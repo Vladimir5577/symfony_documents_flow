@@ -33,6 +33,26 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         $this->getEntityManager()->flush();
     }
 
+    /**
+     * @param string $identifier
+     * @return User|null
+     *
+     * Критично: подгрузка ролей и их permissions одним запросом
+     *
+     * Иначе получите N+1 при is_granted().
+     */
+    public function loadUserByIdentifier(string $identifier): ?User
+    {
+        return $this->createQueryBuilder('u')
+            ->leftJoin('u.rolesRel', 'r')->addSelect('r')
+            ->leftJoin('r.permissions', 'rp')->addSelect('rp')
+            ->leftJoin('u.permissions', 'up')->addSelect('up')
+            ->where('u.email = :id')
+            ->setParameter('id', $identifier)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     //    /**
     //     * @return User[] Returns an array of User objects
     //     */
