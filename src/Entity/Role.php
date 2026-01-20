@@ -23,15 +23,9 @@ class Role
     #[ORM\Column(length: 128, nullable: true)]
     private ?string $label = null;
 
-    /** @var Collection<int, Permission> */
-    #[ORM\ManyToMany(targetEntity: Permission::class)]
-    #[ORM\JoinTable(name: 'role_permission')]
-    private Collection $permissions;
-
     public function __construct(string $name = '')
     {
         $this->name = $name;
-        $this->permissions = new ArrayCollection();
     }
 
     public function getId(): ?int { return $this->id; }
@@ -41,15 +35,4 @@ class Role
 
     public function getLabel(): ?string { return $this->label; }
     public function setLabel(?string $label): self { $this->label = $label; return $this; }
-
-    /** @return Collection<int, Permission> */
-    public function getPermissions(): Collection { return $this->permissions; }
-
-    public function addPermission(Permission $permission): self
-    {
-        if (!$this->permissions->contains($permission)) {
-            $this->permissions->add($permission);
-        }
-        return $this;
-    }
 }

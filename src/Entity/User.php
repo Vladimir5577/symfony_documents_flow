@@ -63,20 +63,9 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\JoinTable(name: 'user_role')]
     private Collection $rolesRel;
 
-    /**
-     * Индивидуальные permissions пользователя (override/добавка).
-     * Можно не делать, если permissions только через роли.
-     *
-     * @var Collection<int, Permission>
-     */
-    #[ORM\ManyToMany(targetEntity: Permission::class)]
-    #[ORM\JoinTable(name: 'user_permission')]
-    private Collection $permissions;
-
     public function __construct()
     {
         $this->rolesRel = new ArrayCollection();
-        $this->permissions = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -243,42 +232,5 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
             $this->rolesRel->add($role);
         }
         return $this;
-    }
-
-    /** @return Collection<int, Permission> */
-    public function getPermissions(): Collection { return $this->permissions; }
-
-    public function addPermission(Permission $permission): self
-    {
-        if (!$this->permissions->contains($permission)) {
-            $this->permissions->add($permission);
-        }
-        return $this;
-    }
-
-    /**
-     * Итоговые permissions пользователя:
-     * permissions из ролей + индивидуальные permissions пользователя.
-     */
-    public function getEffectivePermissionNames(): array
-    {
-        $names = [];
-
-        foreach ($this->rolesRel as $role) {
-            foreach ($role->getPermissions() as $p) {
-                $names[] = $p->getName();
-            }
-        }
-
-        foreach ($this->permissions as $p) {
-            $names[] = $p->getName();
-        }
-
-        return array_values(array_unique($names));
-    }
-
-    public function hasPermission(string $permissionName): bool
-    {
-        return in_array($permissionName, $this->getEffectivePermissionNames(), true);
     }
 }
