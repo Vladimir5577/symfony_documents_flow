@@ -5,11 +5,18 @@
 ```bash
 $ cp .env .env.local
 
+
+Create
+$ php bin/console make:controller PageController
+
+
+Mugration
 $ php bin/console make:migration
 $ php bin/console doctrine:migrations:migrate
 
 Fixture
 $ php bin/console make:fixture RoleFixtures  
+
 
 $ php bin/console doctrine:fixtures:load    ---- run all fixtures and purge db
 $ php bin/console doctrine:fixtures:load --group=roles              --- will be purged

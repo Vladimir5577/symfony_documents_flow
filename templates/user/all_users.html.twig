@@ -1,0 +1,148 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Пользователи!{% endblock %}
+
+
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+
+
+{% block main %}
+    <h1>Все пользователи</h1>
+
+    <section class="section">
+        <div class="row" id="table-hover-row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Список пользователей</h4>
+                        <p class="text-muted">Всего пользователей: {{ pagination.total_items }}</p>
+                    </div>
+                    <div class="card-content">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Фамилия</th>
+                                    <th>Имя</th>
+                                    <th>Отчество</th>
+                                    <th>Логин</th>
+                                    <th>Телефон</th>
+                                    <th>Начальник</th>
+                                    <th>Статус</th>
+                                    <th>Действия</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% if users|length > 0 %}
+                                    {% for user in users %}
+                                        <tr>
+                                            <td class="text-bold-500">{{ user.id }}</td>
+                                            <td>{{ user.lastname ?? '-' }}</td>
+                                            <td>{{ user.firstname ?? '-' }}</td>
+                                            <td>{{ user.patronymic ?? '-' }}</td>
+                                            <td>{{ user.login }}</td>
+                                            <td>{{ user.phone ?? '-' }}</td>
+                                            <td>
+                                                {% if user.boss %}
+                                                    {{ user.boss.lastname ?? '' }} {{ user.boss.firstname ?? '' }}
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if user.isActive %}
+                                                    <span class="badge bg-success">Активен</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger">Неактивен</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="#" title="Редактировать">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-edit">
+                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                    </svg>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="9" class="text-center">Пользователи не найдены</td>
+                                    </tr>
+                                {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        {# Пагинация #}
+                        {% if pagination.total_pages > 1 %}
+                            <div class="card-body">
+                                <nav aria-label="Навигация по страницам">
+                                    <ul class="pagination justify-content-center mb-0">
+                                        {# Предыдущая страница #}
+                                        <li class="page-item {% if pagination.current_page == 1 %}disabled{% endif %}">
+                                            <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_all_users', {page: pagination.current_page - 1}) }}{% else %}#{% endif %}" aria-label="Предыдущая">
+                                                <span aria-hidden="true">&laquo;</span>
+                                            </a>
+                                        </li>
+                                        
+                                        {# Номера страниц #}
+                                        {% set start_page = max(1, pagination.current_page - 2) %}
+                                        {% set end_page = min(pagination.total_pages, pagination.current_page + 2) %}
+                                        
+                                        {% if start_page > 1 %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ path('app_all_users', {page: 1}) }}">1</a>
+                                            </li>
+                                            {% if start_page > 2 %}
+                                                <li class="page-item disabled">
+                                                    <span class="page-link">...</span>
+                                                </li>
+                                            {% endif %}
+                                        {% endif %}
+                                        
+                                        {% for page in start_page..end_page %}
+                                            <li class="page-item {% if page == pagination.current_page %}active{% endif %}">
+                                                <a class="page-link" href="{{ path('app_all_users', {page: page}) }}">{{ page }}</a>
+                                            </li>
+                                        {% endfor %}
+                                        
+                                        {% if end_page < pagination.total_pages %}
+                                            {% if end_page < pagination.total_pages - 1 %}
+                                                <li class="page-item disabled">
+                                                    <span class="page-link">...</span>
+                                                </li>
+                                            {% endif %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ path('app_all_users', {page: pagination.total_pages}) }}">{{ pagination.total_pages }}</a>
+                                            </li>
+                                        {% endif %}
+                                        
+                                        {# Следующая страница #}
+                                        <li class="page-item {% if pagination.current_page == pagination.total_pages %}disabled{% endif %}">
+                                            <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_all_users', {page: pagination.current_page + 1}) }}{% else %}#{% endif %}" aria-label="Следующая">
+                                                <span aria-hidden="true">&raquo;</span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">
+                                        Страница {{ pagination.current_page }} из {{ pagination.total_pages }}
+                                        (показано {{ ((pagination.current_page - 1) * pagination.items_per_page) + 1 }} - {{ min(pagination.current_page * pagination.items_per_page, pagination.total_items) }} из {{ pagination.total_items }})
+                                    </small>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

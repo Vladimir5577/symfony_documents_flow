@@ -22,7 +22,7 @@
                     <div class="card-content">
                         <div class="card-body">
 
-                            <form action="{{ path('app_register') }}" method="post" class="form">
+                            <form action="{{ path('user_register') }}" method="post" class="form">
                                 <input type="hidden" name="_csrf_token" value="{{ csrf_token('register') }}">
 
                                 {% for message in app.flashes('success') %}

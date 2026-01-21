@@ -5,6 +5,7 @@ namespace App\Controller\Auth;
 use App\Entity\User;
 use App\Utils\LoginGenerator;
 use App\Repository\UserRepository;
+use App\Repository\RoleRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,12 +17,13 @@ use Symfony\Component\Security\Http\Authentication\AuthenticationUtils;
 class AuthController extends AbstractController
 {
 
-    #[Route(path: '/register', name: 'app_register', methods: ['GET', 'POST'])]
+    #[Route(path: '/register', name: 'user_register', methods: ['GET', 'POST'])]
     public function register(
         Request $request,
         UserPasswordHasherInterface $passwordHasher,
         EntityManagerInterface $entityManager,
         UserRepository $userRepository,
+        RoleRepository $roleRepository,
         LoginGenerator $loginGenerator
     ): Response
     {
@@ -64,6 +66,12 @@ class AuthController extends AbstractController
             $user->setPhone(trim((string) ($formData['phone-column'] ?? '')) ?: null);
             $user->setPassword($passwordHasher->hashPassword($user, $plainPassword));
 
+            // Assign default role ROLE_USER
+            $defaultRole = $roleRepository->findOneBy(['name' => 'ROLE_USER']);
+            if ($defaultRole) {
+                $user->addRoleEntity($defaultRole);
+            }
+
             $entityManager->persist($user);
             $entityManager->flush();
 
@@ -81,6 +89,7 @@ class AuthController extends AbstractController
         $request->getSession()->remove('register_error');
 
         return $this->render('auth/register.html.twig', [
+            'active_tab' => 'register',
             'error' => $error,
             'form_data' => $formData,
         ]);

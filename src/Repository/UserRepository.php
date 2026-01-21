@@ -52,6 +52,44 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             ->getOneOrNullResult();
     }
 
+    /**
+     * Получить пагинированный список пользователей
+     *
+     * @param int $page Номер страницы (начиная с 1)
+     * @param int $limit Количество элементов на странице
+     * @return array{users: array, total: int, page: int, limit: int, totalPages: int}
+     */
+    public function findPaginated(int $page = 1, int $limit = 10): array
+    {
+        $offset = ($page - 1) * $limit;
+
+        $qb = $this->createQueryBuilder('u')
+            ->orderBy('u.id', 'ASC');
+
+        // Получаем общее количество пользователей
+        $total = (int) $this->createQueryBuilder('u')
+            ->select('COUNT(u.id)')
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        // Получаем пользователей для текущей страницы
+        $users = $qb
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        $totalPages = (int) ceil($total / $limit);
+
+        return [
+            'users' => $users,
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'totalPages' => $totalPages,
+        ];
+    }
+
     //    /**
     //     * @return User[] Returns an array of User objects
     //     */

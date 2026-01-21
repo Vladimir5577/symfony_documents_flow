@@ -1,0 +1,93 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Все организации!{% endblock %}
+
+
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+
+
+{% block main %}
+    <h1>Все организации</h1>
+
+    <section class="section">
+        <div class="row" id="table-hover-row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Hoverable rows</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <p>Add <code class="highlighter-rouge">.table-hover</code> to enable a hover state on table
+                                rows
+                                within a
+                                <code class="highlighter-rouge">&lt;tbody&gt;</code>.
+                            </p>
+                        </div>
+                        <!-- table hover -->
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                <tr>
+                                    <th>NAME</th>
+                                    <th>RATE</th>
+                                    <th>SKILL</th>
+                                    <th>TYPE</th>
+                                    <th>LOCATION</th>
+                                    <th>ACTION</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <tr>
+                                    <td class="text-bold-500">Michael Right</td>
+                                    <td>$15/hr</td>
+                                    <td class="text-bold-500">UI/UX</td>
+                                    <td>Remote</td>
+                                    <td>Austin,Taxes</td>
+                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-bold-500">Morgan Vanblum</td>
+                                    <td>$13/hr</td>
+                                    <td class="text-bold-500">Graphic concepts</td>
+                                    <td>Remote</td>
+                                    <td>Shangai,China</td>
+                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-bold-500">Tiffani Blogz</td>
+                                    <td>$15/hr</td>
+                                    <td class="text-bold-500">Animation</td>
+                                    <td>Remote</td>
+                                    <td>Austin,Texas</td>
+                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-bold-500">Ashley Boul</td>
+                                    <td>$15/hr</td>
+                                    <td class="text-bold-500">Animation</td>
+                                    <td>Remote</td>
+                                    <td>Austin,Texas</td>
+                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-bold-500">Mikkey Mice</td>
+                                    <td>$15/hr</td>
+                                    <td class="text-bold-500">Animation</td>
+                                    <td>Remote</td>
+                                    <td>Austin,Texas</td>
+                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
+                                </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}
