@@ -16,9 +16,6 @@ security:
             # Ensure dev tools and static assets are always allowed
             pattern: ^/(_profiler|_wdt|assets|build)/
             security: false
-        secured_area:
-            form_login:
-                enable_csrf: true
         main:
             lazy: true
             provider: app_user_provider
@@ -26,6 +23,8 @@ security:
                 login_path: app_login
                 check_path: app_login
                 enable_csrf: true
+                username_parameter: _username
+                password_parameter: _password
             logout:
                 path: app_logout
                 # where to redirect after logout

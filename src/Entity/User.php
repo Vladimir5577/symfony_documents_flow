@@ -3,6 +3,7 @@
 namespace App\Entity;
 
 use App\Repository\UserRepository;
+use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
@@ -58,14 +59,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(options: ['default' => true])]
     private bool $isActive = true;
 
-    /** @var Collection<int, Role> */
-    #[ORM\ManyToMany(targetEntity: Role::class)]
-    #[ORM\JoinTable(name: 'user_role')]
-    private Collection $rolesRel;
+    /** @var Collection<int, UserRole> */
+    #[ORM\OneToMany(mappedBy: 'user', targetEntity: UserRole::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    private Collection $userRoles;
 
     public function __construct()
     {
-        $this->rolesRel = new ArrayCollection();
+        $this->userRoles = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -216,21 +216,31 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     {
         $names = ['ROLE_USER'];
 
-        foreach ($this->rolesRel as $role) {
-            $names[] = $role->getName();
+        foreach ($this->userRoles as $userRole) {
+            $role = $userRole->getRole();
+            if ($role) {
+                $names[] = $role->getName();
+            }
         }
 
         return array_values(array_unique($names));
     }
 
-    /** @return Collection<int, Role> */
-    public function getRolesRel(): Collection { return $this->rolesRel; }
+    /** @return Collection<int, UserRole> */
+    public function getRolesRel(): Collection
+    {
+        return $this->userRoles;
+    }
 
     public function addRoleEntity(Role $role): self
     {
-        if (!$this->rolesRel->contains($role)) {
-            $this->rolesRel->add($role);
+        foreach ($this->userRoles as $userRole) {
+            if ($userRole->getRole() === $role) {
+                return $this;
+            }
         }
+
+        $this->userRoles->add(new UserRole($this, $role));
         return $this;
     }
 }

@@ -1,0 +1,84 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Регистрация!{% endblock %}
+
+
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+
+
+{% block main %}
+    <h1>Регистрация пользователя</h1>
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Форма регистрации</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+
+                            <form action="{{ path('app_register') }}" method="post" class="form">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('register') }}">
+
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success">{{ message }}</div>
+                                {% endfor %}
+
+                                {% if error %}
+                                    <div class="alert alert-danger">{{ error }}</div>
+                                {% endif %}
+
+                                <div class="row">
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="first-name-column">Фамилия</label>
+                                            <input type="text" id="first-name-column" class="form-control" placeholder="Фамилия" name="fname-column" value="{{ form_data['fname-column']|default('') }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="last-name-column">Имя</label>
+                                            <input type="text" id="last-name-column" class="form-control" placeholder="Имя" name="lname-column" value="{{ form_data['lname-column']|default('') }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="city-column">Отчество</label>
+                                            <input type="text" id="city-column" class="form-control" placeholder="Отчество" name="city-column" value="{{ form_data['city-column']|default('') }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="phone-column">Телефон</label>
+                                            <input type="text" id="phone-column" class="form-control" name="phone-column" placeholder="+7..." value="{{ form_data['phone-column']|default('') }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="password-column">Пароль</label>
+                                            <input type="password" id="password-column" class="form-control" name="plain_password" placeholder="Пароль" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="confirm-password-column">Повторите пароль</label>
+                                            <input type="password" id="confirm-password-column" class="form-control" name="confirm_password" placeholder="Повторите пароль" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 d-flex justify-content-end">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Регистрация</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}
