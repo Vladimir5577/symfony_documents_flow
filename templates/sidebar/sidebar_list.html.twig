@@ -1,5 +1,6 @@
 <ul class="menu">
-    <li class="sidebar-title">Menu</li>
+
+    <li class="sidebar-title">Меню</li>
 
     <li
         class="sidebar-item  {% if active_tab == 'new_document' %}active{% endif %}">
@@ -15,6 +16,8 @@
             has-sub
             {% if active_tab == 'register' %}active{% endif %}
             {% if active_tab == 'all_users' %}active{% endif %}
+            {% if active_tab == 'view_user' %}active{% endif %}
+            {% if active_tab == 'edit_user' %}active{% endif %}
     ">
         <a href="#" class='sidebar-link'>
             <i class="bi bi-stack"></i>
@@ -58,5 +61,13 @@
 
         </ul>
     </li>
+{#    <a href="#" class="btn btn-outline-danger">Danger</a>#}
+    <li class="sidebar-item">
+        <a href="{{ path('app_logout') }}" class="btn btn-outline-danger">
+            <span>Выйти</span>
+            <i class="bi bi-box-arrow-right ms-2"></i>
+        </a>
+    </li>
+
 
 </ul>

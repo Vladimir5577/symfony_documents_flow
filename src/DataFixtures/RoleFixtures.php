@@ -19,8 +19,8 @@ class RoleFixtures extends Fixture implements FixtureGroupInterface
         $roles = [
             ['name' => 'ROLE_ADMIN', 'label' => 'Администратор'],
             ['name' => 'ROLE_HR', 'label' => 'Отдел кадров'],
-            ['name' => 'ROLE_USER', 'label' => 'Пользователь'],
             ['name' => 'ROLE_EDITOR', 'label' => 'Редактор'],
+            ['name' => 'ROLE_USER', 'label' => 'Пользователь'],
         ];
 
         foreach ($roles as $item) {

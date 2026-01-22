@@ -2,22 +2,22 @@
 
 namespace App\Repository;
 
-use App\Entity\DepartmentDevision;
+use App\Entity\DepartmentDivision;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
- * @extends ServiceEntityRepository<DepartmentDevision>
+ * @extends ServiceEntityRepository<DepartmentDivision>
  */
-class DepartmentDevisionRepository extends ServiceEntityRepository
+class DepartmentDivisionRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
     {
-        parent::__construct($registry, DepartmentDevision::class);
+        parent::__construct($registry, DepartmentDivision::class);
     }
 
 //    /**
-//     * @return DepartmentDevision[] Returns an array of DepartmentDevision objects
+//     * @return DepartmentDivision[] Returns an array of DepartmentDivision objects
 //     */
 //    public function findByExampleField($value): array
 //    {
@@ -31,7 +31,7 @@ class DepartmentDevisionRepository extends ServiceEntityRepository
 //        ;
 //    }
 
-//    public function findOneBySomeField($value): ?DepartmentDevision
+//    public function findOneBySomeField($value): ?DepartmentDivision
 //    {
 //        return $this->createQueryBuilder('d')
 //            ->andWhere('d.exampleField = :val')

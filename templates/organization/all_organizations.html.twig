@@ -1,6 +1,6 @@
 {% extends 'base_dashboard.html.twig' %}
 
-{% block title %}Все организации!{% endblock %}
+{% block title %}Организации!{% endblock %}
 
 
 
@@ -18,73 +18,112 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h4 class="card-title">Hoverable rows</h4>
+                        <h4 class="card-title">Список организаций</h4>
+                        <p class="text-muted">Всего организаций: {{ pagination.total_items }}</p>
                     </div>
                     <div class="card-content">
-                        <div class="card-body">
-                            <p>Add <code class="highlighter-rouge">.table-hover</code> to enable a hover state on table
-                                rows
-                                within a
-                                <code class="highlighter-rouge">&lt;tbody&gt;</code>.
-                            </p>
-                        </div>
-                        <!-- table hover -->
                         <div class="table-responsive">
                             <table class="table table-hover mb-0">
                                 <thead>
                                 <tr>
-                                    <th>NAME</th>
-                                    <th>RATE</th>
-                                    <th>SKILL</th>
-                                    <th>TYPE</th>
-                                    <th>LOCATION</th>
-                                    <th>ACTION</th>
+                                    <th>ID</th>
+                                    <th>Название</th>
+                                    <th>Адрес</th>
+                                    <th>Телефон</th>
+                                    <th>Email</th>
+                                    <th>Количество департаментов</th>
+                                    <th>Действия</th>
                                 </tr>
                                 </thead>
                                 <tbody>
-                                <tr>
-                                    <td class="text-bold-500">Michael Right</td>
-                                    <td>$15/hr</td>
-                                    <td class="text-bold-500">UI/UX</td>
-                                    <td>Remote</td>
-                                    <td>Austin,Taxes</td>
-                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
-                                </tr>
-                                <tr>
-                                    <td class="text-bold-500">Morgan Vanblum</td>
-                                    <td>$13/hr</td>
-                                    <td class="text-bold-500">Graphic concepts</td>
-                                    <td>Remote</td>
-                                    <td>Shangai,China</td>
-                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
-                                </tr>
-                                <tr>
-                                    <td class="text-bold-500">Tiffani Blogz</td>
-                                    <td>$15/hr</td>
-                                    <td class="text-bold-500">Animation</td>
-                                    <td>Remote</td>
-                                    <td>Austin,Texas</td>
-                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
-                                </tr>
-                                <tr>
-                                    <td class="text-bold-500">Ashley Boul</td>
-                                    <td>$15/hr</td>
-                                    <td class="text-bold-500">Animation</td>
-                                    <td>Remote</td>
-                                    <td>Austin,Texas</td>
-                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
-                                </tr>
-                                <tr>
-                                    <td class="text-bold-500">Mikkey Mice</td>
-                                    <td>$15/hr</td>
-                                    <td class="text-bold-500">Animation</td>
-                                    <td>Remote</td>
-                                    <td>Austin,Texas</td>
-                                    <td><a href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-mail badge-circle badge-circle-light-secondary font-medium-1"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></a></td>
-                                </tr>
+                                {% if organizations|length > 0 %}
+                                    {% for organization in organizations %}
+                                        <tr>
+                                            <td class="text-bold-500">{{ organization.id }}</td>
+                                            <td>{{ organization.name }}</td>
+                                            <td>{{ organization.address ?? '-' }}</td>
+                                            <td>{{ organization.phone ?? '-' }}</td>
+                                            <td>{{ organization.email ?? '-' }}</td>
+                                            <td>{{ organization.departments|length }}</td>
+                                            <td>
+                                                <a href="#" title="Редактировать">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-edit">
+                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                    </svg>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="8" class="text-center">Организации не найдены</td>
+                                    </tr>
+                                {% endif %}
                                 </tbody>
                             </table>
                         </div>
+
+                        {# Пагинация #}
+                        {% if pagination.total_pages > 1 %}
+                            <div class="card-body">
+                                <nav aria-label="Навигация по страницам">
+                                    <ul class="pagination justify-content-center mb-0">
+                                        {# Предыдущая страница #}
+                                        <li class="page-item {% if pagination.current_page == 1 %}disabled{% endif %}">
+                                            <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_all_organizations', {page: pagination.current_page - 1}) }}{% else %}#{% endif %}" aria-label="Предыдущая">
+                                                <span aria-hidden="true">&laquo;</span>
+                                            </a>
+                                        </li>
+
+                                        {# Номера страниц #}
+                                        {% set start_page = max(1, pagination.current_page - 2) %}
+                                        {% set end_page = min(pagination.total_pages, pagination.current_page + 2) %}
+
+                                        {% if start_page > 1 %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ path('app_all_organizations', {page: 1}) }}">1</a>
+                                            </li>
+                                            {% if start_page > 2 %}
+                                                <li class="page-item disabled">
+                                                    <span class="page-link">...</span>
+                                                </li>
+                                            {% endif %}
+                                        {% endif %}
+
+                                        {% for page in start_page..end_page %}
+                                            <li class="page-item {% if page == pagination.current_page %}active{% endif %}">
+                                                <a class="page-link" href="{{ path('app_all_organizations', {page: page}) }}">{{ page }}</a>
+                                            </li>
+                                        {% endfor %}
+
+                                        {% if end_page < pagination.total_pages %}
+                                            {% if end_page < pagination.total_pages - 1 %}
+                                                <li class="page-item disabled">
+                                                    <span class="page-link">...</span>
+                                                </li>
+                                            {% endif %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ path('app_all_organizations', {page: pagination.total_pages}) }}">{{ pagination.total_pages }}</a>
+                                            </li>
+                                        {% endif %}
+
+                                        {# Следующая страница #}
+                                        <li class="page-item {% if pagination.current_page == pagination.total_pages %}disabled{% endif %}">
+                                            <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_all_organizations', {page: pagination.current_page + 1}) }}{% else %}#{% endif %}" aria-label="Следующая">
+                                                <span aria-hidden="true">&raquo;</span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">
+                                        Страница {{ pagination.current_page }} из {{ pagination.total_pages }}
+                                        (показано {{ ((pagination.current_page - 1) * pagination.items_per_page) + 1 }} - {{ min(pagination.current_page * pagination.items_per_page, pagination.total_items) }} из {{ pagination.total_items }})
+                                    </small>
+                                </div>
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>

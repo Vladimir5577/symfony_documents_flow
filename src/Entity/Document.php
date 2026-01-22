@@ -14,14 +14,14 @@ class Document
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(nullable: true)]
-    private ?int $organization_id = null;
+    #[ORM\Column(nullable: false)]
+    private int $organization_id;
 
     #[ORM\Column(nullable: true)]
     private ?int $department_id = null;
 
     #[ORM\Column(nullable: true)]
-    private ?int $department_devision_id = null;
+    private ?int $department_division_id = null;
 
     #[ORM\Column(length: 255)]
     private ?string $name = null;
@@ -46,12 +46,12 @@ class Document
         return $this->id;
     }
 
-    public function getOrganizationId(): ?int
+    public function getOrganizationId(): int
     {
         return $this->organization_id;
     }
 
-    public function setOrganizationId(?int $organization_id): static
+    public function setOrganizationId(int $organization_id): static
     {
         $this->organization_id = $organization_id;
 
@@ -70,14 +70,14 @@ class Document
         return $this;
     }
 
-    public function getDepartmentDevisionId(): ?int
+    public function getDepartmentDivisionId(): ?int
     {
-        return $this->department_devision_id;
+        return $this->department_division_id;
     }
 
-    public function setDepartmentDevisionId(?int $department_devision_id): static
+    public function setDepartmentDivisionId(?int $department_division_id): static
     {
-        $this->department_devision_id = $department_devision_id;
+        $this->department_division_id = $department_division_id;
 
         return $this;
     }

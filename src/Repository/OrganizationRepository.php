@@ -16,6 +16,46 @@ class OrganizationRepository extends ServiceEntityRepository
         parent::__construct($registry, Organization::class);
     }
 
+    /**
+     * Получить пагинированный список организаций
+     *
+     * @param int $page Номер страницы (начиная с 1)
+     * @param int $limit Количество элементов на странице
+     * @return array{organizations: array, total: int, page: int, limit: int, totalPages: int}
+     */
+    public function findPaginated(int $page = 1, int $limit = 10): array
+    {
+        $offset = ($page - 1) * $limit;
+
+        $qb = $this->createQueryBuilder('o')
+            ->leftJoin('o.departments', 'd')
+            ->addSelect('d')
+            ->orderBy('o.id', 'ASC');
+
+        // Получаем общее количество организаций
+        $total = (int) $this->createQueryBuilder('o')
+            ->select('COUNT(o.id)')
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        // Получаем организации для текущей страницы
+        $organizations = $qb
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        $totalPages = (int) ceil($total / $limit);
+
+        return [
+            'organizations' => $organizations,
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'totalPages' => $totalPages,
+        ];
+    }
+
     //    /**
     //     * @return Organization[] Returns an array of Organization objects
     //     */

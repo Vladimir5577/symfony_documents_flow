@@ -19,6 +19,21 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column]
     private ?int $id = null;
 
+    // organization
+    #[ORM\ManyToOne(targetEntity: Organization::class)]
+    #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    private Organization $organization;
+
+    // department
+    #[ORM\ManyToOne(targetEntity: Department::class)]
+    #[ORM\JoinColumn(name: 'department_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    private Department $department;
+
+    // department_division
+    #[ORM\ManyToOne(targetEntity: DepartmentDivision::class)]
+    #[ORM\JoinColumn(name: 'department_division_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    private DepartmentDivision $departmentDivision;
+
     // 1) lastname
     #[ORM\Column(length: 50, nullable: true)]
     private ?string $lastname = null;
@@ -241,6 +256,42 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         }
 
         $this->userRoles->add(new UserRole($this, $role));
+        return $this;
+    }
+
+    public function getOrganization(): Organization
+    {
+        return $this->organization;
+    }
+
+    public function setOrganization(Organization $organization): static
+    {
+        $this->organization = $organization;
+
+        return $this;
+    }
+
+    public function getDepartment(): Department
+    {
+        return $this->department;
+    }
+
+    public function setDepartment(Department $department): static
+    {
+        $this->department = $department;
+
+        return $this;
+    }
+
+    public function getDepartmentDivision(): DepartmentDivision
+    {
+        return $this->departmentDivision;
+    }
+
+    public function setDepartmentDivision(DepartmentDivision $departmentDivision): static
+    {
+        $this->departmentDivision = $departmentDivision;
+
         return $this;
     }
 }

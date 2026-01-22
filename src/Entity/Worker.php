@@ -13,8 +13,8 @@ class Worker
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column]
-    private ?int $user_id = null;
+    #[ORM\Column(nullable: false)]
+    private int $user_id;
 
     #[ORM\Column(length: 255)]
     private ?string $profession = null;
@@ -27,7 +27,7 @@ class Worker
         return $this->id;
     }
 
-    public function getUserId(): ?int
+    public function getUserId(): int
     {
         return $this->user_id;
     }

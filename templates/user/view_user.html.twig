@@ -1,0 +1,144 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Просмотр пользователя!{% endblock %}
+
+
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Просмотр пользователя</h1>
+        <a href="{{ path('app_all_users', {page: page|default(1)}) }}" class="btn btn-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Назад к списку
+        </a>
+    </div>
+
+    <section class="section">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Информация о пользователе</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <table class="table table-borderless">
+                                        <tbody>
+                                            <tr>
+                                                <th class="text-muted" style="width: 30%;">ID:</th>
+                                                <td><strong>{{ user.id }}</strong></td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Фамилия:</th>
+                                                <td>{{ user.lastname ?? '-' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Имя:</th>
+                                                <td>{{ user.firstname ?? '-' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Отчество:</th>
+                                                <td>{{ user.patronymic ?? '-' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Логин:</th>
+                                                <td><code>{{ user.login }}</code></td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Телефон:</th>
+                                                <td>{{ user.phone ?? '-' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Статус:</th>
+                                                <td>
+                                                    {% if user.isActive %}
+                                                        <span class="badge bg-success">Активен</span>
+                                                    {% else %}
+                                                        <span class="badge bg-danger">Неактивен</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Организация:</th>
+                                                <td>
+                                                    <strong>{{ user.organization.name }}</strong>
+                                                    {% if user.organization.address %}
+                                                        <br><small class="text-muted">{{ user.organization.address }}</small>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Департамент:</th>
+                                                <td>
+                                                    <strong>{{ user.department.name }}</strong>
+                                                    {% if user.department.description %}
+                                                        <br><small class="text-muted">{{ user.department.description }}</small>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Подразделение:</th>
+                                                <td>
+                                                    <strong>{{ user.departmentDivision.name }}</strong>
+                                                    {% if user.departmentDivision.description %}
+                                                        <br><small class="text-muted">{{ user.departmentDivision.description }}</small>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Начальник:</th>
+                                                <td>
+                                                    {% if user.boss %}
+                                                        {{ user.boss.lastname ?? '' }} {{ user.boss.firstname ?? '' }} {{ user.boss.patronymic ?? '' }}
+                                                        <br><small class="text-muted">Логин: {{ user.boss.login }}</small>
+                                                    {% else %}
+                                                        <span class="text-muted">-</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Роли:</th>
+                                                <td>
+                                                    {% set roles = user.roles %}
+                                                    {% if roles|length > 0 %}
+                                                        {% for role in roles %}
+                                                            <span class="badge bg-primary me-1">{{ role }}</span>
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        <span class="text-muted">Нет ролей</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="d-flex justify-content-end mt-4">
+        <a href="{{ path('app_edit_user', {id: user.id}) }}" class="btn btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-edit">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+            Редактировать пользователя
+        </a>
+    </div>
+    
+{% endblock %}

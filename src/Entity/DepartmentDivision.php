@@ -2,19 +2,22 @@
 
 namespace App\Entity;
 
-use App\Repository\OrganizationRepository;
-use Doctrine\Common\Collections\ArrayCollection;
-use Doctrine\Common\Collections\Collection;
+use App\Repository\DepartmentDivisionRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity(repositoryClass: OrganizationRepository::class)]
-class Organization
+#[ORM\Entity(repositoryClass: DepartmentDivisionRepository::class)]
+class DepartmentDivision
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
+
+    // department
+    #[ORM\ManyToOne(targetEntity: Department::class)]
+    #[ORM\JoinColumn(name: 'department_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    private Department $department;
 
     #[ORM\Column(length: 255)]
     private ?string $name = null;
@@ -31,18 +34,6 @@ class Organization
     #[ORM\Column(length: 100, nullable: true)]
     private ?string $email = null;
 
-    #[ORM\Column(nullable: true)]
-    private ?int $organization_id = null;
-
-    /** @var Collection<int, Department> */
-    #[ORM\OneToMany(mappedBy: 'organization', targetEntity: Department::class)]
-    private Collection $departments;
-
-    public function __construct()
-    {
-        $this->departments = new ArrayCollection();
-    }
-
     public function getId(): ?int
     {
         return $this->id;
@@ -56,6 +47,18 @@ class Organization
     public function setName(string $name): static
     {
         $this->name = $name;
+
+        return $this;
+    }
+
+    public function getDepartment(): Department
+    {
+        return $this->department;
+    }
+
+    public function setDepartment(Department $department): static
+    {
+        $this->department = $department;
 
         return $this;
     }
@@ -104,41 +107,6 @@ class Organization
     public function setEmail(?string $email): static
     {
         $this->email = $email;
-
-        return $this;
-    }
-
-    public function getOrganizationId(): ?int
-    {
-        return $this->organization_id;
-    }
-
-    public function setOrganizationId(?int $organization_id): static
-    {
-        $this->organization_id = $organization_id;
-
-        return $this;
-    }
-
-    /** @return Collection<int, Department> */
-    public function getDepartments(): Collection
-    {
-        return $this->departments;
-    }
-
-    public function addDepartment(Department $department): static
-    {
-        if (!$this->departments->contains($department)) {
-            $this->departments->add($department);
-            $department->setOrganization($this);
-        }
-
-        return $this;
-    }
-
-    public function removeDepartment(Department $department): static
-    {
-        $this->departments->removeElement($department);
 
         return $this;
     }

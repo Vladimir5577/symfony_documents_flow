@@ -1,0 +1,164 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Редактировать пользователя!{% endblock %}
+
+
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Редактировать пользователя</h1>
+        <a href="{{ path('app_view_user', {id: user.id}) }}" class="btn btn-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Назад к просмотру
+        </a>
+    </div>
+
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Форма редактирования пользователя</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('app_update_user') }}" method="post" class="form">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_user') }}">
+                                <input type="hidden" name="user_id" value="{{ user.id }}">
+
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success">{{ message }}</div>
+                                {% endfor %}
+
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger">{{ message }}</div>
+                                {% endfor %}
+
+                                <div class="row">
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="lastname">Фамилия</label>
+                                            <input type="text" id="lastname" class="form-control" placeholder="Фамилия" name="lastname" value="{{ user.lastname ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="firstname">Имя</label>
+                                            <input type="text" id="firstname" class="form-control" placeholder="Имя" name="firstname" value="{{ user.firstname ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="patronymic">Отчество</label>
+                                            <input type="text" id="patronymic" class="form-control" placeholder="Отчество" name="patronymic" value="{{ user.patronymic ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="phone">Телефон</label>
+                                            <input type="text" id="phone" class="form-control" name="phone" placeholder="+7..." value="{{ user.phone ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="login">Логин</label>
+                                            <input type="text" id="login" class="form-control" name="login" placeholder="Логин" value="{{ user.login }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="is_active">Статус</label>
+                                            <select id="is_active" class="form-control" name="is_active">
+                                                <option value="1" {% if user.isActive %}selected{% endif %}>Активен</option>
+                                                <option value="0" {% if not user.isActive %}selected{% endif %}>Неактивен</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="organization">Организация</label>
+                                            <select id="organization" class="form-control" name="organization_id" required>
+                                                <option value="">Выберите организацию</option>
+                                                {% for org in organizations %}
+                                                    <option value="{{ org.id }}" {% if user.organization.id == org.id %}selected{% endif %}>{{ org.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="department">Департамент</label>
+                                            <select id="department" class="form-control" name="department_id" required>
+                                                <option value="">Выберите департамент</option>
+                                                {% for dept in departments %}
+                                                    <option value="{{ dept.id }}" {% if user.department.id == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="department_division">Подразделение</label>
+                                            <select id="department_division" class="form-control" name="department_division_id" required>
+                                                <option value="">Выберите подразделение</option>
+                                                {% for div in departmentDivisions %}
+                                                    <option value="{{ div.id }}" {% if user.departmentDivision.id == div.id %}selected{% endif %}>{{ div.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="boss">Начальник</label>
+                                            <select id="boss" class="form-control" name="boss_id">
+                                                <option value="">Нет начальника</option>
+                                                {% for bossUser in allUsers %}
+                                                    {% if bossUser.id != user.id %}
+                                                        <option value="{{ bossUser.id }}" {% if user.boss and user.boss.id == bossUser.id %}selected{% endif %}>
+                                                            {{ bossUser.lastname ?? '' }} {{ bossUser.firstname ?? '' }} {{ bossUser.patronymic ?? '' }} ({{ bossUser.login }})
+                                                        </option>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label>Роли</label>
+                                            <div class="form-check-group">
+                                                {% for role in roles %}
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="roles[]" value="{{ role.id }}" id="role_{{ role.id }}"
+                                                               {% for userRole in user.rolesRel %}
+                                                                   {% if userRole.role.id == role.id %}checked{% endif %}
+                                                               {% endfor %}>
+                                                        <label class="form-check-label" for="role_{{ role.id }}">
+                                                            {{ role.name }}
+                                                        </label>
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 d-flex justify-content-end mt-3">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить изменения</button>
+                                        <a href="{{ path('app_view_user', {id: user.id}) }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

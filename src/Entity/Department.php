@@ -3,6 +3,9 @@
 namespace App\Entity;
 
 use App\Repository\DepartmentRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: DepartmentRepository::class)]
@@ -13,10 +16,15 @@ class Department
     #[ORM\Column]
     private ?int $id = null;
 
+    // organization
+    #[ORM\ManyToOne(targetEntity: Organization::class)]
+    #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    private Organization $organization;
+
     #[ORM\Column(length: 255)]
     private ?string $name = null;
 
-    #[ORM\Column(length: 255, nullable: true)]
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
     #[ORM\Column(length: 255, nullable: true)]
@@ -27,6 +35,15 @@ class Department
 
     #[ORM\Column(length: 100, nullable: true)]
     private ?string $email = null;
+
+    /** @var Collection<int, DepartmentDivision> */
+    #[ORM\OneToMany(mappedBy: 'department', targetEntity: DepartmentDivision::class)]
+    private Collection $departmentDivisions;
+
+    public function __construct()
+    {
+        $this->departmentDivisions = new ArrayCollection();
+    }
 
     public function getId(): ?int
     {
@@ -89,6 +106,41 @@ class Department
     public function setEmail(?string $email): static
     {
         $this->email = $email;
+
+        return $this;
+    }
+
+    public function getOrganization(): Organization
+    {
+        return $this->organization;
+    }
+
+    public function setOrganization(Organization $organization): static
+    {
+        $this->organization = $organization;
+
+        return $this;
+    }
+
+    /** @return Collection<int, DepartmentDivision> */
+    public function getDepartmentDivisions(): Collection
+    {
+        return $this->departmentDivisions;
+    }
+
+    public function addDepartmentDivision(DepartmentDivision $departmentDivision): static
+    {
+        if (!$this->departmentDivisions->contains($departmentDivision)) {
+            $this->departmentDivisions->add($departmentDivision);
+            $departmentDivision->setDepartment($this);
+        }
+
+        return $this;
+    }
+
+    public function removeDepartmentDivision(DepartmentDivision $departmentDivision): static
+    {
+        $this->departmentDivisions->removeElement($departmentDivision);
 
         return $this;
     }
