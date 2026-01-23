@@ -28,6 +28,12 @@ class AuthController extends AbstractController
         ]);
     }
 
+    #[Route(path: '/', name: 'app_home')]
+    public function home(): Response
+    {
+        return $this->redirectToRoute('app_login');
+    }
+
     #[Route(path: '/logout', name: 'app_logout')]
     public function logout(): void
     {

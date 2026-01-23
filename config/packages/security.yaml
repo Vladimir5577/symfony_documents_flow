@@ -52,11 +52,13 @@ security:
     access_control:
         # Публичные роуты (доступны всем, включая неаутентифицированных)
         - { path: ^/login, roles: PUBLIC_ACCESS }
+        - { path: ^/$, roles: PUBLIC_ACCESS } # корневой путь - редирект на /login
 
         # Все остальные роуты требуют аутентификации
         # Конкретные права доступа настраиваются через IsGranted в контроллерах
         - { path: ^/register, roles: ROLE_ADMIN }
-        - { path: ^/dashboard, roles: ROLE_USER } # этот урл должен быть в конце
+        - { path: ^/dashboard, roles: ROLE_USER }
+        - { path: ^/, roles: ROLE_USER } # этот урл должен быть в конце (catch-all для всех остальных путей)
 
 when@test:
     security:
