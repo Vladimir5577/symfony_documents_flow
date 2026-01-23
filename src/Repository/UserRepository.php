@@ -67,12 +67,14 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             ->orderBy('u.id', 'ASC');
 
         // Получаем общее количество пользователей
+        // Фильтр soft delete автоматически исключает удаленных пользователей
         $total = (int) $this->createQueryBuilder('u')
             ->select('COUNT(u.id)')
             ->getQuery()
             ->getSingleScalarResult();
 
         // Получаем пользователей для текущей страницы
+        // Фильтр soft delete автоматически исключает удаленных пользователей
         $users = $qb
             ->setFirstResult($offset)
             ->setMaxResults($limit)
@@ -104,6 +106,27 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
     //            ->getResult()
     //        ;
     //    }
+
+    /**
+     * Получить всех активных (не удаленных) пользователей
+     *
+     * @return User[]
+     */
+    public function findAllActive(): array
+    {
+        return $this->findAll();
+    }
+
+    /**
+     * Найти активного пользователя по ID
+     *
+     * @param int $id
+     * @return User|null
+     */
+    public function findActive(int $id): ?User
+    {
+        return $this->find($id);
+    }
 
     //    public function findOneBySomeField($value): ?User
     //    {

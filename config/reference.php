@@ -1455,6 +1455,60 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     generate_final_classes?: bool|Param, // Default: true
  *     generate_final_entities?: bool|Param, // Default: false
  * }
+ * @psalm-type StofDoctrineExtensionsConfig = array{
+ *     orm?: array<string, array{ // Default: []
+ *         translatable?: scalar|null|Param, // Default: false
+ *         timestampable?: scalar|null|Param, // Default: false
+ *         blameable?: scalar|null|Param, // Default: false
+ *         sluggable?: scalar|null|Param, // Default: false
+ *         tree?: scalar|null|Param, // Default: false
+ *         loggable?: scalar|null|Param, // Default: false
+ *         ip_traceable?: scalar|null|Param, // Default: false
+ *         sortable?: scalar|null|Param, // Default: false
+ *         softdeleteable?: scalar|null|Param, // Default: false
+ *         uploadable?: scalar|null|Param, // Default: false
+ *         reference_integrity?: scalar|null|Param, // Default: false
+ *     }>,
+ *     mongodb?: array<string, array{ // Default: []
+ *         translatable?: scalar|null|Param, // Default: false
+ *         timestampable?: scalar|null|Param, // Default: false
+ *         blameable?: scalar|null|Param, // Default: false
+ *         sluggable?: scalar|null|Param, // Default: false
+ *         tree?: scalar|null|Param, // Default: false
+ *         loggable?: scalar|null|Param, // Default: false
+ *         ip_traceable?: scalar|null|Param, // Default: false
+ *         sortable?: scalar|null|Param, // Default: false
+ *         softdeleteable?: scalar|null|Param, // Default: false
+ *         uploadable?: scalar|null|Param, // Default: false
+ *         reference_integrity?: scalar|null|Param, // Default: false
+ *     }>,
+ *     class?: array{
+ *         translatable?: scalar|null|Param, // Default: "Gedmo\\Translatable\\TranslatableListener"
+ *         timestampable?: scalar|null|Param, // Default: "Gedmo\\Timestampable\\TimestampableListener"
+ *         blameable?: scalar|null|Param, // Default: "Gedmo\\Blameable\\BlameableListener"
+ *         sluggable?: scalar|null|Param, // Default: "Gedmo\\Sluggable\\SluggableListener"
+ *         tree?: scalar|null|Param, // Default: "Gedmo\\Tree\\TreeListener"
+ *         loggable?: scalar|null|Param, // Default: "Gedmo\\Loggable\\LoggableListener"
+ *         sortable?: scalar|null|Param, // Default: "Gedmo\\Sortable\\SortableListener"
+ *         softdeleteable?: scalar|null|Param, // Default: "Gedmo\\SoftDeleteable\\SoftDeleteableListener"
+ *         uploadable?: scalar|null|Param, // Default: "Gedmo\\Uploadable\\UploadableListener"
+ *         reference_integrity?: scalar|null|Param, // Default: "Gedmo\\ReferenceIntegrity\\ReferenceIntegrityListener"
+ *     },
+ *     softdeleteable?: array{
+ *         handle_post_flush_event?: bool|Param, // Default: false
+ *     },
+ *     uploadable?: array{
+ *         default_file_path?: scalar|null|Param, // Default: null
+ *         mime_type_guesser_class?: scalar|null|Param, // Default: "Stof\\DoctrineExtensionsBundle\\Uploadable\\MimeTypeGuesserAdapter"
+ *         default_file_info_class?: scalar|null|Param, // Default: "Stof\\DoctrineExtensionsBundle\\Uploadable\\UploadedFileInfo"
+ *         validate_writable_directory?: bool|Param, // Default: true
+ *     },
+ *     default_locale?: scalar|null|Param, // Default: "en"
+ *     translation_fallback?: bool|Param, // Default: false
+ *     persist_default_translation?: bool|Param, // Default: false
+ *     skip_translation_on_load?: bool|Param, // Default: false
+ *     metadata_cache_pool?: scalar|null|Param, // Default: null
+ * }
  * @psalm-type ConfigType = array{
  *     imports?: ImportsConfig,
  *     parameters?: ParametersConfig,
@@ -1468,6 +1522,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     twig_extra?: TwigExtraConfig,
  *     security?: SecurityConfig,
  *     monolog?: MonologConfig,
+ *     stof_doctrine_extensions?: StofDoctrineExtensionsConfig,
  *     "when@dev"?: array{
  *         imports?: ImportsConfig,
  *         parameters?: ParametersConfig,
@@ -1484,6 +1539,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         security?: SecurityConfig,
  *         monolog?: MonologConfig,
  *         maker?: MakerConfig,
+ *         stof_doctrine_extensions?: StofDoctrineExtensionsConfig,
  *     },
  *     "when@prod"?: array{
  *         imports?: ImportsConfig,
@@ -1498,6 +1554,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         twig_extra?: TwigExtraConfig,
  *         security?: SecurityConfig,
  *         monolog?: MonologConfig,
+ *         stof_doctrine_extensions?: StofDoctrineExtensionsConfig,
  *     },
  *     "when@test"?: array{
  *         imports?: ImportsConfig,
@@ -1513,6 +1570,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         twig_extra?: TwigExtraConfig,
  *         security?: SecurityConfig,
  *         monolog?: MonologConfig,
+ *         stof_doctrine_extensions?: StofDoctrineExtensionsConfig,
  *     },
  *     ...<string, ExtensionType|array{ // extra keys must follow the when@%env% pattern or match an extension alias
  *         imports?: ImportsConfig,

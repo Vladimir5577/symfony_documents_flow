@@ -218,6 +218,7 @@ final class UserController extends AbstractController
         }
 
         // Загружаем пользователя со всеми связанными данными
+        // Фильтр soft delete автоматически исключает удаленных пользователей
         $user = $userRepository->createQueryBuilder('u')
             ->leftJoin('u.organization', 'org')->addSelect('org')
             ->leftJoin('u.department', 'dept')->addSelect('dept')

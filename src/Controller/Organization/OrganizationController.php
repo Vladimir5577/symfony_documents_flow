@@ -11,6 +11,30 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 final class OrganizationController extends AbstractController
 {
+    #[Route('/view_organization/{id}', name: 'view_organization', requirements: ['id' => '\d+'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function viewOrganization(int $id, OrganizationRepository $organizationRepository): Response
+    {
+        $organization = $organizationRepository->createQueryBuilder('o')
+            ->leftJoin('o.departments', 'd')
+            ->addSelect('d')
+            ->leftJoin('d.departmentDivisions', 'dd')
+            ->addSelect('dd')
+            ->where('o.id = :id')
+            ->setParameter('id', $id)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        if (!$organization) {
+            throw $this->createNotFoundException('Организация не найдена');
+        }
+
+        return $this->render('organization/view_organization.html.twig', [
+            'active_tab' => 'view_organization',
+            'organization' => $organization,
+        ]);
+    }
+
     #[Route('/all_organizations', name: 'app_all_organizations', methods: ['GET'])]
     public function allOrganizations(Request $request, OrganizationRepository $organizationRepository): Response
     {

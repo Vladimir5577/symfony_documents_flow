@@ -32,7 +32,6 @@
                                     <th>Отчество</th>
                                     <th>Логин</th>
                                     <th>Телефон</th>
-                                    <th>Начальник</th>
                                     <th>Статус</th>
                                     <th>Действия</th>
                                 </tr>
@@ -47,13 +46,6 @@
                                             <td>{{ user.patronymic ?? '-' }}</td>
                                             <td>{{ user.login }}</td>
                                             <td>{{ user.phone ?? '-' }}</td>
-                                            <td>
-                                                {% if user.boss %}
-                                                    {{ user.boss.lastname ?? '' }} {{ user.boss.firstname ?? '' }}
-                                                {% else %}
-                                                    -
-                                                {% endif %}
-                                            </td>
                                             <td>
                                                 {% if user.isActive %}
                                                     <span class="badge bg-success">Активен</span>
@@ -70,7 +62,7 @@
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="9" class="text-center">Пользователи не найдены</td>
+                                        <td colspan="8" class="text-center">Пользователи не найдены</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>
