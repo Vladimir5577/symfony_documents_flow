@@ -2,6 +2,27 @@
 
 {% block title %}Просмотр организации!{% endblock %}
 
+{# Рекурсивный макрос для отображения дерева организаций в простом виде #}
+{% macro renderOrganizationTree(organization, level) %}
+    {% import _self as self %}
+    {% set indent = level * 25 %}
+    <div style="margin-left: {{ indent }}px; padding: 3px 0;">
+        <span style="font-weight: 500; font-size: 15px;">
+            — <a href="{{ path('view_organization', {'id': organization.id}) }}" 
+                 style="text-decoration: none; color: inherit;"
+                 onmouseover="this.style.color='#0d6efd';" 
+                 onmouseout="this.style.color='inherit';">
+                {{ organization.name }}
+            </a>
+        </span>
+        {% if organization.childOrganizations|length > 0 %}
+            {% for childOrg in organization.childOrganizations %}
+                {{ self.renderOrganizationTree(childOrg, level + 1) }}
+            {% endfor %}
+        {% endif %}
+    </div>
+{% endmacro %}
+
 
 
 {% block sidebar_list %}
@@ -80,6 +101,28 @@
                         </div>
                     </div>
                 </div>
+
+                {# Дочерние организации в виде дерева #}
+                {% if organization.childOrganizations|length > 0 %}
+                    {% import _self as self %}
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h4 class="card-title">
+                                Структура дочерних организаций
+                                <span class="badge bg-success ms-2">{{ organization.childOrganizations|length }}</span>
+                            </h4>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-body">
+                                <div style="font-size: 15px; line-height: 2; padding: 10px 0;">
+                                    {% for childOrg in organization.childOrganizations %}
+                                        {{ self.renderOrganizationTree(childOrg, 0) }}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
 
                 {# Департаменты #}
                 <div class="card">

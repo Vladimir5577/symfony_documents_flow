@@ -25,13 +25,9 @@
                             <form action="{{ path('user_register') }}" method="post" class="form">
                                 <input type="hidden" name="_csrf_token" value="{{ csrf_token('register') }}">
 
-                                {% for message in app.flashes('success') %}
-                                    <div class="alert alert-success">{{ message }}</div>
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger">{{ message }}</div>
                                 {% endfor %}
-
-                                {% if error %}
-                                    <div class="alert alert-danger">{{ error }}</div>
-                                {% endif %}
 
                                 <div class="row">
                                     <div class="col-12">
@@ -58,6 +54,19 @@
                                             <input type="text" id="phone-column" class="form-control" name="phone-column" placeholder="+7..." value="{{ form_data['phone-column']|default('') }}">
                                         </div>
                                     </div>
+                                    {% if is_admin|default(false) and organizations is defined and organizations %}
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="organization_id">Организация <span class="text-danger">*</span></label>
+                                            <select id="organization_id" class="form-control" name="organization_id" required>
+                                                <option value="">— Выберите организацию —</option>
+                                                {% for org in organizations %}
+                                                    <option value="{{ org.id }}" {% if form_data.organization_id|default('') == org.id %}selected{% endif %}>{{ org.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    {% endif %}
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="password-column">Пароль</label>

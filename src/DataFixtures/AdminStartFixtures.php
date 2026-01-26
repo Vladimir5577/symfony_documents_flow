@@ -5,6 +5,7 @@ namespace App\DataFixtures;
 use App\Entity\Role;
 use App\Entity\User;
 use App\Entity\Organization;
+use App\Enum\UserRole;
 use App\Repository\OrganizationRepository;
 use Doctrine\Persistence\ObjectManager;
 use Doctrine\Bundle\FixturesBundle\Fixture;
@@ -37,13 +38,19 @@ class AdminStartFixtures extends Fixture implements FixtureGroupInterface
         // Сохраняем ссылку на организацию
         $this->addReference('admin_organization', $adminOrganization);
 
-        // Создаем роль админа
-        $adminRole = new Role('ROLE_ADMIN');
-        $adminRole->setLabel('Администратор');
-        $manager->persist($adminRole);
+        // Создаем все роли из enum
+        $adminRole = null;
+        foreach (UserRole::cases() as $userRole) {
+            $role = new Role($userRole->value);
+            $role->setLabel($userRole->getLabel());
+            $manager->persist($role);
 
-        // Сохраняем ссылку на роль
-        $this->addReference('admin_role', $adminRole);
+            // Сохраняем ссылку на роль админа
+            if ($userRole === UserRole::ROLE_ADMIN) {
+                $adminRole = $role;
+                $this->addReference('admin_role', $role);
+            }
+        }
 
         // Создаем админа
         $admin = new User();

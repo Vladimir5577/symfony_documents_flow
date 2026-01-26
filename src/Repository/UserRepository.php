@@ -128,6 +128,38 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         return $this->find($id);
     }
 
+    /**
+     * Найти пользователя по логину (исключая soft deleted).
+     * Используется для валидации уникальности UniqueEntity.
+     * При редактировании исключает текущего пользователя из проверки.
+     *
+     * @param array<string, mixed> $criteria Критерии (ключ 'login')
+     * @param User|null $excludeUser Пользователь, которого исключить (при редактировании)
+     * @return User|null
+     */
+    public function findOneByLogin(array $criteria, ?User $excludeUser = null): ?User
+    {
+        $login = $criteria['login'] ?? null;
+        if ($login === null || $login === '') {
+            return null;
+        }
+
+        $qb = $this->createQueryBuilder('u')
+            ->where('u.login = :login')
+            ->setParameter('login', $login)
+            ->orderBy('u.id', 'ASC')
+            ->setMaxResults(1);
+
+        if ($excludeUser !== null && $excludeUser->getId() !== null) {
+            $qb->andWhere('u.id != :excludeId')
+                ->setParameter('excludeId', $excludeUser->getId());
+        }
+
+        $result = $qb->getQuery()->getResult();
+
+        return $result[0] ?? null;
+    }
+
     //    public function findOneBySomeField($value): ?User
     //    {
     //        return $this->createQueryBuilder('u')

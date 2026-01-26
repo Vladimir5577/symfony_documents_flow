@@ -3,6 +3,7 @@
 namespace App\Controller\Organization;
 
 use App\Entity\Organization;
+use App\Entity\User;
 use App\Repository\OrganizationRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -23,6 +24,12 @@ final class OrganizationController extends AbstractController
             ->addSelect('d')
             ->leftJoin('d.departmentDivisions', 'dd')
             ->addSelect('dd')
+            ->leftJoin('o.childOrganizations', 'co')
+            ->addSelect('co')
+            ->leftJoin('co.childOrganizations', 'co2')
+            ->addSelect('co2')
+            ->leftJoin('co2.childOrganizations', 'co3')
+            ->addSelect('co3')
             ->where('o.id = :id')
             ->setParameter('id', $id)
             ->getQuery()
@@ -60,7 +67,7 @@ final class OrganizationController extends AbstractController
     }
 
     #[Route('/create_organization', name: 'create_organization', methods: ['GET', 'POST'])]
-    #[IsGranted('ROLE_ADMIN')]
+    #[IsGranted('ROLE_USER')]
     public function createOrganization(
         Request $request,
         OrganizationRepository $organizationRepository,
@@ -76,6 +83,14 @@ final class OrganizationController extends AbstractController
                 return $this->redirectToRoute('create_organization');
             }
 
+            $currentUser = $this->getUser();
+            $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
+
+            if (!$isAdmin && $currentUser instanceof User && !$currentUser->getOrganization()) {
+                $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
+                return $this->redirectToRoute('create_organization');
+            }
+
             // Создаем новую организацию
             $organization = new Organization();
             $organization->setName(trim((string) ($formData['name'] ?? '')));
@@ -84,16 +99,11 @@ final class OrganizationController extends AbstractController
             $organization->setPhone(trim((string) ($formData['phone'] ?? '')) ?: null);
             $organization->setEmail(trim((string) ($formData['email'] ?? '')) ?: null);
 
-            // Устанавливаем родительскую организацию, если указана
-            $parentId = (int) ($formData['parent_id'] ?? 0);
-            if ($parentId > 0) {
-                $parent = $organizationRepository->find($parentId);
-                if ($parent) {
-                    // Проверка на циклическую зависимость: организация не может быть родителем самой себя
-                    if ($parent->getId() !== null) {
-                        $organization->setParent($parent);
-                    }
-                }
+            // Админ создаёт главную организацию (без родителя). Пользователь — дочернюю для своей организации.
+            if ($isAdmin) {
+                $organization->setParent(null);
+            } else {
+                $organization->setParent($currentUser->getOrganization());
             }
 
             // Валидация объекта
@@ -105,11 +115,10 @@ final class OrganizationController extends AbstractController
                 }
                 
                 // Возвращаем форму с данными и ошибками
-                $organizations = $organizationRepository->findAll();
                 return $this->render('organization/create_organization.html.twig', [
                     'active_tab' => 'create_organization',
-                    'organizations' => $organizations,
                     'form_data' => $formData,
+                    'is_admin' => $isAdmin,
                 ]);
             }
 
@@ -117,15 +126,20 @@ final class OrganizationController extends AbstractController
             $entityManager->flush();
 
             $this->addFlash('success', 'Организация успешно создана.');
-            return $this->redirectToRoute('view_organization', ['id' => $organization->getId()]);
+            if ($isAdmin) {
+                return $this->redirectToRoute('view_organization', ['id' => $organization->getId()]);
+            }
+            return $this->redirectToRoute('app_all_organizations');
         }
 
         // GET запрос - показываем форму
-        $organizations = $organizationRepository->findAll();
+        $currentUser = $this->getUser();
+        $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
 
         return $this->render('organization/create_organization.html.twig', [
             'active_tab' => 'create_organization',
-            'organizations' => $organizations,
+            'is_admin' => $isAdmin,
+            'form_data' => [],
         ]);
     }
 }

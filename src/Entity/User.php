@@ -8,13 +8,21 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
+use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: '`user`')]
 #[ORM\UniqueConstraint(name: 'UNIQ_IDENTIFIER_LOGIN', fields: ['login'])]
 #[Gedmo\SoftDeleteable(fieldName: 'deletedAt', timeAware: false, hardDelete: false)]
+#[UniqueEntity(
+    fields: ['login'],
+    message: 'Пользователь с таким логином уже существует.',
+    repositoryMethod: 'findOneByLogin',
+    ignoreNull: false
+)]
 class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
@@ -25,6 +33,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     // organization
     #[ORM\ManyToOne(targetEntity: Organization::class)]
     #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    #[Assert\NotNull(message: 'Организация обязательна для заполнения.')]
     private Organization $organization;
 
     // department
@@ -38,15 +47,20 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     private ?DepartmentDivision $departmentDivision = null;
 
     // 1) lastname
-    #[ORM\Column(length: 50, nullable: true)]
+    #[ORM\Column(length: 50)]
+    #[Assert\NotBlank(message: 'Фамилия обязательна для заполнения.')]
+    #[Assert\Length(max: 50, maxMessage: 'Фамилия не должна превышать {{ limit }} символов.')]
     private ?string $lastname = null;
 
     // 2) firstname
-    #[ORM\Column(length: 50, nullable: true)]
+    #[ORM\Column(length: 50)]
+    #[Assert\NotBlank(message: 'Имя обязательно для заполнения.')]
+    #[Assert\Length(max: 50, maxMessage: 'Имя не должно превышать {{ limit }} символов.')]
     private ?string $firstname = null;
 
     // 3) patronymic
     #[ORM\Column(length: 50, nullable: true)]
+    #[Assert\Length(max: 50, maxMessage: 'Отчество не должно превышать {{ limit }} символов.')]
     private ?string $patronymic = null;
 
     // 4) boss (self-reference)
@@ -56,13 +70,23 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     // 5) phone
     #[ORM\Column(length: 30, nullable: true)]
+    #[Assert\Length(max: 30, maxMessage: 'Телефон не должен превышать {{ limit }} символов.')]
     private ?string $phone = null;
 
     // 6) email
     #[ORM\Column(length: 50, nullable: true)]
+    #[Assert\Email(message: 'Email имеет неверный формат.')]
+    #[Assert\Length(max: 50, maxMessage: 'Email не должен превышать {{ limit }} символов.')]
     private ?string $email = null;
 
     #[ORM\Column(length: 50)]
+    #[Assert\NotBlank(message: 'Логин обязателен для заполнения.')]
+    #[Assert\Length(
+        min: 1,
+        max: 50,
+        minMessage: 'Логин не может быть пустым.',
+        maxMessage: 'Логин не должен превышать {{ limit }} символов.'
+    )]
     private ?string $login = null;
 
 //    /**
@@ -75,6 +99,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
      * @var string The hashed password
      */
     #[ORM\Column]
+    #[Assert\NotBlank(message: 'Пароль обязателен для заполнения.')]
     private ?string $password = null;
 
     // 8) is_active

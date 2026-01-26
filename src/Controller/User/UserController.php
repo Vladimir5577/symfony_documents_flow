@@ -17,6 +17,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class UserController extends AbstractController
 {
@@ -25,142 +26,116 @@ final class UserController extends AbstractController
         Request $request,
         UserPasswordHasherInterface $passwordHasher,
         EntityManagerInterface $entityManager,
-        UserRepository $userRepository,
         RoleRepository $roleRepository,
         OrganizationRepository $organizationRepository,
-        LoginGenerator $loginGenerator
-    ): Response
-    {
-        $formData = [];
-        if ($request->isMethod('POST')) {
-            $formData = $request->request->all();
-            $request->getSession()->set('register_form_data', $formData);
-
-            if (!$this->isCsrfTokenValid('register', $formData['_csrf_token'] ?? '')) {
-                $request->getSession()->set('register_error', 'Неверный CSRF токен.');
-                return $this->redirectToRoute('app_register');
-            }
-
-            $lastname = trim((string) ($formData['fname-column'] ?? ''));
-            $firstname = trim((string) ($formData['lname-column'] ?? ''));
-            $plainPassword = (string) ($formData['plain_password'] ?? '');
-            $confirmPassword = (string) ($formData['confirm_password'] ?? '');
-
-            if ($lastname === '' || $firstname === '') {
-                $request->getSession()->set('register_error', 'Имя и фамилия обязательны.');
-                return $this->redirectToRoute('app_register');
-            }
-
-            if ($plainPassword !== $confirmPassword) {
-                $request->getSession()->set('register_error', 'Пароли не совпадают.');
-                return $this->redirectToRoute('app_register');
-            }
-
-            $login = $loginGenerator->generateLoginBase($lastname, $firstname);
-            if ($login === '') {
-                $request->getSession()->set('register_error', 'Не удалось сформировать логин.');
-                return $this->redirectToRoute('app_register');
-            }
-
-            // Получаем текущего залогиненного пользователя
-            $currentUser = $this->getUser();
-            $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
-
-            // Определяем организацию для нового пользователя
-            $organization = null;
-            if ($isAdmin) {
-                // Если админ - организация должна быть выбрана из формы
-                $organizationId = (int) ($formData['organization_id'] ?? 0);
-                if ($organizationId <= 0) {
-                    $request->getSession()->set('register_error', 'Необходимо выбрать организацию.');
-                    return $this->redirectToRoute('user_register');
-                }
-                $organization = $organizationRepository->find($organizationId);
-                if (!$organization) {
-                    $request->getSession()->set('register_error', 'Организация не найдена.');
-                    return $this->redirectToRoute('user_register');
-                }
-            } elseif ($currentUser instanceof User) {
-                // Если не админ - берем организацию из текущего пользователя
-                $organization = $currentUser->getOrganization();
-            } else {
-                // Если пользователь не залогинен - ошибка
-                $request->getSession()->set('register_error', 'Необходимо войти в систему для регистрации пользователя.');
-                return $this->redirectToRoute('user_register');
-            }
-
-            if (!$organization) {
-                $request->getSession()->set('register_error', 'Не удалось определить организацию.');
-                return $this->redirectToRoute('user_register');
-            }
-
-            $user = new User();
-            $user->setLogin($login);
-            $user->setLastname($lastname ?: null);
-            $user->setFirstname($firstname ?: null);
-            $user->setPatronymic(trim((string) ($formData['city-column'] ?? '')) ?: null);
-            $user->setPhone(trim((string) ($formData['phone-column'] ?? '')) ?: null);
-            $user->setPassword($passwordHasher->hashPassword($user, $plainPassword));
-            $user->setOrganization($organization);
-
-            // Устанавливаем created_by текущим залогиненным пользователем
-            if ($currentUser instanceof User) {
-                $user->setCreatedBy($currentUser);
-            }
-
-            // Assign default role ROLE_USER
-            $defaultRole = $roleRepository->findOneBy(['name' => 'ROLE_USER']);
-            if ($defaultRole) {
-                $user->addRoleEntity($defaultRole);
-            }
-
-            $entityManager->persist($user);
-            $entityManager->flush();
-
-            // Создаем Worker, если указана profession
-            $profession = trim((string) ($formData['profession-column'] ?? ''));
-            if ($profession !== '') {
-                $worker = new Worker();
-                $worker->setUserId($user->getId());
-                $worker->setProfession($profession);
-                $description = trim((string) ($formData['description-column'] ?? ''));
-                if ($description !== '') {
-                    $worker->setDescription($description);
-                }
-                $entityManager->persist($worker);
-                $entityManager->flush();
-            }
-
-            $request->getSession()->remove('register_form_data');
-            $request->getSession()->remove('register_error');
-            $this->addFlash('success', 'Регистрация успешна.');
-
-            return $this->redirectToRoute('app_register');
-        } else {
-            $formData = $request->getSession()->get('register_form_data', []);
-            $request->getSession()->remove('register_form_data');
-        }
-
-        $error = $request->getSession()->get('register_error');
-        $request->getSession()->remove('register_error');
-
-        // Получаем текущего пользователя для проверки роли
+        LoginGenerator $loginGenerator,
+        ValidatorInterface $validator
+    ): Response {
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
-        
-        // Если админ - передаем список организаций для выбора
-        $organizations = null;
-        if ($isAdmin) {
-            $organizations = $organizationRepository->findAll();
+        $organizations = $isAdmin ? $organizationRepository->findAll() : null;
+
+        $renderForm = function (array $formData = []) use ($isAdmin, $organizations): Response {
+            return $this->render('auth/register.html.twig', [
+                'active_tab' => 'register',
+                'form_data' => $formData,
+                'is_admin' => $isAdmin,
+                'organizations' => $organizations,
+            ]);
+        };
+
+        if (!$request->isMethod('POST')) {
+            return $renderForm([]);
         }
 
-        return $this->render('auth/register.html.twig', [
-            'active_tab' => 'register',
-            'error' => $error,
-            'form_data' => $formData,
-            'is_admin' => $isAdmin,
-            'organizations' => $organizations,
-        ]);
+        $formData = $request->request->all();
+
+        if (!$this->isCsrfTokenValid('register', $formData['_csrf_token'] ?? '')) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('user_register');
+        }
+
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему для регистрации пользователя.');
+            return $this->redirectToRoute('user_register');
+        }
+
+        $organization = null;
+        if ($isAdmin) {
+            $organizationId = (int) ($formData['organization_id'] ?? 0);
+            if ($organizationId <= 0) {
+                $this->addFlash('error', 'Необходимо выбрать организацию.');
+                return $renderForm($formData);
+            }
+            $organization = $organizationRepository->find($organizationId);
+            if (!$organization) {
+                $this->addFlash('error', 'Организация не найдена.');
+                return $renderForm($formData);
+            }
+        } else {
+            $organization = $currentUser->getOrganization();
+            if (!$organization) {
+                $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
+                return $this->redirectToRoute('user_register');
+            }
+        }
+
+        $plainPassword = (string) ($formData['plain_password'] ?? '');
+        $confirmPassword = (string) ($formData['confirm_password'] ?? '');
+        if ($plainPassword !== $confirmPassword) {
+            $this->addFlash('error', 'Пароли не совпадают.');
+            return $renderForm($formData);
+        }
+
+        $lastname = trim((string) ($formData['fname-column'] ?? ''));
+        $firstname = trim((string) ($formData['lname-column'] ?? ''));
+        $login = $loginGenerator->generateLoginBase($lastname, $firstname);
+        if ($login === '') {
+            $this->addFlash('error', 'Не удалось сформировать логин.');
+            return $renderForm($formData);
+        }
+
+        $user = new User();
+        $user->setLogin($login);
+        $user->setLastname($lastname !== '' ? $lastname : null);
+        $user->setFirstname($firstname !== '' ? $firstname : null);
+        $user->setPatronymic(trim((string) ($formData['city-column'] ?? '')) ?: null);
+        $user->setPhone(trim((string) ($formData['phone-column'] ?? '')) ?: null);
+        $user->setPassword($passwordHasher->hashPassword($user, $plainPassword));
+        $user->setOrganization($organization);
+        $user->setCreatedBy($currentUser);
+
+        $defaultRole = $roleRepository->findOneBy(['name' => 'ROLE_USER']);
+        if ($defaultRole) {
+            $user->addRoleEntity($defaultRole);
+        }
+
+        $errors = $validator->validate($user);
+        if (count($errors) > 0) {
+            foreach ($errors as $error) {
+                $this->addFlash('error', $error->getMessage());
+            }
+            return $renderForm($formData);
+        }
+
+        $entityManager->persist($user);
+        $entityManager->flush();
+
+        $profession = trim((string) ($formData['profession-column'] ?? ''));
+        if ($profession !== '') {
+            $worker = new Worker();
+            $worker->setUserId($user->getId());
+            $worker->setProfession($profession);
+            $description = trim((string) ($formData['description-column'] ?? ''));
+            if ($description !== '') {
+                $worker->setDescription($description);
+            }
+            $entityManager->persist($worker);
+            $entityManager->flush();
+        }
+
+        $this->addFlash('success', 'Регистрация успешна.');
+        return $this->redirectToRoute('app_view_user', ['id' => $user->getId()]);
     }
 
     #[Route('/users', name: 'app_all_users', methods: ['GET'])]

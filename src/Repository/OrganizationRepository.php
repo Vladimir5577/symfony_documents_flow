@@ -53,6 +53,7 @@ class OrganizationRepository extends ServiceEntityRepository
 
     /**
      * Получить пагинированный список организаций
+     * Выводит только родительские организации (без дочерних)
      *
      * @param int $page Номер страницы (начиная с 1)
      * @param int $limit Количество элементов на странице
@@ -66,13 +67,15 @@ class OrganizationRepository extends ServiceEntityRepository
             ->leftJoin('o.departments', 'd')
             ->addSelect('d')
             ->where('o.name != :adminName')
+            ->andWhere('o.parent IS NULL')
             ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)
             ->orderBy('o.id', 'ASC');
 
-        // Получаем общее количество организаций (исключая админскую)
+        // Получаем общее количество родительских организаций (исключая админскую)
         $total = (int) $this->createQueryBuilder('o')
             ->select('COUNT(o.id)')
             ->where('o.name != :adminName')
+            ->andWhere('o.parent IS NULL')
             ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)
             ->getQuery()
             ->getSingleScalarResult();

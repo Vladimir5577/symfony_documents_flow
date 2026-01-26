@@ -3,6 +3,7 @@
 namespace App\DataFixtures;
 
 use App\Entity\Role;
+use App\Enum\UserRole;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Persistence\ObjectManager;
@@ -16,16 +17,10 @@ class RoleFixtures extends Fixture implements FixtureGroupInterface
 
     public function load(ObjectManager $manager): void
     {
-        $roles = [
-            ['name' => 'ROLE_ADMIN', 'label' => 'Администратор'],
-            ['name' => 'ROLE_HR', 'label' => 'Отдел кадров'],
-            ['name' => 'ROLE_EDITOR', 'label' => 'Редактор'],
-            ['name' => 'ROLE_USER', 'label' => 'Пользователь'],
-        ];
-
-        foreach ($roles as $item) {
-            $role = new Role($item['name']);
-            $role->setLabel($item['label']);
+        // Создаем все роли из enum
+        foreach (UserRole::cases() as $userRole) {
+            $role = new Role($userRole->value);
+            $role->setLabel($userRole->getLabel());
             $manager->persist($role);
         }
 

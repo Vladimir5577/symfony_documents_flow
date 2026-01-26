@@ -11,6 +11,13 @@
 
 
 {% block main %}
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Просмотр пользователя</h1>
         <a href="{{ path('app_all_users', {page: page|default(1)}) }}" class="btn btn-secondary">
