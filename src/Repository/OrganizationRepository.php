@@ -11,9 +11,44 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class OrganizationRepository extends ServiceEntityRepository
 {
+    public const ADMIN_ORGANIZATION_NAME = 'Admin Organization';
+    
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, Organization::class);
+    }
+
+    /**
+     * Найти организацию по имени (исключая soft deleted)
+     * Используется для валидации уникальности с учетом soft delete
+     *
+     * Фильтр soft delete применяется автоматически через глобальный фильтр Doctrine
+     * UniqueEntity передает массив критериев и текущий объект как последний параметр при редактировании
+     *
+     * @param array<string, mixed> $criteria Массив критериев (ключ 'name' содержит название организации)
+     * @param Organization|null $excludeOrganization Организация, которую нужно исключить из проверки (для редактирования)
+     * @return Organization|null
+     */
+    public function findOneByName(array $criteria, ?Organization $excludeOrganization = null): ?Organization
+    {
+        $name = $criteria['name'] ?? null;
+        if ($name === null) {
+            return null;
+        }
+
+        $qb = $this->createQueryBuilder('o')
+            ->where('o.name = :name')
+            ->setParameter('name', $name)
+            ->orderBy('o.id', 'ASC')
+            ->setMaxResults(1);
+
+        if ($excludeOrganization !== null && $excludeOrganization->getId() !== null) {
+            $qb->andWhere('o.id != :excludeId')
+                ->setParameter('excludeId', $excludeOrganization->getId());
+        }
+
+        $result = $qb->getQuery()->getResult();
+        return $result[0] ?? null;
     }
 
     /**
@@ -30,11 +65,15 @@ class OrganizationRepository extends ServiceEntityRepository
         $qb = $this->createQueryBuilder('o')
             ->leftJoin('o.departments', 'd')
             ->addSelect('d')
+            ->where('o.name != :adminName')
+            ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)
             ->orderBy('o.id', 'ASC');
 
-        // Получаем общее количество организаций
+        // Получаем общее количество организаций (исключая админскую)
         $total = (int) $this->createQueryBuilder('o')
             ->select('COUNT(o.id)')
+            ->where('o.name != :adminName')
+            ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)
             ->getQuery()
             ->getSingleScalarResult();
 

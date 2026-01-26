@@ -70,6 +70,18 @@
                                             <input type="password" id="confirm-password-column" class="form-control" name="confirm_password" placeholder="Повторите пароль" required>
                                         </div>
                                     </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="profession-column">Профессия (опционально)</label>
+                                            <input type="text" id="profession-column" class="form-control" name="profession-column" placeholder="Профессия" value="{{ form_data['profession-column']|default('') }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="description-column">Описание профессии (опционально)</label>
+                                            <textarea id="description-column" class="form-control" name="description-column" placeholder="Описание" rows="3">{{ form_data['description-column']|default('') }}</textarea>
+                                        </div>
+                                    </div>
                                     <div class="col-12 d-flex justify-content-end">
                                         <button type="submit" class="btn btn-primary me-1 mb-1">Регистрация</button>
                                     </div>

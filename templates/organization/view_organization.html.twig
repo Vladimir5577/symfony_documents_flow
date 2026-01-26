@@ -18,6 +18,21 @@
         </a>
     </div>
 
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+
+        <script>
+            Swal.fire({
+                title: "Организация создана успешно!",
+                text: "Можно добавить новых пользователей",
+                icon: "success"
+            });
+        </script>
+    {% endfor %}
+
     <section class="section">
         <div class="row">
             <div class="col-12">

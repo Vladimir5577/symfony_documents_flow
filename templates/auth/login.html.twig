@@ -14,6 +14,8 @@
     <link rel="stylesheet" href="./front_end/assets/compiled/css/app-dark.css">
     <link rel="stylesheet" href="./front_end/assets/compiled/css/auth.css">
 
+    <script src="/front_end/assets/static/js/sweet_alert.js"></script>
+
     {% block javascripts %}
         {% block importmap %}{{ importmap('app') }}{% endblock %}
     {% endblock %}
@@ -81,6 +83,15 @@
 
                     {% if error %}
                         <div class="alert alert-danger">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
+
+                        <script>
+                            Swal.fire({
+                                icon: "error",
+                                title: "Неправильные логин или пароль",
+                                text: "Проверьте введенные данные",
+                                // footer: '<a href="#">Why do I have this issue?</a>'
+                            });
+                        </script>
                     {% endif %}
 
                     {% if app.user %}

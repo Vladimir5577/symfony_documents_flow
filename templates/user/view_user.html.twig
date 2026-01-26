@@ -70,33 +70,6 @@
                                                 </td>
                                             </tr>
                                             <tr>
-                                                <th class="text-muted">Организация:</th>
-                                                <td>
-                                                    <strong>{{ user.organization.name }}</strong>
-                                                    {% if user.organization.address %}
-                                                        <br><small class="text-muted">{{ user.organization.address }}</small>
-                                                    {% endif %}
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <th class="text-muted">Департамент:</th>
-                                                <td>
-                                                    <strong>{{ user.department.name }}</strong>
-                                                    {% if user.department.description %}
-                                                        <br><small class="text-muted">{{ user.department.description }}</small>
-                                                    {% endif %}
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <th class="text-muted">Подразделение:</th>
-                                                <td>
-                                                    <strong>{{ user.departmentDivision.name }}</strong>
-                                                    {% if user.departmentDivision.description %}
-                                                        <br><small class="text-muted">{{ user.departmentDivision.description }}</small>
-                                                    {% endif %}
-                                                </td>
-                                            </tr>
-                                            <tr>
                                                 <th class="text-muted">Начальник:</th>
                                                 <td>
                                                     {% if user.boss %}
@@ -120,6 +93,18 @@
                                                     {% endif %}
                                                 </td>
                                             </tr>
+                                            {% if worker %}
+                                            <tr>
+                                                <th class="text-muted">Профессия:</th>
+                                                <td><strong>{{ worker.profession }}</strong></td>
+                                            </tr>
+                                            {% if worker.description %}
+                                            <tr>
+                                                <th class="text-muted">Описание:</th>
+                                                <td>{{ worker.description }}</td>
+                                            </tr>
+                                            {% endif %}
+                                            {% endif %}
                                         </tbody>
                                     </table>
                                 </div>

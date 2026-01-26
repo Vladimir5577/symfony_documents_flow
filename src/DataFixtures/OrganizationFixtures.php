@@ -46,6 +46,13 @@ class OrganizationFixtures extends Fixture
                 'phone' => '+7 (863) 567-89-01',
                 'email' => 'project@stroyproekt.ru',
             ],
+            [
+                'name' => 'Административная организация',
+                'description' => 'Организация для системных администраторов',
+                'address' => 'г. Ростов-на-Дону, ул. Административная, д. 1',
+                'phone' => '+7 (863) 000-00-01',
+                'email' => 'admin@system.local',
+            ],
         ];
 
         foreach ($organizations as $index => $orgData) {

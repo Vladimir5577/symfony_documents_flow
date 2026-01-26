@@ -11,6 +11,92 @@
 
 
 {% block main %}
-    <h1>Новая организация</h1>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Новая организация</h1>
+        <a href="{{ path('app_all_organizations') }}" class="btn btn-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Назад к списку
+        </a>
+    </div>
 
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Форма создания организации</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('create_organization') }}" method="post" class="form">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('create_organization') }}">
+
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success">{{ message }}</div>
+                                {% endfor %}
+
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger">{{ message }}</div>
+                                {% endfor %}
+
+                                <div class="row">
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="name">Название организации <span class="text-danger">*</span></label>
+                                            <input type="text" id="name" class="form-control" placeholder="Название организации" name="name" value="{{ form_data.name|default('') }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="parent_id">Родительская организация</label>
+                                            <select id="parent_id" class="form-control" name="parent_id">
+                                                <option value="">Нет родительской организации</option>
+                                                {% for org in organizations %}
+                                                    <option value="{{ org.id }}" {% if form_data.parent_id|default('') == org.id %}selected{% endif %}>{{ org.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="description">Описание</label>
+                                            <textarea id="description" class="form-control" name="description" rows="3" placeholder="Описание организации">{{ form_data.description|default('') }}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="address">Адрес</label>
+                                            <input type="text" id="address" class="form-control" name="address" placeholder="Адрес организации" value="{{ form_data.address|default('') }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="phone">Телефон</label>
+                                            <input type="text" id="phone" class="form-control" name="phone" placeholder="+7 (XXX) XXX-XX-XX" value="{{ form_data.phone|default('') }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="email">Email</label>
+                                            <input type="email" id="email" class="form-control" name="email" placeholder="email@example.com" value="{{ form_data.email|default('') }}">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-12 d-flex justify-content-end">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Создать организацию</button>
+                                        <a href="{{ path('app_all_organizations') }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 {% endblock %}

@@ -29,13 +29,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     // department
     #[ORM\ManyToOne(targetEntity: Department::class)]
-    #[ORM\JoinColumn(name: 'department_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
-    private Department $department;
+    #[ORM\JoinColumn(name: 'department_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
+    private ?Department $department = null;
 
     // department_division
     #[ORM\ManyToOne(targetEntity: DepartmentDivision::class)]
-    #[ORM\JoinColumn(name: 'department_division_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
-    private DepartmentDivision $departmentDivision;
+    #[ORM\JoinColumn(name: 'department_division_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
+    private ?DepartmentDivision $departmentDivision = null;
 
     // 1) lastname
     #[ORM\Column(length: 50, nullable: true)]
@@ -57,6 +57,10 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     // 5) phone
     #[ORM\Column(length: 30, nullable: true)]
     private ?string $phone = null;
+
+    // 6) email
+    #[ORM\Column(length: 50, nullable: true)]
+    private ?string $email = null;
 
     #[ORM\Column(length: 50)]
     private ?string $login = null;
@@ -82,14 +86,24 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
 
-    // 10) updated_at
+    // 10) created_by (self-reference)
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(name: 'created_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?self $createdBy = null;
+
+    // 11) updated_at
     #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable]
     private ?\DateTimeImmutable $updatedAt = null;
 
-    // 11) deleted_at (soft delete)
+    // 12) deleted_at (soft delete)
     #[ORM\Column(name: 'deleted_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $deletedAt = null;
+
+    // 13) updated_by (self-reference)
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(name: 'updated_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?self $updatedBy = null;
 
     /** @var Collection<int, UserRole> */
     #[ORM\OneToMany(mappedBy: 'user', targetEntity: UserRole::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
@@ -217,6 +231,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
+    public function getEmail(): ?string
+    {
+        return $this->email;
+    }
+
+    public function setEmail(?string $email): static
+    {
+        $this->email = $email;
+
+        return $this;
+    }
+
     public function isActive(): bool
     {
         return $this->isActive;
@@ -288,24 +314,24 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    public function getDepartment(): Department
+    public function getDepartment(): ?Department
     {
         return $this->department;
     }
 
-    public function setDepartment(Department $department): static
+    public function setDepartment(?Department $department): static
     {
         $this->department = $department;
 
         return $this;
     }
 
-    public function getDepartmentDivision(): DepartmentDivision
+    public function getDepartmentDivision(): ?DepartmentDivision
     {
         return $this->departmentDivision;
     }
 
-    public function setDepartmentDivision(DepartmentDivision $departmentDivision): static
+    public function setDepartmentDivision(?DepartmentDivision $departmentDivision): static
     {
         $this->departmentDivision = $departmentDivision;
 
@@ -320,6 +346,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setCreatedAt(?\DateTimeImmutable $createdAt): static
     {
         $this->createdAt = $createdAt;
+
+        return $this;
+    }
+
+    public function getCreatedBy(): ?self
+    {
+        return $this->createdBy;
+    }
+
+    public function setCreatedBy(?self $createdBy): static
+    {
+        $this->createdBy = $createdBy;
 
         return $this;
     }
@@ -351,5 +389,17 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function isDeleted(): bool
     {
         return $this->deletedAt !== null;
+    }
+
+    public function getUpdatedBy(): ?self
+    {
+        return $this->updatedBy;
+    }
+
+    public function setUpdatedBy(?self $updatedBy): static
+    {
+        $this->updatedBy = $updatedBy;
+
+        return $this;
     }
 }

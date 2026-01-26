@@ -3,11 +3,13 @@
 namespace App\Controller\User;
 
 use App\Entity\User;
+use App\Entity\Worker;
 use App\Repository\DepartmentDivisionRepository;
 use App\Repository\DepartmentRepository;
 use App\Repository\OrganizationRepository;
 use App\Repository\RoleRepository;
 use App\Repository\UserRepository;
+use App\Repository\WorkerRepository;
 use App\Utils\LoginGenerator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -25,6 +27,7 @@ final class UserController extends AbstractController
         EntityManagerInterface $entityManager,
         UserRepository $userRepository,
         RoleRepository $roleRepository,
+        OrganizationRepository $organizationRepository,
         LoginGenerator $loginGenerator
     ): Response
     {
@@ -59,6 +62,38 @@ final class UserController extends AbstractController
                 return $this->redirectToRoute('app_register');
             }
 
+            // Получаем текущего залогиненного пользователя
+            $currentUser = $this->getUser();
+            $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
+
+            // Определяем организацию для нового пользователя
+            $organization = null;
+            if ($isAdmin) {
+                // Если админ - организация должна быть выбрана из формы
+                $organizationId = (int) ($formData['organization_id'] ?? 0);
+                if ($organizationId <= 0) {
+                    $request->getSession()->set('register_error', 'Необходимо выбрать организацию.');
+                    return $this->redirectToRoute('user_register');
+                }
+                $organization = $organizationRepository->find($organizationId);
+                if (!$organization) {
+                    $request->getSession()->set('register_error', 'Организация не найдена.');
+                    return $this->redirectToRoute('user_register');
+                }
+            } elseif ($currentUser instanceof User) {
+                // Если не админ - берем организацию из текущего пользователя
+                $organization = $currentUser->getOrganization();
+            } else {
+                // Если пользователь не залогинен - ошибка
+                $request->getSession()->set('register_error', 'Необходимо войти в систему для регистрации пользователя.');
+                return $this->redirectToRoute('user_register');
+            }
+
+            if (!$organization) {
+                $request->getSession()->set('register_error', 'Не удалось определить организацию.');
+                return $this->redirectToRoute('user_register');
+            }
+
             $user = new User();
             $user->setLogin($login);
             $user->setLastname($lastname ?: null);
@@ -66,6 +101,12 @@ final class UserController extends AbstractController
             $user->setPatronymic(trim((string) ($formData['city-column'] ?? '')) ?: null);
             $user->setPhone(trim((string) ($formData['phone-column'] ?? '')) ?: null);
             $user->setPassword($passwordHasher->hashPassword($user, $plainPassword));
+            $user->setOrganization($organization);
+
+            // Устанавливаем created_by текущим залогиненным пользователем
+            if ($currentUser instanceof User) {
+                $user->setCreatedBy($currentUser);
+            }
 
             // Assign default role ROLE_USER
             $defaultRole = $roleRepository->findOneBy(['name' => 'ROLE_USER']);
@@ -75,6 +116,20 @@ final class UserController extends AbstractController
 
             $entityManager->persist($user);
             $entityManager->flush();
+
+            // Создаем Worker, если указана profession
+            $profession = trim((string) ($formData['profession-column'] ?? ''));
+            if ($profession !== '') {
+                $worker = new Worker();
+                $worker->setUserId($user->getId());
+                $worker->setProfession($profession);
+                $description = trim((string) ($formData['description-column'] ?? ''));
+                if ($description !== '') {
+                    $worker->setDescription($description);
+                }
+                $entityManager->persist($worker);
+                $entityManager->flush();
+            }
 
             $request->getSession()->remove('register_form_data');
             $request->getSession()->remove('register_error');
@@ -89,10 +144,22 @@ final class UserController extends AbstractController
         $error = $request->getSession()->get('register_error');
         $request->getSession()->remove('register_error');
 
+        // Получаем текущего пользователя для проверки роли
+        $currentUser = $this->getUser();
+        $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
+        
+        // Если админ - передаем список организаций для выбора
+        $organizations = null;
+        if ($isAdmin) {
+            $organizations = $organizationRepository->findAll();
+        }
+
         return $this->render('auth/register.html.twig', [
             'active_tab' => 'register',
             'error' => $error,
             'form_data' => $formData,
+            'is_admin' => $isAdmin,
+            'organizations' => $organizations,
         ]);
     }
 
@@ -118,16 +185,13 @@ final class UserController extends AbstractController
     }
 
     #[Route('/user/{id}', name: 'app_view_user', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function viewUser(int $id, Request $request, UserRepository $userRepository): Response
+    public function viewUser(int $id, Request $request, UserRepository $userRepository, WorkerRepository $workerRepository): Response
     {
         // Получаем номер страницы из query параметра для возврата к той же странице списка
         $page = max(1, (int) $request->query->get('page', 1));
 
         // Загружаем пользователя со всеми связанными данными для избежания N+1
         $user = $userRepository->createQueryBuilder('u')
-            ->leftJoin('u.organization', 'org')->addSelect('org')
-            ->leftJoin('u.department', 'dept')->addSelect('dept')
-            ->leftJoin('u.departmentDivision', 'div')->addSelect('div')
             ->leftJoin('u.boss', 'boss')->addSelect('boss')
             ->leftJoin('u.userRoles', 'ur')->addSelect('ur')
             ->leftJoin('ur.role', 'r')->addSelect('r')
@@ -140,9 +204,13 @@ final class UserController extends AbstractController
             throw $this->createNotFoundException('Пользователь не найден');
         }
 
+        // Загружаем Worker для пользователя, если он существует
+        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+
         return $this->render('user/view_user.html.twig', [
             'active_tab' => 'view_user',
             'user' => $user,
+            'worker' => $worker,
             'page' => $page,
         ]);
     }
@@ -284,7 +352,8 @@ final class UserController extends AbstractController
         $departmentId = (int) ($formData['department_id'] ?? 0);
         if ($departmentId > 0) {
             $department = $departmentRepository->find($departmentId);
-            if ($department && $user->getDepartment()->getId() !== $department->getId()) {
+            $currentDepartment = $user->getDepartment();
+            if ($department && (!$currentDepartment || $currentDepartment->getId() !== $department->getId())) {
                 $user->setDepartment($department);
             }
         }
@@ -293,7 +362,8 @@ final class UserController extends AbstractController
         $departmentDivisionId = (int) ($formData['department_division_id'] ?? 0);
         if ($departmentDivisionId > 0) {
             $departmentDivision = $departmentDivisionRepository->find($departmentDivisionId);
-            if ($departmentDivision && $user->getDepartmentDivision()->getId() !== $departmentDivision->getId()) {
+            $currentDepartmentDivision = $user->getDepartmentDivision();
+            if ($departmentDivision && (!$currentDepartmentDivision || $currentDepartmentDivision->getId() !== $departmentDivision->getId())) {
                 $user->setDepartmentDivision($departmentDivision);
             }
         }
@@ -360,6 +430,12 @@ final class UserController extends AbstractController
                     }
                 }
             }
+        }
+
+        // Устанавливаем updated_by текущим залогиненным пользователем
+        $currentUser = $this->getUser();
+        if ($currentUser instanceof User) {
+            $user->setUpdatedBy($currentUser);
         }
 
         // Сохраняем изменения

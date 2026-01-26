@@ -10,9 +10,20 @@ Create
 $ php bin/console make:controller PageController
 
 
+drop database don_stroy_mash;
+create database don_stroy_mash;
+
+// ============================
+
 Mugration
 $ php bin/console make:migration
 $ php bin/console doctrine:migrations:migrate
+
+    Load basic admin fixturex
+$ php bin/console doctrine:fixtures:load --group=admin   --- only one fixture
+
+
+// ============================
 
 Fixture
 $ php bin/console make:fixture RoleFixtures  
