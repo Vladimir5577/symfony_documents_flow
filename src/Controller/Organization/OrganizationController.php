@@ -16,14 +16,9 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 final class OrganizationController extends AbstractController
 {
     #[Route('/view_organization/{id}', name: 'view_organization', requirements: ['id' => '\d+'])]
-    #[IsGranted('ROLE_ADMIN')]
     public function viewOrganization(int $id, OrganizationRepository $organizationRepository): Response
     {
         $organization = $organizationRepository->createQueryBuilder('o')
-            ->leftJoin('o.departments', 'd')
-            ->addSelect('d')
-            ->leftJoin('d.departmentDivisions', 'dd')
-            ->addSelect('dd')
             ->leftJoin('o.childOrganizations', 'co')
             ->addSelect('co')
             ->leftJoin('co.childOrganizations', 'co2')
@@ -48,20 +43,54 @@ final class OrganizationController extends AbstractController
     #[Route('/all_organizations', name: 'app_all_organizations', methods: ['GET'])]
     public function allOrganizations(Request $request, OrganizationRepository $organizationRepository): Response
     {
-        $page = max(1, (int) $request->query->get('page', 1));
-        $limit = 10; // Количество организаций на странице
+        $currentUser = $this->getUser();
 
-        $pagination = $organizationRepository->findPaginated($page, $limit);
+        if (!$currentUser instanceof User) {
+            throw $this->createAccessDeniedException('Необходима авторизация');
+        }
+
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+
+        if ($isAdmin) {
+            // Админ видит все родительские организации с пагинацией
+            $page = max(1, (int) $request->query->get('page', 1));
+            $limit = 10; // Количество организаций на странице
+
+            $pagination = $organizationRepository->findPaginated($page, $limit);
+
+            return $this->render('organization/all_organizations.html.twig', [
+                'active_tab' => 'all_organizations',
+                'controller_name' => 'OrganizationController',
+                'organizations' => $pagination['organizations'],
+                'pagination' => [
+                    'current_page' => $pagination['page'],
+                    'total_pages' => $pagination['totalPages'],
+                    'total_items' => $pagination['total'],
+                    'items_per_page' => $pagination['limit'],
+                ],
+            ]);
+        }
+
+        // Обычный пользователь видит только свою организацию
+        $userOrganization = $currentUser->getOrganization();
+
+        if (!$userOrganization) {
+            $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
+            return $this->redirectToRoute('app_dashboard');
+        }
+
+        // Показываем только организацию пользователя
+        $organizations = [$userOrganization];
 
         return $this->render('organization/all_organizations.html.twig', [
             'active_tab' => 'all_organizations',
             'controller_name' => 'OrganizationController',
-            'organizations' => $pagination['organizations'],
+            'organizations' => $organizations,
             'pagination' => [
-                'current_page' => $pagination['page'],
-                'total_pages' => $pagination['totalPages'],
-                'total_items' => $pagination['total'],
-                'items_per_page' => $pagination['limit'],
+                'current_page' => 1,
+                'total_pages' => 1,
+                'total_items' => 1,
+                'items_per_page' => 1,
             ],
         ]);
     }
@@ -113,7 +142,7 @@ final class OrganizationController extends AbstractController
                 foreach ($errors as $error) {
                     $this->addFlash('error', $error->getMessage());
                 }
-                
+
                 // Возвращаем форму с данными и ошибками
                 return $this->render('organization/create_organization.html.twig', [
                     'active_tab' => 'create_organization',

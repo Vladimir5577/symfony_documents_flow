@@ -89,9 +89,53 @@
 
     <div id="main">
         <header class="mb-3">
-            <a href="#" class="burger-btn d-block d-xl-none">
-                <i class="bi bi-justify fs-3"></i>
-            </a>
+            <div class="d-flex justify-content-between align-items-center w-100">
+                <a href="#" class="burger-btn d-block d-xl-none">
+                    <i class="bi bi-justify fs-3"></i>
+                </a>
+                {% if app.user %}
+                    <div class="dropdown ms-auto">
+                        <a class="btn btn-link text-decoration-none dropdown-toggle d-flex align-items-center gap-2 px-3 py-2" href="#" role="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="border: none; box-shadow: none; color: inherit;">
+                            <i class="bi bi-person-circle" style="font-size: 1.25rem;"></i>
+                            <span class="d-none d-md-inline" style="font-size: 0.9rem; font-weight: 500;">
+                                {% if app.user.lastname or app.user.firstname %}
+                                    {{ app.user.lastname ?? '' }} {{ app.user.firstname ?? '' }}
+                                {% else %}
+                                    {{ app.user.userIdentifier }}
+                                {% endif %}
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="userDropdown" style="min-width: 200px;">
+                            <li>
+                                <h6 class="dropdown-header text-truncate mb-0" style="max-width: 180px;">
+                                    {% if app.user.lastname or app.user.firstname %}
+                                        {{ app.user.lastname ?? '' }} {{ app.user.firstname ?? '' }} {{ app.user.patronymic ?? '' }}
+                                    {% else %}
+                                        {{ app.user.userIdentifier }}
+                                    {% endif %}
+                                </h6>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{{ path('app_view_user', {id: app.user.id}) }}">
+                                    <i class="bi bi-person me-2"></i>Мой профиль
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{{ path('app_edit_user', {id: app.user.id}) }}">
+                                    <i class="bi bi-gear me-2"></i>Настройки
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item text-danger" href="{{ path('app_logout') }}">
+                                    <i class="bi bi-box-arrow-right me-2"></i>Выход
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
         </header>
 
         <div class="page-heading">

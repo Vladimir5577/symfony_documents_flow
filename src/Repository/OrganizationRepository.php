@@ -52,6 +52,63 @@ class OrganizationRepository extends ServiceEntityRepository
     }
 
     /**
+     * Получить все родительские организации (где parent IS NULL)
+     * Исключает админскую организацию
+     *
+     * @return Organization[]
+     */
+    public function findAllParentOrganizations(): array
+    {
+        return $this->createQueryBuilder('o')
+            ->where('o.parent IS NULL')
+            ->andWhere('o.name != :adminName')
+            ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)
+            ->orderBy('o.name', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Получить дерево организаций с дочерними (рекурсивно)
+     * Для админа — все родительские организации с полным деревом дочерних.
+     * Для обычного пользователя — организация пользователя и её дочерние
+     * (если пользователь в дочерней организации — эта организация и её дети).
+     *
+     * @param Organization|null $userOrganization Организация пользователя (null для админа)
+     * @return Organization[]
+     */
+    public function getOrganizationTree(?Organization $userOrganization = null): array
+    {
+        if ($userOrganization === null) {
+            // Для админа — все родительские организации с полным деревом
+            return $this->findAllParentOrganizations();
+        }
+
+        // Для обычного пользователя — его организация и дочерние к ней
+        return [$userOrganization];
+    }
+
+    /**
+     * Загрузить организацию со всеми дочерними организациями (рекурсивно, до 5 уровней)
+     *
+     * @param int $organizationId ID организации
+     * @return Organization|null
+     */
+    public function findWithChildren(int $organizationId): ?Organization
+    {
+        return $this->createQueryBuilder('o')
+            ->leftJoin('o.childOrganizations', 'co1')->addSelect('co1')
+            ->leftJoin('co1.childOrganizations', 'co2')->addSelect('co2')
+            ->leftJoin('co2.childOrganizations', 'co3')->addSelect('co3')
+            ->leftJoin('co3.childOrganizations', 'co4')->addSelect('co4')
+            ->leftJoin('co4.childOrganizations', 'co5')->addSelect('co5')
+            ->where('o.id = :id')
+            ->setParameter('id', $organizationId)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    /**
      * Получить пагинированный список организаций
      * Выводит только родительские организации (без дочерних)
      *
@@ -64,8 +121,6 @@ class OrganizationRepository extends ServiceEntityRepository
         $offset = ($page - 1) * $limit;
 
         $qb = $this->createQueryBuilder('o')
-            ->leftJoin('o.departments', 'd')
-            ->addSelect('d')
             ->where('o.name != :adminName')
             ->andWhere('o.parent IS NULL')
             ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)

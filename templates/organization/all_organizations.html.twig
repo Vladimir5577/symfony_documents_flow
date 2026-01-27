@@ -42,7 +42,6 @@
                                     <th>Адрес</th>
                                     <th>Телефон</th>
                                     <th>Email</th>
-                                    <th>Количество департаментов</th>
                                     <th>Действия</th>
                                 </tr>
                                 </thead>
@@ -55,7 +54,6 @@
                                             <td>{{ organization.address ?? '-' }}</td>
                                             <td>{{ organization.phone ?? '-' }}</td>
                                             <td>{{ organization.email ?? '-' }}</td>
-                                            <td>{{ organization.departments|length }}</td>
                                             <td>
                                                 <a href="{{ path('view_organization', {id: organization.id}) }}" class="btn btn-info rounded-pill">
                                                     Просмотр

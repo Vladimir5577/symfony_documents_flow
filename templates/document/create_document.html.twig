@@ -1,0 +1,100 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Создание документа: {{ document_type.name }}{% endblock %}
+
+
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+
+
+{% block main %}
+    <h1>Создание документа: {{ document_type.name }}</h1>
+
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Форма создания документа</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('app_create_document', {'type_id': document_type.id}) }}" method="post" class="form">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('create_document') }}">
+                                <input type="hidden" name="type_id" value="{{ document_type.id }}">
+
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger">{{ message }}</div>
+                                {% endfor %}
+
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success">{{ message }}</div>
+                                {% endfor %}
+
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_name">Название документа <span class="text-danger">*</span></label>
+                                            <input type="text" id="document_name" class="form-control" placeholder="Введите название документа" name="name" value="{{ form_data.name|default('') }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_description">Описание</label>
+                                            <textarea id="document_description" class="form-control" placeholder="Введите описание документа" name="description" rows="4">{{ form_data.description|default('') }}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="organization_id">Организация <span class="text-danger">*</span></label>
+                                            <select id="organization_id" class="form-control" name="organization_id" required>
+                                                {% if organizations is defined and organizations|length > 0 %}
+                                                    {% for org in organizations %}
+                                                        {% if org %}
+                                                            {% include 'auth/organization_tree_option.html.twig' with {'organization': org, 'level': 0, 'selected_id': form_data.organization_id|default('')} %}
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <option value="">Организации не найдены</option>
+                                                {% endif %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_status">Статус</label>
+                                            <select id="document_status" class="form-control" name="status" required>
+                                                {% for value, label in document_statuses %}
+                                                    <option value="{{ value }}" {% if form_data.status|default('NEW') == value %}selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_deadline">Срок выполнения</label>
+                                            <input type="date" id="document_deadline" class="form-control" name="deadline" value="{{ form_data.deadline|default('') }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_file">Файл (путь к файлу)</label>
+                                            <input type="text" id="document_file" class="form-control" placeholder="Введите путь к файлу" name="file" value="{{ form_data.file|default('') }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-12 d-flex justify-content-end">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Создать документ</button>
+                                        <a href="{{ path('app_new_document') }}" class="btn btn-light-secondary me-1 mb-1">Отмена</a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

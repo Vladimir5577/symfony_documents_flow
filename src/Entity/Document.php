@@ -2,11 +2,15 @@
 
 namespace App\Entity;
 
+use App\Enum\DocumentStatus;
 use App\Repository\DocumentRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use Gedmo\Mapping\Annotation as Gedmo;
+use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Entity(repositoryClass: DocumentRepository::class)]
+#[Gedmo\SoftDeleteable(fieldName: 'deletedAt', timeAware: false, hardDelete: false)]
 class Document
 {
     #[ORM\Id]
@@ -14,72 +18,62 @@ class Document
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(nullable: false)]
-    private int $organization_id;
-
-    #[ORM\Column(nullable: true)]
-    private ?int $department_id = null;
-
-    #[ORM\Column(nullable: true)]
-    private ?int $department_division_id = null;
+    #[ORM\ManyToOne(targetEntity: Organization::class)]
+    #[ORM\JoinColumn(name: 'organization_creator_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    #[Assert\NotNull(message: 'Организация-создатель обязательна для заполнения.')]
+    private Organization $organizationCreator;
 
     #[ORM\Column(length: 255)]
+    #[Assert\NotBlank(message: 'Название документа обязательно для заполнения.')]
+    #[Assert\Length(
+        min: 1,
+        max: 255,
+        minMessage: 'Название документа не может быть пустым.',
+        maxMessage: 'Название документа не должно превышать {{ limit }} символов.'
+    )]
     private ?string $name = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
-    #[ORM\Column(length: 255, nullable: true)]
-    private ?string $type = null;
+    // document_type (ManyToOne relation)
+    #[ORM\ManyToOne(targetEntity: DocumentType::class)]
+    #[ORM\JoinColumn(name: 'document_type_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    #[Assert\NotNull(message: 'Тип документа обязателен для заполнения.')]
+    private ?DocumentType $documentType = null;
 
-    #[ORM\Column(length: 255, nullable: true)]
-    private ?string $status = null;
+    #[ORM\Column(type: Types::STRING, length: 50, nullable: true, enumType: DocumentStatus::class)]
+    private ?DocumentStatus $status = null;
 
     #[ORM\Column(type: Types::DATE_MUTABLE, nullable: true)]
     private ?\DateTime $deadline = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Assert\Length(max: 255, maxMessage: 'Путь к файлу не должен превышать {{ limit }} символов.')]
     private ?string $file = null;
+
+    // created_at
+    #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
+    #[Gedmo\Timestampable(on: 'create')]
+    private ?\DateTimeImmutable $createdAt = null;
+
+    // updated_at
+    #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE)]
+    #[Gedmo\Timestampable]
+    private ?\DateTimeImmutable $updatedAt = null;
+
+    // deleted_at (soft delete)
+    #[ORM\Column(name: 'deleted_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $deletedAt = null;
+
+    // created_by (author)
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'created_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $createdBy = null;
 
     public function getId(): ?int
     {
         return $this->id;
-    }
-
-    public function getOrganizationId(): int
-    {
-        return $this->organization_id;
-    }
-
-    public function setOrganizationId(int $organization_id): static
-    {
-        $this->organization_id = $organization_id;
-
-        return $this;
-    }
-
-    public function getDepartmentId(): ?int
-    {
-        return $this->department_id;
-    }
-
-    public function setDepartmentId(?int $department_id): static
-    {
-        $this->department_id = $department_id;
-
-        return $this;
-    }
-
-    public function getDepartmentDivisionId(): ?int
-    {
-        return $this->department_division_id;
-    }
-
-    public function setDepartmentDivisionId(?int $department_division_id): static
-    {
-        $this->department_division_id = $department_division_id;
-
-        return $this;
     }
 
     public function getName(): ?string
@@ -106,24 +100,24 @@ class Document
         return $this;
     }
 
-    public function getType(): ?string
+    public function getDocumentType(): ?DocumentType
     {
-        return $this->type;
+        return $this->documentType;
     }
 
-    public function setType(?string $type): static
+    public function setDocumentType(?DocumentType $documentType): static
     {
-        $this->type = $type;
+        $this->documentType = $documentType;
 
         return $this;
     }
 
-    public function getStatus(): ?string
+    public function getStatus(): ?DocumentStatus
     {
         return $this->status;
     }
 
-    public function setStatus(?string $status): static
+    public function setStatus(?DocumentStatus $status): static
     {
         $this->status = $status;
 
@@ -150,6 +144,71 @@ class Document
     public function setFile(?string $file): static
     {
         $this->file = $file;
+
+        return $this;
+    }
+
+    public function getCreatedAt(): ?\DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function setCreatedAt(?\DateTimeImmutable $createdAt): static
+    {
+        $this->createdAt = $createdAt;
+
+        return $this;
+    }
+
+    public function getUpdatedAt(): ?\DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+
+    public function setUpdatedAt(?\DateTimeImmutable $updatedAt): static
+    {
+        $this->updatedAt = $updatedAt;
+
+        return $this;
+    }
+
+    public function getDeletedAt(): ?\DateTimeImmutable
+    {
+        return $this->deletedAt;
+    }
+
+    public function setDeletedAt(?\DateTimeImmutable $deletedAt): static
+    {
+        $this->deletedAt = $deletedAt;
+
+        return $this;
+    }
+
+    public function isDeleted(): bool
+    {
+        return $this->deletedAt !== null;
+    }
+
+    public function getCreatedBy(): ?User
+    {
+        return $this->createdBy;
+    }
+
+    public function setCreatedBy(?User $createdBy): static
+    {
+        $this->createdBy = $createdBy;
+
+        return $this;
+    }
+
+    public function getOrganizationCreator(): Organization
+    {
+        return $this->organizationCreator;
+    }
+
+    public function setOrganizationCreator(Organization $organizationCreator): static
+    {
+        $this->organizationCreator = $organizationCreator;
 
         return $this;
     }

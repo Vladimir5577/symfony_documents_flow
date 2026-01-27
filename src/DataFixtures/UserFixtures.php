@@ -2,8 +2,6 @@
 
 namespace App\DataFixtures;
 
-use App\Entity\Department;
-use App\Entity\DepartmentDivision;
 use App\Entity\Organization;
 use App\Entity\User;
 use App\Repository\RoleRepository;
@@ -31,8 +29,6 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
         return [
             RoleFixtures::class,
             OrganizationFixtures::class,
-            DepartmentFixtures::class,
-            DepartmentDivisionFixtures::class,
         ];
     }
 
@@ -47,16 +43,12 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
         $admin->setFirstname('Системный');
         $admin->setEmail('admin@admin.com');
         $admin->setOrganization($adminOrganization);
-        $admin->setDepartment(null);
-        $admin->setDepartmentDivision(null);
         $admin->setPassword($this->passwordHasher->hashPassword($admin, '1234'));
         $this->attachRole($admin, 'ROLE_ADMIN');
         $manager->persist($admin);
 
-        // Получаем первую организацию, департамент и подразделение для остальных пользователей
+        // Получаем первую организацию для остальных пользователей
         $organization = $this->getReference('organization_1', Organization::class);
-        $department = $this->getReference('department_1', Department::class);
-        $departmentDivision = $this->getReference('department_division_1', DepartmentDivision::class);
 
         $hr = new User();
         $hr->setLogin('hr01');
@@ -64,8 +56,6 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
         $hr->setFirstname('Главный');
         $hr->setEmail('hr01@example.com');
         $hr->setOrganization($organization);
-        $hr->setDepartment($department);
-        $hr->setDepartmentDivision($departmentDivision);
         $hr->setPassword($this->passwordHasher->hashPassword($hr, '1234'));
         $this->attachRole($hr, 'ROLE_HR');
         $manager->persist($hr);
@@ -76,8 +66,6 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
         $editor->setFirstname('Главный');
         $editor->setEmail('editor01@example.com');
         $editor->setOrganization($organization);
-        $editor->setDepartment($department);
-        $editor->setDepartmentDivision($departmentDivision);
         $editor->setPassword($this->passwordHasher->hashPassword($editor, '1234'));
         $this->attachRole($editor, 'ROLE_EDITOR');
         $manager->persist($editor);
@@ -88,8 +76,6 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
         $user->setFirstname('Обычный');
         $user->setEmail('user01@example.com');
         $user->setOrganization($organization);
-        $user->setDepartment($department);
-        $user->setDepartmentDivision($departmentDivision);
         $user->setPassword($this->passwordHasher->hashPassword($user, '1234'));
         $this->attachRole($user, 'ROLE_USER');
         $manager->persist($user);
@@ -125,16 +111,6 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
                        'Арсеньевна', 'Ивановна', 'Денисовна', 'Евгеньевна', 'Тимуровна', 'Владиславовна',
                        'Игоревна', 'Владимировна', 'Павловна', 'Руслановна', 'Марковна', 'Львовна'];
 
-        // Получаем все доступные подразделения для случайного распределения
-        $divisions = [];
-        for ($i = 1; $i <= 24; $i++) {
-            try {
-                $divisions[] = $this->getReference('department_division_' . $i, DepartmentDivision::class);
-            } catch (\Exception $e) {
-                // Если подразделение не найдено, пропускаем
-                break;
-            }
-        }
 
         for ($i = 2; $i <= 101; $i++) {
             $user = new User();
@@ -165,29 +141,10 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
             // Random active status (90% active)
             $user->setIsActive(rand(0, 100) < 90);
 
-            // Assign random organization, department and division
+            // Assign random organization
             // Важно: organization_6 принадлежит только админу, поэтому исключаем её из случайного выбора
-            if (!empty($divisions)) {
-                $randomDivision = $divisions[array_rand($divisions)];
-                $assignedOrganization = $randomDivision->getDepartment()->getOrganization();
-                
-                // Гарантируем, что organization_6 используется только для админа
-                // Если случайно выбрана organization_6, используем organization_1
-                if ($assignedOrganization === $adminOrganization) {
-                    $user->setOrganization($organization);
-                    $user->setDepartment($department);
-                    $user->setDepartmentDivision($departmentDivision);
-                } else {
-                    $user->setDepartmentDivision($randomDivision);
-                    $user->setDepartment($randomDivision->getDepartment());
-                    $user->setOrganization($assignedOrganization);
-                }
-            } else {
-                // Fallback to first organization/department/division if no divisions found
-                $user->setOrganization($organization);
-                $user->setDepartment($department);
-                $user->setDepartmentDivision($departmentDivision);
-            }
+            // Используем organization_1 для всех пользователей
+            $user->setOrganization($organization);
 
             // Assign ROLE_USER
             $this->attachRole($user, 'ROLE_USER');

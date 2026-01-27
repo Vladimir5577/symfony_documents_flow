@@ -11,6 +11,30 @@
 
 
 {% block main %}
-    <h1>Создание нового документа</h1>
+    <h1>Выберите тип документа!</h1>
 
+    <section class="section">
+        <div class="row">
+            {% for docType in document_types|default([]) %}
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <a href="{{ path('app_create_document', {'type_id': docType.id}) }}" class="btn btn-outline-primary">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h4 class="card-title mb-0">{{ docType.name }}</h4>
+                            </div>
+                            <div class="card-body">
+                                {% if docType.description %}
+                                    <p class="card-text text-muted small mb-0">{{ docType.description }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            {% else %}
+                <div class="col-12">
+                    <p class="text-muted">Типы документов не найдены.</p>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
 {% endblock %}

@@ -71,9 +71,6 @@ class Organization
     #[ORM\OneToMany(mappedBy: 'parent', targetEntity: self::class)]
     private Collection $childOrganizations;
 
-    /** @var Collection<int, Department> */
-    #[ORM\OneToMany(mappedBy: 'organization', targetEntity: Department::class)]
-    private Collection $departments;
 
     // created_at
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
@@ -92,7 +89,6 @@ class Organization
     public function __construct()
     {
         $this->childOrganizations = new ArrayCollection();
-        $this->departments = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -199,28 +195,6 @@ class Organization
         return $this;
     }
 
-    /** @return Collection<int, Department> */
-    public function getDepartments(): Collection
-    {
-        return $this->departments;
-    }
-
-    public function addDepartment(Department $department): static
-    {
-        if (!$this->departments->contains($department)) {
-            $this->departments->add($department);
-            $department->setOrganization($this);
-        }
-
-        return $this;
-    }
-
-    public function removeDepartment(Department $department): static
-    {
-        $this->departments->removeElement($department);
-
-        return $this;
-    }
 
     public function getCreatedAt(): ?\DateTimeImmutable
     {

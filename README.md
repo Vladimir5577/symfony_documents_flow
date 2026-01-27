@@ -21,6 +21,7 @@ $ php bin/console doctrine:migrations:migrate
 
     Load basic admin fixturex
 $ php bin/console doctrine:fixtures:load --group=admin   --- only one fixture
+$ php bin/console doctrine:fixtures:load --group=base   --- only one fixture
 
 
 // ============================

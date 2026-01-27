@@ -1,0 +1,15 @@
+{%- set indent = '' -%}
+{%- for i in 0..level -%}
+    {%- if i > 0 -%}
+        {%- set indent = indent ~ '&nbsp;&nbsp;&nbsp;&nbsp;' -%}
+    {%- endif -%}
+{%- endfor -%}
+{%- set prefix = level > 0 ? '└─ ' : '' -%}
+<option value="{{ organization.id }}" {% if selected_id == organization.id %}selected{% endif %}>
+    {{ indent|raw }}{{ prefix }}{{ organization.name }}
+</option>
+{% if organization.childOrganizations|length > 0 %}
+    {% for childOrg in organization.childOrganizations %}
+        {% include 'auth/organization_tree_option.html.twig' with {'organization': childOrg, 'level': level + 1, 'selected_id': selected_id} %}
+    {% endfor %}
+{% endif %}

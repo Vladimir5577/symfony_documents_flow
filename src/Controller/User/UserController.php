@@ -4,8 +4,6 @@ namespace App\Controller\User;
 
 use App\Entity\User;
 use App\Entity\Worker;
-use App\Repository\DepartmentDivisionRepository;
-use App\Repository\DepartmentRepository;
 use App\Repository\OrganizationRepository;
 use App\Repository\RoleRepository;
 use App\Repository\UserRepository;
@@ -33,14 +31,37 @@ final class UserController extends AbstractController
     ): Response {
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
-        $organizations = $isAdmin ? $organizationRepository->findAll() : null;
+        
+        // Получаем дерево организаций
+        $userOrganization = $currentUser instanceof User ? $currentUser->getOrganization() : null;
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $userOrganization);
+        
+        // Загружаем организации с дочерними для отображения дерева
+        $organizationsWithChildren = [];
+        if (!empty($organizationTree)) {
+            foreach ($organizationTree as $org) {
+                $loadedOrg = $organizationRepository->findWithChildren($org->getId());
+                if ($loadedOrg) {
+                    $organizationsWithChildren[] = $loadedOrg;
+                }
+            }
+        }
+        
+        $roles = $roleRepository->findAllExceptAdmin();
 
-        $renderForm = function (array $formData = []) use ($isAdmin, $organizations): Response {
+        $initialFormData = [];
+        if (!$isAdmin && $userOrganization) {
+            $initialFormData['organization_id'] = $userOrganization->getId();
+        }
+
+        $renderForm = function (array $formData = []) use ($isAdmin, $organizationsWithChildren, $roles, $initialFormData): Response {
+            $data = $formData !== [] ? $formData : $initialFormData;
             return $this->render('auth/register.html.twig', [
                 'active_tab' => 'register',
-                'form_data' => $formData,
+                'form_data' => $data,
                 'is_admin' => $isAdmin,
-                'organizations' => $organizations,
+                'organizations' => $organizationsWithChildren,
+                'roles' => $roles,
             ]);
         };
 
@@ -60,23 +81,43 @@ final class UserController extends AbstractController
             return $this->redirectToRoute('user_register');
         }
 
-        $organization = null;
-        if ($isAdmin) {
-            $organizationId = (int) ($formData['organization_id'] ?? 0);
-            if ($organizationId <= 0) {
-                $this->addFlash('error', 'Необходимо выбрать организацию.');
-                return $renderForm($formData);
-            }
-            $organization = $organizationRepository->find($organizationId);
-            if (!$organization) {
-                $this->addFlash('error', 'Организация не найдена.');
-                return $renderForm($formData);
-            }
-        } else {
-            $organization = $currentUser->getOrganization();
-            if (!$organization) {
+        // Получаем выбранную организацию
+        $organizationId = (int) ($formData['organization_id'] ?? 0);
+        if ($organizationId <= 0) {
+            $this->addFlash('error', 'Необходимо выбрать организацию.');
+            return $renderForm($formData);
+        }
+        
+        $organization = $organizationRepository->find($organizationId);
+        if (!$organization) {
+            $this->addFlash('error', 'Организация не найдена.');
+            return $renderForm($formData);
+        }
+        
+        // Проверяем права доступа к выбранной организации
+        if (!$isAdmin) {
+            $userOrganization = $currentUser->getOrganization();
+            if (!$userOrganization) {
                 $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
                 return $this->redirectToRoute('user_register');
+            }
+
+            // Разрешена организация пользователя или любая дочерняя к ней
+            $isValid = $organization->getId() === $userOrganization->getId();
+            if (!$isValid) {
+                $checkOrg = $organization;
+                while ($checkOrg->getParent() !== null) {
+                    $checkOrg = $checkOrg->getParent();
+                    if ($checkOrg->getId() === $userOrganization->getId()) {
+                        $isValid = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!$isValid) {
+                $this->addFlash('error', 'Вы не можете выбрать организацию вне вашего дерева организаций.');
+                return $renderForm($formData);
             }
         }
 
@@ -105,9 +146,22 @@ final class UserController extends AbstractController
         $user->setOrganization($organization);
         $user->setCreatedBy($currentUser);
 
-        $defaultRole = $roleRepository->findOneBy(['name' => 'ROLE_USER']);
-        if ($defaultRole) {
-            $user->addRoleEntity($defaultRole);
+        // Обрабатываем выбранную роль
+        $selectedRoleId = isset($formData['role']) && $formData['role'] !== '' ? (int) $formData['role'] : null;
+
+        if ($selectedRoleId !== null && $selectedRoleId > 0) {
+            $role = $roleRepository->find($selectedRoleId);
+            if ($role && $role->getName() !== 'ROLE_ADMIN') {
+                $user->addRoleEntity($role);
+            }
+        }
+
+        // Если роль не выбрана, добавляем ROLE_USER по умолчанию
+        if ($selectedRoleId === null || $selectedRoleId === 0) {
+            $defaultRole = $roleRepository->findOneBy(['name' => 'ROLE_USER']);
+            if ($defaultRole) {
+                $user->addRoleEntity($defaultRole);
+            }
         }
 
         $errors = $validator->validate($user);
@@ -196,16 +250,15 @@ final class UserController extends AbstractController
         Request $request,
         UserRepository $userRepository,
         OrganizationRepository $organizationRepository,
-        DepartmentRepository $departmentRepository,
-        DepartmentDivisionRepository $departmentDivisionRepository,
-        RoleRepository $roleRepository
+        RoleRepository $roleRepository,
+        WorkerRepository $workerRepository
     ): Response {
+        $currentUser = $this->getUser();
+        $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
+        
         // Загружаем пользователя со всеми связанными данными для избежания N+1
         $user = $userRepository->createQueryBuilder('u')
             ->leftJoin('u.organization', 'org')->addSelect('org')
-            ->leftJoin('u.department', 'dept')->addSelect('dept')
-            ->leftJoin('u.departmentDivision', 'div')->addSelect('div')
-            ->leftJoin('u.boss', 'boss')->addSelect('boss')
             ->leftJoin('u.userRoles', 'ur')->addSelect('ur')
             ->leftJoin('ur.role', 'r')->addSelect('r')
             ->where('u.id = :id')
@@ -217,21 +270,44 @@ final class UserController extends AbstractController
             throw $this->createNotFoundException('Пользователь не найден');
         }
 
-        // Получаем списки для выпадающих списков
-        $organizations = $organizationRepository->findAll();
-        $departments = $departmentRepository->findAll();
-        $departmentDivisions = $departmentDivisionRepository->findAll();
-        $allUsers = $userRepository->findAll(); // Для выбора начальника
-        $roles = $roleRepository->findAll();
+        // Получаем Worker для пользователя, если он существует
+        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+
+        // Получаем дерево организаций
+        $currentUserOrg = $currentUser instanceof User ? $currentUser->getOrganization() : null;
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $currentUserOrg);
+        
+        // Загружаем организации с дочерними для отображения дерева
+        $organizationsWithChildren = [];
+        if (!empty($organizationTree)) {
+            foreach ($organizationTree as $org) {
+                $loadedOrg = $organizationRepository->findWithChildren($org->getId());
+                if ($loadedOrg) {
+                    $organizationsWithChildren[] = $loadedOrg;
+                }
+            }
+        }
+        
+        $roles = $roleRepository->findAllExceptAdmin();
+
+        // Получаем выбранную роль пользователя (первую, если их несколько)
+        $selectedRoleId = null;
+        foreach ($user->getRolesRel() as $userRole) {
+            $role = $userRole->getRole();
+            if ($role && $role->getName() !== 'ROLE_ADMIN') {
+                $selectedRoleId = $role->getId();
+                break;
+            }
+        }
 
         return $this->render('user/edit_user.html.twig', [
             'active_tab' => 'edit_user',
             'user' => $user,
-            'organizations' => $organizations,
-            'departments' => $departments,
-            'departmentDivisions' => $departmentDivisions,
-            'allUsers' => $allUsers,
+            'worker' => $worker,
+            'is_admin' => $isAdmin,
+            'organizations' => $organizationsWithChildren,
             'roles' => $roles,
+            'selected_role_id' => $selectedRoleId,
         ]);
     }
 
@@ -241,10 +317,12 @@ final class UserController extends AbstractController
         EntityManagerInterface $entityManager,
         UserRepository $userRepository,
         OrganizationRepository $organizationRepository,
-        DepartmentRepository $departmentRepository,
-        DepartmentDivisionRepository $departmentDivisionRepository,
-        RoleRepository $roleRepository
+        RoleRepository $roleRepository,
+        WorkerRepository $workerRepository,
+        UserPasswordHasherInterface $passwordHasher
     ): Response {
+        $currentUser = $this->getUser();
+        $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
         $formData = $request->request->all();
 
         // Валидация CSRF токена
@@ -264,8 +342,6 @@ final class UserController extends AbstractController
         // Фильтр soft delete автоматически исключает удаленных пользователей
         $user = $userRepository->createQueryBuilder('u')
             ->leftJoin('u.organization', 'org')->addSelect('org')
-            ->leftJoin('u.department', 'dept')->addSelect('dept')
-            ->leftJoin('u.departmentDivision', 'div')->addSelect('div')
             ->leftJoin('u.boss', 'boss')->addSelect('boss')
             ->leftJoin('u.userRoles', 'ur')->addSelect('ur')
             ->leftJoin('ur.role', 'r')->addSelect('r')
@@ -279,23 +355,23 @@ final class UserController extends AbstractController
             return $this->redirectToRoute('app_all_users');
         }
 
-        // Обновляем основные поля только если они изменились
-        $lastname = trim((string) ($formData['lastname'] ?? '')) ?: null;
+        // Обновляем основные поля в формате формы регистрации
+        $lastname = trim((string) ($formData['fname-column'] ?? '')) ?: null;
         if ($user->getLastname() !== $lastname) {
             $user->setLastname($lastname);
         }
 
-        $firstname = trim((string) ($formData['firstname'] ?? '')) ?: null;
+        $firstname = trim((string) ($formData['lname-column'] ?? '')) ?: null;
         if ($user->getFirstname() !== $firstname) {
             $user->setFirstname($firstname);
         }
 
-        $patronymic = trim((string) ($formData['patronymic'] ?? '')) ?: null;
+        $patronymic = trim((string) ($formData['city-column'] ?? '')) ?: null;
         if ($user->getPatronymic() !== $patronymic) {
             $user->setPatronymic($patronymic);
         }
 
-        $phone = trim((string) ($formData['phone'] ?? '')) ?: null;
+        $phone = trim((string) ($formData['phone-column'] ?? '')) ?: null;
         if ($user->getPhone() !== $phone) {
             $user->setPhone($phone);
         }
@@ -309,85 +385,91 @@ final class UserController extends AbstractController
             $user->setLogin($login);
         }
 
-        $isActive = isset($formData['is_active']) && $formData['is_active'] === '1';
-        if ($user->isActive() !== $isActive) {
-            $user->setIsActive($isActive);
+        // Обновляем пароль, если он указан
+        $plainPassword = trim((string) ($formData['plain_password'] ?? ''));
+        $confirmPassword = trim((string) ($formData['confirm_password'] ?? ''));
+        if ($plainPassword !== '') {
+            if ($plainPassword !== $confirmPassword) {
+                $this->addFlash('error', 'Пароли не совпадают.');
+                return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
+            }
+            $user->setPassword($passwordHasher->hashPassword($user, $plainPassword));
         }
 
-        // Обновляем организацию только если изменилась
+        // Обновляем организацию
         $organizationId = (int) ($formData['organization_id'] ?? 0);
-        if ($organizationId > 0) {
-            $organization = $organizationRepository->find($organizationId);
-            if ($organization && $user->getOrganization()->getId() !== $organization->getId()) {
-                $user->setOrganization($organization);
-            }
+        if ($organizationId <= 0) {
+            $this->addFlash('error', 'Необходимо выбрать организацию.');
+            return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
         }
-
-        // Обновляем департамент только если изменился
-        $departmentId = (int) ($formData['department_id'] ?? 0);
-        if ($departmentId > 0) {
-            $department = $departmentRepository->find($departmentId);
-            $currentDepartment = $user->getDepartment();
-            if ($department && (!$currentDepartment || $currentDepartment->getId() !== $department->getId())) {
-                $user->setDepartment($department);
-            }
+        
+        $organization = $organizationRepository->find($organizationId);
+        if (!$organization) {
+            $this->addFlash('error', 'Организация не найдена.');
+            return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
         }
-
-        // Обновляем подразделение только если изменилось
-        $departmentDivisionId = (int) ($formData['department_division_id'] ?? 0);
-        if ($departmentDivisionId > 0) {
-            $departmentDivision = $departmentDivisionRepository->find($departmentDivisionId);
-            $currentDepartmentDivision = $user->getDepartmentDivision();
-            if ($departmentDivision && (!$currentDepartmentDivision || $currentDepartmentDivision->getId() !== $departmentDivision->getId())) {
-                $user->setDepartmentDivision($departmentDivision);
+        
+        // Проверяем права доступа к выбранной организации
+        if (!$isAdmin) {
+            $currentUserOrg = $currentUser instanceof User ? $currentUser->getOrganization() : null;
+            if (!$currentUserOrg) {
+                $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
+                return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
             }
-        }
-
-        // Обновляем начальника только если изменился
-        $bossId = isset($formData['boss_id']) && $formData['boss_id'] !== '' ? (int) $formData['boss_id'] : null;
-        $currentBossId = $user->getBoss()?->getId();
-        if ($bossId !== $currentBossId) {
-            if ($bossId !== null) {
-                if ($bossId === $userId) {
-                    $this->addFlash('error', 'Пользователь не может быть начальником сам себе.');
-                    return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
-                }
-                $boss = $userRepository->find($bossId);
-                if ($boss) {
-                    $user->setBoss($boss);
-                }
+            
+            // Находим корневую организацию пользователя
+            $userRootOrg = $currentUserOrg;
+            while ($userRootOrg->getParent() !== null) {
+                $userRootOrg = $userRootOrg->getParent();
+            }
+            
+            // Проверяем, что выбранная организация принадлежит дереву пользователя
+            $isValid = false;
+            if ($organization->getId() === $userRootOrg->getId()) {
+                $isValid = true;
             } else {
-                $user->setBoss(null);
+                // Проверяем, является ли выбранная организация дочерней в дереве пользователя
+                $checkOrg = $organization;
+                while ($checkOrg->getParent() !== null) {
+                    $checkOrg = $checkOrg->getParent();
+                    if ($checkOrg->getId() === $userRootOrg->getId()) {
+                        $isValid = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!$isValid) {
+                $this->addFlash('error', 'Вы не можете выбрать организацию вне вашего дерева организаций.');
+                return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
             }
         }
-
-        // Обновляем роли - сравниваем текущие с новыми и обновляем только изменения
-        $selectedRoleIds = $formData['roles'] ?? [];
-        if (!is_array($selectedRoleIds)) {
-            $selectedRoleIds = [];
+        
+        // Обновляем организацию только если изменилась
+        if ($user->getOrganization()->getId() !== $organization->getId()) {
+            $user->setOrganization($organization);
         }
-        $selectedRoleIds = array_map('intval', $selectedRoleIds);
 
-        // Получаем текущие ID ролей
-        $currentRoleIds = [];
+        // Обновляем роль (radio button, одна роль)
+        $selectedRoleId = isset($formData['role']) && $formData['role'] !== '' ? (int) $formData['role'] : null;
+
+        // Получаем текущую роль (не админскую)
+        $currentRoleId = null;
         foreach ($user->getRolesRel() as $userRole) {
             $role = $userRole->getRole();
-            if ($role) {
-                $currentRoleIds[] = $role->getId();
+            if ($role && $role->getName() !== 'ROLE_ADMIN') {
+                $currentRoleId = $role->getId();
+                break;
             }
         }
 
-        // Сортируем для сравнения
-        sort($currentRoleIds);
-        sort($selectedRoleIds);
-
-        // Обновляем роли только если они изменились
-        if ($currentRoleIds !== $selectedRoleIds) {
-            // Удаляем роли, которых нет в новых
+        // Обновляем роль только если она изменилась
+        if ($selectedRoleId !== $currentRoleId) {
+            // Удаляем все роли кроме админской
             $rolesToRemove = [];
             foreach ($user->getRolesRel() as $userRole) {
                 $role = $userRole->getRole();
-                if ($role && !in_array($role->getId(), $selectedRoleIds, true)) {
+                if ($role && $role->getName() !== 'ROLE_ADMIN') {
                     $rolesToRemove[] = $userRole;
                 }
             }
@@ -396,24 +478,47 @@ final class UserController extends AbstractController
                 $entityManager->remove($userRole);
             }
 
-            // Добавляем новые роли, которых еще нет
-            foreach ($selectedRoleIds as $roleId) {
-                if (!in_array($roleId, $currentRoleIds, true)) {
-                    $role = $roleRepository->find($roleId);
-                    if ($role) {
-                        $user->addRoleEntity($role);
-                    }
+            // Добавляем новую роль, если она выбрана
+            if ($selectedRoleId !== null && $selectedRoleId > 0) {
+                $role = $roleRepository->find($selectedRoleId);
+                if ($role && $role->getName() !== 'ROLE_ADMIN') {
+                    $user->addRoleEntity($role);
+                }
+            } else {
+                // Если роль не выбрана, добавляем ROLE_USER по умолчанию
+                $defaultRole = $roleRepository->findOneBy(['name' => 'ROLE_USER']);
+                if ($defaultRole) {
+                    $user->addRoleEntity($defaultRole);
                 }
             }
         }
 
         // Устанавливаем updated_by текущим залогиненным пользователем
-        $currentUser = $this->getUser();
         if ($currentUser instanceof User) {
             $user->setUpdatedBy($currentUser);
         }
 
-        // Сохраняем изменения
+        // Сохраняем изменения пользователя
+        $entityManager->flush();
+
+        // Обновляем или создаем Worker
+        $profession = trim((string) ($formData['profession-column'] ?? ''));
+        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+
+        if ($profession !== '') {
+            if (!$worker) {
+                $worker = new Worker();
+                $worker->setUserId($user->getId());
+            }
+            $worker->setProfession($profession);
+            $description = trim((string) ($formData['description-column'] ?? ''));
+            $worker->setDescription($description !== '' ? $description : null);
+            $entityManager->persist($worker);
+        } elseif ($worker) {
+            // Если профессия пустая, удаляем Worker
+            $entityManager->remove($worker);
+        }
+
         $entityManager->flush();
 
         $this->addFlash('success', 'Пользователь успешно обновлен.');

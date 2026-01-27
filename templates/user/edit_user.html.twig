@@ -31,6 +31,7 @@
                     </div>
                     <div class="card-content">
                         <div class="card-body">
+
                             <form action="{{ path('app_update_user') }}" method="post" class="form">
                                 <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_user') }}">
                                 <input type="hidden" name="user_id" value="{{ user.id }}">
@@ -44,112 +45,94 @@
                                 {% endfor %}
 
                                 <div class="row">
-                                    <div class="col-md-6 col-12">
+                                    <div class="col-12">
                                         <div class="form-group">
-                                            <label for="lastname">Фамилия</label>
-                                            <input type="text" id="lastname" class="form-control" placeholder="Фамилия" name="lastname" value="{{ user.lastname ?? '' }}">
+                                            <label for="first-name-column">Фамилия <span class="text-danger">*</span></label>
+                                            <input type="text" id="first-name-column" class="form-control" placeholder="Фамилия" name="fname-column" value="{{ user.lastname ?? '' }}" required>
                                         </div>
                                     </div>
-                                    <div class="col-md-6 col-12">
+                                    <div class="col-12">
                                         <div class="form-group">
-                                            <label for="firstname">Имя</label>
-                                            <input type="text" id="firstname" class="form-control" placeholder="Имя" name="firstname" value="{{ user.firstname ?? '' }}">
+                                            <label for="last-name-column">Имя <span class="text-danger">*</span></label>
+                                            <input type="text" id="last-name-column" class="form-control" placeholder="Имя" name="lname-column" value="{{ user.firstname ?? '' }}" required>
                                         </div>
                                     </div>
-                                    <div class="col-md-6 col-12">
+                                    <div class="col-12">
                                         <div class="form-group">
-                                            <label for="patronymic">Отчество</label>
-                                            <input type="text" id="patronymic" class="form-control" placeholder="Отчество" name="patronymic" value="{{ user.patronymic ?? '' }}">
+                                            <label for="city-column">Отчество</label>
+                                            <input type="text" id="city-column" class="form-control" placeholder="Отчество" name="city-column" value="{{ user.patronymic ?? '' }}">
                                         </div>
                                     </div>
-                                    <div class="col-md-6 col-12">
+                                    <div class="col-12">
                                         <div class="form-group">
-                                            <label for="phone">Телефон</label>
-                                            <input type="text" id="phone" class="form-control" name="phone" placeholder="+7..." value="{{ user.phone ?? '' }}">
+                                            <label for="phone-column">Телефон</label>
+                                            <input type="text" id="phone-column" class="form-control" name="phone-column" placeholder="+7..." value="{{ user.phone ?? '' }}">
                                         </div>
                                     </div>
-                                    <div class="col-md-6 col-12">
+                                    {% if organizations is defined and organizations %}
+                                    <div class="col-12">
                                         <div class="form-group">
-                                            <label for="login">Логин</label>
-                                            <input type="text" id="login" class="form-control" name="login" placeholder="Логин" value="{{ user.login }}" required>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6 col-12">
-                                        <div class="form-group">
-                                            <label for="is_active">Статус</label>
-                                            <select id="is_active" class="form-control" name="is_active">
-                                                <option value="1" {% if user.isActive %}selected{% endif %}>Активен</option>
-                                                <option value="0" {% if not user.isActive %}selected{% endif %}>Неактивен</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6 col-12">
-                                        <div class="form-group">
-                                            <label for="organization">Организация</label>
-                                            <select id="organization" class="form-control" name="organization_id" required>
-                                                <option value="">Выберите организацию</option>
+                                            <label for="organization_id">Организация к которой принадлежит пользователь <span class="text-danger">*</span></label>
+                                            <select id="organization_id" class="form-control" name="organization_id" required>
+                                                <option value="">— Выберите организацию —</option>
                                                 {% for org in organizations %}
-                                                    <option value="{{ org.id }}" {% if user.organization.id == org.id %}selected{% endif %}>{{ org.name }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6 col-12">
-                                        <div class="form-group">
-                                            <label for="department">Департамент</label>
-                                            <select id="department" class="form-control" name="department_id" required>
-                                                <option value="">Выберите департамент</option>
-                                                {% for dept in departments %}
-                                                    <option value="{{ dept.id }}" {% if user.department.id == dept.id %}selected{% endif %}>{{ dept.name }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6 col-12">
-                                        <div class="form-group">
-                                            <label for="department_division">Подразделение</label>
-                                            <select id="department_division" class="form-control" name="department_division_id" required>
-                                                <option value="">Выберите подразделение</option>
-                                                {% for div in departmentDivisions %}
-                                                    <option value="{{ div.id }}" {% if user.departmentDivision.id == div.id %}selected{% endif %}>{{ div.name }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6 col-12">
-                                        <div class="form-group">
-                                            <label for="boss">Начальник</label>
-                                            <select id="boss" class="form-control" name="boss_id">
-                                                <option value="">Нет начальника</option>
-                                                {% for bossUser in allUsers %}
-                                                    {% if bossUser.id != user.id %}
-                                                        <option value="{{ bossUser.id }}" {% if user.boss and user.boss.id == bossUser.id %}selected{% endif %}>
-                                                            {{ bossUser.lastname ?? '' }} {{ bossUser.firstname ?? '' }} {{ bossUser.patronymic ?? '' }} ({{ bossUser.login }})
-                                                        </option>
+                                                    {% if org %}
+                                                        {% include 'auth/organization_tree_option.html.twig' with {'organization': org, 'level': 0, 'selected_id': user.organization.id|default('')} %}
                                                     {% endif %}
                                                 {% endfor %}
                                             </select>
                                         </div>
                                     </div>
+                                    {% endif %}
+                                    {% if roles is defined and roles %}
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label>Роли</label>
-                                            <div class="form-check-group">
+                                            <label>Роль</label>
+                                            <div>
                                                 {% for role in roles %}
                                                     <div class="form-check">
-                                                        <input class="form-check-input" type="checkbox" name="roles[]" value="{{ role.id }}" id="role_{{ role.id }}"
-                                                               {% for userRole in user.rolesRel %}
-                                                                   {% if userRole.role.id == role.id %}checked{% endif %}
-                                                               {% endfor %}>
-                                                        <label class="form-check-label" for="role_{{ role.id }}">
-                                                            {{ role.name }}
+                                                        <input class="form-check-input" type="radio" name="role" id="role-{{ role.id }}" value="{{ role.id }}" {% if selected_role_id == role.id %}checked{% endif %}>
+                                                        <label class="form-check-label" for="role-{{ role.id }}">
+                                                            {{ role.label|default(role.name) }}
                                                         </label>
                                                     </div>
                                                 {% endfor %}
                                             </div>
+                                            <small class="form-text text-muted">Выберите роль. Если роль не выбрана, будет назначена роль ROLE_USER по умолчанию.</small>
                                         </div>
                                     </div>
-                                    <div class="col-12 d-flex justify-content-end mt-3">
+                                    {% endif %}
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="login-column">Логин <span class="text-danger">*</span></label>
+                                            <input type="text" id="login-column" class="form-control" name="login" placeholder="Логин" value="{{ user.login }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="password-column">Новый пароль</label>
+                                            <input type="password" id="password-column" class="form-control" name="plain_password" placeholder="Оставьте пустым, если не хотите менять пароль">
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="confirm-password-column">Повторите новый пароль</label>
+                                            <input type="password" id="confirm-password-column" class="form-control" name="confirm_password" placeholder="Повторите пароль">
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="profession-column">Профессия (опционально)</label>
+                                            <input type="text" id="profession-column" class="form-control" name="profession-column" placeholder="Профессия" value="{{ worker.profession|default('') }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="description-column">Описание профессии (опционально)</label>
+                                            <textarea id="description-column" class="form-control" name="description-column" placeholder="Описание" rows="3">{{ worker.description|default('') }}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 d-flex justify-content-end">
                                         <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить изменения</button>
                                         <a href="{{ path('app_view_user', {id: user.id}) }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
                                     </div>

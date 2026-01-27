@@ -36,15 +36,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[Assert\NotNull(message: 'Организация обязательна для заполнения.')]
     private Organization $organization;
 
-    // department
-    #[ORM\ManyToOne(targetEntity: Department::class)]
-    #[ORM\JoinColumn(name: 'department_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
-    private ?Department $department = null;
-
-    // department_division
-    #[ORM\ManyToOne(targetEntity: DepartmentDivision::class)]
-    #[ORM\JoinColumn(name: 'department_division_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
-    private ?DepartmentDivision $departmentDivision = null;
 
     // 1) lastname
     #[ORM\Column(length: 50)]
@@ -72,6 +63,9 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 30, nullable: true)]
     #[Assert\Length(max: 30, maxMessage: 'Телефон не должен превышать {{ limit }} символов.')]
     private ?string $phone = null;
+
+    #[ORM\Column(name: 'birth_date', type: Types::DATE_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $birthDay = null;
 
     // 6) email
     #[ORM\Column(length: 50, nullable: true)]
@@ -256,6 +250,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
+    public function getBirthDay(): ?\DateTimeImmutable
+    {
+        return $this->birthDay;
+    }
+
+    public function setBirthDay(?\DateTimeImmutable $birthDay): static
+    {
+        $this->birthDay = $birthDay;
+
+        return $this;
+    }
+
     public function getEmail(): ?string
     {
         return $this->email;
@@ -339,29 +345,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    public function getDepartment(): ?Department
-    {
-        return $this->department;
-    }
-
-    public function setDepartment(?Department $department): static
-    {
-        $this->department = $department;
-
-        return $this;
-    }
-
-    public function getDepartmentDivision(): ?DepartmentDivision
-    {
-        return $this->departmentDivision;
-    }
-
-    public function setDepartmentDivision(?DepartmentDivision $departmentDivision): static
-    {
-        $this->departmentDivision = $departmentDivision;
-
-        return $this;
-    }
 
     public function getCreatedAt(): ?\DateTimeImmutable
     {

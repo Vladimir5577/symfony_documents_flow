@@ -3,6 +3,7 @@
 namespace App\Repository;
 
 use App\Entity\Role;
+use App\Enum\UserRole;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -14,6 +15,21 @@ class RoleRepository extends ServiceEntityRepository
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, Role::class);
+    }
+
+    /**
+     * Получить все роли кроме админской
+     *
+     * @return Role[]
+     */
+    public function findAllExceptAdmin(): array
+    {
+        return $this->createQueryBuilder('r')
+            ->where('r.name != :adminRole')
+            ->setParameter('adminRole', UserRole::ROLE_ADMIN->value)
+            ->orderBy('r.id', 'ASC')
+            ->getQuery()
+            ->getResult();
     }
 
     //    /**

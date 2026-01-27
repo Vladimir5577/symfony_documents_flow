@@ -4,21 +4,15 @@ namespace App\DataFixtures;
 
 use App\Entity\Role;
 use App\Entity\User;
-use App\Entity\Organization;
 use App\Enum\UserRole;
-use App\Repository\OrganizationRepository;
+use App\Entity\Organization;
 use Doctrine\Persistence\ObjectManager;
+use App\Repository\OrganizationRepository;
 use Doctrine\Bundle\FixturesBundle\Fixture;
-use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
-class AdminStartFixtures extends Fixture implements FixtureGroupInterface
+class AdminStartFixtures extends Fixture
 {
-    public static function getGroups(): array
-    {
-        return ['admin'];
-    }
-
     public function __construct(
         private readonly UserPasswordHasherInterface $passwordHasher
     ) {
@@ -59,8 +53,6 @@ class AdminStartFixtures extends Fixture implements FixtureGroupInterface
         $admin->setFirstname('Системный');
         $admin->setEmail('admin@admin.com');
         $admin->setOrganization($adminOrganization);
-        $admin->setDepartment(null);
-        $admin->setDepartmentDivision(null);
         $admin->setPassword($this->passwordHasher->hashPassword($admin, '1234'));
         $admin->setIsActive(true);
         $admin->addRoleEntity($adminRole);
