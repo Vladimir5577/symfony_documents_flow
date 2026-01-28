@@ -2,22 +2,22 @@
 
 {% block title %}Просмотр организации!{% endblock %}
 
-{# Рекурсивный макрос для отображения дерева организаций в простом виде #}
-{% macro renderOrganizationTree(organization, level) %}
+{# Рекурсивный макрос для отображения дерева организаций в простом виде. from_org — организация, с которой переходят (текущая страница). #}
+{% macro renderOrganizationTree(organization, level, from_org) %}
     {% import _self as self %}
     {% set indent = level * 25 %}
     <div style="margin-left: {{ indent }}px; padding: 3px 0;">
         <span style="font-weight: 500; font-size: 15px;">
-            — <a href="{{ path('view_organization', {'id': organization.id}) }}" 
+            — <a href="{{ path('view_organization', {'id': organization.id, 'from': from_org.id}) }}"
                  style="text-decoration: none; color: inherit;"
-                 onmouseover="this.style.color='#0d6efd';" 
+                 onmouseover="this.style.color='#0d6efd';"
                  onmouseout="this.style.color='inherit';">
                 {{ organization.name }}
             </a>
         </span>
         {% if organization.childOrganizations|length > 0 %}
             {% for childOrg in organization.childOrganizations %}
-                {{ self.renderOrganizationTree(childOrg, level + 1) }}
+                {{ self.renderOrganizationTree(childOrg, level + 1, from_org) }}
             {% endfor %}
         {% endif %}
     </div>
@@ -34,9 +34,15 @@
 {% block main %}
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1>Просмотр организации</h1>
-        <a href="{{ path('app_all_organizations') }}" class="btn btn-secondary rounded-pill">
-            <i class="bi bi-arrow-left"></i> Назад к списку
-        </a>
+        {% if back_organization %}
+            <a href="{{ path('view_organization', {id: back_organization.id}) }}" class="btn btn-secondary rounded-pill" title="Вернуться к {{ back_organization.name }}">
+                <i class="bi bi-arrow-left"></i> Назад к «{{ back_organization.name }}»
+            </a>
+        {% else %}
+            <a href="{{ path('app_all_organizations') }}" class="btn btn-secondary rounded-pill">
+                <i class="bi bi-arrow-left"></i> Назад к списку
+            </a>
+        {% endif %}
     </div>
 
     {% for message in app.flashes('success') %}
@@ -116,13 +122,75 @@
                             <div class="card-body">
                                 <div style="font-size: 15px; line-height: 2; padding: 10px 0;">
                                     {% for childOrg in organization.childOrganizations %}
-                                        {{ self.renderOrganizationTree(childOrg, 0) }}
+                                        {{ self.renderOrganizationTree(childOrg, 0, organization) }}
                                     {% endfor %}
                                 </div>
                             </div>
                         </div>
                     </div>
                 {% endif %}
+
+                {# Пользователи организации #}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4 class="card-title">
+                            Пользователи организации
+                            <span class="badge bg-primary ms-2">{{ users|length }}</span>
+                        </h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            {% if users|length > 0 %}
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>ФИО</th>
+                                                <th>Логин</th>
+                                                <th>Роли</th>
+                                                <th>Статус</th>
+                                                <th>Действия</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for user in users %}
+                                                <tr>
+                                                    <td class="text-bold-500">
+                                                        {{ user.lastname ?? '-' }} {{ user.firstname ?? '-' }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
+                                                    </td>
+                                                    <td>{{ user.login }}</td>
+                                                    <td>
+                                                        {% for ur in user.rolesRel %}
+                                                            {% if ur.role %}
+                                                                <span class="badge bg-secondary me-1">{{ ur.role.label }}</span>
+                                                            {% endif %}
+                                                        {% else %}
+                                                            <span class="text-muted">—</span>
+                                                        {% endfor %}
+                                                    </td>
+                                                    <td>
+                                                        {% if user.isActive %}
+                                                            <span class="badge bg-success">Активен</span>
+                                                        {% else %}
+                                                            <span class="badge bg-danger">Неактивен</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        <a href="{{ path('app_view_user', {id: user.id}) }}" class="btn btn-sm btn-outline-primary" title="Просмотр">
+                                                            <i class="bi bi-eye"></i>
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <p class="text-muted mb-0">В организации пока нет пользователей.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
 
             </div>
         </div>

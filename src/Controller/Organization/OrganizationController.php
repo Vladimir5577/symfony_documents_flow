@@ -5,6 +5,7 @@ namespace App\Controller\Organization;
 use App\Entity\Organization;
 use App\Entity\User;
 use App\Repository\OrganizationRepository;
+use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -16,7 +17,7 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 final class OrganizationController extends AbstractController
 {
     #[Route('/view_organization/{id}', name: 'view_organization', requirements: ['id' => '\d+'])]
-    public function viewOrganization(int $id, OrganizationRepository $organizationRepository): Response
+    public function viewOrganization(int $id, Request $request, OrganizationRepository $organizationRepository, UserRepository $userRepository): Response
     {
         $organization = $organizationRepository->createQueryBuilder('o')
             ->leftJoin('o.childOrganizations', 'co')
@@ -34,9 +35,22 @@ final class OrganizationController extends AbstractController
             throw $this->createNotFoundException('Организация не найдена');
         }
 
+        $users = $userRepository->findByOrganization($organization);
+
+        $fromId = $request->query->get('from');
+        $backOrganization = null;
+        if ($fromId !== null && $fromId !== '' && (int) $fromId !== $id) {
+            $fromOrg = $organizationRepository->find((int) $fromId);
+            if ($fromOrg !== null) {
+                $backOrganization = $fromOrg;
+            }
+        }
+
         return $this->render('organization/view_organization.html.twig', [
             'active_tab' => 'view_organization',
             'organization' => $organization,
+            'users' => $users,
+            'back_organization' => $backOrganization,
         ]);
     }
 

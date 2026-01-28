@@ -28,6 +28,7 @@ class AppFixtures extends Fixture implements FixtureGroupInterface, DependentFix
             AdminStartFixtures::class,
             DocumentTypeFixtures::class,
             OrganizationFixtures::class,
+            UserFixtures::class,
         ];
     }
 }

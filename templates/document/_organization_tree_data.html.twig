@@ -1,0 +1,12 @@
+<div class="org-node"
+     data-org-id="{{ organization.id }}"
+     data-parent-id="{{ organization.parent ? organization.parent.id : '' }}"
+     data-name="{{ organization.name }}">
+</div>
+
+{% if organization.childOrganizations is defined and organization.childOrganizations|length > 0 %}
+    {% for childOrg in organization.childOrganizations %}
+        {% include 'document/_organization_tree_data.html.twig' with {'organization': childOrg} %}
+    {% endfor %}
+{% endif %}
+

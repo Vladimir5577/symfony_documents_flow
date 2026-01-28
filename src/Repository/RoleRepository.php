@@ -18,6 +18,14 @@ class RoleRepository extends ServiceEntityRepository
     }
 
     /**
+     * Найти роль по enum.
+     */
+    public function findOneByName(UserRole $role): ?Role
+    {
+        return $this->findOneBy(['name' => $role], ['id' => 'ASC']);
+    }
+
+    /**
      * Получить все роли кроме админской
      *
      * @return Role[]
@@ -26,7 +34,7 @@ class RoleRepository extends ServiceEntityRepository
     {
         return $this->createQueryBuilder('r')
             ->where('r.name != :adminRole')
-            ->setParameter('adminRole', UserRole::ROLE_ADMIN->value)
+            ->setParameter('adminRole', UserRole::ROLE_ADMIN)
             ->orderBy('r.id', 'ASC')
             ->getQuery()
             ->getResult();

@@ -14,6 +14,31 @@
         class="
             sidebar-item
             has-sub
+            {% if active_tab == 'incoming_documents' %}active{% endif %}
+            {% if active_tab == 'outgoing_documents' %}active{% endif %}
+    ">
+        <a href="#" class='sidebar-link'>
+            <i class="bi bi-stack"></i>
+            <span>Документы</span>
+        </a>
+
+        <ul class="submenu active">
+
+            <li class="submenu-item {% if active_tab == 'incoming_documents' %}active{% endif %} ">
+                <a href="{{ path('app_incoming_documents') }}" class="submenu-link">Входящие</a>
+            </li>
+
+            <li class="submenu-item  {% if active_tab == 'outgoing_documents' %}active{% endif %} ">
+                <a href="{{ path('app_outgoing_documents') }}" class="submenu-link">Исходящие</a>
+            </li>
+
+        </ul>
+    </li>
+
+    <li
+        class="
+            sidebar-item
+            has-sub
             {% if active_tab == 'register' %}active{% endif %}
             {% if active_tab == 'all_users' %}active{% endif %}
             {% if active_tab == 'view_user' %}active{% endif %}

@@ -4,6 +4,8 @@ namespace App\Entity;
 
 use App\Enum\DocumentStatus;
 use App\Repository\DocumentRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
@@ -70,6 +72,15 @@ class Document
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'created_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?User $createdBy = null;
+
+    /** @var Collection<int, DocumentUserRecipient> */
+    #[ORM\OneToMany(mappedBy: 'document', targetEntity: DocumentUserRecipient::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    private Collection $userRecipients;
+
+    public function __construct()
+    {
+        $this->userRecipients = new ArrayCollection();
+    }
 
     public function getId(): ?int
     {
@@ -209,6 +220,36 @@ class Document
     public function setOrganizationCreator(Organization $organizationCreator): static
     {
         $this->organizationCreator = $organizationCreator;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, DocumentUserRecipient>
+     */
+    public function getUserRecipients(): Collection
+    {
+        return $this->userRecipients;
+    }
+
+    public function addUserRecipient(DocumentUserRecipient $userRecipient): static
+    {
+        if (!$this->userRecipients->contains($userRecipient)) {
+            $this->userRecipients->add($userRecipient);
+            $userRecipient->setDocument($this);
+        }
+
+        return $this;
+    }
+
+    public function removeUserRecipient(DocumentUserRecipient $userRecipient): static
+    {
+        if ($this->userRecipients->removeElement($userRecipient)) {
+            // set the owning side to null (unless already changed)
+            if ($userRecipient->getDocument() === $this) {
+                $userRecipient->setDocument(null);
+            }
+        }
 
         return $this;
     }

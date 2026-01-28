@@ -17,9 +17,13 @@ class RoleFixtures extends Fixture implements FixtureGroupInterface
 
     public function load(ObjectManager $manager): void
     {
-        // Создаем все роли из enum
+        $repo = $manager->getRepository(Role::class);
+
         foreach (UserRole::cases() as $userRole) {
-            $role = new Role($userRole->value);
+            if ($repo->findOneBy(['name' => $userRole])) {
+                continue;
+            }
+            $role = new Role($userRole);
             $role->setLabel($userRole->getLabel());
             $manager->persist($role);
         }

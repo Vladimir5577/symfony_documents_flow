@@ -6,8 +6,11 @@
 $ cp .env .env.local
 
 
-Create
+    Create
+    ------
 $ php bin/console make:controller PageController
+    create entity and repository
+$ php bin/console make:entity
 
 
 drop database don_stroy_mash;
@@ -22,7 +25,10 @@ $ php bin/console doctrine:migrations:migrate
     Load basic admin fixturex
 $ php bin/console doctrine:fixtures:load --group=admin   --- only one fixture
 $ php bin/console doctrine:fixtures:load --group=base   --- only one fixture
+// ============================
 
+    Debug routing
+$ php bin/console debug:router
 
 // ============================
 

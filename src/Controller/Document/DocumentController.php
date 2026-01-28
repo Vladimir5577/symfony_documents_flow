@@ -3,15 +3,18 @@
 namespace App\Controller\Document;
 
 use App\Entity\Document;
+use App\Entity\DocumentUserRecipient;
 use App\Entity\User;
 use App\Enum\DocumentStatus;
 use App\Repository\DocumentRepository;
 use App\Repository\DocumentTypeRepository;
 use App\Repository\OrganizationRepository;
+use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
@@ -34,6 +37,7 @@ final class DocumentController extends AbstractController
         Request $request,
         DocumentTypeRepository $documentTypeRepository,
         OrganizationRepository $organizationRepository,
+        UserRepository $userRepository,
         EntityManagerInterface $entityManager,
         ValidatorInterface $validator
     ): Response {
@@ -50,7 +54,7 @@ final class DocumentController extends AbstractController
 
         $isAdmin = $this->isGranted('ROLE_ADMIN');
         $userOrganization = $currentUser->getOrganization();
-        
+
         // Для обычного пользователя находим корневую организацию (если он в дочерней)
         $rootOrganization = $userOrganization;
         if ($userOrganization && !$isAdmin) {
@@ -58,7 +62,7 @@ final class DocumentController extends AbstractController
                 $rootOrganization = $rootOrganization->getParent();
             }
         }
-        
+
         // Получаем дерево организаций для пользователя
         $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
 
@@ -72,7 +76,7 @@ final class DocumentController extends AbstractController
                 }
             }
         }
-        
+
         // Если всё ещё пусто, но у пользователя есть организация, загружаем её
         if (empty($organizationsWithChildren) && $userOrganization) {
             $loadedOrg = $organizationRepository->findWithChildren($userOrganization->getId());
@@ -80,6 +84,9 @@ final class DocumentController extends AbstractController
                 $organizationsWithChildren[] = $loadedOrg;
             }
         }
+
+        // Пользователи, которые могут работать с документами
+        $availableUsers = $userRepository->findAllWorkWithDocuments();
 
         $formData = [];
         $initialFormData = [
@@ -90,7 +97,7 @@ final class DocumentController extends AbstractController
             $initialFormData['organization_id'] = $userOrganization->getId();
         }
 
-        $renderForm = function (array $data = []) use ($documentType, $organizationsWithChildren, $initialFormData): Response {
+        $renderForm = function (array $data = []) use ($documentType, $organizationsWithChildren, $initialFormData, $availableUsers): Response {
             $formData = $data !== [] ? $data : $initialFormData;
         return $this->render('document/create_document.html.twig', [
             'active_tab' => 'new_document',
@@ -98,6 +105,7 @@ final class DocumentController extends AbstractController
             'organizations' => $organizationsWithChildren,
             'form_data' => $formData,
             'document_statuses' => DocumentStatus::getCreationChoices(),
+            'users' => $availableUsers,
         ]);
         };
 
@@ -202,9 +210,112 @@ final class DocumentController extends AbstractController
 
         // Сохраняем документ
         $entityManager->persist($document);
+
+        // Присваиваем документ выбранным пользователям
+        $userIds = $formData['user_ids'] ?? [];
+        if (is_array($userIds) && !empty($userIds)) {
+            $now = new \DateTimeImmutable();
+            foreach ($userIds as $userId) {
+                $userId = (int) $userId;
+                if ($userId <= 0) {
+                    continue;
+                }
+                $recipientUser = $userRepository->findActive($userId);
+                if (!$recipientUser) {
+                    continue;
+                }
+
+                $recipient = new DocumentUserRecipient();
+                $recipient->setDocument($document);
+                $recipient->setUser($recipientUser);
+                $recipient->setStatus($document->getStatus() ?? DocumentStatus::NEW);
+                $recipient->setCreatedAt($now);
+                $recipient->setUpdatedAt($now);
+
+                $entityManager->persist($recipient);
+            }
+        }
+
         $entityManager->flush();
 
         $this->addFlash('success', 'Документ успешно создан.');
         return $this->redirectToRoute('app_new_document');
+    }
+
+    #[Route('/document/organization-users/{id}', name: 'app_document_org_users', methods: ['GET'])]
+    public function getOrganizationUsers(
+        int $id,
+        Request $request,
+        OrganizationRepository $organizationRepository,
+        UserRepository $userRepository
+    ): JsonResponse {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            return new JsonResponse(['error' => 'Unauthorized'], JsonResponse::HTTP_UNAUTHORIZED);
+        }
+
+        $organization = $organizationRepository->find($id);
+        if (!$organization) {
+            return new JsonResponse(['error' => 'Organization not found'], JsonResponse::HTTP_NOT_FOUND);
+        }
+
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $userOrganization = $currentUser->getOrganization();
+
+        if (!$isAdmin) {
+            if (!$userOrganization) {
+                return new JsonResponse(['error' => 'Organization not defined'], JsonResponse::HTTP_FORBIDDEN);
+            }
+
+            $isValid = $organization->getId() === $userOrganization->getId();
+            if (!$isValid) {
+                $checkOrg = $organization;
+                while ($checkOrg->getParent() !== null) {
+                    $checkOrg = $checkOrg->getParent();
+                    if ($checkOrg->getId() === $userOrganization->getId()) {
+                        $isValid = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!$isValid) {
+                return new JsonResponse(['error' => 'Forbidden'], JsonResponse::HTTP_FORBIDDEN);
+            }
+        }
+
+        $users = $userRepository->findWorkWithDocumentsByOrganization($organization);
+        $data = [];
+        foreach ($users as $user) {
+            $data[] = [
+                'id' => $user->getId(),
+                'name' => trim(sprintf(
+                    '%s %s %s',
+                    (string) $user->getLastname(),
+                    (string) $user->getFirstname(),
+                    (string) ($user->getPatronymic() ?? '')
+                )),
+            ];
+        }
+
+        return new JsonResponse($data);
+    }
+
+    #[Route('/incoming_documents', name: 'app_incoming_documents')]
+    public function getIncomingDocuments(): Response
+    {
+
+        return $this->render('document/incoming_documents.html.twig', [
+            'active_tab' => 'incoming_documents',
+        ]);
+    }
+
+    #[Route('/outgoing_documents', name: 'app_outgoing_documents')]
+    public function getOutgoingDocuments(): Response
+    {
+
+        return $this->render('document/outgoing_documents.html.twig', [
+            'active_tab' => 'outgoing_documents',
+        ]);
     }
 }

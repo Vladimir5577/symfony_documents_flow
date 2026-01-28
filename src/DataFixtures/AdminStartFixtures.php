@@ -35,7 +35,7 @@ class AdminStartFixtures extends Fixture
         // Создаем все роли из enum
         $adminRole = null;
         foreach (UserRole::cases() as $userRole) {
-            $role = new Role($userRole->value);
+            $role = new Role($userRole);
             $role->setLabel($userRole->getLabel());
             $manager->persist($role);
 

@@ -100,6 +100,10 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(options: ['default' => true])]
     private bool $isActive = true;
 
+    // work_with_documents
+    #[ORM\Column(options: ['default' => false])]
+    private bool $workWithDocuments = false;
+
     // 9) created_at
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
@@ -282,6 +286,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setIsActive(bool $isActive): static
     {
         $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function isWorkWithDocuments(): bool
+    {
+        return $this->workWithDocuments;
+    }
+
+    public function setWorkWithDocuments(bool $workWithDocuments): static
+    {
+        $this->workWithDocuments = $workWithDocuments;
 
         return $this;
     }

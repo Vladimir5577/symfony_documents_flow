@@ -2,6 +2,7 @@
 
 namespace App\Repository;
 
+use App\Entity\Organization;
 use App\Entity\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -115,6 +116,58 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
     public function findAllActive(): array
     {
         return $this->findAll();
+    }
+
+    /**
+     * Пользователи, которые работают с документами в указанной организации.
+     *
+     * @return User[]
+     */
+    public function findWorkWithDocumentsByOrganization(Organization $organization): array
+    {
+        return $this->createQueryBuilder('u')
+            ->where('u.organization = :org')
+            ->andWhere('u.workWithDocuments = :flag')
+            ->setParameter('org', $organization)
+            ->setParameter('flag', true)
+            ->orderBy('u.lastname', 'ASC')
+            ->addOrderBy('u.firstname', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Пользователи, которые работают с документами.
+     *
+     * @return User[]
+     */
+    public function findAllWorkWithDocuments(): array
+    {
+        return $this->createQueryBuilder('u')
+            ->where('u.workWithDocuments = :flag')
+            ->setParameter('flag', true)
+            ->orderBy('u.lastname', 'ASC')
+            ->addOrderBy('u.firstname', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Пользователи организации (с подгрузкой ролей для отображения).
+     *
+     * @return User[]
+     */
+    public function findByOrganization(Organization $organization): array
+    {
+        return $this->createQueryBuilder('u')
+            ->leftJoin('u.userRoles', 'ur')->addSelect('ur')
+            ->leftJoin('ur.role', 'r')->addSelect('r')
+            ->where('u.organization = :org')
+            ->setParameter('org', $organization)
+            ->orderBy('u.lastname', 'ASC')
+            ->addOrderBy('u.firstname', 'ASC')
+            ->getQuery()
+            ->getResult();
     }
 
     /**

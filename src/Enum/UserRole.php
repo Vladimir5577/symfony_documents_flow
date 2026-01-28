@@ -9,6 +9,7 @@ enum UserRole: string
     case ROLE_ADMIN = 'ROLE_ADMIN';
     case ROLE_CEO = 'ROLE_CEO';
     case ROLE_HR = 'ROLE_HR';
+    case ROLE_MANAGER = 'ROLE_MANAGER';
     case ROLE_USER_EDITOR = 'ROLE_USER_EDITOR';
     case ROLE_USER = 'ROLE_USER';
 
@@ -18,6 +19,7 @@ enum UserRole: string
             self::ROLE_ADMIN => 'Администратор',
             self::ROLE_CEO => 'Директор',
             self::ROLE_HR => 'Отдел кадров',
+            self::ROLE_MANAGER => 'Менеджер',
             self::ROLE_USER_EDITOR => 'Пользователь Редактор',
             self::ROLE_USER => 'Пользователь',
         };
