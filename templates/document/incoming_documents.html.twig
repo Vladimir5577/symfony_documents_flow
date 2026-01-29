@@ -11,7 +11,55 @@
 
 
 {% block main %}
-    <h1>Входящие документы!</h1>
+    <h1>Входящие документы</h1>
 
-
+    <section class="section">
+        <div class="card">
+            <div class="card-body">
+                {% if recipients is defined and recipients|length > 0 %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Название</th>
+                                    <th>Тип</th>
+                                    <th>Организация</th>
+                                    <th>Дата создания</th>
+                                    <th>Срок</th>
+                                    <th>Статус</th>
+                                    <th>Создал</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for recipient in recipients %}
+                                    {% set doc = recipient.document %}
+                                    <tr>
+                                        <td>{{ doc.name }}</td>
+                                        <td>{{ doc.documentType ? doc.documentType.name : '—' }}</td>
+                                        <td>{{ doc.organizationCreator ? doc.organizationCreator.name : '—' }}</td>
+                                        <td>{{ doc.createdAt ? doc.createdAt|date('d.m.Y H:i') : '—' }}</td>
+                                        <td>{{ doc.deadline ? doc.deadline|date('d.m.Y') : '—' }}</td>
+                                        <td>{{ recipient.status ? recipient.status.label : '—' }}</td>
+                                        <td>
+                                            {% if doc.createdBy %}
+                                                {{ doc.createdBy.lastname }} {{ doc.createdBy.firstname }}
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ path('app_view_document', {id: doc.id}) }}" class="btn btn-sm btn-outline-primary">Просмотр</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">Нет входящих документов.</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
 {% endblock %}

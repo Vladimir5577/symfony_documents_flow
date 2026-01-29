@@ -8,6 +8,7 @@ use App\Entity\User;
 use App\Enum\DocumentStatus;
 use App\Repository\DocumentRepository;
 use App\Repository\DocumentTypeRepository;
+use App\Repository\DocumentUserRecipientRepository;
 use App\Repository\OrganizationRepository;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -302,20 +303,72 @@ final class DocumentController extends AbstractController
     }
 
     #[Route('/incoming_documents', name: 'app_incoming_documents')]
-    public function getIncomingDocuments(): Response
+    public function getIncomingDocuments(DocumentUserRecipientRepository $recipientRepository): Response
     {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $recipients = $recipientRepository->findByUserWithDocument($currentUser);
 
         return $this->render('document/incoming_documents.html.twig', [
             'active_tab' => 'incoming_documents',
+            'recipients' => $recipients,
         ]);
     }
 
     #[Route('/outgoing_documents', name: 'app_outgoing_documents')]
-    public function getOutgoingDocuments(): Response
+    public function getOutgoingDocuments(DocumentRepository $documentRepository): Response
     {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $documents = $documentRepository->findByCreatedBy($currentUser);
 
         return $this->render('document/outgoing_documents.html.twig', [
             'active_tab' => 'outgoing_documents',
+            'documents' => $documents,
+        ]);
+    }
+
+    #[Route('/view_document/{id}', name: 'app_view_document', requirements: ['id' => '\d+'])]
+    public function viewDocument(int $id, DocumentRepository $documentRepository): Response
+    {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document) {
+            throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        // Доступ: создатель, получатель или админ
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
+        $isRecipient = false;
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
+                $isRecipient = true;
+                break;
+            }
+        }
+
+        if (!$isAdmin && !$isCreator && !$isRecipient) {
+            $this->addFlash('error', 'Нет доступа к этому документу.');
+            return $this->redirectToRoute('app_incoming_documents');
+        }
+
+        return $this->render('document/view_document.html.twig', [
+            'active_tab' => 'view_document',
+            'document' => $document,
         ]);
     }
 }
