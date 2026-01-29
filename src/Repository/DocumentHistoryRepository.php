@@ -16,6 +16,22 @@ class DocumentHistoryRepository extends ServiceEntityRepository
         parent::__construct($registry, DocumentHistory::class);
     }
 
+    /**
+     * @return DocumentHistory[]
+     */
+    public function findByDocumentAndUserOrderByCreatedAtDesc(int $documentId, int $userId): array
+    {
+        return $this->createQueryBuilder('h')
+            ->leftJoin('h.user', 'u')->addSelect('u')
+            ->andWhere('h.document = :documentId')
+            ->andWhere('h.user = :userId')
+            ->setParameter('documentId', $documentId)
+            ->setParameter('userId', $userId)
+            ->orderBy('h.createdAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
     //    /**
     //     * @return DocumentHistory[] Returns an array of DocumentHistory objects
     //     */

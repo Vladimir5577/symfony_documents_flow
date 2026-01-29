@@ -1,0 +1,122 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}История документа: {{ document.name }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">История документа</h1>
+        <div>
+            <a href="{{ path('app_view_incoming_document', {'id': document.id}) }}" class="btn btn-outline-secondary btn-sm me-1">К документу</a>
+            <a href="{{ path('app_incoming_documents') }}" class="btn btn-outline-secondary btn-sm">Входящие</a>
+        </div>
+    </div>
+
+    <section class="section">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">{{ document.name }}</h4>
+            </div>
+            <div class="card-body">
+                {% if historyUser %}
+                    <div class="mb-3">
+                        <strong>История для пользователя:</strong> 
+                        {{ historyUser.lastname }} {{ historyUser.firstname }}{% if historyUser.patronymic %} {{ historyUser.patronymic }}{% endif %}
+                    </div>
+                {% endif %}
+
+                {% if history is defined and history|length > 0 %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Дата и время</th>
+                                    <th>Действие</th>
+                                    <th>Кто изменил</th>
+                                    <th>Был статус</th>
+                                    <th>Стал статус</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in history %}
+                                    <tr>
+                                        <td>{{ item.createdAt ? item.createdAt|date('d.m.Y H:i') : '—' }}</td>
+                                        <td>{{ item.action ?? '—' }}</td>
+                                        <td>
+                                            {% if item.user %}
+                                                {{ item.user.lastname }} {{ item.user.firstname }}{% if item.user.patronymic %} {{ item.user.patronymic }}{% endif %}
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.oldStatus %}
+                                                {% set status = item.oldStatus %}
+                                                {% if status.value == 'DRAFT' %}
+                                                    <span class="badge bg-secondary">{{ status.label }}</span>
+                                                {% elseif status.value == 'NEW' %}
+                                                    <span class="badge bg-primary">{{ status.label }}</span>
+                                                {% elseif status.value == 'IN_REVIEW' %}
+                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'PENDING_APPROVAL' %}
+                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'APPROVED' %}
+                                                    <span class="badge bg-success">{{ status.label }}</span>
+                                                {% elseif status.value == 'REJECTED' %}
+                                                    <span class="badge bg-danger">{{ status.label }}</span>
+                                                {% elseif status.value == 'IN_PROGRESS' %}
+                                                    <span class="badge bg-info text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'COMPLETED' %}
+                                                    <span class="badge bg-success">{{ status.label }}</span>
+                                                {% elseif status.value == 'CANCELLED' %}
+                                                    <span class="badge bg-dark">{{ status.label }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ status.label }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.newStatus %}
+                                                {% set status = item.newStatus %}
+                                                {% if status.value == 'DRAFT' %}
+                                                    <span class="badge bg-secondary">{{ status.label }}</span>
+                                                {% elseif status.value == 'NEW' %}
+                                                    <span class="badge bg-primary">{{ status.label }}</span>
+                                                {% elseif status.value == 'IN_REVIEW' %}
+                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'PENDING_APPROVAL' %}
+                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'APPROVED' %}
+                                                    <span class="badge bg-success">{{ status.label }}</span>
+                                                {% elseif status.value == 'REJECTED' %}
+                                                    <span class="badge bg-danger">{{ status.label }}</span>
+                                                {% elseif status.value == 'IN_PROGRESS' %}
+                                                    <span class="badge bg-info text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'COMPLETED' %}
+                                                    <span class="badge bg-success">{{ status.label }}</span>
+                                                {% elseif status.value == 'CANCELLED' %}
+                                                    <span class="badge bg-dark">{{ status.label }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ status.label }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">История изменений по этому документу для данного пользователя пока пуста.</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+{% endblock %}

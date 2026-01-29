@@ -38,9 +38,36 @@
                                         <td>{{ doc.organizationCreator ? doc.organizationCreator.name : '—' }}</td>
                                         <td>{{ doc.createdAt ? doc.createdAt|date('d.m.Y H:i') : '—' }}</td>
                                         <td>{{ doc.deadline ? doc.deadline|date('d.m.Y') : '—' }}</td>
-                                        <td>{{ doc.status ? doc.status.label : '—' }}</td>
                                         <td>
-                                            <a href="{{ path('app_view_document', {id: doc.id}) }}" class="btn btn-sm btn-outline-primary">Просмотр</a>
+                                            {% if doc.status %}
+                                                {% set status = doc.status %}
+                                                {% if status.value == 'DRAFT' %}
+                                                    <span class="badge bg-secondary">{{ status.label }}</span>
+                                                {% elseif status.value == 'NEW' %}
+                                                    <span class="badge bg-primary">{{ status.label }}</span>
+                                                {% elseif status.value == 'IN_REVIEW' %}
+                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'PENDING_APPROVAL' %}
+                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'APPROVED' %}
+                                                    <span class="badge bg-success">{{ status.label }}</span>
+                                                {% elseif status.value == 'REJECTED' %}
+                                                    <span class="badge bg-danger">{{ status.label }}</span>
+                                                {% elseif status.value == 'IN_PROGRESS' %}
+                                                    <span class="badge bg-info text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'COMPLETED' %}
+                                                    <span class="badge bg-success">{{ status.label }}</span>
+                                                {% elseif status.value == 'CANCELLED' %}
+                                                    <span class="badge bg-dark">{{ status.label }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ status.label }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ path('app_view_outgoing_document', {id: doc.id}) }}" class="btn btn-sm btn-outline-primary">Просмотр</a>
                                         </td>
                                     </tr>
                                 {% endfor %}

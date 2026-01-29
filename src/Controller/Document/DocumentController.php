@@ -3,9 +3,11 @@
 namespace App\Controller\Document;
 
 use App\Entity\Document;
+use App\Entity\DocumentHistory;
 use App\Entity\DocumentUserRecipient;
 use App\Entity\User;
 use App\Enum\DocumentStatus;
+use App\Repository\DocumentHistoryRepository;
 use App\Repository\DocumentRepository;
 use App\Repository\DocumentTypeRepository;
 use App\Repository\DocumentUserRecipientRepository;
@@ -240,7 +242,7 @@ final class DocumentController extends AbstractController
         $entityManager->flush();
 
         $this->addFlash('success', 'Документ успешно создан.');
-        return $this->redirectToRoute('app_new_document');
+        return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
     }
 
     #[Route('/document/organization-users/{id}', name: 'app_document_org_users', methods: ['GET'])]
@@ -336,8 +338,48 @@ final class DocumentController extends AbstractController
         ]);
     }
 
-    #[Route('/view_document/{id}', name: 'app_view_document', requirements: ['id' => '\d+'])]
-    public function viewDocument(int $id, DocumentRepository $documentRepository): Response
+    #[Route('/view_incoming_document/{id}', name: 'app_view_incoming_document', requirements: ['id' => '\d+'])]
+    public function viewIncomingDocument(int $id, DocumentRepository $documentRepository): Response
+    {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document) {
+            throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        // Доступ: создатель, получатель или админ
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
+        $isRecipient = false;
+        $userRecipient = null;
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
+                $isRecipient = true;
+                $userRecipient = $recipient;
+                break;
+            }
+        }
+
+        if (!$isAdmin && !$isCreator && !$isRecipient) {
+            $this->addFlash('error', 'Нет доступа к этому документу.');
+            return $this->redirectToRoute('app_incoming_documents');
+        }
+
+        return $this->render('document/view_incoming_document.html.twig', [
+            'active_tab' => 'incoming_documents',
+            'document' => $document,
+            'isRecipient' => $isRecipient,
+            'userRecipient' => $userRecipient,
+        ]);
+    }
+
+    #[Route('/view_outgoing_document/{id}', name: 'app_view_outgoing_document', requirements: ['id' => '\d+'])]
+    public function viewOutgoingDocument(int $id, DocumentRepository $documentRepository): Response
     {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
@@ -366,9 +408,171 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_incoming_documents');
         }
 
-        return $this->render('document/view_document.html.twig', [
+        return $this->render('document/view_outgoing_document.html.twig', [
+            'active_tab' => 'outgoing_documents',
+            'document' => $document,
+        ]);
+    }
+
+    #[Route('/document/{id}/status/update', name: 'app_document_status_update', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function updateDocumentStatus(
+        int $id,
+        Request $request,
+        DocumentRepository $documentRepository,
+        EntityManagerInterface $entityManager
+    ): Response {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document) {
+            throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        // Находим получателя для текущего пользователя
+        $userRecipient = null;
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
+                $userRecipient = $recipient;
+                break;
+            }
+        }
+
+        // Проверяем, что пользователь является получателем документа
+        if (!$userRecipient) {
+            $this->addFlash('error', 'Вы можете изменять статус только для входящих документов.');
+            return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
+        }
+
+        // Валидация CSRF токена
+        if (!$this->isCsrfTokenValid('document_status_' . $id, $request->request->get('_token'))) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
+        }
+
+        // Получаем статус из запроса
+        $statusValue = trim((string) ($request->request->get('status') ?? ''));
+        if ($statusValue === '') {
+            $this->addFlash('error', 'Необходимо выбрать статус.');
+            return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
+        }
+
+        // Валидация и установка статуса
+        try {
+            $status = DocumentStatus::from($statusValue);
+        } catch (\ValueError $e) {
+            $this->addFlash('error', 'Неверный статус документа.');
+            return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
+        }
+
+        // Разрешенные статусы для получателей
+        $allowedStatuses = [
+            DocumentStatus::IN_PROGRESS,
+            DocumentStatus::IN_REVIEW,
+            DocumentStatus::APPROVED,
+            DocumentStatus::REJECTED,
+        ];
+
+        if (!in_array($status, $allowedStatuses, true)) {
+            $this->addFlash('error', 'Выбранный статус недоступен для изменения.');
+            return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
+        }
+
+        // Проверяем, не совпадает ли новый статус с текущим
+        $oldStatus = $userRecipient->getStatus();
+        if ($oldStatus === $status) {
+            $this->addFlash('info', sprintf('Документ уже находится в статусе "%s".', $status->getLabel()));
+            return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
+        }
+
+        // Сохраняем старый статус перед изменением
+        $oldStatusForHistory = $oldStatus;
+
+        // Обновляем статус получателя
+        $userRecipient->setStatus($status);
+        $userRecipient->setUpdatedAt(new \DateTimeImmutable());
+
+        // Записываем историю изменения статуса
+        $history = new DocumentHistory();
+        $history->setDocument($document);
+        $history->setUser($currentUser);
+        $history->setAction('Изменение статуса получателя');
+        $history->setOldStatus($oldStatusForHistory ?? DocumentStatus::NEW);
+        $history->setNewStatus($status);
+        $history->setCreatedAt(new \DateTimeImmutable());
+
+        $entityManager->persist($history);
+        $entityManager->flush();
+
+        $this->addFlash('success', sprintf('Статус документа изменен на "%s".', $status->getLabel()));
+        return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
+    }
+
+    #[Route('/incoming_document/{id}/history/{userId}', name: 'app_history_incoming_document', requirements: ['id' => '\d+', 'userId' => '\d+'])]
+    public function historyIncomingDocument(
+        int $id,
+        int $userId,
+        Request $request,
+        DocumentRepository $documentRepository,
+        DocumentHistoryRepository $historyRepository,
+        UserRepository $userRepository
+    ): Response {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document) {
+            throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        $historyUser = $userRepository->find($userId);
+        if (!$historyUser) {
+            throw $this->createNotFoundException('Пользователь не найден.');
+        }
+
+        // Доступ: создатель, получатель или админ
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
+        $isRecipient = false;
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
+                $isRecipient = true;
+                break;
+            }
+        }
+
+        // Проверяем, что запрашиваемая история принадлежит текущему пользователю (если не админ)
+//        if (!$isAdmin && $userId !== $currentUser->getId()) {
+//            $this->addFlash('error', 'Нет доступа к истории этого пользователя.');
+//            return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
+//        }
+
+        if (!$isAdmin && !$isCreator && !$isRecipient) {
+            $this->addFlash('error', 'Нет доступа к этому документу.');
+            return $this->redirectToRoute('app_incoming_documents');
+        }
+
+        $history = $historyRepository->findByDocumentAndUserOrderByCreatedAtDesc($id, $userId);
+
+        return $this->render('document/history_incoming_document.html.twig', [
             'active_tab' => 'view_document',
             'document' => $document,
+            'historyUser' => $historyUser,
+            'history' => $history,
+        ]);
+    }
+
+    #[Route('/history_outgoing_documents', name: 'app_history_outgoing_documents')]
+    public function getHistoryOutgoingDocuments(DocumentRepository $documentRepository): Response
+    {
+        return $this->render('document/history_outgoing_document.html.twig', [
+            'active_tab' => 'outgoing_documents',
         ]);
     }
 }

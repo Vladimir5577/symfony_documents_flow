@@ -1,0 +1,150 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Просмотр документа: {{ document.name }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+
+    <h1 class="mb-0">Просмотр исходящего документа</h1>
+
+    <section class="section">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">{{ document.name }}</h4>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-3 text-muted">Тип документа</dt>
+                    <dd class="col-sm-9">{{ document.documentType ? document.documentType.name : '—' }}</dd>
+
+                    <dt class="col-sm-3 text-muted">Организация</dt>
+                    <dd class="col-sm-9">{{ document.organizationCreator ? document.organizationCreator.name : '—' }}</dd>
+
+                    <dt class="col-sm-3 text-muted">Статус</dt>
+                    <dd class="col-sm-9">
+                        {% if document.status %}
+                            {% set status = document.status %}
+                            {% if status.value == 'DRAFT' %}
+                                <span class="badge bg-secondary">{{ status.label }}</span>
+                            {% elseif status.value == 'NEW' %}
+                                <span class="badge bg-primary">{{ status.label }}</span>
+                            {% elseif status.value == 'IN_REVIEW' %}
+                                <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                            {% elseif status.value == 'PENDING_APPROVAL' %}
+                                <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                            {% elseif status.value == 'APPROVED' %}
+                                <span class="badge bg-success">{{ status.label }}</span>
+                            {% elseif status.value == 'REJECTED' %}
+                                <span class="badge bg-danger">{{ status.label }}</span>
+                            {% elseif status.value == 'IN_PROGRESS' %}
+                                <span class="badge bg-info text-dark">{{ status.label }}</span>
+                            {% elseif status.value == 'COMPLETED' %}
+                                <span class="badge bg-success">{{ status.label }}</span>
+                            {% elseif status.value == 'CANCELLED' %}
+                                <span class="badge bg-dark">{{ status.label }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ status.label }}</span>
+                            {% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-sm-3 text-muted">Дата создания</dt>
+                    <dd class="col-sm-9">{{ document.createdAt ? document.createdAt|date('d.m.Y H:i') : '—' }}</dd>
+
+                    <dt class="col-sm-3 text-muted">Дата обновления</dt>
+                    <dd class="col-sm-9">{{ document.updatedAt ? document.updatedAt|date('d.m.Y H:i') : '—' }}</dd>
+
+                    <dt class="col-sm-3 text-muted">Срок выполнения</dt>
+                    <dd class="col-sm-9">{{ document.deadline ? document.deadline|date('d.m.Y') : '—' }}</dd>
+
+                    <dt class="col-sm-3 text-muted">Создал</dt>
+                    <dd class="col-sm-9">
+                        {% if document.createdBy %}
+                            {{ document.createdBy.lastname }} {{ document.createdBy.firstname }}{% if document.createdBy.patronymic %} {{ document.createdBy.patronymic }}{% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </dd>
+
+                    {% if document.file %}
+                        <dt class="col-sm-3 text-muted">Файл</dt>
+                        <dd class="col-sm-9">{{ document.file }}</dd>
+                    {% endif %}
+                </dl>
+
+                {% if document.description %}
+                    <hr>
+                    <h6 class="text-muted">Описание</h6>
+                    <p class="mb-0">{{ document.description|nl2br }}</p>
+                {% endif %}
+
+                {% if document.userRecipients is defined and document.userRecipients|length > 0 %}
+                    <hr>
+                    <h6 class="text-muted">Получатели</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-borderless mb-0">
+                            <thead>
+                                <tr>
+                                    <th>ФИО</th>
+                                    <th>Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for recipient in document.userRecipients %}
+                                    <tr>
+                                        <td>
+                                            {% if recipient.user %}
+                                                {{ recipient.user.lastname }} {{ recipient.user.firstname }}{% if recipient.user.patronymic %} {{ recipient.user.patronymic }}{% endif %}
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if recipient.status %}
+                                                {% set status = recipient.status %}
+                                                {% if status.value == 'DRAFT' %}
+                                                    <span class="badge bg-secondary">{{ status.label }}</span>
+                                                {% elseif status.value == 'NEW' %}
+                                                    <span class="badge bg-primary">{{ status.label }}</span>
+                                                {% elseif status.value == 'IN_REVIEW' %}
+                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'PENDING_APPROVAL' %}
+                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'APPROVED' %}
+                                                    <span class="badge bg-success">{{ status.label }}</span>
+                                                {% elseif status.value == 'REJECTED' %}
+                                                    <span class="badge bg-danger">{{ status.label }}</span>
+                                                {% elseif status.value == 'IN_PROGRESS' %}
+                                                    <span class="badge bg-info text-dark">{{ status.label }}</span>
+                                                {% elseif status.value == 'COMPLETED' %}
+                                                    <span class="badge bg-success">{{ status.label }}</span>
+                                                {% elseif status.value == 'CANCELLED' %}
+                                                    <span class="badge bg-dark">{{ status.label }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ status.label }}</span>
+                                                {% endif %}
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+{% endblock %}
