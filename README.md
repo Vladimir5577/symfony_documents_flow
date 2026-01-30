@@ -40,7 +40,16 @@ $ php bin/console doctrine:fixtures:load    ---- run all fixtures and purge db
 $ php bin/console doctrine:fixtures:load --group=roles              --- will be purged
 $ php bin/console doctrine:fixtures:load --group=roles --append   --- without purge
 
+// ==================================
 
+1. Установка LibreOffice на сервер для ковертации ворд в пдф
+
+Ubuntu/Debian:
+
+sudo apt-get update
+sudo apt-get install libreoffice
+
+// ==================================
 
 ## Xdebug
 

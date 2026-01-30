@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Выбор места для штампа</title>
+
+    <script src="https://unpkg.com/pdfjs-dist@3.7.107/build/pdf.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "https://unpkg.com/pdfjs-dist@3.7.107/build/pdf.worker.js";
+    </script>
+
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .pdf-page {
+            border: 1px solid #333;
+            margin-bottom: 20px;
+            cursor: crosshair;
+            position: relative;
+        }
+        .click-indicator {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: rgba(255,0,0,0.5);
+            border: 2px solid red;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+
+<h2>Кликните на PDF, чтобы выбрать место для штампа</h2>
+<div id="pdf-container"></div>
+
+<script>
+    const url = '/files/executors.pdf';
+    const container = document.getElementById('pdf-container');
+    const scale = 1.5;
+
+    pdfjsLib.getDocument(url).promise.then(async pdf => {
+
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+
+            const page = await pdf.getPage(pageNum);
+            const viewport = page.getViewport({ scale });
+
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'relative';
+
+            const canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page';
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            wrapper.appendChild(canvas);
+            container.appendChild(wrapper);
+
+            const ctx = canvas.getContext('2d');
+            await page.render({ canvasContext: ctx, viewport }).promise;
+
+            let indicator = null;
+
+            canvas.addEventListener('click', e => {
+
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                // ✔ ПРАВИЛЬНЫЕ PDF-КООРДИНАТЫ
+                const pdfX = x / scale;
+                const pdfY = (viewport.height - y) / scale;
+
+                // индикатор клика
+                if (indicator) indicator.remove();
+                indicator = document.createElement('div');
+                indicator.className = 'click-indicator';
+                indicator.style.left = `${x}px`;
+                indicator.style.top = `${y}px`;
+                wrapper.appendChild(indicator);
+
+                setTimeout(() => {
+                    if (confirm(
+                        `Страница: ${pageNum}\nX: ${pdfX.toFixed(2)}\nY: ${pdfY.toFixed(2)}\n\nПоставить штамп?`
+                    )) {
+                        fetch('/executors_signature', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                page: pageNum,
+                                x: pdfX,
+                                y: pdfY
+                            })
+                        })
+                            .then(() => alert('Штамп поставлен'))
+                            .catch(console.error);
+                    } else {
+                        indicator.remove();
+                        indicator = null;
+                    }
+                }, 50);
+            });
+        }
+    });
+</script>
+
+</body>
+</html>

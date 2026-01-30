@@ -1,5 +1,6 @@
 <?php
 
+
 namespace App\Controller\Document;
 
 use App\Entity\Document;
@@ -14,10 +15,13 @@ use App\Repository\DocumentUserRecipientRepository;
 use App\Repository\OrganizationRepository;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use setasign\Fpdi\Tcpdf\Fpdi;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Process;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
@@ -36,14 +40,15 @@ final class DocumentController extends AbstractController
 
     #[Route('/create_document/{type_id}', name: 'app_create_document', methods: ['GET', 'POST'])]
     public function createDocument(
-        int $type_id,
-        Request $request,
+        int                    $type_id,
+        Request                $request,
         DocumentTypeRepository $documentTypeRepository,
         OrganizationRepository $organizationRepository,
-        UserRepository $userRepository,
+        UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
-        ValidatorInterface $validator
-    ): Response {
+        ValidatorInterface     $validator
+    ): Response
+    {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
             $this->addFlash('error', 'Необходимо войти в систему для создания документа.');
@@ -102,14 +107,14 @@ final class DocumentController extends AbstractController
 
         $renderForm = function (array $data = []) use ($documentType, $organizationsWithChildren, $initialFormData, $availableUsers): Response {
             $formData = $data !== [] ? $data : $initialFormData;
-        return $this->render('document/create_document.html.twig', [
-            'active_tab' => 'new_document',
-            'document_type' => $documentType,
-            'organizations' => $organizationsWithChildren,
-            'form_data' => $formData,
-            'document_statuses' => DocumentStatus::getCreationChoices(),
-            'users' => $availableUsers,
-        ]);
+            return $this->render('document/create_document.html.twig', [
+                'active_tab' => 'new_document',
+                'document_type' => $documentType,
+                'organizations' => $organizationsWithChildren,
+                'form_data' => $formData,
+                'document_statuses' => DocumentStatus::getCreationChoices(),
+                'users' => $availableUsers,
+            ]);
         };
 
         if (!$request->isMethod('POST')) {
@@ -125,14 +130,14 @@ final class DocumentController extends AbstractController
         }
 
         // Получаем название документа
-        $name = trim((string) ($formData['name'] ?? ''));
+        $name = trim((string)($formData['name'] ?? ''));
         if ($name === '') {
             $this->addFlash('error', 'Название документа обязательно для заполнения.');
             return $renderForm($formData);
         }
 
         // Получаем организацию
-        $organizationId = (int) ($formData['organization_id'] ?? 0);
+        $organizationId = (int)($formData['organization_id'] ?? 0);
         if ($organizationId <= 0) {
             $this->addFlash('error', 'Необходимо выбрать организацию.');
             return $renderForm($formData);
@@ -173,11 +178,11 @@ final class DocumentController extends AbstractController
         // Создаем документ
         $document = new Document();
         $document->setName($name);
-        $document->setDescription(trim((string) ($formData['description'] ?? '')) ?: null);
+        $document->setDescription(trim((string)($formData['description'] ?? '')) ?: null);
         $document->setOrganizationCreator($organization);
         $document->setDocumentType($documentType);
         // Обрабатываем статус
-        $statusStr = trim((string) ($formData['status'] ?? ''));
+        $statusStr = trim((string)($formData['status'] ?? ''));
         if ($statusStr !== '') {
             try {
                 $status = DocumentStatus::from($statusStr);
@@ -187,11 +192,11 @@ final class DocumentController extends AbstractController
                 return $renderForm($formData);
             }
         }
-        $document->setFile(trim((string) ($formData['file'] ?? '')) ?: null);
+        $document->setFile(trim((string)($formData['file'] ?? '')) ?: null);
         $document->setCreatedBy($currentUser);
 
         // Обрабатываем deadline
-        $deadlineStr = trim((string) ($formData['deadline'] ?? ''));
+        $deadlineStr = trim((string)($formData['deadline'] ?? ''));
         if ($deadlineStr !== '') {
             try {
                 $deadline = new \DateTime($deadlineStr);
@@ -219,7 +224,7 @@ final class DocumentController extends AbstractController
         if (is_array($userIds) && !empty($userIds)) {
             $now = new \DateTimeImmutable();
             foreach ($userIds as $userId) {
-                $userId = (int) $userId;
+                $userId = (int)$userId;
                 if ($userId <= 0) {
                     continue;
                 }
@@ -247,11 +252,12 @@ final class DocumentController extends AbstractController
 
     #[Route('/document/organization-users/{id}', name: 'app_document_org_users', methods: ['GET'])]
     public function getOrganizationUsers(
-        int $id,
-        Request $request,
+        int                    $id,
+        Request                $request,
         OrganizationRepository $organizationRepository,
-        UserRepository $userRepository
-    ): JsonResponse {
+        UserRepository         $userRepository
+    ): JsonResponse
+    {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
             return new JsonResponse(['error' => 'Unauthorized'], JsonResponse::HTTP_UNAUTHORIZED);
@@ -294,9 +300,9 @@ final class DocumentController extends AbstractController
                 'id' => $user->getId(),
                 'name' => trim(sprintf(
                     '%s %s %s',
-                    (string) $user->getLastname(),
-                    (string) $user->getFirstname(),
-                    (string) ($user->getPatronymic() ?? '')
+                    (string)$user->getLastname(),
+                    (string)$user->getFirstname(),
+                    (string)($user->getPatronymic() ?? '')
                 )),
             ];
         }
@@ -416,11 +422,12 @@ final class DocumentController extends AbstractController
 
     #[Route('/document/{id}/status/update', name: 'app_document_status_update', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function updateDocumentStatus(
-        int $id,
-        Request $request,
-        DocumentRepository $documentRepository,
+        int                    $id,
+        Request                $request,
+        DocumentRepository     $documentRepository,
         EntityManagerInterface $entityManager
-    ): Response {
+    ): Response
+    {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
             $this->addFlash('error', 'Необходимо войти в систему.');
@@ -454,7 +461,7 @@ final class DocumentController extends AbstractController
         }
 
         // Получаем статус из запроса
-        $statusValue = trim((string) ($request->request->get('status') ?? ''));
+        $statusValue = trim((string)($request->request->get('status') ?? ''));
         if ($statusValue === '') {
             $this->addFlash('error', 'Необходимо выбрать статус.');
             return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
@@ -513,13 +520,14 @@ final class DocumentController extends AbstractController
 
     #[Route('/incoming_document/{id}/history/{userId}', name: 'app_history_incoming_document', requirements: ['id' => '\d+', 'userId' => '\d+'])]
     public function historyIncomingDocument(
-        int $id,
-        int $userId,
-        Request $request,
-        DocumentRepository $documentRepository,
+        int                       $id,
+        int                       $userId,
+        Request                   $request,
+        DocumentRepository        $documentRepository,
         DocumentHistoryRepository $historyRepository,
-        UserRepository $userRepository
-    ): Response {
+        UserRepository            $userRepository
+    ): Response
+    {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
             $this->addFlash('error', 'Необходимо войти в систему.');

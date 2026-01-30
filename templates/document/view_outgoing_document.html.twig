@@ -98,6 +98,7 @@
                                 <tr>
                                     <th>ФИО</th>
                                     <th>Статус</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -137,6 +138,9 @@
                                             {% else %}
                                                 —
                                             {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ path('app_history_outgoing_document', {'id': document.id, 'userId': recipient.user.id}) }}" class="btn btn-sm btn-outline-primary">Посмотреть историю</a>
                                         </td>
                                     </tr>
                                 {% endfor %}
