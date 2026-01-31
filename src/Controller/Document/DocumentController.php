@@ -192,7 +192,38 @@ final class DocumentController extends AbstractController
                 return $renderForm($formData);
             }
         }
-        $document->setFile(trim((string)($formData['file'] ?? '')) ?: null);
+
+        // upload file
+
+        $file = $request->files->get('originalFile');
+
+        if (!$file || !$file->isValid()) {
+            $this->addFlash('error', 'Выберите файл (PDF, JPEG или PNG).');
+            return $renderForm($formData);
+        }
+
+        if ($file->getSize() > 5 * 1024 * 1024) {
+            $this->addFlash('error', 'Файл слишком большой (максимум 5 МБ).');
+            return $renderForm($formData);
+        }
+
+        if (!in_array($file->getMimeType(), [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+        ], true)) {
+            $this->addFlash('error', 'Допустимые форматы: PDF, JPEG, PNG.');
+            return $renderForm($formData);
+        }
+
+        $uploadDir = $this->getParameter('private_upload_dir');
+
+        $filename = bin2hex(random_bytes(16))
+            . '.' . ($file->guessExtension() ?? 'bin');
+
+        $file->move($uploadDir, $filename);
+
+        $document->setOriginalFile($filename);
         $document->setCreatedBy($currentUser);
 
         // Обрабатываем deadline

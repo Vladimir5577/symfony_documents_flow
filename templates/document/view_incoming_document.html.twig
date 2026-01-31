@@ -85,9 +85,13 @@
                         {% endif %}
                     </dd>
 
-                    {% if document.file %}
-                        <dt class="col-sm-3 text-muted">Файл</dt>
-                        <dd class="col-sm-9">{{ document.file }}</dd>
+                    {% if document.originalFile %}
+                        <dt class="col-sm-3 text-muted">Оригинальный файл</dt>
+                        <dd class="col-sm-9">{{ document.originalFile }}</dd>
+                    {% endif %}
+                    {% if document.updatedFile %}
+                        <dt class="col-sm-3 text-muted">Обновлённый файл</dt>
+                        <dd class="col-sm-9">{{ document.updatedFile }}</dd>
                     {% endif %}
                 </dl>
 
