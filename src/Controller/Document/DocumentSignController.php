@@ -2,8 +2,10 @@
 
 namespace App\Controller\Document;
 
+use App\Service\Document\FileUploadService;
 use setasign\Fpdi\Tcpdf\Fpdi;
 use App\Repository\DocumentRepository;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -21,6 +23,8 @@ final class DocumentSignController extends AbstractController
         ]);
     }
 
+
+    // @deprecated
     #[Route('/sign_document', name: 'app_sign_document')]
     public function signDocument(): Response
     {
@@ -202,14 +206,22 @@ final class DocumentSignController extends AbstractController
     }
 
     #[Route('/executors_signature', name: 'app_executors_signature')]
-    public function executorsSignature(Request $request): Response
+    public function executorsSignature(
+        Request $request,
+        DocumentRepository $documentRepository,
+        #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
+        #[Autowire('%private_upload_dir_documents_updated%')] string $updatedDir,
+    ): Response
     {
         $data = json_decode($request->getContent(), true) ?? [];
 
-        $projectDir = $this->getParameter('kernel.project_dir');
-        $filesDir = $projectDir . '/public/files';
-        $sourcePdf = $filesDir . '/executors.pdf';      // исходный документ
-        $outputPdf = $filesDir . '/executors_sign.pdf';   // файл с добавленной подписью
+        $document = $documentRepository->findOneWithRelations($data['id']);
+        if (!$document?->getOriginalFile()) {
+            throw $this->createNotFoundException('У документа нет файла для подписания.');
+        }
+
+        $sourcePdf = $originalsDir . '/' . $document->getOriginalFile();      // исходный документ
+        $outputPdf = $updatedDir . '/' . $document->getOriginalFile();   // файл с добавленной подписью
 
 
         // координаты с фронта
@@ -218,10 +230,6 @@ final class DocumentSignController extends AbstractController
         $stampPage = $data['page'];   // номер страницы (1-based!)
         $stampX = $data['x'] / 4;    // X из JS
         $stampY = (840 - $data['y']) / 3.15;    // Y из JS
-
-//        $stampPage = 2;
-//        $stampX = 70;    // X из JS
-//        $stampY = 30;    // Y из JS
 
         $pdf = new Fpdi();
 
@@ -271,8 +279,6 @@ final class DocumentSignController extends AbstractController
 
         $pdf->Output($outputPdf, 'F');
 
-
-
         return $this->render('document/test.html.twig', [
         ]);
     }
@@ -280,7 +286,6 @@ final class DocumentSignController extends AbstractController
     #[Route('/convert_img_to_pdf', name: 'app_convert_img_to_pdf')]
     public function convertImgToPdf(Request $request): Response
     {
-
         $projectDir = $this->getParameter('kernel.project_dir');
         $filesDir   = $projectDir . '/public/files';
 
@@ -328,6 +333,7 @@ final class DocumentSignController extends AbstractController
     public function signAndSaveDocument(
         int $id,
         DocumentRepository $documentRepository,
+        FileUploadService $fileUploadService,
     ): Response
     {
         $document = $documentRepository->findOneWithRelations($id);
@@ -335,15 +341,19 @@ final class DocumentSignController extends AbstractController
             throw $this->createNotFoundException('У документа нет файла для подписания.');
         }
 
-        $fileUrl = $this->generateUrl('app_document_download_file', [
-            'id' => $document->getId(),
-            'type' => 'original',
-            'inline' => 1,
-        ], UrlGeneratorInterface::ABSOLUTE_URL);
+        $fileUrl = $this->generateUrl(
+            'app_document_download_file',
+            [
+                'id' => $document->getId(),
+                'type' => 'original',
+                'inline' => 1,
+            ]
+        );
 
-        return $this->render('document/sign_document.html.twig', [
+        return $this->render('document/test.html.twig', [
             'active_tab' => 'incoming_documents',
             'file_url' => $fileUrl,
+            'id' => $document->getId(),
         ]);
     }
 }

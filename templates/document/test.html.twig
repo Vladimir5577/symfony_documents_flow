@@ -36,7 +36,9 @@
 <div id="pdf-container"></div>
 
 <script>
-    const url = '/files/executors.pdf';
+    // const url = '/files/executors.pdf';
+    const url = {{ file_url|json_encode|raw }};
+    const documentId = {{ id }};
     const container = document.getElementById('pdf-container');
     const scale = 1.5;
 
@@ -89,6 +91,7 @@
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
+                                id: documentId,
                                 page: pageNum,
                                 x: pdfX,
                                 y: pdfY
