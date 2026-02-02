@@ -3,8 +3,10 @@
 namespace App\Entity;
 
 use App\Enum\DocumentStatus;
-use App\Repository\DocumentUserRecipientRepository;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use Gedmo\Mapping\Annotation as Gedmo;
+use App\Repository\DocumentUserRecipientRepository;
 
 #[ORM\Entity(repositoryClass: DocumentUserRecipientRepository::class)]
 #[ORM\UniqueConstraint(name: 'uniq_document_user', columns: ['document_id', 'user_id'])]
@@ -26,10 +28,12 @@ class DocumentUserRecipient
     #[ORM\Column(enumType: DocumentStatus::class)]
     private ?DocumentStatus $status = null;
 
-    #[ORM\Column]
+    #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
+    #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
 
-    #[ORM\Column]
+    #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE)]
+    #[Gedmo\Timestampable]
     private ?\DateTimeImmutable $updatedAt = null;
 
     public function getId(): ?int

@@ -8,6 +8,8 @@
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
     private_upload_dir: '%env(resolve:PRIVATE_UPLOAD_DIR)%'
+    private_upload_dir_documents_originals: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_ORIGINALS)%'
+    private_upload_dir_documents_updated: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_UPDATED)%'
 
 services:
     # default configuration for services in *this* file

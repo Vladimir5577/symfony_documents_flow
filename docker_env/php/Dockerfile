@@ -29,7 +29,7 @@ COPY . .
 # Create folder for upload files and give to it permissions
 RUN mkdir -p /uploads \
     && chown -R www-data:www-data /uploads \
-    && chmod -R 775 /uploads
+    && chmod -R 777 /uploads
 
 # Install PHP dependencies
 # RUN composer install

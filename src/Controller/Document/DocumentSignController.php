@@ -7,6 +7,7 @@ use App\Repository\DocumentRepository;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 
 final class DocumentSignController extends AbstractController
@@ -193,7 +194,7 @@ final class DocumentSignController extends AbstractController
 // ------------------------
         $pdf->Output($outputPdf, 'F');
 
-        echo "PDF с таблицей сохранен: $outputPdf";
+//        echo "PDF с таблицей сохранен: $outputPdf";
 
 
         return $this->render('document/test.html.twig', [
@@ -320,6 +321,29 @@ final class DocumentSignController extends AbstractController
 
 
         return $this->render('document/test.html.twig', [
+        ]);
+    }
+
+    #[Route('/sign_and_save_document/{id}', name: 'app_sign_and_save_document')]
+    public function signAndSaveDocument(
+        int $id,
+        DocumentRepository $documentRepository,
+    ): Response
+    {
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document?->getOriginalFile()) {
+            throw $this->createNotFoundException('У документа нет файла для подписания.');
+        }
+
+        $fileUrl = $this->generateUrl('app_document_download_file', [
+            'id' => $document->getId(),
+            'type' => 'original',
+            'inline' => 1,
+        ], UrlGeneratorInterface::ABSOLUTE_URL);
+
+        return $this->render('document/sign_document.html.twig', [
+            'active_tab' => 'incoming_documents',
+            'file_url' => $fileUrl,
         ]);
     }
 }

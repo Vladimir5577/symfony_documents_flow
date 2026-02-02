@@ -1,0 +1,334 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Редактирование документа: {{ document.name }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+
+    {#  style for multichoice  #}
+    <link rel="stylesheet" href="/front_end/assets/compiled/css/choices.min.css">
+
+    <h1 class="mb-0">Редактирование документа</h1>
+
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">{{ document.name }}</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('app_edit_outgoing_document', {'id': document.id}) }}" method="post" class="form" enctype="multipart/form-data">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_document') }}">
+
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                {% endfor %}
+
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                {% endfor %}
+
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_name">Название документа <span class="text-danger">*</span></label>
+                                            <input type="text" id="document_name" class="form-control" placeholder="Введите название документа" name="name" value="{{ form_data.name|default('') }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_description">Описание</label>
+                                            <textarea id="document_description" class="form-control" placeholder="Введите описание документа" name="description" rows="4">{{ form_data.description|default('') }}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="organization_id">Организация <span class="text-danger">*</span></label>
+                                            <select id="organization_id" class="form-control" name="organization_id" required>
+                                                {% if organizations is defined and organizations|length > 0 %}
+                                                    {% for org in organizations %}
+                                                        {% if org %}
+                                                            {% include 'auth/organization_tree_option.html.twig' with {'organization': org, 'level': 0, 'selected_id': form_data.organization_id|default('')} %}
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <option value="">Организации не найдены</option>
+                                                {% endif %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_users">
+                                                Пользователи (получатели)
+                                                <button type="button"
+                                                        class="btn btn-outline-secondary btn-sm ms-2"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#organizationUserModal">
+                                                    Выбрать по организациям
+                                                </button>
+                                            </label>
+                                            <select id="document_users" class="form-control" name="user_ids[]" multiple>
+                                                {% if users is defined and users|length > 0 %}
+                                                    {% for user in users %}
+                                                        <option value="{{ user.id }}"
+                                                                {% if form_data.user_ids is defined and user.id in form_data.user_ids %}selected{% endif %}>
+                                                            {{ user.lastname }} {{ user.firstname }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
+                                                        </option>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <option disabled>Пользователи не найдены</option>
+                                                {% endif %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_status">Статус</label>
+                                            <select id="document_status" class="form-control" name="status" required>
+                                                {% for value, label in document_statuses %}
+                                                    <option value="{{ value }}" {% if form_data.status|default('NEW') == value %}selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_deadline">Срок выполнения</label>
+                                            <input type="date" id="document_deadline" class="form-control" name="deadline" value="{{ form_data.deadline|default('') }}">
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="formFileLg" class="form-label">
+                                                Заменить файл (необязательно)
+                                                {% if document.originalFile %}
+                                                    <span class="text-muted small">Текущий: {{ document.originalFile }}</span>
+                                                {% endif %}
+                                            </label>
+                                            <input class="form-control form-control-lg" id="formFileLg" type="file" name="originalFile">
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12 d-flex justify-content-end">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить изменения</button>
+                                        <a href="{{ path('app_view_outgoing_document', {'id': document.id}) }}" class="btn btn-light-secondary me-1 mb-1">Отмена</a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="org-tree-data" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}">
+        {% if organizations is defined and organizations|length > 0 %}
+            {% for org in organizations %}
+                {% if org %}
+                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    <div class="modal fade" id="organizationUserModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Выбор организации</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div id="org-breadcrumb" class="text-muted small"></div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="org-nav-back" disabled>Назад</button>
+                    </div>
+                    <div id="org-list" class="list-group" style="max-height: 300px; overflow-y: auto;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" id="show-org-users-btn" disabled>
+                        Показать пользователей выбранной организации
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const usersSelect = document.getElementById('document_users');
+            let choicesInstance = null;
+
+            if (usersSelect && window.Choices) {
+                choicesInstance = new Choices(usersSelect, {
+                    removeItemButton: true,
+                    searchEnabled: true,
+                    searchPlaceholderValue: 'Начните вводить имя пользователя...',
+                    itemSelectText: '',
+                    noResultsText: 'Пользователи не найдены',
+                    noChoicesText: 'Нет доступных пользователей',
+                });
+            }
+
+            const orgDataContainer = document.getElementById('org-tree-data');
+            if (!orgDataContainer) {
+                return;
+            }
+
+            const nodes = Array.from(orgDataContainer.querySelectorAll('.org-node')).map(function (el) {
+                return {
+                    id: el.getAttribute('data-org-id'),
+                    parentId: el.getAttribute('data-parent-id') || null,
+                    name: el.getAttribute('data-name')
+                };
+            });
+
+            const orgListEl = document.getElementById('org-list');
+            const backBtn = document.getElementById('org-nav-back');
+            const breadcrumbEl = document.getElementById('org-breadcrumb');
+            const showUsersBtn = document.getElementById('show-org-users-btn');
+
+            let currentParentId = null;
+            const history = [];
+            let selectedOrgId = null;
+
+            function renderList() {
+                orgListEl.innerHTML = '';
+                const levelNodes = nodes.filter(function (n) {
+                    return (n.parentId === null && currentParentId === null) ||
+                        (n.parentId !== null && n.parentId === currentParentId);
+                });
+
+                levelNodes.forEach(function (n) {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'list-group-item list-group-item-action';
+                    item.textContent = n.name;
+                    item.dataset.orgId = n.id;
+
+                    if (n.id === selectedOrgId) {
+                        item.classList.add('active');
+                    }
+
+                    item.addEventListener('click', function () {
+                        selectedOrgId = n.id;
+                        updateSelection();
+                    });
+
+                    item.addEventListener('dblclick', function () {
+                        history.push(currentParentId);
+                        currentParentId = n.id;
+                        selectedOrgId = null;
+                        renderList();
+                        updateBreadcrumb();
+                        updateControls();
+                    });
+
+                    orgListEl.appendChild(item);
+                });
+
+                if (levelNodes.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'text-muted';
+                    empty.textContent = 'Нет дочерних организаций';
+                    orgListEl.appendChild(empty);
+                }
+            }
+
+            function updateSelection() {
+                Array.from(orgListEl.querySelectorAll('.list-group-item')).forEach(function (el) {
+                    el.classList.toggle('active', el.dataset.orgId === selectedOrgId);
+                });
+                updateControls();
+            }
+
+            function buildBreadcrumb() {
+                if (!selectedOrgId) {
+                    return 'Главные организации';
+                }
+                const chain = [];
+                let currentId = selectedOrgId;
+                while (currentId) {
+                    const node = nodes.find(function (n) { return n.id === currentId; });
+                    if (!node) break;
+                    chain.unshift(node.name);
+                    currentId = node.parentId;
+                }
+                return chain.join(' / ');
+            }
+
+            function updateBreadcrumb() {
+                breadcrumbEl.textContent = buildBreadcrumb();
+            }
+
+            function updateControls() {
+                backBtn.disabled = history.length === 0;
+                showUsersBtn.disabled = !selectedOrgId;
+            }
+
+            backBtn.addEventListener('click', function () {
+                if (history.length === 0) {
+                    return;
+                }
+                currentParentId = history.pop();
+                selectedOrgId = null;
+                renderList();
+                updateBreadcrumb();
+                updateControls();
+            });
+
+            const usersUrlTemplate = orgDataContainer.getAttribute('data-users-url-template');
+            showUsersBtn.addEventListener('click', function () {
+                if (!selectedOrgId || !usersUrlTemplate) {
+                    return;
+                }
+                const url = usersUrlTemplate.replace('__ORG__', selectedOrgId);
+                fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                    .then(function (response) { return response.json(); })
+                    .then(function (data) {
+                        if (!choicesInstance) {
+                            usersSelect.innerHTML = '';
+                            data.forEach(function (u) {
+                                const opt = document.createElement('option');
+                                opt.value = u.id;
+                                opt.textContent = u.name;
+                                usersSelect.appendChild(opt);
+                            });
+                        } else {
+                            choicesInstance.clearStore();
+                            choicesInstance.setChoices(
+                                data.map(function (u) {
+                                    return {value: u.id, label: u.name, selected: false};
+                                }),
+                                'value',
+                                'label',
+                                true
+                            );
+                        }
+                    })
+                    .catch(function (e) {
+                        console.error(e);
+                    });
+            });
+
+            renderList();
+            updateBreadcrumb();
+            updateControls();
+        });
+    </script>
+{% endblock %}

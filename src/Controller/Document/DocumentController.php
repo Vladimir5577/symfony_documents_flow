@@ -14,14 +14,15 @@ use App\Repository\DocumentTypeRepository;
 use App\Repository\DocumentUserRecipientRepository;
 use App\Repository\OrganizationRepository;
 use App\Repository\UserRepository;
+use App\Service\Document\FileUploadService;
 use Doctrine\ORM\EntityManagerInterface;
-use setasign\Fpdi\Tcpdf\Fpdi;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\Process\Exception\ProcessFailedException;
-use Symfony\Component\Process\Process;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
@@ -46,14 +47,15 @@ final class DocumentController extends AbstractController
         OrganizationRepository $organizationRepository,
         UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
-        ValidatorInterface     $validator
+        ValidatorInterface     $validator,
+        FileUploadService      $fileUploadService,
     ): Response
     {
         $currentUser = $this->getUser();
-        if (!$currentUser instanceof User) {
-            $this->addFlash('error', 'Необходимо войти в систему для создания документа.');
-            return $this->redirectToRoute('app_login');
-        }
+//        if (!$currentUser instanceof User) {
+//            $this->addFlash('error', 'Необходимо войти в систему для создания документа.');
+//            return $this->redirectToRoute('app_login');
+//        }
 
         $documentType = $documentTypeRepository->find($type_id);
         if (!$documentType) {
@@ -193,37 +195,16 @@ final class DocumentController extends AbstractController
             }
         }
 
-        // upload file
-
         $file = $request->files->get('originalFile');
-
-        if (!$file || !$file->isValid()) {
-            $this->addFlash('error', 'Выберите файл (PDF, JPEG или PNG).');
-            return $renderForm($formData);
+        if ($file) {
+            $fileNameResponse = $fileUploadService->uploadFile($file);
+            if ($fileNameResponse['error']) {
+                $this->addFlash('error', $fileNameResponse['error']);
+                return $renderForm($formData);
+            }
+            $document->setOriginalFile($fileNameResponse['fileName']);
         }
 
-        if ($file->getSize() > 5 * 1024 * 1024) {
-            $this->addFlash('error', 'Файл слишком большой (максимум 5 МБ).');
-            return $renderForm($formData);
-        }
-
-        if (!in_array($file->getMimeType(), [
-            'application/pdf',
-            'image/jpeg',
-            'image/png',
-        ], true)) {
-            $this->addFlash('error', 'Допустимые форматы: PDF, JPEG, PNG.');
-            return $renderForm($formData);
-        }
-
-        $uploadDir = $this->getParameter('private_upload_dir');
-
-        $filename = bin2hex(random_bytes(16))
-            . '.' . ($file->guessExtension() ?? 'bin');
-
-        $file->move($uploadDir, $filename);
-
-        $document->setOriginalFile($filename);
         $document->setCreatedBy($currentUser);
 
         // Обрабатываем deadline
@@ -445,10 +426,287 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_incoming_documents');
         }
 
+        $canEdit = $isAdmin || $isCreator;
+
         return $this->render('document/view_outgoing_document.html.twig', [
             'active_tab' => 'outgoing_documents',
             'document' => $document,
+            'can_edit' => $canEdit,
         ]);
+    }
+
+    #[Route('/edit_outgoing_document/{id}', name: 'app_edit_outgoing_document', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
+    public function editOutgoingDocument(
+        int                    $id,
+        Request                $request,
+        DocumentRepository     $documentRepository,
+        OrganizationRepository $organizationRepository,
+        UserRepository         $userRepository,
+        EntityManagerInterface $entityManager,
+        ValidatorInterface     $validator,
+        FileUploadService      $fileUploadService,
+    ): Response
+    {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document) {
+            throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        // Проверка доступа: только создатель или админ могут редактировать
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
+
+        if (!$isAdmin && !$isCreator) {
+            $this->addFlash('error', 'Нет доступа к редактированию этого документа.');
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
+        }
+
+        $userOrganization = $currentUser->getOrganization();
+        $rootOrganization = $userOrganization;
+        if ($userOrganization && !$isAdmin) {
+            while ($rootOrganization->getParent() !== null) {
+                $rootOrganization = $rootOrganization->getParent();
+            }
+        }
+
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+        $organizationsWithChildren = [];
+        if (!empty($organizationTree)) {
+            foreach ($organizationTree as $org) {
+                $loadedOrg = $organizationRepository->findWithChildren($org->getId());
+                if ($loadedOrg) {
+                    $organizationsWithChildren[] = $loadedOrg;
+                }
+            }
+        }
+
+        if (empty($organizationsWithChildren) && $userOrganization) {
+            $loadedOrg = $organizationRepository->findWithChildren($userOrganization->getId());
+            if ($loadedOrg) {
+                $organizationsWithChildren[] = $loadedOrg;
+            }
+        }
+
+        $availableUsers = $userRepository->findAllWorkWithDocuments();
+
+        // Подготовка данных формы из документа
+        $currentRecipientIds = [];
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser()) {
+                $currentRecipientIds[] = $recipient->getUser()->getId();
+            }
+        }
+
+        $initialFormData = [
+            'name' => $document->getName(),
+            'description' => $document->getDescription(),
+            'organization_id' => $document->getOrganizationCreator()->getId(),
+            'status' => $document->getStatus()?->value,
+            'deadline' => $document->getDeadline()?->format('Y-m-d'),
+            'user_ids' => $currentRecipientIds,
+        ];
+
+        $renderForm = function (array $data = []) use ($document, $organizationsWithChildren, $initialFormData, $availableUsers): Response {
+            $formData = $data !== [] ? $data : $initialFormData;
+            return $this->render('document/edit_outgoing_document.html.twig', [
+                'active_tab' => 'outgoing_documents',
+                'document' => $document,
+                'organizations' => $organizationsWithChildren,
+                'form_data' => $formData,
+                'document_statuses' => DocumentStatus::getCreationChoices(),
+                'users' => $availableUsers,
+            ]);
+        };
+
+        if (!$request->isMethod('POST')) {
+            return $renderForm([]);
+        }
+
+        $formData = $request->request->all();
+
+        // Валидация CSRF токена
+        if (!$this->isCsrfTokenValid('edit_document', $formData['_csrf_token'] ?? '')) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('app_edit_outgoing_document', ['id' => $id]);
+        }
+
+        // Валидация названия
+        $name = trim((string)($formData['name'] ?? ''));
+        if ($name === '') {
+            $this->addFlash('error', 'Название документа обязательно для заполнения.');
+            return $renderForm($formData);
+        }
+
+        // Валидация организации
+        $organizationId = (int)($formData['organization_id'] ?? 0);
+        if ($organizationId <= 0) {
+            $this->addFlash('error', 'Организация обязательна для заполнения.');
+            return $renderForm($formData);
+        }
+
+        $organization = $organizationRepository->find($organizationId);
+        if (!$organization) {
+            $this->addFlash('error', 'Выбранная организация не найдена.');
+            return $renderForm($formData);
+        }
+
+        // Валидация статуса
+        $statusValue = trim((string)($formData['status'] ?? ''));
+        $status = DocumentStatus::tryFrom($statusValue);
+        if (!$status) {
+            $this->addFlash('error', 'Некорректный статус документа.');
+            return $renderForm($formData);
+        }
+
+        // Парсинг deadline
+        $deadlineStr = trim((string)($formData['deadline'] ?? ''));
+        $deadline = null;
+        if ($deadlineStr !== '') {
+            $deadline = \DateTime::createFromFormat('Y-m-d', $deadlineStr);
+            if (!$deadline) {
+                $this->addFlash('error', 'Неверный формат даты срока выполнения.');
+                return $renderForm($formData);
+            }
+        }
+
+        // Обновление полей документа
+        $document->setName($name);
+        $document->setDescription(trim((string)($formData['description'] ?? '')));
+        $document->setOrganizationCreator($organization);
+        $document->setStatus($status);
+        $document->setDeadline($deadline);
+
+        // Обработка загрузки файла (если есть)
+        $uploadedFile = $request->files->get('originalFile');
+        if ($uploadedFile) {
+            try {
+                $fileName = $fileUploadService->uploadFile($uploadedFile);
+                $document->setOriginalFile($fileName['fileName']);
+            } catch (\Exception $e) {
+                $this->addFlash('error', 'Ошибка загрузки файла: ' . $e->getMessage());
+                return $renderForm($formData);
+            }
+        }
+
+        // Валидация сущности
+        $errors = $validator->validate($document);
+        if (count($errors) > 0) {
+            foreach ($errors as $error) {
+                $this->addFlash('error', $error->getMessage());
+            }
+            return $renderForm($formData);
+        }
+
+        // Обновление получателей — только если список изменился
+        $userIds = $formData['user_ids'] ?? [];
+        if (!is_array($userIds)) {
+            $userIds = [];
+        }
+        $userIds = array_map('intval', $userIds);
+        $userIds = array_values(array_filter($userIds, fn($id) => $id > 0));
+        sort($userIds);
+
+        $currentRecipientIds = [];
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser()) {
+                $currentRecipientIds[] = $recipient->getUser()->getId();
+            }
+        }
+        sort($currentRecipientIds);
+
+        $recipientsChanged = ($userIds !== $currentRecipientIds);
+
+        if ($recipientsChanged) {
+            // Удаляем все текущие записи и сразу выполняем
+            foreach ($document->getUserRecipients()->toArray() as $recipient) {
+                $entityManager->remove($recipient);
+            }
+            $document->getUserRecipients()->clear();
+            $entityManager->flush();
+
+            // Создаём новые записи
+            foreach ($userIds as $userId) {
+                $user = $userRepository->find($userId);
+                if (!$user) {
+                    continue;
+                }
+
+                $recipient = new DocumentUserRecipient();
+                $recipient->setDocument($document);
+                $recipient->setUser($user);
+                $recipient->setStatus(DocumentStatus::NEW);
+                $document->addUserRecipient($recipient);
+                $entityManager->persist($recipient);
+            }
+        }
+
+        $entityManager->flush();
+
+        $this->addFlash('success', 'Документ успешно обновлён.');
+        return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
+    }
+
+    #[Route('/document/{id}/file/{type}', name: 'app_document_download_file', requirements: ['id' => '\d+', 'type' => 'original|updated'])]
+    public function downloadDocumentFile(
+        int $id,
+        string $type,
+        Request $request,
+        DocumentRepository $documentRepository,
+        #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
+        #[Autowire('%private_upload_dir_documents_updated%')] string $updatedDir,
+    ): Response {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document) {
+            throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
+        $isRecipient = false;
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
+                $isRecipient = true;
+                break;
+            }
+        }
+
+        if (!$isAdmin && !$isCreator && !$isRecipient) {
+            $this->addFlash('error', 'Нет доступа к этому документу.');
+            return $this->redirectToRoute('app_incoming_documents');
+        }
+
+        $filename = $type === 'original' ? $document->getOriginalFile() : $document->getUpdatedFile();
+        if (!$filename) {
+            throw $this->createNotFoundException('Файл не найден.');
+        }
+
+        $filename = basename($filename);
+        $dir = $type === 'original' ? $originalsDir : $updatedDir;
+        $path = $dir . \DIRECTORY_SEPARATOR . $filename;
+
+        if (!is_file($path)) {
+            throw $this->createNotFoundException('Файл не найден на диске.');
+        }
+
+        $response = new BinaryFileResponse($path);
+        $response->setContentDisposition(
+            $request->query->getBoolean('inline') ? ResponseHeaderBag::DISPOSITION_INLINE : ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+            $filename
+        );
+
+        return $response;
     }
 
     #[Route('/document/{id}/status/update', name: 'app_document_status_update', requirements: ['id' => '\d+'], methods: ['POST'])]
