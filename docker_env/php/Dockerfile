@@ -23,8 +23,13 @@ WORKDIR /var/www/html
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
-# Copy the Laravel application to the container
+# Copy application to the container
 COPY . .
+
+# Create folder for upload files and give to it permissions
+RUN mkdir -p /uploads \
+    && chown -R www-data:www-data /uploads \
+    && chmod -R 775 /uploads
 
 # Install PHP dependencies
 # RUN composer install

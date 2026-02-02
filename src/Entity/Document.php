@@ -50,9 +50,13 @@ class Document
     #[ORM\Column(type: Types::DATE_MUTABLE, nullable: true)]
     private ?\DateTime $deadline = null;
 
-    #[ORM\Column(length: 255, nullable: true)]
-    #[Assert\Length(max: 255, maxMessage: 'Путь к файлу не должен превышать {{ limit }} символов.')]
-    private ?string $file = null;
+    #[ORM\Column(name: 'original_file', length: 255, nullable: true)]
+    #[Assert\Length(max: 255, maxMessage: 'Путь к оригинальному файлу не должен превышать {{ limit }} символов.')]
+    private ?string $originalFile = null;
+
+    #[ORM\Column(name: 'updated_file', length: 255, nullable: true)]
+    #[Assert\Length(max: 255, maxMessage: 'Путь к обновлённому файлу не должен превышать {{ limit }} символов.')]
+    private ?string $updatedFile = null;
 
     // created_at
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
@@ -147,14 +151,26 @@ class Document
         return $this;
     }
 
-    public function getFile(): ?string
+    public function getOriginalFile(): ?string
     {
-        return $this->file;
+        return $this->originalFile;
     }
 
-    public function setFile(?string $file): static
+    public function setOriginalFile(?string $originalFile): static
     {
-        $this->file = $file;
+        $this->originalFile = $originalFile;
+
+        return $this;
+    }
+
+    public function getUpdatedFile(): ?string
+    {
+        return $this->updatedFile;
+    }
+
+    public function setUpdatedFile(?string $updatedFile): static
+    {
+        $this->updatedFile = $updatedFile;
 
         return $this;
     }
