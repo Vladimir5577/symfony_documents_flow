@@ -576,6 +576,61 @@ final class DocumentController extends AbstractController
         ]);
     }
 
+    #[Route('/outgoing_document/{id}/history/{userId}', name: 'app_history_outgoing_document', requirements: ['id' => '\d+', 'userId' => '\d+'])]
+    public function historyOutgoingDocument(
+        int                       $id,
+        int                       $userId,
+        DocumentRepository        $documentRepository,
+        DocumentHistoryRepository $historyRepository,
+        UserRepository            $userRepository
+    ): Response {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document) {
+            throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        $historyUser = $userRepository->find($userId);
+        if (!$historyUser) {
+            throw $this->createNotFoundException('Пользователь не найден.');
+        }
+
+        // Доступ: создатель документа или админ
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
+        $isRecipientForUser = false;
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser() && $recipient->getUser()->getId() === $userId) {
+                $isRecipientForUser = true;
+                break;
+            }
+        }
+
+        if (!$isAdmin && !$isCreator) {
+            $this->addFlash('error', 'Нет доступа к этому документу.');
+            return $this->redirectToRoute('app_outgoing_documents');
+        }
+
+        if (!$isRecipientForUser) {
+            $this->addFlash('error', 'Указанный пользователь не является получателем этого документа.');
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
+        }
+
+        $history = $historyRepository->findByDocumentAndUserOrderByCreatedAtDesc($id, $userId);
+
+        return $this->render('document/history_outgoing_document.html.twig', [
+            'active_tab' => 'outgoing_documents',
+            'document' => $document,
+            'historyUser' => $historyUser,
+            'history' => $history,
+        ]);
+    }
+
     #[Route('/history_outgoing_documents', name: 'app_history_outgoing_documents')]
     public function getHistoryOutgoingDocuments(DocumentRepository $documentRepository): Response
     {

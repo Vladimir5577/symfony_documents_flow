@@ -275,6 +275,53 @@ final class DocumentSignController extends AbstractController
         return $this->render('document/test.html.twig', [
         ]);
     }
+
+    #[Route('/convert_img_to_pdf', name: 'app_convert_img_to_pdf')]
+    public function convertImgToPdf(Request $request): Response
+    {
+
+        $projectDir = $this->getParameter('kernel.project_dir');
+        $filesDir   = $projectDir . '/public/files';
+
+        $imagePath = $filesDir . '/image.jpg';
+        $outputPdf = $filesDir . '/image_converted.pdf';
+
+// --------------------------
+// Создаём FPDI без первой страницы
+// --------------------------
+        $pdf = new Fpdi('P', 'mm', 'A4', true, 'UTF-8', false); // последний параметр false отключает авто AddPage
+
+// Явно добавляем страницу
+        $pdf->AddPage();
+
+// размеры картинки
+        list($imgWidth, $imgHeight) = getimagesize($imagePath);
+
+// размеры страницы PDF
+        $pageWidth  = $pdf->getPageWidth();
+        $pageHeight = $pdf->getPageHeight();
+
+// масштабирование
+        $scale = min($pageWidth / $imgWidth, $pageHeight / $imgHeight);
+
+        $newWidth  = $imgWidth * $scale;
+        $newHeight = $imgHeight * $scale;
+
+// центрируем
+        $x = ($pageWidth - $newWidth) / 2;
+        $y = ($pageHeight - $newHeight) / 2;
+
+// вставляем изображение
+        $pdf->Image($imagePath, $x, $y, $newWidth, $newHeight);
+
+// сохраняем PDF
+        $pdf->Output($outputPdf, 'F');
+
+
+
+        return $this->render('document/test.html.twig', [
+        ]);
+    }
 }
 
 
