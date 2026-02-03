@@ -110,8 +110,26 @@
                                     </div>
 
                                     <div class="col-12">
-                                        <label for="formFileLg" class="form-label">Выберите или перетащите файл</label>
-                                        <input class="form-control form-control-lg" id="formFileLg" type="file" name="originalFile">
+                                        <label class="form-label d-block">Источник документа</label>
+                                        <div id="file-source-choice" class="d-flex flex-wrap gap-2 mb-2">
+                                            <button type="button" class="btn btn-outline-primary" data-source="upload">
+                                                Загрузить файл с компьютера
+                                            </button>
+                                            <button type="button" class="btn btn-outline-primary" data-source="own">
+                                                Создать документ из шаблона
+                                            </button>
+                                        </div>
+
+                                        <div id="file-upload-block" class="d-none">
+                                            <label for="formFileLg" class="form-label">Выберите или перетащите файл</label>
+                                            <input class="form-control form-control-lg" id="formFileLg" type="file" name="originalFile">
+                                        </div>
+
+                                        <div id="file-from-own-block" class="d-none">
+                                            <a href="{{ path('app_document_create_from_template') }}" type="button" class="btn btn-primary" id="choose-from-own-btn">
+                                                Выберите из своих
+                                            </a>
+                                        </div>
                                     </div>
 
                                     <div class="col-12 d-flex justify-content-end">
@@ -163,6 +181,30 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            (function initFileSourceChoice() {
+                const choiceBtns = document.querySelectorAll('#file-source-choice [data-source]');
+                const uploadBlock = document.getElementById('file-upload-block');
+                const fromOwnBlock = document.getElementById('file-from-own-block');
+                const formFileInput = document.getElementById('formFileLg');
+
+                if (!choiceBtns.length || !uploadBlock || !fromOwnBlock) return;
+
+                choiceBtns.forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        const source = this.getAttribute('data-source');
+                        uploadBlock.classList.add('d-none');
+                        fromOwnBlock.classList.add('d-none');
+                        if (formFileInput) formFileInput.removeAttribute('required');
+                        if (source === 'upload') {
+                            uploadBlock.classList.remove('d-none');
+                            if (formFileInput) formFileInput.setAttribute('required', 'required');
+                        } else if (source === 'own') {
+                            fromOwnBlock.classList.remove('d-none');
+                        }
+                    });
+                });
+            })();
+
             (function initFileDrop() {
                 const fileInput = document.getElementById('document_original_file');
                 const dropZone = document.getElementById('file-drop-zone');

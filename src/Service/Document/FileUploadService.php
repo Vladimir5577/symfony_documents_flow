@@ -52,7 +52,7 @@ class FileUploadService
             throw new \LogicException('Can not get upload directory.');
         }
 
-        $filename = bin2hex(random_bytes(16)) . '.' . ($file->guessExtension() ?? 'bin');
+        $filename = $this->generateFileName() . '.' . ($file->guessExtension() ?? 'bin');
         $file->move($this->documentsOriginalsDir, $filename);
 
         $result['fileName'] = $filename;
@@ -67,5 +67,10 @@ class FileUploadService
     {
         $fileName = basename($fileName);
         return $this->documentsOriginalsDir . \DIRECTORY_SEPARATOR . $fileName;
+    }
+
+    public function generateFileName(): string
+    {
+        return bin2hex(random_bytes(16));
     }
 }

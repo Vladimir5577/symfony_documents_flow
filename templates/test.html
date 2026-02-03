@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Редактирование документа</title>
+
+    <style>
+        .save-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 16px;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        @media print {
+            .save-btn { display: none !important; }
+        }
+    </style>
+
+</head>
+<body class="edit-mode">
+
+
+
+<!-- ################################################################################
+####################################################################################-->
+
+
+<style>
+    @page { size: A4; margin: 20mm; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #e8e8e8; padding: 20px 0; }
+    .page-a4 {
+        width: 210mm;
+        min-height: 297mm;
+        padding: 20mm;
+        box-sizing: border-box;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid #999;
+        box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    }
+    #editor-container {
+        position: relative;
+        height: 257mm;
+        overflow: hidden;
+    }
+    .block {
+        position: absolute;
+        padding: 0;
+        margin: 0;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.35;
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+        word-break: break-word;
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+    @media print {
+        body { background: #fff; padding: 0; }
+        .page-a4 { border: none; box-shadow: none; }
+    }
+</style>
+<div class="page-a4"><div id="editor-container">
+    <p class="block" style="top: 0.206349mm; left: 101.589mm; max-width: 68.411mm; max-height: 256.794mm; border: none;">ФИО: Иванов Иван ИвановDSFASDFAS
+        ASDFASDFASDFASDFASDF
+        SDFASDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDич</p>
+    <h2 class="block" style="top: 70mm; left: 70mm; max-width: 100mm; max-height: 187mm; border: none;">ЗАЯВЛЕНИЕ</h2>
+    <p class="block" style="top: 80mm; left: 20mm; max-width: 150mm; max-height: 177mm; border: none;">
+        Прошу принять меня на работу. Можно написать несколько строк текста, чтобы проверить перенос и корректное отображение после сохранения. SDSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSDFDDFDFDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    </p>
+    <p class="block" style="top: 200mm; left: 20mm; max-width: 150mm; max-height: 57mm; border: none;">Дата: 03.02.2026</p>
+</div></div>
+
+
+
+
+<!-- ################################################################################
+####################################################################################-->
+
+<button class="save-btn">Сохранить HTML</button>
+
+<script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+<script>
+    const CONTENT_W_MM = 170;
+    const CONTENT_H_MM = 257;
+
+    function updateBlockBounds(block) {
+        const top = parseFloat(block.style.top) || 0;
+        const left = parseFloat(block.style.left) || 0;
+        const topMm = String(block.style.top).endsWith('mm') ? top : top / 3.78;
+        const leftMm = String(block.style.left).endsWith('mm') ? left : left / 3.78;
+        block.style.maxWidth = (CONTENT_W_MM - leftMm) + 'mm';
+        block.style.maxHeight = (CONTENT_H_MM - topMm) + 'mm';
+    }
+
+    document.querySelectorAll('.block').forEach(block => {
+        block.setAttribute('contenteditable', 'true');
+        updateBlockBounds(block);
+    });
+
+    document.querySelectorAll('.block').forEach(block => {
+        block.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.execCommand('insertLineBreak');
+            }
+        });
+    });
+
+    interact('.block').draggable({
+        inertia: true,
+        modifiers: [
+            interact.modifiers.restrictRect({
+                restriction: 'parent',
+                endOnly: true
+            })
+        ],
+        listeners: {
+            move(event) {
+                const target = event.target;
+                let top = parseFloat(target.style.top) || 0;
+                let left = parseFloat(target.style.left) || 0;
+                const inMm = String(target.style.top).endsWith('mm');
+                if (inMm) {
+                    top += event.dy / 3.78;
+                    left += event.dx / 3.78;
+                } else {
+                    top += event.dy;
+                    left += event.dx;
+                }
+                target.style.top = top + (inMm ? 'mm' : 'px');
+                target.style.left = left + (inMm ? 'mm' : 'px');
+                updateBlockBounds(target);
+            }
+        }
+    });
+
+    document.querySelector('.save-btn').addEventListener('click', () => {
+        const container = document.getElementById('editor-container');
+        const clone = container.cloneNode(true);
+
+        clone.querySelectorAll('.block').forEach(block => {
+            block.removeAttribute('contenteditable');
+            block.style.border = 'none';
+            block.style.width = '';
+            block.style.height = '';
+            Array.from(block.querySelectorAll('div, p')).forEach(el => {
+                const br = document.createElement('br');
+                el.parentNode.insertBefore(br, el);
+                el.replaceWith(...el.childNodes);
+            });
+        });
+
+        const style = `
+      <style>
+        @page { size: A4; margin: 20mm; }
+        body { margin: 0; font-family: Arial, sans-serif; background: #e8e8e8; padding: 20px 0; }
+        .page-a4 {
+          width: 210mm;
+          min-height: 297mm;
+          padding: 20mm;
+          box-sizing: border-box;
+          margin: 0 auto;
+          background: #fff;
+          border: 1px solid #999;
+          box-shadow: 0 2px 10px rgba(0,0,0,.15);
+        }
+        #editor-container {
+          position: relative;
+          height: 257mm;
+          overflow: hidden;
+        }
+        .block {
+          position: absolute;
+          padding: 0;
+          margin: 0;
+          font-family: Arial, sans-serif;
+          font-size: 14px;
+          line-height: 1.35;
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+          word-break: break-word;
+          overflow: hidden;
+          box-sizing: border-box;
+        }
+        @media print {
+          body { background: #fff; padding: 0; }
+          .page-a4 { border: none; box-shadow: none; }
+        }
+      </style>
+    `;
+
+        const html = style + '<div class="page-a4"><div id="editor-container">' + clone.innerHTML + '</div></div>';
+
+        fetch('/document_save_from_template', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ html })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    alert('Документ успешно сохранён!');
+                } else {
+                    alert('Ошибка при сохранении: ' + (data.message || ''));
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Ошибка соединения с сервером.');
+            });
+    });
+</script>
+
+</body>
+</html>
