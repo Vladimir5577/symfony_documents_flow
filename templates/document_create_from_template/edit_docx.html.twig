@@ -3,15 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <title>Редактирование DOCX</title>
+    <style>
+        .save-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 16px;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        @media print {
+            .save-btn { display: none !important; }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="http://localhost:8081/web-apps/apps/api/documents/api.js"></script>
 </head>
 <body>
+<button class="save-btn">Сохранить HTML</button>
+{% if documentId %}
+<form id="save-file-to-document-form" method="post" action="{{ path('app_save_file_from_template_to_document') }}" style="display: none;">
+    <input type="hidden" name="document_id" value="{{ documentId }}">
+    <input type="hidden" name="_token" value="{{ csrf_token('save_file_to_document') }}">
+</form>
+{% endif %}
 <div id="editor" style="width: 100%; height: 600px;"></div>
 
 <script>
     {# Один ключ на сессию — нужен для кнопки «Сохранить» и для сохранения при уходе со страницы #}
     const docKey = "{{ docKey|e('js') }}";
     const triggerSaveUrl = "{{ path('app_trigger_forcesave')|e('js') }}";
+    const documentId = {{ documentId ?? 'null' }};
 
     const docEditor = new DocsAPI.DocEditor("editor", {
         width: "100%",
@@ -33,9 +58,30 @@
         }
     });
 
+    // ???
     // Сохранение при уходе со страницы (закрытие вкладки, переход, перезагрузка)
     window.addEventListener("beforeunload", function () {
         navigator.sendBeacon(triggerSaveUrl, new Blob([JSON.stringify({ key: docKey })], { type: "application/json" }));
+    });
+
+    document.querySelector('.save-btn').addEventListener('click', function () {
+        // Сначала триггерим сохранение в OnlyOffice (как нажатие кнопки «Сохранить» в редакторе)
+        fetch(triggerSaveUrl, {
+            method: 'POST',
+            body: JSON.stringify({ key: docKey }),
+            headers: { 'Content-Type': 'application/json' }
+        }).then(function () {
+            return Swal.fire({ title: "Файл будет прикреплен к документу" });
+        }).then(function () {
+            if (!documentId) return;
+            var form = document.getElementById('save-file-to-document-form');
+            if (form) form.submit();
+        }).catch(function () {
+            if (documentId) {
+                var form = document.getElementById('save-file-to-document-form');
+                if (form) form.submit();
+            }
+        });
     });
 </script>
 </body>

@@ -93,6 +93,11 @@
                                         Просмотр
                                     </a>
                                 {% endif %}
+                                {% if ext in ['doc', 'docx'] %}
+                                    <a href="{{ path('app_edit_docx', {id: document.id, filename: document.originalFile}) }}" class="btn btn-sm btn-outline-warning" target="_blank" rel="noopener">
+                                        Редактировать
+                                    </a>
+                                {% endif %}
                             </div>
                         </dd>
                     {% endif %}

@@ -2,7 +2,9 @@
 
 namespace App\Controller\Document;
 
+use App\Repository\DocumentRepository;
 use App\Service\Document\FileUploadService;
+use Doctrine\ORM\EntityManagerInterface;
 use Mpdf\Mpdf;
 use Mpdf\Output\Destination;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -114,8 +116,22 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
         Request $request,
         #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
     ): Response {
-        $filename = 'doc.docx';
-        $docPath = $originalsDir . '/' . $filename;
+        $documentId = $request->query->getInt('id') ?: null;
+        $requestedFilename = $request->query->get('filename');
+        if ($requestedFilename !== null && $requestedFilename !== '') {
+            $filename = basename($requestedFilename);
+            if (!str_ends_with(strtolower($filename), '.docx')) {
+                $filename = 'doc.docx';
+            }
+            $docPath = $originalsDir . '/' . $filename;
+            if (!is_readable($docPath)) {
+                $filename = 'doc.docx';
+                $docPath = $originalsDir . '/' . $filename;
+            }
+        } else {
+            $filename = 'doc.docx';
+            $docPath = $originalsDir . '/' . $filename;
+        }
         $documentVersion = file_exists($docPath) ? (string) filemtime($docPath) : (string) time();
         $docKey = 'doc-' . random_int(100000000, 999999999);
 
@@ -124,8 +140,55 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
             'fileUrl' => $filename,
             'docKey' => $docKey,
             'documentVersion' => $documentVersion,
+            'documentId' => $documentId,
         ]);
     }
+
+    #[Route('/save_file_from_template_to_document', name: 'app_save_file_from_template_to_document', methods: ['POST'])]
+    public function saveFileFromTemplateToDocument(
+        Request $request,
+        DocumentRepository $documentRepository,
+        EntityManagerInterface $entityManager,
+        FileUploadService $fileUploadService,
+        #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
+    ): Response {
+        $documentId = (int) ($request->request->get('document_id') ?? $request->query->get('id') ?? 0);
+        if ($documentId <= 0) {
+            $this->addFlash('error', 'Не указан документ.');
+            return $this->redirectToRoute('app_outgoing_documents');
+        }
+
+        if (!$this->isCsrfTokenValid('save_file_to_document', $request->request->get('_token') ?? '')) {
+            $this->addFlash('error', 'Неверный токен.');
+            return $this->redirectToRoute('app_outgoing_documents');
+        }
+
+        $document = $documentRepository->find($documentId);
+        if (!$document) {
+            $this->addFlash('error', 'Документ не найден.');
+            return $this->redirectToRoute('app_outgoing_documents');
+        }
+
+        $sourceFile = $originalsDir . '/doc.docx';
+        if (!is_readable($sourceFile)) {
+            $this->addFlash('error', 'Файл doc.docx не найден. Сначала сохраните документ в редакторе.');
+            return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
+        }
+
+        $uniqueName = date('Y-m-d_His') . '_' . $fileUploadService->generateFileName() . '.docx';
+        $targetPath = $originalsDir . '/' . $uniqueName;
+        if (!@copy($sourceFile, $targetPath)) {
+            $this->addFlash('error', 'Не удалось сохранить копию файла.');
+            return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
+        }
+
+        $document->setOriginalFile($uniqueName);
+        $entityManager->flush();
+
+        $this->addFlash('success', 'Файл прикреплён к документу.');
+        return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
+    }
+
 
     #[Route('/trigger_forcesave', name: 'app_trigger_forcesave', methods: ['POST'])]
     public function triggerForcesave(Request $request): JsonResponse
@@ -184,18 +247,18 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
         $fileContent = @file_get_contents($url);
 
         if ($fileContent === false) {
-            file_put_contents('./onlyoffice_error.log', date('Y-m-d H:i:s') . " - Failed to download file from URL: {$url}\n", FILE_APPEND);
+//            file_put_contents('./onlyoffice_error.log', date('Y-m-d H:i:s') . " - Failed to download file from URL: {$url}\n", FILE_APPEND);
             return $this->json(['error' => 1]);
         }
 
         $result = @file_put_contents($targetPath, $fileContent);
 
         if ($result === false) {
-            file_put_contents('./onlyoffice_error.log', date('Y-m-d H:i:s') . " - Failed to write file to path: {$targetPath}\n", FILE_APPEND);
+//            file_put_contents('./onlyoffice_error.log', date('Y-m-d H:i:s') . " - Failed to write file to path: {$targetPath}\n", FILE_APPEND);
             return $this->json(['error' => 1]);
         }
 
-        file_put_contents('./onlyoffice_success.log', date('Y-m-d H:i:s') . " - File saved: {$targetPath}, size: {$result} bytes\n", FILE_APPEND);
+//        file_put_contents('./onlyoffice_success.log', date('Y-m-d H:i:s') . " - File saved: {$targetPath}, size: {$result} bytes\n", FILE_APPEND);
 
         return $this->json(['error' => 0]);
     }

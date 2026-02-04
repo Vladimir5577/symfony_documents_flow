@@ -259,6 +259,11 @@ final class DocumentController extends AbstractController
         $entityManager->flush();
 
         $this->addFlash('success', 'Документ успешно создан.');
+
+        if (($formData['submit_action'] ?? null) === 'from_template') {
+            return $this->redirectToRoute('app_edit_docx', ['id' => $document->getId()]);
+        }
+
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
     }
 

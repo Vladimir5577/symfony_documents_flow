@@ -126,9 +126,10 @@
                                         </div>
 
                                         <div id="file-from-own-block" class="d-none">
-                                            <a href="{{ path('app_document_create_from_template') }}" type="button" class="btn btn-primary" id="choose-from-own-btn">
-                                                Создать документ из шаблона
-                                            </a>
+                                            <label class="form-label d-block">Сохранить и перейти к созданию файла из шаблона</label>
+                                            <button type="submit" class="btn btn-primary" id="choose-from-own-btn" name="submit_action" value="from_template">
+                                                Создать файл из шаблона
+                                            </button>
                                         </div>
                                     </div>
 
@@ -202,6 +203,23 @@
                             fromOwnBlock.classList.remove('d-none');
                         }
                     });
+                });
+            })();
+
+            (function initChooseFromOwnBtn() {
+                const btn = document.getElementById('choose-from-own-btn');
+                if (!btn) return;
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const form = this.closest('form');
+                    const msg = 'Сохранить данные и перейти к созданию файла из шаблона?';
+                    alert(msg);
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'submit_action';
+                    input.value = 'from_template';
+                    form.appendChild(input);
+                    form.submit();
                 });
             })();
 
