@@ -53,7 +53,9 @@ security:
     access_control:
         # Публичные роуты (доступны всем, включая неаутентифицированных)
         - { path: ^/login, roles: PUBLIC_ACCESS }
+        - { path: ^/save_docx, roles: PUBLIC_ACCESS }
         - { path: ^/$, roles: PUBLIC_ACCESS } # корневой путь - редирект на /login
+
 
         # Все остальные роуты требуют аутентификации
         # Конкретные права доступа настраиваются через IsGranted в контроллерах
