@@ -88,14 +88,14 @@
                                     Скачать
                                 </a>
                                 {% set ext = document.originalFile|split('.')|last|lower %}
-                                {% if ext in ['doc', 'docx', 'pdf'] %}
+                                {% if ext in ['pdf'] %}
                                     <a href="{{ path('app_document_download_file', {id: document.id, type: 'original', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
                                         Просмотр
                                     </a>
                                 {% endif %}
                                 {% if ext in ['doc', 'docx'] %}
                                     <a href="{{ path('app_edit_docx', {id: document.id, filename: document.originalFile}) }}" class="btn btn-sm btn-outline-warning" target="_blank" rel="noopener">
-                                        Редактировать
+                                        Просмотр и редактировани
                                     </a>
                                 {% endif %}
                             </div>

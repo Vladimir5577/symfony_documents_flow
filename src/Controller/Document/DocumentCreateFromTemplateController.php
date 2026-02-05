@@ -115,32 +115,34 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
     public function editDocx(
         Request $request,
         #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
+        #[Autowire('%private_upload_dir_documents_templates%')] string $templatesDir,
     ): Response {
         $documentId = $request->query->getInt('id') ?: null;
         $requestedFilename = $request->query->get('filename');
+
+        $documentServerBaseUrl = 'http://nginx';
+
+        $fromTemplate = false;
         if ($requestedFilename !== null && $requestedFilename !== '') {
             $filename = basename($requestedFilename);
-            if (!str_ends_with(strtolower($filename), '.docx')) {
-                $filename = 'doc.docx';
-            }
-            $docPath = $originalsDir . '/' . $filename;
-            if (!is_readable($docPath)) {
-                $filename = 'doc.docx';
-                $docPath = $originalsDir . '/' . $filename;
-            }
+            $docPath = $originalsDir . DIRECTORY_SEPARATOR . $filename;
         } else {
-            $filename = 'doc.docx';
-            $docPath = $originalsDir . '/' . $filename;
+            $filename = 'application.docx';
+            $docPath = $templatesDir . DIRECTORY_SEPARATOR . $filename;
+            $fromTemplate = true;
         }
+
         $documentVersion = file_exists($docPath) ? (string) filemtime($docPath) : (string) time();
+        $documentFileUrl = $documentServerBaseUrl . $docPath . '?v=' . $documentVersion;
         $docKey = 'doc-' . random_int(100000000, 999999999);
 
         return $this->render('document_create_from_template/edit_docx.html.twig', [
             'filename' => $filename,
             'fileUrl' => $filename,
             'docKey' => $docKey,
-            'documentVersion' => $documentVersion,
+            'documentFileUrl' => $documentFileUrl,
             'documentId' => $documentId,
+            'fromTemplate' => $fromTemplate,
         ]);
     }
 
@@ -152,6 +154,8 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
         FileUploadService $fileUploadService,
         #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
     ): Response {
+        $fromTemplate = $request->request->get('from_template');
+
         $documentId = (int) ($request->request->get('document_id') ?? $request->query->get('id') ?? 0);
         if ($documentId <= 0) {
             $this->addFlash('error', 'Не указан документ.');
@@ -169,23 +173,28 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
             return $this->redirectToRoute('app_outgoing_documents');
         }
 
-        $sourceFile = $originalsDir . '/doc.docx';
+        $requestedFilename = $request->request->get('filename');
+        $hasFilename = $requestedFilename !== null && $requestedFilename !== '';
+        $sourceFilename = $hasFilename ? basename($requestedFilename) : 'doc.docx';
+        $sourceFile = $originalsDir . '/' . $sourceFilename;
         if (!is_readable($sourceFile)) {
-            $this->addFlash('error', 'Файл doc.docx не найден. Сначала сохраните документ в редакторе.');
+            $this->addFlash('error', sprintf('Файл «%s» не найден. Сначала сохраните документ в редакторе.', $sourceFilename));
             return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
         }
 
-        $uniqueName = date('Y-m-d_His') . '_' . $fileUploadService->generateFileName() . '.docx';
-        $targetPath = $originalsDir . '/' . $uniqueName;
-        if (!@copy($sourceFile, $targetPath)) {
-            $this->addFlash('error', 'Не удалось сохранить копию файла.');
-            return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
+        if ($fromTemplate) {
+            // Новый документ — создаём новый файл с уникальным именем и обновляем запись в БД
+            $uniqueName = date('Y-m-d') . '_' . $fileUploadService->generateFileName() . '.docx';
+            $targetPath = $originalsDir . '/' . $uniqueName;
+            if (!@copy($sourceFile, $targetPath)) {
+                $this->addFlash('error', 'Не удалось сохранить копию файла.');
+                return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
+            }
+            $document->setOriginalFile($uniqueName);
+            $entityManager->flush();
         }
 
-        $document->setOriginalFile($uniqueName);
-        $entityManager->flush();
-
-        $this->addFlash('success', 'Файл прикреплён к документу.');
+        $this->addFlash('success', $hasFilename ? 'Документ обновлён.' : 'Файл прикреплён к документу.');
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
     }
 
@@ -236,7 +245,10 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
             return $this->json(['error' => 0]);
         }
 
-        $filename = 'doc.docx';
+        $requestedFilename = $request->query->get('filename');
+        $filename = $requestedFilename !== null && $requestedFilename !== ''
+            ? basename($requestedFilename)
+            : 'doc.docx';
 
         // Сохраняем в ту же папку (originals), откуда загружается документ в редактор,
         // чтобы файл «на диске» обновлялся при автосохранении

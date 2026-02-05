@@ -10,6 +10,7 @@ parameters:
     private_upload_dir: '%env(resolve:PRIVATE_UPLOAD_DIR)%'
     private_upload_dir_documents_originals: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_ORIGINALS)%'
     private_upload_dir_documents_updated: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_UPDATED)%'
+    private_upload_dir_documents_templates: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_TEMPLATES)%'
 
 services:
     # default configuration for services in *this* file
