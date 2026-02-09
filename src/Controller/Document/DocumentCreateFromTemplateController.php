@@ -3,6 +3,7 @@
 namespace App\Controller\Document;
 
 use App\Repository\DocumentRepository;
+use App\Service\Document\Convertor\DocxToPdfConvertorService;
 use App\Service\Document\FileUploadService;
 use Doctrine\ORM\EntityManagerInterface;
 use Mpdf\Mpdf;
@@ -19,15 +20,15 @@ final class DocumentCreateFromTemplateController extends AbstractController
     #[Route('/document_create_from_template', name: 'app_document_create_from_template')]
     public function index(Request $request): Response
     {
-        $content = '
-            <p>Прошу принять меня на работу.</p>
-            <p>ФИО: Иванов Иван Иванович</p>
-        ';
-
-        // если форма отправлена, подставляем новый текст
-        if ($request->isMethod('POST')) {
-            $content = $request->request->get('content');
-        }
+//        $content = '
+//            <p>Прошу принять меня на работу.</p>
+//            <p>ФИО: Иванов Иван Иванович</p>
+//        ';
+//
+//        // если форма отправлена, подставляем новый текст
+//        if ($request->isMethod('POST')) {
+//            $content = $request->request->get('content');
+//        }
 
         return $this->render('document_create_from_template/index.html.twig', [
             'content' => $content,
@@ -44,67 +45,67 @@ final class DocumentCreateFromTemplateController extends AbstractController
         #[Autowire('%kernel.project_dir%')] string $projectDir,
     ): Response
     {
-        $html = $request->request->get('html');
-        if (!$html) {
-            return $this->json(['status' => 'error', 'message' => 'HTML не передан']);
-        }
-
-        // Конвертим в UTF-8, если надо
-        if (!mb_check_encoding($html, 'UTF-8')) {
-            $html = mb_convert_encoding($html, 'UTF-8');
-        }
-
-        $baseName = date('Y-m-d_His') . '_' . $fileUploadService->generateFileName();
-
-        $htmlFilename = $baseName . '.html';
-        $htmlPath = $originalsDir . DIRECTORY_SEPARATOR . $htmlFilename;
-        file_put_contents($htmlPath, $html);
-
-
-
-        $pdfFilename = $baseName . '.pdf';
-        $pdfPath = $updatedDir . DIRECTORY_SEPARATOR . $pdfFilename;
-
-        $mpdfTempDir = $projectDir . '/var/tmp/mpdf';
-        $mpdf = new Mpdf([
-            'mode' => 'utf-8',
-            'format' => 'A4',
-            'margin_left' => 15,
-            'margin_right' => 15,
-            'margin_top' => 20,
-            'margin_bottom' => 20,
-            'tempDir' => $mpdfTempDir,
-        ]);
-
-        $mpdf->setFooter('{PAGENO} / {nb}');
-
-        $htmlForPdf = '<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<style>
-body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:0; }
-</style>
-</head>
-<body>' . $html . '</body>
-</html>';
-
-        $htmlPath = '/uploads/documents/originals/2026-02-03_172046_6c7219907d1036448599efb865409e6f.html';
-        $htmlForPdf = file_get_contents($htmlPath);
-
-
-        $mpdf->WriteHTML($htmlForPdf, \Mpdf\HTMLParserMode::HTML_BODY);
-
-//        $mpdf->SetWatermarkText('СЕКРЕТНО');
-//        $mpdf->showWatermarkText = true;
-
-        $mpdf->Output($pdfPath, Destination::FILE);
+//        $html = $request->request->get('html');
+//        if (!$html) {
+//            return $this->json(['status' => 'error', 'message' => 'HTML не передан']);
+//        }
+//
+//        // Конвертим в UTF-8, если надо
+//        if (!mb_check_encoding($html, 'UTF-8')) {
+//            $html = mb_convert_encoding($html, 'UTF-8');
+//        }
+//
+//        $baseName = date('Y-m-d_His') . '_' . $fileUploadService->generateFileName();
+//
+//        $htmlFilename = $baseName . '.html';
+//        $htmlPath = $originalsDir . DIRECTORY_SEPARATOR . $htmlFilename;
+//        file_put_contents($htmlPath, $html);
+//
+//
+//
+//        $pdfFilename = $baseName . '.pdf';
+//        $pdfPath = $updatedDir . DIRECTORY_SEPARATOR . $pdfFilename;
+//
+//        $mpdfTempDir = $projectDir . '/var/tmp/mpdf';
+//        $mpdf = new Mpdf([
+//            'mode' => 'utf-8',
+//            'format' => 'A4',
+//            'margin_left' => 15,
+//            'margin_right' => 15,
+//            'margin_top' => 20,
+//            'margin_bottom' => 20,
+//            'tempDir' => $mpdfTempDir,
+//        ]);
+//
+//        $mpdf->setFooter('{PAGENO} / {nb}');
+//
+//        $htmlForPdf = '<!DOCTYPE html>
+//<html lang="ru">
+//<head>
+//<meta charset="UTF-8">
+//<style>
+//body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:0; }
+//</style>
+//</head>
+//<body>' . $html . '</body>
+//</html>';
+//
+//        $htmlPath = '/uploads/documents/originals/2026-02-03_172046_6c7219907d1036448599efb865409e6f.html';
+//        $htmlForPdf = file_get_contents($htmlPath);
+//
+//
+//        $mpdf->WriteHTML($htmlForPdf, \Mpdf\HTMLParserMode::HTML_BODY);
+//
+////        $mpdf->SetWatermarkText('СЕКРЕТНО');
+////        $mpdf->showWatermarkText = true;
+//
+//        $mpdf->Output($pdfPath, Destination::FILE);
 
         return $this->json([
             'status' => 'ok',
             'message' => 'HTML и PDF сохранены',
-            'html' => $htmlFilename,
-            'pdf' => $pdfFilename,
+//            'html' => $htmlFilename,
+//            'pdf' => $pdfFilename,
         ]);
     }
 
@@ -152,6 +153,7 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
         DocumentRepository $documentRepository,
         EntityManagerInterface $entityManager,
         FileUploadService $fileUploadService,
+        DocxToPdfConvertorService $docxToPdfConvertorService,
         #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
     ): Response {
         $fromTemplate = $request->request->get('from_template');
@@ -176,7 +178,7 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
         $requestedFilename = $request->request->get('filename');
         $hasFilename = $requestedFilename !== null && $requestedFilename !== '';
         $sourceFilename = $hasFilename ? basename($requestedFilename) : 'doc.docx';
-        $sourceFile = $originalsDir . '/' . $sourceFilename;
+        $sourceFile = $originalsDir . DIRECTORY_SEPARATOR . $sourceFilename;
         if (!is_readable($sourceFile)) {
             $this->addFlash('error', sprintf('Файл «%s» не найден. Сначала сохраните документ в редакторе.', $sourceFilename));
             return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
@@ -185,11 +187,12 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
         if ($fromTemplate) {
             // Новый документ — создаём новый файл с уникальным именем и обновляем запись в БД
             $uniqueName = date('Y-m-d') . '_' . $fileUploadService->generateFileName() . '.docx';
-            $targetPath = $originalsDir . '/' . $uniqueName;
+            $targetPath = $originalsDir . DIRECTORY_SEPARATOR . $uniqueName;
             if (!@copy($sourceFile, $targetPath)) {
                 $this->addFlash('error', 'Не удалось сохранить копию файла.');
                 return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
             }
+            $docxToPdfConvertorService->convertDocxToPdf($sourceFile);
             $document->setOriginalFile($uniqueName);
             $entityManager->flush();
         }
@@ -274,23 +277,4 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
 
         return $this->json(['error' => 0]);
     }
-
-
-    // ========================================================
-
-//    #[Route('/document_save_from_template', name: 'app_document_save_from_template')]
-//    public function saveFromTemplate(Request $request): Response
-//    {
-//        // Получаем HTML из POST
-//        $html = $request->request->get('html');
-//
-//        if (!$html) {
-//            return $this->json(['status' => 'error', 'message' => 'HTML не передан']);
-//        }
-//
-//
-//        return $this->render('document_create_from_template/index.html.twig', [
-//            'date' => (new \DateTime())->format('d.m.Y'),
-//        ]);
-//    }
 }

@@ -31,7 +31,7 @@ $ composer install
 http://localhost:8087/
 ```
 
-7. Run migrations
+7. Run migrations (make sure that database exist)
 ```bash
 $ php bin/console doctrine:migrations:migrate
 ```
