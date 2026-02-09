@@ -52,6 +52,48 @@ class DocumentRepository extends ServiceEntityRepository
             ->getResult();
     }
 
+    /**
+     * Пагинированный список документов, созданных пользователем (исходящие).
+     *
+     * @param User $user
+     * @param int $page Номер страницы (начиная с 1)
+     * @param int $limit Количество элементов на странице
+     * @return array{documents: array, total: int, page: int, limit: int, totalPages: int}
+     */
+    public function findPaginatedByCreatedBy(User $user, int $page = 1, int $limit = 10): array
+    {
+        $offset = ($page - 1) * $limit;
+
+        $total = (int) $this->createQueryBuilder('d')
+            ->select('COUNT(d.id)')
+            ->where('d.createdBy = :user')
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        $documents = $this->createQueryBuilder('d')
+            ->leftJoin('d.documentType', 'dt')->addSelect('dt')
+            ->leftJoin('d.organizationCreator', 'o')->addSelect('o')
+            ->leftJoin('d.createdBy', 'cb')->addSelect('cb')
+            ->where('d.createdBy = :user')
+            ->setParameter('user', $user)
+            ->orderBy('d.createdAt', 'DESC')
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        $totalPages = (int) ceil($total / $limit);
+
+        return [
+            'documents' => $documents,
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'totalPages' => $totalPages,
+        ];
+    }
+
     //    /**
     //     * @return Document[] Returns an array of Document objects
     //     */

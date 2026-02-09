@@ -147,7 +147,6 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             ->where('u.workWithDocuments = :flag')
             ->setParameter('flag', true)
             ->orderBy('u.lastname', 'ASC')
-            ->addOrderBy('u.firstname', 'ASC')
             ->getQuery()
             ->getResult();
     }

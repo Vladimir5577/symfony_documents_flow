@@ -7,13 +7,14 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class FileUploadService
 {
-    private const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 МБ
+    private const MAX_SIZE_BYTES = 9 * 1024 * 1024; // 5 МБ
 
     private const ALLOWED_MIME_TYPES = [
         'application/pdf',
         'application/msword',                                                      // .doc
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
         'image/jpeg',
+        'image/jpg',
         'image/png',
     ];
 
@@ -34,7 +35,7 @@ class FileUploadService
         ];
 
         if (!$file->isValid()) {
-            $result['error'] = 'Выберите файл (PDF, DOC, DOCX, JPEG или PNG).';
+            $result['error'] = $file->getErrorMessage() ?: 'Выберите файл (PDF, DOC, DOCX, JPEG или PNG).';
             return $result;
         }
 
@@ -72,5 +73,22 @@ class FileUploadService
     public function generateFileName(): string
     {
         return bin2hex(random_bytes(16));
+    }
+
+    /**
+     * Удаляет файл из папки оригиналов по имени файла.
+     * Если файла нет — метод завершается без ошибки.
+     */
+    public function deleteFile(string $fileName): void
+    {
+        $path = $this->getFilePath($fileName);
+        if (!is_file($path)) {
+            return;
+        }
+        $dirReal = realpath($this->documentsOriginalsDir);
+        $fileReal = realpath($path);
+        if ($dirReal !== false && $fileReal !== false && str_starts_with($fileReal, $dirReal . \DIRECTORY_SEPARATOR)) {
+            unlink($path);
+        }
     }
 }

@@ -36,6 +36,7 @@
         </ul>
     </li>
 
+    {% if is_granted('ROLE_MANAGER') %}
     <li
         class="
             sidebar-item
@@ -62,7 +63,9 @@
 
         </ul>
     </li>
+    {% endif %}
 
+    {% if is_granted('ROLE_MANAGER') %}
     <li
         class="
             sidebar-item
@@ -88,7 +91,8 @@
 
         </ul>
     </li>
-{#    <a href="#" class="btn btn-outline-danger">Danger</a>#}
+    {% endif %}
+
     <li class="sidebar-item">
         <a href="{{ path('app_logout') }}" class="btn btn-outline-danger">
             <span>Выйти</span>

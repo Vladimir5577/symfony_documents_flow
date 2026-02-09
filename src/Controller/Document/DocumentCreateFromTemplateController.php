@@ -235,7 +235,7 @@ body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:
     {
         $data = json_decode($request->getContent(), true);
 
-        file_put_contents('./onlyoffice_callback.json', json_encode($data, JSON_PRETTY_PRINT));
+//        file_put_contents('./onlyoffice_callback.json', json_encode($data, JSON_PRETTY_PRINT));
 
         if (!isset($data['status']) || !in_array($data['status'], [2, 6], true)) {
             return $this->json(['error' => 0]);

@@ -213,7 +213,7 @@
                     e.preventDefault();
                     const form = this.closest('form');
                     const msg = 'Сохранить данные и перейти к созданию файла из шаблона?';
-                    alert(msg);
+                    if (!confirm(msg)) return;
                     const input = document.createElement('input');
                     input.type = 'hidden';
                     input.name = 'submit_action';
@@ -247,7 +247,7 @@
 
                 function setFile(file) {
                     if (!file) return hideFile();
-                    if (file.size > 5 * 1024 * 1024) {
+                    if (file.size > 9 * 1024 * 1024) {
                         alert('Файл слишком большой (макс. 5 МБ)');
                         return;
                     }

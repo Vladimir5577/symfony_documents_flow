@@ -110,17 +110,62 @@
                                         </div>
                                     </div>
 
+                                    {#  #### File  ###################################  #}
+
+                                    <div class="form-group">
+                                        <label class="form-label d-block">Файл документа</label>
+                                    </div>
+
+                                    <div class="form-group">
+                                        {% set ext = document.originalFile|split('.')|last|lower %}
+
+                                        {% if ext in ['pdf'] %}
+                                            <label class="form-label d-block">Файл pdf расширения</label>
+                                            <a href="{{ path('app_document_download_file', {id: document.id, type: 'original', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
+                                                Просмотр pdf
+                                            </a>
+                                        {% endif %}
+
+                                        {% if ext in ['doc', 'docx'] %}
+                                            <label class="form-label d-block">Файл word расширения</label>
+                                            <a href="{{ path('app_edit_docx', {id: document.id, filename: document.originalFile}) }}" class="btn btn-sm btn-outline-warning" target="_blank" rel="noopener">
+                                                Просмотр и редактировани word документа
+                                            </a>
+                                        {% endif %}
+
+                                        {% if ext in ['jpeg', 'jpg', 'png'] %}
+                                            <label class="form-label d-block">Файл типа image</label>
+                                            <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="{{ path('app_document_download_file', {id: document.id, type: 'original', inline: 1}) }}">
+                                                Просмотр image
+                                            </button>
+                                        {% endif %}
+                                    </div>
+
                                     <div class="col-12">
-                                        <div class="form-group">
-                                            <label for="formFileLg" class="form-label">
-                                                Заменить файл (необязательно)
-                                                {% if document.originalFile %}
-                                                    <span class="text-muted small">Текущий: {{ document.originalFile }}</span>
-                                                {% endif %}
-                                            </label>
+                                        <label class="form-label d-block">Заменить документ. Старый будет удален</label>
+                                        <div id="file-source-choice" class="d-flex flex-wrap gap-2 mb-2">
+                                            <button type="button" class="btn btn-outline-primary" data-source="upload">
+                                                Загрузить файл с компьютера
+                                            </button>
+                                            <button type="button" class="btn btn-outline-primary" data-source="own">
+                                                Создать документ из шаблона
+                                            </button>
+                                        </div>
+
+                                        <div id="file-upload-block" class="d-none">
+                                            <label for="formFileLg" class="form-label">Выберите или перетащите файл</label>
                                             <input class="form-control form-control-lg" id="formFileLg" type="file" name="originalFile">
                                         </div>
+
+                                        <div id="file-from-own-block" class="d-none">
+                                            <label class="form-label d-block">Сохранить и перейти к созданию файла из шаблона</label>
+                                            <button type="submit" class="btn btn-primary" id="choose-from-own-btn" name="submit_action" value="from_template">
+                                                Сохранить документ и создать файл из шаблона
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {#  #######################################  #}
 
                                     <div class="col-12 d-flex justify-content-end">
                                         <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить изменения</button>
@@ -171,6 +216,47 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            (function initFileSourceChoice() {
+                const choiceBtns = document.querySelectorAll('#file-source-choice [data-source]');
+                const uploadBlock = document.getElementById('file-upload-block');
+                const fromOwnBlock = document.getElementById('file-from-own-block');
+                const formFileInput = document.getElementById('formFileLg');
+
+                if (!choiceBtns.length || !uploadBlock || !fromOwnBlock) return;
+
+                choiceBtns.forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        const source = this.getAttribute('data-source');
+                        uploadBlock.classList.add('d-none');
+                        fromOwnBlock.classList.add('d-none');
+                        if (formFileInput) formFileInput.removeAttribute('required');
+                        if (source === 'upload') {
+                            uploadBlock.classList.remove('d-none');
+                            if (formFileInput) formFileInput.setAttribute('required', 'required');
+                        } else if (source === 'own') {
+                            fromOwnBlock.classList.remove('d-none');
+                        }
+                    });
+                });
+            })();
+
+            (function initChooseFromOwnBtn() {
+                const btn = document.getElementById('choose-from-own-btn');
+                if (!btn) return;
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const form = this.closest('form');
+                    const msg = 'Сохранить изменения, удалить старый файл и перейти к созданию файла из шаблона?';
+                    if (!confirm(msg)) return;
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'submit_action';
+                    input.value = 'from_template';
+                    form.appendChild(input);
+                    form.submit();
+                });
+            })();
+
             const usersSelect = document.getElementById('document_users');
             let choicesInstance = null;
 
@@ -331,4 +417,9 @@
             updateControls();
         });
     </script>
+
+
+
+    {{ include('document/partials/_preview_image_script.html.twig') }}
+
 {% endblock %}

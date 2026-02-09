@@ -55,4 +55,18 @@ enum DocumentStatus: string
             self::NEW->value => self::NEW->getLabel(),
         ];
     }
+
+    /**
+     * Статусы, которые получатель документа может выставить себе.
+     * @return list<DocumentStatus>
+     */
+    public static function getReceiverAllowedStatuses(): array
+    {
+        return [
+            self::IN_PROGRESS,
+            self::IN_REVIEW,
+            self::APPROVED,
+            self::REJECTED,
+        ];
+    }
 }

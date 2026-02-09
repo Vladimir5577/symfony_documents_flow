@@ -328,7 +328,7 @@ final class DocumentController extends AbstractController
     }
 
     #[Route('/incoming_documents', name: 'app_incoming_documents')]
-    public function getIncomingDocuments(DocumentUserRecipientRepository $recipientRepository): Response
+    public function getIncomingDocuments(Request $request, DocumentUserRecipientRepository $recipientRepository): Response
     {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
@@ -336,16 +336,25 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_login');
         }
 
-        $recipients = $recipientRepository->findByUserWithDocument($currentUser);
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = 10;
+
+        $pagination = $recipientRepository->findPaginatedByUser($currentUser, $page, $limit);
 
         return $this->render('document/incoming_documents.html.twig', [
             'active_tab' => 'incoming_documents',
-            'recipients' => $recipients,
+            'recipients' => $pagination['recipients'],
+            'pagination' => [
+                'current_page' => $pagination['page'],
+                'total_pages' => $pagination['totalPages'],
+                'total_items' => $pagination['total'],
+                'items_per_page' => $pagination['limit'],
+            ],
         ]);
     }
 
     #[Route('/outgoing_documents', name: 'app_outgoing_documents')]
-    public function getOutgoingDocuments(DocumentRepository $documentRepository): Response
+    public function getOutgoingDocuments(Request $request, DocumentRepository $documentRepository): Response
     {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
@@ -353,11 +362,20 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_login');
         }
 
-        $documents = $documentRepository->findByCreatedBy($currentUser);
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = 10;
+
+        $pagination = $documentRepository->findPaginatedByCreatedBy($currentUser, $page, $limit);
 
         return $this->render('document/outgoing_documents.html.twig', [
             'active_tab' => 'outgoing_documents',
-            'documents' => $documents,
+            'documents' => $pagination['documents'],
+            'pagination' => [
+                'current_page' => $pagination['page'],
+                'total_pages' => $pagination['totalPages'],
+                'total_items' => $pagination['total'],
+                'items_per_page' => $pagination['limit'],
+            ],
         ]);
     }
 
@@ -587,18 +605,6 @@ final class DocumentController extends AbstractController
         $document->setStatus($status);
         $document->setDeadline($deadline);
 
-        // Обработка загрузки файла (если есть)
-        $uploadedFile = $request->files->get('originalFile');
-        if ($uploadedFile) {
-            try {
-                $fileName = $fileUploadService->uploadFile($uploadedFile);
-                $document->setOriginalFile($fileName['fileName']);
-            } catch (\Exception $e) {
-                $this->addFlash('error', 'Ошибка загрузки файла: ' . $e->getMessage());
-                return $renderForm($formData);
-            }
-        }
-
         // Валидация сущности
         $errors = $validator->validate($document);
         if (count($errors) > 0) {
@@ -606,6 +612,23 @@ final class DocumentController extends AbstractController
                 $this->addFlash('error', $error->getMessage());
             }
             return $renderForm($formData);
+        }
+
+        // Обработка загрузки файла (если есть)
+        $uploadedFile = $request->files->get('originalFile');
+        if ($uploadedFile) {
+            try {
+                $fileName = $fileUploadService->uploadFile($uploadedFile);
+
+                // if old file exist remove it from disc and replace new one
+                if ($document->getOriginalFile()) {
+                    $fileUploadService->deleteFile($document->getOriginalFile());
+                }
+                $document->setOriginalFile($fileName['fileName']);
+            } catch (\Exception $e) {
+                $this->addFlash('error', 'Ошибка загрузки файла: ' . $e->getMessage());
+                return $renderForm($formData);
+            }
         }
 
         // Обновление получателей — только если список изменился
@@ -652,6 +675,18 @@ final class DocumentController extends AbstractController
         }
 
         $entityManager->flush();
+
+        // Если выбрано «создать из шаблона» — удаляем старый файл и перенаправляем в редактор
+        if (($formData['submit_action'] ?? null) === 'from_template') {
+            if ($document->getOriginalFile()) {
+                $fileUploadService->deleteFile($document->getOriginalFile());
+                $document->setOriginalFile(null);
+                $entityManager->flush();
+            }
+
+            $this->addFlash('success', 'Документ сохранён. Создайте файл из шаблона.');
+            return $this->redirectToRoute('app_edit_docx', ['id' => $document->getId()]);
+        }
 
         $this->addFlash('success', 'Документ успешно обновлён.');
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
@@ -769,15 +804,7 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
         }
 
-        // Разрешенные статусы для получателей
-        $allowedStatuses = [
-            DocumentStatus::IN_PROGRESS,
-            DocumentStatus::IN_REVIEW,
-            DocumentStatus::APPROVED,
-            DocumentStatus::REJECTED,
-        ];
-
-        if (!in_array($status, $allowedStatuses, true)) {
+        if (!in_array($status, DocumentStatus::getReceiverAllowedStatuses(), true)) {
             $this->addFlash('error', 'Выбранный статус недоступен для изменения.');
             return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
         }

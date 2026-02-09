@@ -98,6 +98,11 @@
                                         Просмотр и редактировани
                                     </a>
                                 {% endif %}
+                                {% if ext in ['jpeg', 'jpg', 'png'] %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="{{ path('app_document_download_file', {id: document.id, type: 'original', inline: 1}) }}">
+                                        Просмотр
+                                    </button>
+                                {% endif %}
                             </div>
                         </dd>
                     {% endif %}
@@ -185,10 +190,15 @@
                 {% endif %}
             </div>
         </div>
+
+
         {% if can_edit|default(false) %}
         <div class="mt-4 text-end">
             <a href="{{ path('app_edit_outgoing_document', {id: document.id}) }}" class="btn btn-warning">Редактирование документа</a>
         </div>
         {% endif %}
     </section>
+
+
+    {{ include('document/partials/_preview_image_script.html.twig') }}
 {% endblock %}

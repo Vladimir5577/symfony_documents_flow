@@ -15,12 +15,16 @@
 
     <section class="section">
         <div class="card">
+            <div class="card-header">
+                <p class="text-muted mb-0">Всего документов: {{ pagination.total_items }}</p>
+            </div>
             <div class="card-body">
                 {% if recipients is defined and recipients|length > 0 %}
                     <div class="table-responsive">
-                        <table class="table table-hover">
+                        <table class="table table-hover mb-0">
                             <thead>
                                 <tr>
+                                    <th>id</th>
                                     <th>Название</th>
                                     <th>Тип</th>
                                     <th>Организация</th>
@@ -35,6 +39,7 @@
                                 {% for recipient in recipients %}
                                     {% set doc = recipient.document %}
                                     <tr>
+                                        <td>{{ doc.id }}</td>
                                         <td>{{ doc.name }}</td>
                                         <td>{{ doc.documentType ? doc.documentType.name : '—' }}</td>
                                         <td>{{ doc.organizationCreator ? doc.organizationCreator.name : '—' }}</td>
@@ -83,6 +88,67 @@
                             </tbody>
                         </table>
                     </div>
+
+                    {# Пагинация #}
+                    {% if pagination.total_pages > 1 %}
+                        <div class="card-body">
+                            <nav aria-label="Навигация по страницам">
+                                <ul class="pagination justify-content-center mb-0">
+                                    {# Предыдущая страница #}
+                                    <li class="page-item {% if pagination.current_page == 1 %}disabled{% endif %}">
+                                        <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_incoming_documents', {page: pagination.current_page - 1}) }}{% else %}#{% endif %}" aria-label="Предыдущая">
+                                            <span aria-hidden="true">&laquo;</span>
+                                        </a>
+                                    </li>
+
+                                    {# Номера страниц #}
+                                    {% set start_page = max(1, pagination.current_page - 2) %}
+                                    {% set end_page = min(pagination.total_pages, pagination.current_page + 2) %}
+
+                                    {% if start_page > 1 %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="{{ path('app_incoming_documents', {page: 1}) }}">1</a>
+                                        </li>
+                                        {% if start_page > 2 %}
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        {% endif %}
+                                    {% endif %}
+
+                                    {% for page in start_page..end_page %}
+                                        <li class="page-item {% if page == pagination.current_page %}active{% endif %}">
+                                            <a class="page-link" href="{{ path('app_incoming_documents', {page: page}) }}">{{ page }}</a>
+                                        </li>
+                                    {% endfor %}
+
+                                    {% if end_page < pagination.total_pages %}
+                                        {% if end_page < pagination.total_pages - 1 %}
+                                            <li class="page-item disabled">
+                                                <span class="page-link">...</span>
+                                            </li>
+                                        {% endif %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="{{ path('app_incoming_documents', {page: pagination.total_pages}) }}">{{ pagination.total_pages }}</a>
+                                        </li>
+                                    {% endif %}
+
+                                    {# Следующая страница #}
+                                    <li class="page-item {% if pagination.current_page == pagination.total_pages %}disabled{% endif %}">
+                                        <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_incoming_documents', {page: pagination.current_page + 1}) }}{% else %}#{% endif %}" aria-label="Следующая">
+                                            <span aria-hidden="true">&raquo;</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                            <div class="text-center mt-2">
+                                <small class="text-muted">
+                                    Страница {{ pagination.current_page }} из {{ pagination.total_pages }}
+                                    (показано {{ ((pagination.current_page - 1) * pagination.items_per_page) + 1 }} - {{ min(pagination.current_page * pagination.items_per_page, pagination.total_items) }} из {{ pagination.total_items }})
+                                </small>
+                            </div>
+                        </div>
+                    {% endif %}
                 {% else %}
                     <p class="text-muted mb-0">Нет входящих документов.</p>
                 {% endif %}

@@ -1,0 +1,31 @@
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imagePreviewModalLabel">Просмотр изображения</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body text-center p-0 bg-dark d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 60px);">
+                <img src="" alt="Просмотр" class="img-fluid" id="imagePreviewModalImg" style="max-height: calc(100vh - 60px); max-width: 100%; object-fit: contain;">
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    document.getElementById('imagePreviewModal')?.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget;
+        var imageUrl = button?.getAttribute('data-image-url');
+        var img = document.getElementById('imagePreviewModalImg');
+        if (img && imageUrl) {
+            img.src = imageUrl;
+        }
+    });
+    document.getElementById('imagePreviewModal')?.addEventListener('hidden.bs.modal', function () {
+        var img = document.getElementById('imagePreviewModalImg');
+        if (img) {
+            img.src = '';
+        }
+    });
+</script>
