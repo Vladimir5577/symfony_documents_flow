@@ -32,11 +32,11 @@ final class UserController extends AbstractController
     ): Response {
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
-        
+
         // Получаем дерево организаций
         $userOrganization = $currentUser instanceof User ? $currentUser->getOrganization() : null;
         $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $userOrganization);
-        
+
         // Загружаем организации с дочерними для отображения дерева
         $organizationsWithChildren = [];
         if (!empty($organizationTree)) {
@@ -47,7 +47,7 @@ final class UserController extends AbstractController
                 }
             }
         }
-        
+
         $roles = $roleRepository->findAllExceptAdmin();
 
         $initialFormData = [];
@@ -57,7 +57,7 @@ final class UserController extends AbstractController
 
         $renderForm = function (array $formData = []) use ($isAdmin, $organizationsWithChildren, $roles, $initialFormData): Response {
             $data = $formData !== [] ? $formData : $initialFormData;
-            return $this->render('auth/register.html.twig', [
+            return $this->render('user/register.html.twig', [
                 'active_tab' => 'register',
                 'form_data' => $data,
                 'is_admin' => $isAdmin,
@@ -88,13 +88,13 @@ final class UserController extends AbstractController
             $this->addFlash('error', 'Необходимо выбрать организацию.');
             return $renderForm($formData);
         }
-        
+
         $organization = $organizationRepository->find($organizationId);
         if (!$organization) {
             $this->addFlash('error', 'Организация не найдена.');
             return $renderForm($formData);
         }
-        
+
         // Проверяем права доступа к выбранной организации
         if (!$isAdmin) {
             $userOrganization = $currentUser->getOrganization();
@@ -256,7 +256,7 @@ final class UserController extends AbstractController
     ): Response {
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
-        
+
         // Загружаем пользователя со всеми связанными данными для избежания N+1
         $user = $userRepository->createQueryBuilder('u')
             ->leftJoin('u.organization', 'org')->addSelect('org')
@@ -277,7 +277,7 @@ final class UserController extends AbstractController
         // Получаем дерево организаций
         $currentUserOrg = $currentUser instanceof User ? $currentUser->getOrganization() : null;
         $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $currentUserOrg);
-        
+
         // Загружаем организации с дочерними для отображения дерева
         $organizationsWithChildren = [];
         if (!empty($organizationTree)) {
@@ -288,7 +288,7 @@ final class UserController extends AbstractController
                 }
             }
         }
-        
+
         $roles = $roleRepository->findAllExceptAdmin();
 
         // Получаем выбранную роль пользователя (первую, если их несколько)
@@ -403,13 +403,13 @@ final class UserController extends AbstractController
             $this->addFlash('error', 'Необходимо выбрать организацию.');
             return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
         }
-        
+
         $organization = $organizationRepository->find($organizationId);
         if (!$organization) {
             $this->addFlash('error', 'Организация не найдена.');
             return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
         }
-        
+
         // Проверяем права доступа к выбранной организации
         if (!$isAdmin) {
             $currentUserOrg = $currentUser instanceof User ? $currentUser->getOrganization() : null;
@@ -417,13 +417,13 @@ final class UserController extends AbstractController
                 $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
                 return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
             }
-            
+
             // Находим корневую организацию пользователя
             $userRootOrg = $currentUserOrg;
             while ($userRootOrg->getParent() !== null) {
                 $userRootOrg = $userRootOrg->getParent();
             }
-            
+
             // Проверяем, что выбранная организация принадлежит дереву пользователя
             $isValid = false;
             if ($organization->getId() === $userRootOrg->getId()) {
@@ -439,13 +439,13 @@ final class UserController extends AbstractController
                     }
                 }
             }
-            
+
             if (!$isValid) {
                 $this->addFlash('error', 'Вы не можете выбрать организацию вне вашего дерева организаций.');
                 return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
             }
         }
-        
+
         // Обновляем организацию только если изменилась
         if ($user->getOrganization()->getId() !== $organization->getId()) {
             $user->setOrganization($organization);
@@ -525,5 +525,34 @@ final class UserController extends AbstractController
         $this->addFlash('success', 'Пользователь успешно обновлен.');
 
         return $this->redirectToRoute('app_view_user', ['id' => $userId]);
+    }
+
+    #[Route('/user_delete/{id}', name: 'app_delete_user', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function deleteUser(int $id, Request $request, UserRepository $userRepository, EntityManagerInterface $entityManager): Response
+    {
+        if (!$this->isCsrfTokenValid('delete_user_' . $id, $request->request->get('_csrf_token', ''))) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('app_all_users');
+        }
+
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            return $this->redirectToRoute('app_all_users');
+        }
+        if ($id === $currentUser->getId()) {
+            $this->addFlash('error', 'Нельзя удалить самого себя.');
+            return $this->redirectToRoute('app_view_user', ['id' => $id]);
+        }
+
+        $user = $userRepository->find($id);
+        if (!$user || $user->isDeleted()) {
+            throw $this->createNotFoundException('Пользователь не найден');
+        }
+
+        $user->setDeletedAt(new \DateTimeImmutable());
+        $entityManager->flush();
+
+        $this->addFlash('success', 'Пользователь удалён.');
+        return $this->redirectToRoute('app_all_users');
     }
 }

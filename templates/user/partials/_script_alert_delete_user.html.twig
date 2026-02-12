@@ -1,0 +1,23 @@
+<script>
+    (function () {
+        var form = document.getElementById('delete-user-form');
+        if (!form) return;
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            Swal.fire({
+                title: "Удалить пользователя?",
+                text: "Вы уверены, что хотите удалить этого пользователя?",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonColor: "#d33",
+                cancelButtonColor: "#6c757d",
+                confirmButtonText: "Да, удалить",
+                cancelButtonText: "Отмена"
+            }).then(function (result) {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+    })();
+</script>

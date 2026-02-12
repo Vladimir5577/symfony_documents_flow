@@ -41,17 +41,29 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 50)]
     #[Assert\NotBlank(message: 'Фамилия обязательна для заполнения.')]
     #[Assert\Length(max: 50, maxMessage: 'Фамилия не должна превышать {{ limit }} символов.')]
+    #[Assert\Regex(
+        pattern: '/^[\p{L}\s\-]+$/u',
+        message: 'Фамилия может содержать только буквы, пробелы и дефис. Цифры и спецсимволы не допускаются.'
+    )]
     private ?string $lastname = null;
 
     // 2) firstname
     #[ORM\Column(length: 50)]
     #[Assert\NotBlank(message: 'Имя обязательно для заполнения.')]
     #[Assert\Length(max: 50, maxMessage: 'Имя не должно превышать {{ limit }} символов.')]
+    #[Assert\Regex(
+        pattern: '/^[\p{L}\s\-]+$/u',
+        message: 'Имя может содержать только буквы, пробелы и дефис. Цифры и спецсимволы не допускаются.'
+    )]
     private ?string $firstname = null;
 
     // 3) patronymic
     #[ORM\Column(length: 50, nullable: true)]
     #[Assert\Length(max: 50, maxMessage: 'Отчество не должно превышать {{ limit }} символов.')]
+    #[Assert\Regex(
+        pattern: '/^[\p{L}\s\-]*$/u',
+        message: 'Отчество может содержать только буквы, пробелы и дефис. Цифры и спецсимволы не допускаются.'
+    )]
     private ?string $patronymic = null;
 
     // 4) boss (self-reference)
@@ -62,6 +74,10 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     // 5) phone
     #[ORM\Column(length: 30, nullable: true)]
     #[Assert\Length(max: 30, maxMessage: 'Телефон не должен превышать {{ limit }} символов.')]
+    #[Assert\Regex(
+        pattern: '/^(\+7\s*\(\d{3}\)\s*\d{3}\s*\d{2}\s*\d{2})?$/',
+        message: 'Телефон должен быть в формате: +7 (123) 123 12 12.'
+    )]
     private ?string $phone = null;
 
     #[ORM\Column(name: 'birth_date', type: Types::DATE_IMMUTABLE, nullable: true)]

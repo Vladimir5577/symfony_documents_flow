@@ -1,6 +1,6 @@
 {% extends 'base_dashboard.html.twig' %}
 
-{% block title %}Редактировать пользователя!{% endblock %}
+{% block title %}Регистрация!{% endblock %}
 
 
 
@@ -11,34 +11,19 @@
 
 
 {% block main %}
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Редактировать пользователя</h1>
-        <a href="{{ path('app_view_user', {id: user.id}) }}" class="btn btn-secondary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-            Назад к просмотру
-        </a>
-    </div>
-
+    <h1>Регистрация пользователя</h1>
     <section id="multiple-column-form">
         <div class="row match-height">
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h4 class="card-title">Форма редактирования пользователя</h4>
+                        <h4 class="card-title">Форма регистрации</h4>
                     </div>
                     <div class="card-content">
                         <div class="card-body">
 
-                            <form action="{{ path('app_update_user') }}" method="post" class="form">
-                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_user') }}">
-                                <input type="hidden" name="user_id" value="{{ user.id }}">
-
-                                {% for message in app.flashes('success') %}
-                                    <div class="alert alert-success">{{ message }}</div>
-                                {% endfor %}
+                            <form action="{{ path('user_register') }}" method="post" class="form">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('register') }}">
 
                                 {% for message in app.flashes('error') %}
                                     <div class="alert alert-danger">{{ message }}</div>
@@ -48,25 +33,25 @@
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="first-name-column">Фамилия <span class="text-danger">*</span></label>
-                                            <input type="text" id="first-name-column" class="form-control" placeholder="Фамилия" name="fname-column" value="{{ user.lastname ?? '' }}" required>
+                                            <input type="text" id="first-name-column" class="form-control" placeholder="Фамилия" name="fname-column" value="{{ form_data['fname-column']|default('') }}" required>
                                         </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="last-name-column">Имя <span class="text-danger">*</span></label>
-                                            <input type="text" id="last-name-column" class="form-control" placeholder="Имя" name="lname-column" value="{{ user.firstname ?? '' }}" required>
+                                            <input type="text" id="last-name-column" class="form-control" placeholder="Имя" name="lname-column" value="{{ form_data['lname-column']|default('') }}" required>
                                         </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="city-column">Отчество</label>
-                                            <input type="text" id="city-column" class="form-control" placeholder="Отчество" name="city-column" value="{{ user.patronymic ?? '' }}">
+                                            <input type="text" id="city-column" class="form-control" placeholder="Отчество" name="city-column" value="{{ form_data['city-column']|default('') }}">
                                         </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="phone-column">Телефон</label>
-                                            <input type="text" id="phone-column" class="form-control" name="phone-column" placeholder="+7..." value="{{ user.phone ?? '' }}">
+                                            <input type="text" id="phone-column" class="form-control" name="phone-column" placeholder="+7 (___) ___ __ __" value="{{ form_data['phone-column']|default('') }}" inputmode="tel" maxlength="18" autocomplete="tel">
                                         </div>
                                     </div>
                                     {% if organizations is defined and organizations %}
@@ -77,7 +62,7 @@
                                                 <option value="">— Выберите организацию —</option>
                                                 {% for org in organizations %}
                                                     {% if org %}
-                                                        {% include 'auth/organization_tree_option.html.twig' with {'organization': org, 'level': 0, 'selected_id': user.organization.id|default('')} %}
+                                                        {% include 'auth/organization_tree_option.html.twig' with {'organization': org, 'level': 0, 'selected_id': form_data.organization_id|default('')} %}
                                                     {% endif %}
                                                 {% endfor %}
                                             </select>
@@ -89,9 +74,10 @@
                                         <div class="form-group">
                                             <label>Роль</label>
                                             <div>
+                                                {% set selectedRoleId = form_data.role|default('') %}
                                                 {% for role in roles %}
                                                     <div class="form-check">
-                                                        <input class="form-check-input" type="radio" name="role" id="role-{{ role.id }}" value="{{ role.id }}" {% if selected_role_id == role.id %}checked{% endif %}>
+                                                        <input class="form-check-input" type="radio" name="role" id="role-{{ role.id }}" value="{{ role.id }}" {% if selectedRoleId == role.id %}checked{% endif %}>
                                                         <label class="form-check-label" for="role-{{ role.id }}">
                                                             {{ role.label|default(role.name) }}
                                                         </label>
@@ -104,37 +90,30 @@
                                     {% endif %}
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label for="login-column">Логин <span class="text-danger">*</span></label>
-                                            <input type="text" id="login-column" class="form-control" name="login" placeholder="Логин" value="{{ user.login }}" required>
+                                            <label for="password-column">Пароль <span class="text-danger">*</span></label>
+                                            <input type="password" id="password-column" class="form-control" name="plain_password" placeholder="Пароль" required>
                                         </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label for="password-column">Новый пароль</label>
-                                            <input type="password" id="password-column" class="form-control" name="plain_password" placeholder="Оставьте пустым, если не хотите менять пароль">
-                                        </div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="form-group">
-                                            <label for="confirm-password-column">Повторите новый пароль</label>
-                                            <input type="password" id="confirm-password-column" class="form-control" name="confirm_password" placeholder="Повторите пароль">
+                                            <label for="confirm-password-column">Повторите пароль <span class="text-danger">*</span></label>
+                                            <input type="password" id="confirm-password-column" class="form-control" name="confirm_password" placeholder="Повторите пароль" required>
                                         </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="profession-column">Профессия (опционально)</label>
-                                            <input type="text" id="profession-column" class="form-control" name="profession-column" placeholder="Профессия" value="{{ worker.profession|default('') }}">
+                                            <input type="text" id="profession-column" class="form-control" name="profession-column" placeholder="Профессия" value="{{ form_data['profession-column']|default('') }}">
                                         </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="description-column">Описание профессии (опционально)</label>
-                                            <textarea id="description-column" class="form-control" name="description-column" placeholder="Описание" rows="3">{{ worker.description|default('') }}</textarea>
+                                            <textarea id="description-column" class="form-control" name="description-column" placeholder="Описание" rows="3">{{ form_data['description-column']|default('') }}</textarea>
                                         </div>
                                     </div>
                                     <div class="col-12 d-flex justify-content-end">
-                                        <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить изменения</button>
-                                        <a href="{{ path('app_view_user', {id: user.id}) }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Регистрация</button>
                                     </div>
                                 </div>
                             </form>
