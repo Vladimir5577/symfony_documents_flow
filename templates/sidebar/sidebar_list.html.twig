@@ -53,12 +53,8 @@
 
         <ul class="submenu active">
 
-            <li class="submenu-item {% if active_tab == 'register' %}active{% endif %} ">
-                <a href="{{ path('user_register') }}" class="submenu-link">Регистрация нового</a>
-            </li>
-
             <li class="submenu-item  {% if active_tab == 'all_users' %}active{% endif %} ">
-                <a href="{{ path('app_all_users') }}" class="submenu-link">Все пользователи</a>
+                <a href="{{ path('app_all_users') }}" class="submenu-link">Просмотр всех</a>
             </li>
 
         </ul>
@@ -80,10 +76,6 @@
         </a>
 
         <ul class="submenu active">
-
-            <li class="submenu-item {% if active_tab == 'create_organization' %}active{% endif %} ">
-                <a href="{{ path('create_organization') }}" class="submenu-link">Регистрация организации</a>
-            </li>
 
             <li class="submenu-item  {% if active_tab == 'all_organizations' %}active{% endif %} ">
                 <a href="{{ path('app_all_organizations') }}" class="submenu-link">Все организации</a>

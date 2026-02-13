@@ -170,6 +170,55 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
     }
 
     /**
+     * Soft delete: обнуляет ссылки на пользователя у подчинённых, затем устанавливает deleted_at.
+     * onDelete: SET NULL не срабатывает при soft delete (нет реального DELETE в БД).
+     *
+     * @return bool true если пользователь удалён, false если не найден или уже удалён
+     */
+    public function softDelete(int $id): bool
+    {
+        $user = $this->find($id);
+        if (!$user || $user->isDeleted()) {
+            return false;
+        }
+
+        $em = $this->getEntityManager();
+
+        // Обнулить boss_id, created_by_id, updated_by_id у ссылающихся пользователей
+        $this->createQueryBuilder('u')
+            ->update()
+            ->set('u.boss', ':null')
+            ->where('u.boss = :user')
+            ->setParameter('null', null)
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->execute();
+
+        $this->createQueryBuilder('u')
+            ->update()
+            ->set('u.createdBy', ':null')
+            ->where('u.createdBy = :user')
+            ->setParameter('null', null)
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->execute();
+
+        $this->createQueryBuilder('u')
+            ->update()
+            ->set('u.updatedBy', ':null')
+            ->where('u.updatedBy = :user')
+            ->setParameter('null', null)
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->execute();
+
+        $em->remove($user);
+        $em->flush();
+
+        return true;
+    }
+
+    /**
      * Найти активного пользователя по ID
      *
      * @param int $id

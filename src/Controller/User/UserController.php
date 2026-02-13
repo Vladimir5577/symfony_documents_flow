@@ -222,6 +222,7 @@ final class UserController extends AbstractController
 
         // Загружаем пользователя со всеми связанными данными для избежания N+1
         $user = $userRepository->createQueryBuilder('u')
+            ->leftJoin('u.organization', 'org')->addSelect('org')
             ->leftJoin('u.boss', 'boss')->addSelect('boss')
             ->leftJoin('u.userRoles', 'ur')->addSelect('ur')
             ->leftJoin('ur.role', 'r')->addSelect('r')
@@ -528,7 +529,7 @@ final class UserController extends AbstractController
     }
 
     #[Route('/user_delete/{id}', name: 'app_delete_user', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function deleteUser(int $id, Request $request, UserRepository $userRepository, EntityManagerInterface $entityManager): Response
+    public function deleteUser(int $id, Request $request, UserRepository $userRepository): Response
     {
         if (!$this->isCsrfTokenValid('delete_user_' . $id, $request->request->get('_csrf_token', ''))) {
             $this->addFlash('error', 'Неверный CSRF токен.');
@@ -544,13 +545,9 @@ final class UserController extends AbstractController
             return $this->redirectToRoute('app_view_user', ['id' => $id]);
         }
 
-        $user = $userRepository->find($id);
-        if (!$user || $user->isDeleted()) {
+        if (!$userRepository->softDelete($id)) {
             throw $this->createNotFoundException('Пользователь не найден');
         }
-
-        $user->setDeletedAt(new \DateTimeImmutable());
-        $entityManager->flush();
 
         $this->addFlash('success', 'Пользователь удалён.');
         return $this->redirectToRoute('app_all_users');

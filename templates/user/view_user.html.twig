@@ -77,11 +77,18 @@
                                                 </td>
                                             </tr>
                                             <tr>
+                                                <th class="text-muted">Организация:</th>
+                                                <td>{{ user.organization.name ?? '-' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <th class="text-muted">Дата создания:</th>
+                                                <td>{{ user.createdAt ? user.createdAt|date('d.m.Y H:i') : '-' }}</td>
+                                            </tr>
+                                            <tr>
                                                 <th class="text-muted">Начальник:</th>
                                                 <td>
                                                     {% if user.boss %}
                                                         {{ user.boss.lastname ?? '' }} {{ user.boss.firstname ?? '' }} {{ user.boss.patronymic ?? '' }}
-                                                        <br><small class="text-muted">Логин: {{ user.boss.login }}</small>
                                                     {% else %}
                                                         <span class="text-muted">-</span>
                                                     {% endif %}

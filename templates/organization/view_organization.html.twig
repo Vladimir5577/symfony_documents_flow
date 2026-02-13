@@ -74,10 +74,6 @@
                                 <div class="col-md-6">
                                     <table class="table table-borderless">
                                         <tr>
-                                            <th width="200">ID:</th>
-                                            <td>{{ organization.id }}</td>
-                                        </tr>
-                                        <tr>
                                             <th>Название:</th>
                                             <td><strong>{{ organization.name }}</strong></td>
                                         </tr>
@@ -130,11 +126,11 @@
                     </div>
                 {% endif %}
 
-                {# Пользователи организации #}
+                {# Работники организации #}
                 <div class="card mb-4">
                     <div class="card-header">
                         <h4 class="card-title">
-                            Пользователи организации
+                            Работники организации
                             <span class="badge bg-primary ms-2">{{ users|length }}</span>
                         </h4>
                     </div>
