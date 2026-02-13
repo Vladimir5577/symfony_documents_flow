@@ -18,6 +18,16 @@
         </a>
     </div>
 
+    <div class="mb-3">
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" id="user-search" class="form-control" placeholder="Поиск по фамилии, имени, логину, телефону..." value="{{ search|default('') }}" autocomplete="off">
+            <button type="button" id="user-search-clear" class="btn btn-outline-secondary {% if not search|default('') %}d-none{% endif %}">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    </div>
+
     <section class="section">
         <div class="row" id="table-hover-row">
             <div class="col-12">
@@ -81,7 +91,7 @@
                                     <ul class="pagination justify-content-center mb-0">
                                         {# Предыдущая страница #}
                                         <li class="page-item {% if pagination.current_page == 1 %}disabled{% endif %}">
-                                            <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_all_users', {page: pagination.current_page - 1}) }}{% else %}#{% endif %}" aria-label="Предыдущая">
+                                            <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_all_users', {page: pagination.current_page - 1, search: search|default('')}) }}{% else %}#{% endif %}" aria-label="Предыдущая">
                                                 <span aria-hidden="true">&laquo;</span>
                                             </a>
                                         </li>
@@ -92,7 +102,7 @@
 
                                         {% if start_page > 1 %}
                                             <li class="page-item">
-                                                <a class="page-link" href="{{ path('app_all_users', {page: 1}) }}">1</a>
+                                                <a class="page-link" href="{{ path('app_all_users', {page: 1, search: search|default('')}) }}">1</a>
                                             </li>
                                             {% if start_page > 2 %}
                                                 <li class="page-item disabled">
@@ -103,7 +113,7 @@
 
                                         {% for page in start_page..end_page %}
                                             <li class="page-item {% if page == pagination.current_page %}active{% endif %}">
-                                                <a class="page-link" href="{{ path('app_all_users', {page: page}) }}">{{ page }}</a>
+                                                <a class="page-link" href="{{ path('app_all_users', {page: page, search: search|default('')}) }}">{{ page }}</a>
                                             </li>
                                         {% endfor %}
 
@@ -114,13 +124,13 @@
                                                 </li>
                                             {% endif %}
                                             <li class="page-item">
-                                                <a class="page-link" href="{{ path('app_all_users', {page: pagination.total_pages}) }}">{{ pagination.total_pages }}</a>
+                                                <a class="page-link" href="{{ path('app_all_users', {page: pagination.total_pages, search: search|default('')}) }}">{{ pagination.total_pages }}</a>
                                             </li>
                                         {% endif %}
 
                                         {# Следующая страница #}
                                         <li class="page-item {% if pagination.current_page == pagination.total_pages %}disabled{% endif %}">
-                                            <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_all_users', {page: pagination.current_page + 1}) }}{% else %}#{% endif %}" aria-label="Следующая">
+                                            <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_all_users', {page: pagination.current_page + 1, search: search|default('')}) }}{% else %}#{% endif %}" aria-label="Следующая">
                                                 <span aria-hidden="true">&raquo;</span>
                                             </a>
                                         </li>
@@ -139,4 +149,7 @@
             </div>
         </div>
     </section>
+
+    {% include 'user/partials/_script_user_search.html.twig' %}
+
 {% endblock %}

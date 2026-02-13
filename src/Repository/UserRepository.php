@@ -60,29 +60,31 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
      * @param int $limit Количество элементов на странице
      * @return array{users: array, total: int, page: int, limit: int, totalPages: int}
      */
-    public function findPaginated(int $page = 1, int $limit = 10): array
+    public function findPaginated(int $page = 1, int $limit = 10, string $search = ''): array
     {
         $offset = ($page - 1) * $limit;
 
         $qb = $this->createQueryBuilder('u')
             ->orderBy('u.id', 'ASC');
 
-        // Получаем общее количество пользователей
-        // Фильтр soft delete автоматически исключает удаленных пользователей
-        $total = (int) $this->createQueryBuilder('u')
-            ->select('COUNT(u.id)')
-            ->getQuery()
-            ->getSingleScalarResult();
+        $countQb = $this->createQueryBuilder('u')
+            ->select('COUNT(u.id)');
 
-        // Получаем пользователей для текущей страницы
-        // Фильтр soft delete автоматически исключает удаленных пользователей
+        if ($search !== '') {
+            $searchCondition = 'LOWER(u.lastname) LIKE LOWER(:search) OR LOWER(u.firstname) LIKE LOWER(:search) OR LOWER(u.patronymic) LIKE LOWER(:search) OR LOWER(u.login) LIKE LOWER(:search) OR LOWER(u.phone) LIKE LOWER(:search)';
+            $qb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
+            $countQb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
+        }
+
+        $total = (int) $countQb->getQuery()->getSingleScalarResult();
+
         $users = $qb
             ->setFirstResult($offset)
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();
 
-        $totalPages = (int) ceil($total / $limit);
+        $totalPages = $total > 0 ? (int) ceil($total / $limit) : 1;
 
         return [
             'users' => $users,

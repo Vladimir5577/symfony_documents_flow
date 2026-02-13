@@ -13,6 +13,7 @@ use App\Utils\LoginGenerator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
@@ -197,14 +198,50 @@ final class UserController extends AbstractController
     public function getAllUsers(Request $request, UserRepository $userRepository): Response
     {
         $page = max(1, (int) $request->query->get('page', 1));
-        $limit = 10; // Количество пользователей на странице
+        $search = trim((string) $request->query->get('search', ''));
+        $limit = 10;
 
-        $pagination = $userRepository->findPaginated($page, $limit);
+        $pagination = $userRepository->findPaginated($page, $limit, $search);
 
         return $this->render('user/all_users.html.twig', [
             'active_tab' => 'all_users',
             'controller_name' => 'UserController',
             'users' => $pagination['users'],
+            'search' => $search,
+            'pagination' => [
+                'current_page' => $pagination['page'],
+                'total_pages' => $pagination['totalPages'],
+                'total_items' => $pagination['total'],
+                'items_per_page' => $pagination['limit'],
+            ],
+        ]);
+    }
+
+    #[Route('/users/search', name: 'app_users_search', methods: ['GET'])]
+    public function searchUsers(Request $request, UserRepository $userRepository): JsonResponse
+    {
+        $page = max(1, (int) $request->query->get('page', 1));
+        $search = trim((string) $request->query->get('search', ''));
+        $limit = 10;
+
+        $pagination = $userRepository->findPaginated($page, $limit, $search);
+
+        $usersData = [];
+        foreach ($pagination['users'] as $user) {
+            $usersData[] = [
+                'id' => $user->getId(),
+                'lastname' => $user->getLastname() ?? '-',
+                'firstname' => $user->getFirstname() ?? '-',
+                'patronymic' => $user->getPatronymic() ?? '-',
+                'login' => $user->getLogin(),
+                'phone' => $user->getPhone() ?? '-',
+                'isActive' => $user->isActive(),
+                'viewUrl' => $this->generateUrl('app_view_user', ['id' => $user->getId(), 'page' => $page]),
+            ];
+        }
+
+        return new JsonResponse([
+            'users' => $usersData,
             'pagination' => [
                 'current_page' => $pagination['page'],
                 'total_pages' => $pagination['totalPages'],
