@@ -1,0 +1,126 @@
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('org-search');
+        const clearBtn = document.getElementById('org-search-clear');
+        const tableBody = document.querySelector('.section table.table-hover tbody');
+        const cardHeader = document.querySelector('.section .card-header .text-muted');
+        const paginationContainer = document.querySelector('.section .card-body nav')?.closest('.card-body');
+        let debounceTimer;
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function buildPagination(pagination) {
+            if (pagination.total_pages <= 1) return '';
+
+            const cp = pagination.current_page;
+            const tp = pagination.total_pages;
+            const ipp = pagination.items_per_page;
+            const ti = pagination.total_items;
+
+            let startPage = Math.max(1, cp - 2);
+            let endPage = Math.min(tp, cp + 2);
+
+            let html = '<nav aria-label="Навигация по страницам"><ul class="pagination justify-content-center mb-0">';
+
+            html += '<li class="page-item ' + (cp === 1 ? 'disabled' : '') + '">';
+            html += '<a class="page-link" href="#" data-page="' + (cp > 1 ? cp - 1 : 1) + '" aria-label="Предыдущая"><span aria-hidden="true">&laquo;</span></a></li>';
+
+            if (startPage > 1) {
+                html += '<li class="page-item"><a class="page-link" href="#" data-page="1">1</a></li>';
+                if (startPage > 2) html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+            }
+
+            for (let p = startPage; p <= endPage; p++) {
+                html += '<li class="page-item ' + (p === cp ? 'active' : '') + '"><a class="page-link" href="#" data-page="' + p + '">' + p + '</a></li>';
+            }
+
+            if (endPage < tp) {
+                if (endPage < tp - 1) html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                html += '<li class="page-item"><a class="page-link" href="#" data-page="' + tp + '">' + tp + '</a></li>';
+            }
+
+            html += '<li class="page-item ' + (cp === tp ? 'disabled' : '') + '">';
+            html += '<a class="page-link" href="#" data-page="' + (cp < tp ? cp + 1 : tp) + '" aria-label="Следующая"><span aria-hidden="true">&raquo;</span></a></li>';
+
+            html += '</ul></nav>';
+            html += '<div class="text-center mt-2"><small class="text-muted">';
+            html += 'Страница ' + cp + ' из ' + tp + ' (показано ' + (((cp - 1) * ipp) + 1) + ' - ' + Math.min(cp * ipp, ti) + ' из ' + ti + ')';
+            html += '</small></div>';
+
+            return html;
+        }
+
+        function doSearch(page) {
+            if (!searchInput || !tableBody) return;
+
+            const search = searchInput.value.trim();
+            const url = '{{ path("app_organizations_search") }}' + '?search=' + encodeURIComponent(search) + '&page=' + (page || 1);
+
+            if (clearBtn) clearBtn.classList.toggle('d-none', search === '');
+
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    let rows = '';
+                    if (data.organizations && data.organizations.length > 0) {
+                        data.organizations.forEach(function (o) {
+                            rows += '<tr>';
+                            rows += '<td class="text-bold-500">' + escapeHtml(String(o.id)) + '</td>';
+                            rows += '<td>' + escapeHtml(o.name) + '</td>';
+                            rows += '<td>' + escapeHtml(o.address) + '</td>';
+                            rows += '<td>' + escapeHtml(o.phone) + '</td>';
+                            rows += '<td>' + escapeHtml(o.email) + '</td>';
+                            rows += '<td><a href="' + escapeHtml(o.viewUrl) + '" class="btn btn-info rounded-pill">Просмотр</a></td>';
+                            rows += '</tr>';
+                        });
+                    } else {
+                        rows = '<tr><td colspan="6" class="text-center">Организации не найдены</td></tr>';
+                    }
+
+                    tableBody.innerHTML = rows;
+                    if (cardHeader) cardHeader.textContent = 'Всего организаций: ' + (data.pagination ? data.pagination.total_items : 0);
+
+                    let pagWrapper = document.getElementById('ajax-pagination-org');
+                    if (!pagWrapper) {
+                        pagWrapper = document.createElement('div');
+                        pagWrapper.id = 'ajax-pagination-org';
+                        tableBody.closest('.card-content').appendChild(pagWrapper);
+                    }
+
+                    if (paginationContainer) paginationContainer.style.display = 'none';
+
+                    pagWrapper.innerHTML = (data.pagination && data.pagination.total_pages > 1)
+                        ? '<div class="card-body">' + buildPagination(data.pagination) + '</div>'
+                        : '';
+                });
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(function () { doSearch(1); }, 300);
+            });
+        }
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function () {
+                searchInput.value = '';
+                clearBtn.classList.add('d-none');
+                doSearch(1);
+                searchInput.focus();
+            });
+        }
+
+        document.addEventListener('click', function (e) {
+            const link = e.target.closest('#ajax-pagination-org a[data-page]');
+            if (link) {
+                e.preventDefault();
+                doSearch(parseInt(link.dataset.page, 10));
+            }
+        });
+    });
+</script>

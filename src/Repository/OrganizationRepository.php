@@ -109,40 +109,46 @@ class OrganizationRepository extends ServiceEntityRepository
     }
 
     /**
-     * Получить пагинированный список организаций
-     * Выводит только родительские организации (без дочерних)
+     * Получить пагинированный список организаций.
+     * Без поиска — только корневые (parent IS NULL). С поиском — по всем организациям (включая дочерние).
      *
      * @param int $page Номер страницы (начиная с 1)
      * @param int $limit Количество элементов на странице
+     * @param string $search Поиск по названию, адресу, телефону, email (при непустом поиске ищем по всем уровням)
      * @return array{organizations: array, total: int, page: int, limit: int, totalPages: int}
      */
-    public function findPaginated(int $page = 1, int $limit = 10): array
+    public function findPaginated(int $page = 1, int $limit = 10, string $search = ''): array
     {
         $offset = ($page - 1) * $limit;
 
         $qb = $this->createQueryBuilder('o')
             ->where('o.name != :adminName')
-            ->andWhere('o.parent IS NULL')
             ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)
             ->orderBy('o.id', 'ASC');
 
-        // Получаем общее количество родительских организаций (исключая админскую)
-        $total = (int) $this->createQueryBuilder('o')
+        $countQb = $this->createQueryBuilder('o')
             ->select('COUNT(o.id)')
             ->where('o.name != :adminName')
-            ->andWhere('o.parent IS NULL')
-            ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME);
 
-        // Получаем организации для текущей страницы
+        if ($search !== '') {
+            $searchCondition = 'LOWER(o.name) LIKE LOWER(:search) OR LOWER(o.address) LIKE LOWER(:search) OR LOWER(o.phone) LIKE LOWER(:search) OR LOWER(o.email) LIKE LOWER(:search)';
+            $qb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
+            $countQb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
+        } else {
+            $qb->andWhere('o.parent IS NULL');
+            $countQb->andWhere('o.parent IS NULL');
+        }
+
+        $total = (int) $countQb->getQuery()->getSingleScalarResult();
+
         $organizations = $qb
             ->setFirstResult($offset)
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();
 
-        $totalPages = (int) ceil($total / $limit);
+        $totalPages = $total > 0 ? (int) ceil($total / $limit) : 1;
 
         return [
             'organizations' => $organizations,

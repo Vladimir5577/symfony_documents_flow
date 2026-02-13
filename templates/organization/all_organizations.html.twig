@@ -11,8 +11,8 @@
 
 
 {% block main %}
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Все организации</h1>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">Все организации</h1>
         {% if is_granted('ROLE_ADMIN') %}
             <a href="{{ path('create_organization') }}" class="btn btn-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plus">
@@ -22,6 +22,16 @@
                 Создать организацию
             </a>
         {% endif %}
+    </div>
+
+    <div class="mb-3">
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" id="org-search" class="form-control" placeholder="Поиск по названию, адресу, телефону, email..." value="{{ search|default('') }}" autocomplete="off">
+            <button type="button" id="org-search-clear" class="btn btn-outline-secondary {% if not search|default('') %}d-none{% endif %}">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
     </div>
 
     {% for message in app.flashes('success') %}
@@ -70,7 +80,7 @@
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="8" class="text-center">Организации не найдены</td>
+                                        <td colspan="6" class="text-center">Организации не найдены</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>
@@ -84,7 +94,7 @@
                                     <ul class="pagination justify-content-center mb-0">
                                         {# Предыдущая страница #}
                                         <li class="page-item {% if pagination.current_page == 1 %}disabled{% endif %}">
-                                            <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_all_organizations', {page: pagination.current_page - 1}) }}{% else %}#{% endif %}" aria-label="Предыдущая">
+                                            <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_all_organizations', {page: pagination.current_page - 1, search: search|default('')}) }}{% else %}#{% endif %}" aria-label="Предыдущая">
                                                 <span aria-hidden="true">&laquo;</span>
                                             </a>
                                         </li>
@@ -95,7 +105,7 @@
 
                                         {% if start_page > 1 %}
                                             <li class="page-item">
-                                                <a class="page-link" href="{{ path('app_all_organizations', {page: 1}) }}">1</a>
+                                                <a class="page-link" href="{{ path('app_all_organizations', {page: 1, search: search|default('')}) }}">1</a>
                                             </li>
                                             {% if start_page > 2 %}
                                                 <li class="page-item disabled">
@@ -106,7 +116,7 @@
 
                                         {% for page in start_page..end_page %}
                                             <li class="page-item {% if page == pagination.current_page %}active{% endif %}">
-                                                <a class="page-link" href="{{ path('app_all_organizations', {page: page}) }}">{{ page }}</a>
+                                                <a class="page-link" href="{{ path('app_all_organizations', {page: page, search: search|default('')}) }}">{{ page }}</a>
                                             </li>
                                         {% endfor %}
 
@@ -117,13 +127,13 @@
                                                 </li>
                                             {% endif %}
                                             <li class="page-item">
-                                                <a class="page-link" href="{{ path('app_all_organizations', {page: pagination.total_pages}) }}">{{ pagination.total_pages }}</a>
+                                                <a class="page-link" href="{{ path('app_all_organizations', {page: pagination.total_pages, search: search|default('')}) }}">{{ pagination.total_pages }}</a>
                                             </li>
                                         {% endif %}
 
                                         {# Следующая страница #}
                                         <li class="page-item {% if pagination.current_page == pagination.total_pages %}disabled{% endif %}">
-                                            <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_all_organizations', {page: pagination.current_page + 1}) }}{% else %}#{% endif %}" aria-label="Следующая">
+                                            <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_all_organizations', {page: pagination.current_page + 1, search: search|default('')}) }}{% else %}#{% endif %}" aria-label="Следующая">
                                                 <span aria-hidden="true">&raquo;</span>
                                             </a>
                                         </li>
@@ -142,4 +152,6 @@
             </div>
         </div>
     </section>
+
+    {% include 'organization/partials/_script_organization_search.html.twig' %}
 {% endblock %}

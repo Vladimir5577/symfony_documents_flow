@@ -8,6 +8,7 @@ use App\Repository\OrganizationRepository;
 use App\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -66,16 +67,18 @@ final class OrganizationController extends AbstractController
         $isAdmin = $this->isGranted('ROLE_ADMIN');
 
         if ($isAdmin) {
-            // Админ видит все родительские организации с пагинацией
+            // Админ видит все родительские организации с пагинацией и поиском
             $page = max(1, (int) $request->query->get('page', 1));
-            $limit = 10; // Количество организаций на странице
+            $search = trim((string) $request->query->get('search', ''));
+            $limit = 10;
 
-            $pagination = $organizationRepository->findPaginated($page, $limit);
+            $pagination = $organizationRepository->findPaginated($page, $limit, $search);
 
             return $this->render('organization/all_organizations.html.twig', [
                 'active_tab' => 'all_organizations',
                 'controller_name' => 'OrganizationController',
                 'organizations' => $pagination['organizations'],
+                'search' => $search,
                 'pagination' => [
                     'current_page' => $pagination['page'],
                     'total_pages' => $pagination['totalPages'],
@@ -93,19 +96,96 @@ final class OrganizationController extends AbstractController
             return $this->redirectToRoute('app_dashboard');
         }
 
-        // Показываем только организацию пользователя
+        $search = trim((string) $request->query->get('search', ''));
         $organizations = [$userOrganization];
+        if ($search !== '') {
+            $term = mb_strtolower($search);
+            $match = false
+                || ($userOrganization->getName() && mb_strpos(mb_strtolower($userOrganization->getName()), $term) !== false)
+                || ($userOrganization->getAddress() && mb_strpos(mb_strtolower($userOrganization->getAddress()), $term) !== false)
+                || ($userOrganization->getPhone() && mb_strpos(mb_strtolower($userOrganization->getPhone()), $term) !== false)
+                || ($userOrganization->getEmail() && mb_strpos(mb_strtolower($userOrganization->getEmail()), $term) !== false);
+            if (!$match) {
+                $organizations = [];
+            }
+        }
 
         return $this->render('organization/all_organizations.html.twig', [
             'active_tab' => 'all_organizations',
             'controller_name' => 'OrganizationController',
             'organizations' => $organizations,
+            'search' => $search,
             'pagination' => [
                 'current_page' => 1,
                 'total_pages' => 1,
-                'total_items' => 1,
+                'total_items' => count($organizations),
                 'items_per_page' => 1,
             ],
+        ]);
+    }
+
+    #[Route('/organizations/search', name: 'app_organizations_search', methods: ['GET'])]
+    public function searchOrganizations(Request $request, OrganizationRepository $organizationRepository): JsonResponse
+    {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            return new JsonResponse(['organizations' => [], 'pagination' => ['current_page' => 1, 'total_pages' => 1, 'total_items' => 0, 'items_per_page' => 10]], 403);
+        }
+
+        $page = max(1, (int) $request->query->get('page', 1));
+        $search = trim((string) $request->query->get('search', ''));
+        $limit = 10;
+
+        if ($this->isGranted('ROLE_ADMIN')) {
+            $pagination = $organizationRepository->findPaginated($page, $limit, $search);
+            $organizations = $pagination['organizations'];
+            $paginationData = [
+                'current_page' => $pagination['page'],
+                'total_pages' => $pagination['totalPages'],
+                'total_items' => $pagination['total'],
+                'items_per_page' => $pagination['limit'],
+            ];
+        } else {
+            $userOrganization = $currentUser->getOrganization();
+            $organizations = [];
+            if ($userOrganization) {
+                if ($search === '') {
+                    $organizations = [$userOrganization];
+                } else {
+                    $term = mb_strtolower($search);
+                    $match = false
+                        || ($userOrganization->getName() && mb_strpos(mb_strtolower($userOrganization->getName()), $term) !== false)
+                        || ($userOrganization->getAddress() && mb_strpos(mb_strtolower($userOrganization->getAddress()), $term) !== false)
+                        || ($userOrganization->getPhone() && mb_strpos(mb_strtolower($userOrganization->getPhone()), $term) !== false)
+                        || ($userOrganization->getEmail() && mb_strpos(mb_strtolower($userOrganization->getEmail()), $term) !== false);
+                    if ($match) {
+                        $organizations = [$userOrganization];
+                    }
+                }
+            }
+            $paginationData = [
+                'current_page' => 1,
+                'total_pages' => 1,
+                'total_items' => count($organizations),
+                'items_per_page' => $limit,
+            ];
+        }
+
+        $organizationsData = [];
+        foreach ($organizations as $org) {
+            $organizationsData[] = [
+                'id' => $org->getId(),
+                'name' => $org->getName(),
+                'address' => $org->getAddress() ?? '-',
+                'phone' => $org->getPhone() ?? '-',
+                'email' => $org->getEmail() ?? '-',
+                'viewUrl' => $this->generateUrl('view_organization', ['id' => $org->getId()]),
+            ];
+        }
+
+        return new JsonResponse([
+            'organizations' => $organizationsData,
+            'pagination' => $paginationData,
         ]);
     }
 
