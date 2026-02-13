@@ -90,7 +90,7 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
 
             $prefix = 'org' . $orgIndex;
 
-            $director = $this->createOrgUser($organization, $prefix . '_director', 'ROLE_CEO');
+            $director = $this->createOrgUser($organization, $prefix . '_director', 'ROLE_MANAGER');
             $director->setWorkWithDocuments(true);
             $manager->persist($director);
 
