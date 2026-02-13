@@ -109,6 +109,14 @@ final class OrganizationController extends AbstractController
         ]);
     }
 
+    #[Route('/edit_organization/{id}', name: 'edit_organization', requirements: ['id' => '\d+'])]
+    public function editOrganization(int $id, Request $request, OrganizationRepository $organizationRepository, UserRepository $userRepository): Response
+    {
+        return $this->render('organization/edit_organization.html.twig', [
+            'active_tab' => 'all_organizations'
+        ]);
+    }
+
     #[Route('/create_organization', name: 'create_organization', methods: ['GET', 'POST'])]
     #[IsGranted('ROLE_USER')]
     public function createOrganization(
@@ -117,72 +125,78 @@ final class OrganizationController extends AbstractController
         EntityManagerInterface $entityManager,
         ValidatorInterface $validator
     ): Response {
-        if ($request->isMethod('POST')) {
-            $formData = $request->request->all();
-
-            // Валидация CSRF токена
-            if (!$this->isCsrfTokenValid('create_organization', $formData['_csrf_token'] ?? '')) {
-                $this->addFlash('error', 'Неверный CSRF токен.');
-                return $this->redirectToRoute('create_organization');
-            }
-
-            $currentUser = $this->getUser();
-            $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
-
-            if (!$isAdmin && $currentUser instanceof User && !$currentUser->getOrganization()) {
-                $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
-                return $this->redirectToRoute('create_organization');
-            }
-
-            // Создаем новую организацию
-            $organization = new Organization();
-            $organization->setName(trim((string) ($formData['name'] ?? '')));
-            $organization->setDescription(trim((string) ($formData['description'] ?? '')) ?: null);
-            $organization->setAddress(trim((string) ($formData['address'] ?? '')) ?: null);
-            $organization->setPhone(trim((string) ($formData['phone'] ?? '')) ?: null);
-            $organization->setEmail(trim((string) ($formData['email'] ?? '')) ?: null);
-
-            // Админ создаёт главную организацию (без родителя). Пользователь — дочернюю для своей организации.
-            if ($isAdmin) {
-                $organization->setParent(null);
-            } else {
-                $organization->setParent($currentUser->getOrganization());
-            }
-
-            // Валидация объекта
-            $errors = $validator->validate($organization);
-            if (count($errors) > 0) {
-                // Сохраняем ошибки валидации в сессию для отображения в форме
-                foreach ($errors as $error) {
-                    $this->addFlash('error', $error->getMessage());
-                }
-
-                // Возвращаем форму с данными и ошибками
-                return $this->render('organization/create_organization.html.twig', [
-                    'active_tab' => 'create_organization',
-                    'form_data' => $formData,
-                    'is_admin' => $isAdmin,
-                ]);
-            }
-
-            $entityManager->persist($organization);
-            $entityManager->flush();
-
-            $this->addFlash('success', 'Организация успешно создана.');
-            if ($isAdmin) {
-                return $this->redirectToRoute('view_organization', ['id' => $organization->getId()]);
-            }
-            return $this->redirectToRoute('app_all_organizations');
-        }
-
-        // GET запрос - показываем форму
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
+        $userOrganization = $currentUser instanceof User ? $currentUser->getOrganization() : null;
 
-        return $this->render('organization/create_organization.html.twig', [
-            'active_tab' => 'create_organization',
-            'is_admin' => $isAdmin,
-            'form_data' => [],
-        ]);
+        // Загружаем дерево организаций для пикера
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $userOrganization);
+        $organizationsWithChildren = [];
+        if (!empty($organizationTree)) {
+            foreach ($organizationTree as $org) {
+                $loadedOrg = $organizationRepository->findWithChildren($org->getId());
+                if ($loadedOrg) {
+                    $organizationsWithChildren[] = $loadedOrg;
+                }
+            }
+        }
+
+        $renderForm = function (array $formData = []) use ($isAdmin, $organizationsWithChildren): Response {
+            return $this->render('organization/create_organization.html.twig', [
+                'active_tab' => 'create_organization',
+                'form_data' => $formData,
+                'is_admin' => $isAdmin,
+                'organizations' => $organizationsWithChildren,
+            ]);
+        };
+
+        if (!$request->isMethod('POST')) {
+            return $renderForm([]);
+        }
+
+        $formData = $request->request->all();
+
+        // Валидация CSRF токена
+        if (!$this->isCsrfTokenValid('create_organization', $formData['_csrf_token'] ?? '')) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('create_organization');
+        }
+
+        if (!$isAdmin && $currentUser instanceof User && !$currentUser->getOrganization()) {
+            $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
+            return $this->redirectToRoute('create_organization');
+        }
+
+        // Создаем новую организацию
+        $organization = new Organization();
+        $organization->setName(trim((string) ($formData['name'] ?? '')));
+        $organization->setDescription(trim((string) ($formData['description'] ?? '')) ?: null);
+        $organization->setAddress(trim((string) ($formData['address'] ?? '')) ?: null);
+        $organization->setPhone(trim((string) ($formData['phone'] ?? '')) ?: null);
+        $organization->setEmail(trim((string) ($formData['email'] ?? '')) ?: null);
+
+        // Обрабатываем родительскую организацию
+        $parentId = (int) ($formData['parent_id'] ?? 0);
+        if ($parentId > 0) {
+            $parentOrg = $organizationRepository->find($parentId);
+            if ($parentOrg) {
+                $organization->setParent($parentOrg);
+            }
+        }
+
+        // Валидация объекта
+        $errors = $validator->validate($organization);
+        if (count($errors) > 0) {
+            foreach ($errors as $error) {
+                $this->addFlash('error', $error->getMessage());
+            }
+            return $renderForm($formData);
+        }
+
+        $entityManager->persist($organization);
+        $entityManager->flush();
+
+        $this->addFlash('success', 'Организация успешно создана.');
+        return $this->redirectToRoute('view_organization', ['id' => $organization->getId()]);
     }
 }

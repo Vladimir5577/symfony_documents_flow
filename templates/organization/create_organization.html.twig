@@ -49,16 +49,24 @@
                                             <input type="text" id="name" class="form-control" placeholder="Название организации" name="name" value="{{ form_data.name|default('') }}" required>
                                         </div>
                                     </div>
+                                    {% if organizations is defined and organizations|length > 0 %}
                                     <div class="col-md-6 col-12">
                                         <div class="form-group">
-                                            <label class="d-block">Тип организации</label>
-                                            {% if is_admin|default(false) %}
-                                                <span class="text-muted">Главная организация (без родительской)</span>
-                                            {% else %}
-                                                <span class="text-muted">Дочерняя организация для: <strong>{{ app.user.organization.name }}</strong></span>
-                                            {% endif %}
+                                            <label for="parent_id">Родительская организация</label>
+                                            <input type="hidden" id="organization_id" name="parent_id" value="{{ form_data.parent_id|default('') }}">
+                                            <div class="input-group">
+                                                <input type="text" id="org-display" class="form-control" readonly placeholder="— Без родительской организации —" value="" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
+                                                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
+                                                    <i class="bi bi-building"></i> Выбрать
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary" id="clear-parent-btn" style="display:none;">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </div>
+                                            <small class="form-text text-muted">Если не выбрана — будет создана как главная организация.</small>
                                         </div>
                                     </div>
+                                    {% endif %}
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="description">Описание</label>
@@ -98,4 +106,53 @@
             </div>
         </div>
     </section>
+
+    {% if organizations is defined and organizations|length > 0 %}
+        <div id="org-tree-data" class="d-none">
+            {% for org in organizations %}
+                {% if org %}
+                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {% include 'organization/partials/_org_tree_modal.html.twig' %}
+        {% include 'organization/partials/_org_tree_modal_script.html.twig' %}
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                var clearBtn = document.getElementById('clear-parent-btn');
+                var hiddenInput = document.getElementById('organization_id');
+                var displayInput = document.getElementById('org-display');
+                if (!clearBtn || !hiddenInput || !displayInput) return;
+
+                function updateClearBtn() {
+                    clearBtn.style.display = hiddenInput.value ? '' : 'none';
+                }
+
+                clearBtn.addEventListener('click', function () {
+                    hiddenInput.value = '';
+                    displayInput.value = '';
+                    updateClearBtn();
+                    var tree = document.getElementById('org-tree');
+                    if (tree) {
+                        var sel = tree.querySelector('.org-tree-item.selected');
+                        if (sel) sel.classList.remove('selected');
+                    }
+                    var selectBtn = document.getElementById('org-select-btn');
+                    if (selectBtn) selectBtn.disabled = true;
+                });
+
+                // Show clear button when modal closes (org was selected)
+                var modal = document.getElementById('orgPickerModal');
+                if (modal) {
+                    modal.addEventListener('hidden.bs.modal', function () {
+                        updateClearBtn();
+                    });
+                }
+
+                updateClearBtn();
+            });
+        </script>
+    {% endif %}
 {% endblock %}

@@ -1,0 +1,197 @@
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var orgDataContainer = document.getElementById('org-tree-data');
+        if (!orgDataContainer) return;
+
+        var nodes = Array.from(orgDataContainer.querySelectorAll('.org-node')).map(function (el) {
+            return {
+                id: el.getAttribute('data-org-id'),
+                parentId: el.getAttribute('data-parent-id') || null,
+                name: el.getAttribute('data-name')
+            };
+        });
+
+        var treeEl = document.getElementById('org-tree');
+        var selectBtn = document.getElementById('org-select-btn');
+        var hiddenInput = document.getElementById('organization_id');
+        var displayInput = document.getElementById('org-display');
+
+        var bossField = document.getElementById('boss-field');
+        var bossSelect = document.getElementById('boss_id');
+        var usersUrlTemplate = orgDataContainer.getAttribute('data-users-url-template') || '';
+        var preselectedBossId = orgDataContainer.getAttribute('data-preselected-boss-id') || '';
+
+        var selectedOrgId = null;
+
+        function getChildren(parentId) {
+            return nodes.filter(function (n) {
+                return n.parentId === parentId;
+            });
+        }
+
+        function hasChildren(id) {
+            return nodes.some(function (n) { return n.parentId === id; });
+        }
+
+        function buildTree(parentId, level) {
+            var children = getChildren(parentId);
+            if (children.length === 0) return null;
+
+            var container = document.createElement('div');
+            if (level > 0) {
+                container.className = 'org-tree-children';
+            }
+
+            children.forEach(function (node) {
+                var row = document.createElement('div');
+                row.className = 'org-tree-item';
+                row.style.paddingLeft = (level * 24 + 8) + 'px';
+                row.dataset.orgId = node.id;
+
+                var hasKids = hasChildren(node.id);
+
+                // Toggle arrow
+                var toggle = document.createElement('span');
+                toggle.className = 'org-tree-toggle';
+                if (hasKids) {
+                    toggle.textContent = '▶';
+                }
+                row.appendChild(toggle);
+
+                // Icon
+                var icon = document.createElement('i');
+                icon.className = 'org-tree-icon bi ' + (hasKids ? 'bi-diagram-3' : 'bi-building');
+                row.appendChild(icon);
+
+                // Name
+                var nameSpan = document.createElement('span');
+                nameSpan.textContent = node.name;
+                row.appendChild(nameSpan);
+
+                container.appendChild(row);
+
+                // Children container (built but hidden)
+                var childContainer = null;
+                if (hasKids) {
+                    childContainer = buildTree(node.id, level + 1);
+                    if (childContainer) {
+                        container.appendChild(childContainer);
+                    }
+                }
+
+                // Click to select
+                row.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var prev = treeEl.querySelector('.org-tree-item.selected');
+                    if (prev) prev.classList.remove('selected');
+                    row.classList.add('selected');
+                    selectedOrgId = node.id;
+                    selectBtn.disabled = false;
+
+                    if (hasKids && childContainer) {
+                        var isOpen = childContainer.classList.contains('open');
+                        childContainer.classList.toggle('open', !isOpen);
+                        toggle.classList.toggle('open', !isOpen);
+                    }
+                });
+            });
+
+            return container;
+        }
+
+        function renderTree() {
+            treeEl.innerHTML = '';
+            var tree = buildTree(null, 0);
+            if (tree) {
+                treeEl.appendChild(tree);
+            } else {
+                treeEl.innerHTML = '<div class="text-muted p-2">Нет организаций</div>';
+            }
+        }
+
+        function expandToNode(nodeId) {
+            var chain = [];
+            var currentId = nodeId;
+            while (currentId) {
+                var node = nodes.find(function (n) { return n.id === currentId; });
+                if (!node) break;
+                chain.unshift(node.id);
+                currentId = node.parentId;
+            }
+
+            for (var i = 0; i < chain.length - 1; i++) {
+                var itemEl = treeEl.querySelector('.org-tree-item[data-org-id="' + chain[i] + '"]');
+                if (!itemEl) continue;
+                var childContainer = itemEl.nextElementSibling;
+                if (childContainer && childContainer.classList.contains('org-tree-children')) {
+                    childContainer.classList.add('open');
+                    var tog = itemEl.querySelector('.org-tree-toggle');
+                    if (tog) tog.classList.add('open');
+                }
+            }
+
+            var targetEl = treeEl.querySelector('.org-tree-item[data-org-id="' + nodeId + '"]');
+            if (targetEl) {
+                targetEl.classList.add('selected');
+                selectedOrgId = nodeId;
+                selectBtn.disabled = false;
+            }
+        }
+
+        // --- Boss loading ---
+        function loadBossUsers(orgId, preselectId) {
+            if (!bossField || !bossSelect || !usersUrlTemplate) return;
+
+            var url = usersUrlTemplate.replace('__ORG__', orgId);
+            bossSelect.innerHTML = '<option value="">— Загрузка... —</option>';
+            bossField.style.display = '';
+
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    bossSelect.innerHTML = '<option value="">— Не выбран —</option>';
+                    data.forEach(function (u) {
+                        var opt = document.createElement('option');
+                        opt.value = u.id;
+                        opt.textContent = u.name;
+                        if (preselectId && String(u.id) === String(preselectId)) {
+                            opt.selected = true;
+                        }
+                        bossSelect.appendChild(opt);
+                    });
+                })
+                .catch(function () {
+                    bossSelect.innerHTML = '<option value="">— Ошибка загрузки —</option>';
+                });
+        }
+
+        // --- Select button ---
+        selectBtn.addEventListener('click', function () {
+            if (!selectedOrgId) return;
+            var node = nodes.find(function (n) { return n.id === selectedOrgId; });
+            if (!node) return;
+
+            hiddenInput.value = node.id;
+            displayInput.value = node.name;
+
+            // Load boss users for the selected org
+            loadBossUsers(node.id, null);
+
+            var modal = bootstrap.Modal.getInstance(document.getElementById('orgPickerModal'));
+            if (modal) modal.hide();
+        });
+
+        renderTree();
+
+        // Pre-select if hidden input already has a value
+        var preselectedId = hiddenInput ? hiddenInput.value : null;
+        if (preselectedId) {
+            var preNode = nodes.find(function (n) { return n.id === preselectedId; });
+            if (preNode) {
+                if (displayInput) displayInput.value = preNode.name;
+                expandToNode(preselectedId);
+                loadBossUsers(preselectedId, preselectedBossId);
+            }
+        }
+    });
+</script>

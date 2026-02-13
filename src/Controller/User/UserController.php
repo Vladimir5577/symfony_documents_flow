@@ -27,6 +27,7 @@ final class UserController extends AbstractController
         UserPasswordHasherInterface $passwordHasher,
         EntityManagerInterface $entityManager,
         RoleRepository $roleRepository,
+        UserRepository $userRepository,
         OrganizationRepository $organizationRepository,
         LoginGenerator $loginGenerator,
         ValidatorInterface $validator
@@ -147,6 +148,15 @@ final class UserController extends AbstractController
         $user->setPassword($passwordHasher->hashPassword($user, $plainPassword));
         $user->setOrganization($organization);
         $user->setCreatedBy($currentUser);
+
+        // Обрабатываем выбранного руководителя
+        $bossId = (int) ($formData['boss_id'] ?? 0);
+        if ($bossId > 0) {
+            $boss = $userRepository->find($bossId);
+            if ($boss) {
+                $user->setBoss($boss);
+            }
+        }
 
         // Обрабатываем выбранную роль
         $selectedRoleId = isset($formData['role']) && $formData['role'] !== '' ? (int) $formData['role'] : null;
@@ -489,6 +499,20 @@ final class UserController extends AbstractController
             $user->setOrganization($organization);
         }
 
+        // Обновляем руководителя
+        $bossId = (int) ($formData['boss_id'] ?? 0);
+        $currentBossId = $user->getBoss() ? $user->getBoss()->getId() : 0;
+        if ($bossId !== $currentBossId) {
+            if ($bossId > 0) {
+                $boss = $userRepository->find($bossId);
+                if ($boss) {
+                    $user->setBoss($boss);
+                }
+            } else {
+                $user->setBoss(null);
+            }
+        }
+
         // Обновляем роль (radio button, одна роль)
         $selectedRoleId = isset($formData['role']) && $formData['role'] !== '' ? (int) $formData['role'] : null;
 
@@ -563,6 +587,39 @@ final class UserController extends AbstractController
         $this->addFlash('success', 'Пользователь успешно обновлен.');
 
         return $this->redirectToRoute('app_view_user', ['id' => $userId]);
+    }
+
+    #[Route('/user/organization-users/{id}', name: 'app_user_org_users', methods: ['GET'], requirements: ['id' => '\d+'])]
+    public function getOrganizationUsers(
+        int                    $id,
+        OrganizationRepository $organizationRepository,
+        UserRepository         $userRepository
+    ): JsonResponse {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            return new JsonResponse(['error' => 'Unauthorized'], JsonResponse::HTTP_UNAUTHORIZED);
+        }
+
+        $organization = $organizationRepository->find($id);
+        if (!$organization) {
+            return new JsonResponse(['error' => 'Organization not found'], JsonResponse::HTTP_NOT_FOUND);
+        }
+
+        $users = $userRepository->findByOrganization($organization);
+        $data = [];
+        foreach ($users as $user) {
+            $data[] = [
+                'id' => $user->getId(),
+                'name' => trim(sprintf(
+                    '%s %s %s',
+                    (string) $user->getLastname(),
+                    (string) $user->getFirstname(),
+                    (string) ($user->getPatronymic() ?? '')
+                )),
+            ];
+        }
+
+        return new JsonResponse($data);
     }
 
     #[Route('/user_delete/{id}', name: 'app_delete_user', methods: ['POST'], requirements: ['id' => '\d+'])]
