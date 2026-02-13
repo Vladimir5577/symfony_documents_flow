@@ -109,11 +109,88 @@ final class OrganizationController extends AbstractController
         ]);
     }
 
-    #[Route('/edit_organization/{id}', name: 'edit_organization', requirements: ['id' => '\d+'])]
-    public function editOrganization(int $id, Request $request, OrganizationRepository $organizationRepository, UserRepository $userRepository): Response
-    {
+    #[Route('/edit_organization/{id}', name: 'edit_organization', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function editOrganization(
+        int $id,
+        Request $request,
+        OrganizationRepository $organizationRepository,
+        EntityManagerInterface $entityManager,
+        ValidatorInterface $validator
+    ): Response {
+        $organization = $organizationRepository->find($id);
+
+        if (!$organization) {
+            throw $this->createNotFoundException('Организация не найдена');
+        }
+
+        $currentUser = $this->getUser();
+        $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
+        $userOrganization = $currentUser instanceof User ? $currentUser->getOrganization() : null;
+
+        // Загружаем дерево организаций для пикера
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $userOrganization);
+        $organizationsWithChildren = [];
+        if (!empty($organizationTree)) {
+            foreach ($organizationTree as $org) {
+                $loadedOrg = $organizationRepository->findWithChildren($org->getId());
+                if ($loadedOrg) {
+                    $organizationsWithChildren[] = $loadedOrg;
+                }
+            }
+        }
+
+        if ($request->isMethod('POST')) {
+            $formData = $request->request->all();
+
+            // Валидация CSRF токена
+            if (!$this->isCsrfTokenValid('edit_organization_' . $id, $formData['_csrf_token'] ?? '')) {
+                $this->addFlash('error', 'Неверный CSRF токен.');
+                return $this->redirectToRoute('edit_organization', ['id' => $id]);
+            }
+
+            $organization->setName(trim((string) ($formData['name'] ?? '')));
+            $organization->setDescription(trim((string) ($formData['description'] ?? '')) ?: null);
+            $organization->setAddress(trim((string) ($formData['address'] ?? '')) ?: null);
+            $organization->setPhone(trim((string) ($formData['phone'] ?? '')) ?: null);
+            $organization->setEmail(trim((string) ($formData['email'] ?? '')) ?: null);
+
+            // Обрабатываем родительскую организацию
+            $parentId = (int) ($formData['parent_id'] ?? 0);
+            if ($parentId > 0 && $parentId !== $id) {
+                $parentOrg = $organizationRepository->find($parentId);
+                if ($parentOrg) {
+                    $organization->setParent($parentOrg);
+                }
+            } else {
+                $organization->setParent(null);
+            }
+
+            // Валидация объекта
+            $errors = $validator->validate($organization);
+            if (count($errors) > 0) {
+                foreach ($errors as $error) {
+                    $this->addFlash('error', $error->getMessage());
+                }
+                return $this->render('organization/edit_organization.html.twig', [
+                    'active_tab' => 'all_organizations',
+                    'organization' => $organization,
+                    'is_admin' => $isAdmin,
+                    'organizations' => $organizationsWithChildren,
+                ]);
+            }
+
+            $entityManager->flush();
+
+            $this->addFlash('success', 'Организация успешно обновлена.');
+            return $this->redirectToRoute('view_organization', ['id' => $organization->getId()]);
+        }
+
         return $this->render('organization/edit_organization.html.twig', [
-            'active_tab' => 'all_organizations'
+            'active_tab' => 'all_organizations',
+            'organization' => $organization,
+            'is_admin' => $isAdmin,
+            'organizations' => $organizationsWithChildren,
         ]);
     }
 
@@ -198,5 +275,22 @@ final class OrganizationController extends AbstractController
 
         $this->addFlash('success', 'Организация успешно создана.');
         return $this->redirectToRoute('view_organization', ['id' => $organization->getId()]);
+    }
+
+    #[Route('/delete_organization/{id}', name: 'app_delete_organization', requirements: ['id' => '\d+'], methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function deleteOrganization(int $id, Request $request, OrganizationRepository $organizationRepository): Response
+    {
+        if (!$this->isCsrfTokenValid('delete_organization_' . $id, $request->request->get('_csrf_token', ''))) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('view_organization', ['id' => $id]);
+        }
+
+        if (!$organizationRepository->deleteById($id)) {
+            throw $this->createNotFoundException('Организация не найдена');
+        }
+
+        $this->addFlash('success', 'Организация удалена.');
+        return $this->redirectToRoute('app_all_organizations');
     }
 }

@@ -153,6 +153,30 @@ class OrganizationRepository extends ServiceEntityRepository
         ];
     }
 
+    /**
+     * Удаляет организацию по id (soft delete).
+     * У дочерних организаций сбрасывает родителя (parent = null), чтобы они стали корневыми.
+     *
+     * @return bool true, если организация найдена и удалена, false если не найдена
+     */
+    public function deleteById(int $id): bool
+    {
+        $organization = $this->find($id);
+        if (!$organization instanceof Organization) {
+            return false;
+        }
+
+        $em = $this->getEntityManager();
+        foreach ($organization->getChildOrganizations() as $child) {
+            $child->setParent(null);
+        }
+
+        $em->remove($organization);
+        $em->flush();
+
+        return true;
+    }
+
     //    /**
     //     * @return Organization[] Returns an array of Organization objects
     //     */

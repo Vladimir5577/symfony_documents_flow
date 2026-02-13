@@ -1,6 +1,6 @@
 {% extends 'base_dashboard.html.twig' %}
 
-{% block title %}Новая организация!{% endblock %}
+{% block title %}Редактирование организации{% endblock %}
 
 
 
@@ -13,7 +13,145 @@
 {% block main %}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Редактирование организации</h1>
+        <a href="{{ path('view_organization', {id: organization.id}) }}" class="btn btn-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Назад к просмотру
+        </a>
     </div>
 
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Форма редактирования организации</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('edit_organization', {id: organization.id}) }}" method="post" class="form">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_organization_' ~ organization.id) }}">
 
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success">{{ message }}</div>
+                                {% endfor %}
+
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger">{{ message }}</div>
+                                {% endfor %}
+
+                                <div class="row">
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="name">Название организации <span class="text-danger">*</span></label>
+                                            <input type="text" id="name" class="form-control" placeholder="Название организации" name="name" value="{{ organization.name }}" required>
+                                        </div>
+                                    </div>
+                                    {% if organizations is defined and organizations|length > 0 %}
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="parent_id">Родительская организация</label>
+                                            <input type="hidden" id="organization_id" name="parent_id" value="{{ organization.parent ? organization.parent.id : '' }}">
+                                            <div class="input-group">
+                                                <input type="text" id="org-display" class="form-control" readonly placeholder="— Без родительской организации —" value="{{ organization.parent ? organization.parent.name : '' }}" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
+                                                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
+                                                    <i class="bi bi-building"></i> Выбрать
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary" id="clear-parent-btn" style="{{ organization.parent ? '' : 'display:none;' }}">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </div>
+                                            <small class="form-text text-muted">Если не выбрана — будет главной организацией.</small>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="description">Описание</label>
+                                            <textarea id="description" class="form-control" name="description" rows="3" placeholder="Описание организации">{{ organization.description ?? '' }}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="address">Адрес</label>
+                                            <input type="text" id="address" class="form-control" name="address" placeholder="Адрес организации" value="{{ organization.address ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="phone">Телефон</label>
+                                            <input type="text" id="phone" class="form-control" name="phone" placeholder="+7 (XXX) XXX-XX-XX" value="{{ organization.phone ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="email">Email</label>
+                                            <input type="email" id="email" class="form-control" name="email" placeholder="email@example.com" value="{{ organization.email ?? '' }}">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-12 d-flex justify-content-end">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить изменения</button>
+                                        <a href="{{ path('view_organization', {id: organization.id}) }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% if organizations is defined and organizations|length > 0 %}
+        <div id="org-tree-data" class="d-none">
+            {% for org in organizations %}
+                {% if org %}
+                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {% include 'organization/partials/_org_tree_modal.html.twig' %}
+        {% include 'organization/partials/_org_tree_modal_script.html.twig' %}
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                var clearBtn = document.getElementById('clear-parent-btn');
+                var hiddenInput = document.getElementById('organization_id');
+                var displayInput = document.getElementById('org-display');
+                if (!clearBtn || !hiddenInput || !displayInput) return;
+
+                function updateClearBtn() {
+                    clearBtn.style.display = hiddenInput.value ? '' : 'none';
+                }
+
+                clearBtn.addEventListener('click', function () {
+                    hiddenInput.value = '';
+                    displayInput.value = '';
+                    updateClearBtn();
+                    var tree = document.getElementById('org-tree');
+                    if (tree) {
+                        var sel = tree.querySelector('.org-tree-item.selected');
+                        if (sel) sel.classList.remove('selected');
+                    }
+                    var selectBtn = document.getElementById('org-select-btn');
+                    if (selectBtn) selectBtn.disabled = true;
+                });
+
+                var modal = document.getElementById('orgPickerModal');
+                if (modal) {
+                    modal.addEventListener('hidden.bs.modal', function () {
+                        updateClearBtn();
+                    });
+                }
+
+                updateClearBtn();
+            });
+        </script>
+    {% endif %}
 {% endblock %}
