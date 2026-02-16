@@ -13,9 +13,9 @@ class FileUploadService
         'application/pdf',
         'application/msword',                                                      // .doc
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-        'image/jpeg',
-        'image/jpg',
-        'image/png',
+//        'image/jpeg',
+//        'image/jpg',
+//        'image/png',
     ];
 
     public function __construct(
@@ -40,7 +40,7 @@ class FileUploadService
         }
 
         if ($file->getSize() > self::MAX_SIZE_BYTES) {
-            $result['error'] = 'Файл слишком большой (максимум 5 МБ).';
+            $result['error'] = 'Файл слишком большой (максимум 9 МБ).';
             return $result;
         }
 
@@ -64,7 +64,7 @@ class FileUploadService
      * Возвращает полный путь к файлу в папке оригиналов по имени файла.
      * Имя файла — то, что возвращает uploadFile() (например, из document.originalFile).
      */
-    public function getFilePath(string $fileName): string
+    public function getOriginalFilePath(string $fileName): string
     {
         $fileName = basename($fileName);
         return $this->documentsOriginalsDir . \DIRECTORY_SEPARATOR . $fileName;
@@ -81,7 +81,7 @@ class FileUploadService
      */
     public function deleteFile(string $fileName): void
     {
-        $path = $this->getFilePath($fileName);
+        $path = $this->getOriginalFilePath($fileName);
         if (!is_file($path)) {
             return;
         }

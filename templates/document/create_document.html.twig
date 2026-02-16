@@ -69,27 +69,27 @@
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label for="document_users">
-                                                Пользователи (получатели)
+                                            <label for="document_users">Пользователи (получатели)</label>
+                                            <div id="document_users_trigger" style="cursor: pointer;" title="Нажмите, чтобы выбрать по организациям">
+                                                <select id="document_users" class="form-control" name="user_ids[]" multiple>
+                                                    {% if users is defined and users|length > 0 %}
+                                                        {% for user in users %}
+                                                            <option value="{{ user.id }}" selected>
+                                                                {{ user.lastname }} {{ user.firstname }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
+                                                            </option>
+                                                        {% endfor %}
+                                                    {% endif %}
+                                                </select>
+                                            </div>
+                                            <small class="text-muted">Нажмите на поле или кнопку ниже, чтобы выбрать получателей по организациям</small>
+                                            <div class="mt-1">
                                                 <button type="button"
-                                                        class="btn btn-outline-secondary btn-sm ms-2"
+                                                        class="btn btn-outline-secondary btn-sm"
                                                         data-bs-toggle="modal"
                                                         data-bs-target="#organizationUserModal">
                                                     Выбрать по организациям
                                                 </button>
-                                            </label>
-                                            <select id="document_users" class="form-control" name="user_ids[]" multiple>
-                                                {% if users is defined and users|length > 0 %}
-                                                    {% for user in users %}
-                                                        <option value="{{ user.id }}"
-                                                                {% if form_data.user_ids is defined and user.id in form_data.user_ids %}selected{% endif %}>
-                                                            {{ user.lastname }} {{ user.firstname }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
-                                                        </option>
-                                                    {% endfor %}
-                                                {% else %}
-                                                    <option disabled>Пользователи не найдены</option>
-                                                {% endif %}
-                                            </select>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="col-12">
@@ -156,29 +156,7 @@
         {% endif %}
     </div>
 
-    <div class="modal fade" id="organizationUserModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Выбор организации</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div id="org-breadcrumb" class="text-muted small"></div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="org-nav-back" disabled>Назад</button>
-                    </div>
-                    <div id="org-list" class="list-group" style="max-height: 300px; overflow-y: auto;"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-primary" id="show-org-users-btn" disabled>
-                        Показать пользователей выбранной организации
-                    </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    {% include 'document/partials/_organization_user_modal.html.twig' %}
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -289,163 +267,34 @@
             })();
 
             const usersSelect = document.getElementById('document_users');
+            const usersTrigger = document.getElementById('document_users_trigger');
             let choicesInstance = null;
 
             if (usersSelect && window.Choices) {
                 choicesInstance = new Choices(usersSelect, {
                     removeItemButton: true,
-                    searchEnabled: true,
-                    searchPlaceholderValue: 'Начните вводить имя пользователя...',
+                    searchEnabled: false,
                     itemSelectText: '',
-                    noResultsText: 'Пользователи не найдены',
-                    noChoicesText: 'Нет доступных пользователей',
+                    noChoicesText: 'Нажмите на поле или «Выбрать по организациям»',
                 });
             }
 
-            const orgDataContainer = document.getElementById('org-tree-data');
-            if (!orgDataContainer) {
-                return;
-            }
-
-            const nodes = Array.from(orgDataContainer.querySelectorAll('.org-node')).map(function (el) {
-                return {
-                    id: el.getAttribute('data-org-id'),
-                    parentId: el.getAttribute('data-parent-id') || null,
-                    name: el.getAttribute('data-name')
-                };
-            });
-
-            const orgListEl = document.getElementById('org-list');
-            const backBtn = document.getElementById('org-nav-back');
-            const breadcrumbEl = document.getElementById('org-breadcrumb');
-            const showUsersBtn = document.getElementById('show-org-users-btn');
-
-            let currentParentId = null;
-            const history = [];
-            let selectedOrgId = null;
-
-            function renderList() {
-                orgListEl.innerHTML = '';
-                const levelNodes = nodes.filter(function (n) {
-                    return (n.parentId === null && currentParentId === null) ||
-                        (n.parentId !== null && n.parentId === currentParentId);
-                });
-
-                levelNodes.forEach(function (n) {
-                    const item = document.createElement('button');
-                    item.type = 'button';
-                    item.className = 'list-group-item list-group-item-action';
-                    item.textContent = n.name;
-                    item.dataset.orgId = n.id;
-
-                    if (n.id === selectedOrgId) {
-                        item.classList.add('active');
+            if (usersTrigger) {
+                usersTrigger.addEventListener('click', function (e) {
+                    if (e.target.closest('.choices__button') || e.target.closest('.choices__item')) {
+                        return;
                     }
-
-                    item.addEventListener('click', function () {
-                        selectedOrgId = n.id;
-                        updateSelection();
-                    });
-
-                    item.addEventListener('dblclick', function () {
-                        history.push(currentParentId);
-                        currentParentId = n.id;
-                        selectedOrgId = null;
-                        renderList();
-                        updateBreadcrumb();
-                        updateControls();
-                    });
-
-                    orgListEl.appendChild(item);
+                    e.preventDefault();
+                    var modalEl = document.getElementById('organizationUserModal');
+                    if (modalEl) {
+                        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                        modal.show();
+                    }
                 });
-
-                if (levelNodes.length === 0) {
-                    const empty = document.createElement('div');
-                    empty.className = 'text-muted';
-                    empty.textContent = 'Нет дочерних организаций';
-                    orgListEl.appendChild(empty);
-                }
             }
 
-            function updateSelection() {
-                Array.from(orgListEl.querySelectorAll('.list-group-item')).forEach(function (el) {
-                    el.classList.toggle('active', el.dataset.orgId === selectedOrgId);
-                });
-                updateControls();
-            }
-
-            function buildBreadcrumb() {
-                if (!selectedOrgId) {
-                    return 'Главные организации';
-                }
-                const chain = [];
-                let currentId = selectedOrgId;
-                while (currentId) {
-                    const node = nodes.find(function (n) { return n.id === currentId; });
-                    if (!node) break;
-                    chain.unshift(node.name);
-                    currentId = node.parentId;
-                }
-                return chain.join(' / ');
-            }
-
-            function updateBreadcrumb() {
-                breadcrumbEl.textContent = buildBreadcrumb();
-            }
-
-            function updateControls() {
-                backBtn.disabled = history.length === 0;
-                showUsersBtn.disabled = !selectedOrgId;
-            }
-
-            backBtn.addEventListener('click', function () {
-                if (history.length === 0) {
-                    return;
-                }
-                currentParentId = history.pop();
-                selectedOrgId = null;
-                renderList();
-                updateBreadcrumb();
-                updateControls();
-            });
-
-            const usersUrlTemplate = orgDataContainer.getAttribute('data-users-url-template');
-            showUsersBtn.addEventListener('click', function () {
-                if (!selectedOrgId || !usersUrlTemplate) {
-                    return;
-                }
-                const url = usersUrlTemplate.replace('__ORG__', selectedOrgId);
-                fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
-                    .then(function (response) { return response.json(); })
-                    .then(function (data) {
-                        if (!choicesInstance) {
-                            usersSelect.innerHTML = '';
-                            data.forEach(function (u) {
-                                const opt = document.createElement('option');
-                                opt.value = u.id;
-                                opt.textContent = u.name;
-                                usersSelect.appendChild(opt);
-                            });
-                        } else {
-                            choicesInstance.clearStore();
-                            choicesInstance.setChoices(
-                                data.map(function (u) {
-                                    return {value: u.id, label: u.name, selected: false};
-                                }),
-                                'value',
-                                'label',
-                                true
-                            );
-                        }
-                    })
-                    .catch(function (e) {
-                        console.error(e);
-                    });
-            });
-
-            renderList();
-            updateBreadcrumb();
-            updateControls();
+            window.__documentFlowOrgUserModalChoices = choicesInstance;
         });
     </script>
+    {% include 'document/partials/_organization_user_modal_script.html.twig' %}
 {% endblock %}

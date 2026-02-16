@@ -91,7 +91,7 @@ $ php bin/console doctrine:fixtures:load --group=roles --append   --- without pu
 Ubuntu/Debian:
 
 sudo apt-get update
-sudo apt-get install libreoffice
+sudo apt-get install libreoffice -y
 
 // ==================================
 Convert html to pdf

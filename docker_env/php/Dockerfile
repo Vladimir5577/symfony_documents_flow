@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y \
     && pecl install xdebug \
     && docker-php-ext-enable xdebug
 
+# install libreoffice to convert docx to pdf
+RUN apt-get install libreoffice -y
+
 # Set working directory
 WORKDIR /var/www/html
 

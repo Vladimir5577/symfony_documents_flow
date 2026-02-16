@@ -192,7 +192,9 @@ final class DocumentCreateFromTemplateController extends AbstractController
                 $this->addFlash('error', 'Не удалось сохранить копию файла.');
                 return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
             }
-            $docxToPdfConvertorService->convertDocxToPdf($sourceFile);
+
+            // convert docx to pdf
+            $docxToPdfConvertorService->convertDocxToPdf($targetPath);
             $document->setOriginalFile($uniqueName);
             $entityManager->flush();
         }
@@ -234,7 +236,10 @@ final class DocumentCreateFromTemplateController extends AbstractController
     }
 
     #[Route('/save_docx', name: 'app_save_docx', methods: ['POST'])]
-    public function saveDocx(Request $request): JsonResponse
+    public function saveDocx(
+        Request $request,
+        DocxToPdfConvertorService $docxToPdfConvertorService,
+    ): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
@@ -267,6 +272,9 @@ final class DocumentCreateFromTemplateController extends AbstractController
         }
 
         $result = @file_put_contents($targetPath, $fileContent);
+
+        // convert docx to pdf at once when document saved
+        $docxToPdfConvertorService->convertDocxToPdf($targetPath);
 
         if ($result === false) {
 //            file_put_contents('./onlyoffice_error.log', date('Y-m-d H:i:s') . " - Failed to write file to path: {$targetPath}\n", FILE_APPEND);

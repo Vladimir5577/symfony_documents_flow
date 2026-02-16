@@ -154,6 +154,30 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
     }
 
     /**
+     * Найти пользователей по списку id (для отображения выбранных в форме).
+     *
+     * @param int[] $ids
+     * @return User[]
+     */
+    public function findByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $ids = array_map('intval', array_filter($ids));
+        if ($ids === []) {
+            return [];
+        }
+        return $this->createQueryBuilder('u')
+            ->where('u.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->orderBy('u.lastname', 'ASC')
+            ->addOrderBy('u.firstname', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Пользователи организации (с подгрузкой ролей для отображения).
      *
      * @return User[]

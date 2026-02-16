@@ -23,7 +23,7 @@
     <script src="http://localhost:8081/web-apps/apps/api/documents/api.js"></script>
 </head>
 <body>
-<button class="save-btn">Сохранить HTML</button>
+<button class="save-btn">Сохранить документ</button>
 {% if documentId %}
 <form id="save-file-to-document-form" method="post" action="{{ path('app_save_file_from_template_to_document') }}" style="display: none;">
     <input type="hidden" name="document_id" value="{{ documentId }}">

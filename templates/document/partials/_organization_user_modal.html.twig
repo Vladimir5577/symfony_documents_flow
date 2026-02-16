@@ -1,0 +1,47 @@
+<div class="modal fade" id="organizationUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Выбор пользователей по организациям</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">Выберите организацию — ниже появятся работники. Отметьте нужных; они попадут в список «Выбранные пользователи». Затем нажмите «Добавить выбранных пользователей».</p>
+                <div class="d-flex flex-column gap-3">
+                    <div>
+                        <label class="form-label fw-semibold">Организации</label>
+                        <div id="org-tree" class="border rounded p-2" style="max-height: 220px; overflow-y: auto;"></div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Работники организации</label>
+                        <div id="org-users-block" class="border rounded p-2" style="max-height: 180px; overflow-y: auto;">
+                            <div id="org-users-placeholder" class="text-muted small">Выберите организацию</div>
+                            <div id="org-users-list" class="d-none"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Выбранные пользователи</label>
+                        <div id="modal-selected-users" class="border rounded p-2" style="min-height: 80px;">
+                            <div id="modal-selected-placeholder" class="text-muted small">Пока никого не выбрано</div>
+                            <ul id="modal-selected-list" class="list-group list-group-flush d-none mb-0"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="add-selected-users-btn" disabled>Добавить выбранных пользователей</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    #org-tree .org-tree-item { display: flex; align-items: center; padding: 6px 8px; cursor: pointer; border-radius: 4px; }
+    #org-tree .org-tree-item:hover { background-color: rgba(0,0,0,.06); }
+    #org-tree .org-tree-item.selected { background-color: #0d6efd; color: #fff; }
+    #org-tree .org-tree-toggle { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; margin-right: 4px; font-size: 12px; }
+    #org-tree .org-tree-toggle.open { transform: rotate(90deg); }
+    #org-tree .org-tree-icon { margin-right: 6px; flex-shrink: 0; }
+    #org-tree .org-tree-children { display: none; }
+    #org-tree .org-tree-children.open { display: block; }
+</style>

@@ -95,9 +95,6 @@ final class DocumentController extends AbstractController
             }
         }
 
-        // Пользователи, которые могут работать с документами
-        $availableUsers = $userRepository->findAllWorkWithDocuments();
-
         $formData = [];
         $initialFormData = [
             'status' => DocumentStatus::NEW->value,
@@ -107,20 +104,25 @@ final class DocumentController extends AbstractController
             $initialFormData['organization_id'] = $userOrganization->getId();
         }
 
-        $renderForm = function (array $data = []) use ($documentType, $organizationsWithChildren, $initialFormData, $availableUsers): Response {
+        // Пользователей для мультиселекта не грузим — выбор только через модалку по организациям.
+        // При повторном отображении формы (ошибка валидации) подгружаем только выбранных по id.
+        $renderForm = function (array $data = [], array $users = []) use ($documentType, $organizationsWithChildren, $initialFormData, $userRepository): Response {
             $formData = $data !== [] ? $data : $initialFormData;
+            if ($users === [] && !empty($formData['user_ids'])) {
+                $users = $userRepository->findByIds((array) $formData['user_ids']);
+            }
             return $this->render('document/create_document.html.twig', [
                 'active_tab' => 'new_document',
                 'document_type' => $documentType,
                 'organizations' => $organizationsWithChildren,
                 'form_data' => $formData,
                 'document_statuses' => DocumentStatus::getCreationChoices(),
-                'users' => $availableUsers,
+                'users' => $users,
             ]);
         };
 
         if (!$request->isMethod('POST')) {
-            return $renderForm([]);
+            return $renderForm([], []);
         }
 
         $formData = $request->request->all();
@@ -516,8 +518,6 @@ final class DocumentController extends AbstractController
             }
         }
 
-        $availableUsers = $userRepository->findAllWorkWithDocuments();
-
         // Подготовка данных формы из документа
         $currentRecipientIds = [];
         foreach ($document->getUserRecipients() as $recipient) {
@@ -535,20 +535,26 @@ final class DocumentController extends AbstractController
             'user_ids' => $currentRecipientIds,
         ];
 
-        $renderForm = function (array $data = []) use ($document, $organizationsWithChildren, $initialFormData, $availableUsers): Response {
+        // Пользователей для мультиселекта не грузим списком — выбор только через модалку по организациям.
+        // При первом открытии показываем только текущих получателей; при повторном (ошибка) — выбранных по form_data.
+        $initialUsers = $userRepository->findByIds($currentRecipientIds);
+        $renderForm = function (array $data = [], array $users = []) use ($document, $organizationsWithChildren, $initialFormData, $userRepository): Response {
             $formData = $data !== [] ? $data : $initialFormData;
+            if ($users === [] && !empty($formData['user_ids'])) {
+                $users = $userRepository->findByIds((array) $formData['user_ids']);
+            }
             return $this->render('document/edit_outgoing_document.html.twig', [
                 'active_tab' => 'outgoing_documents',
                 'document' => $document,
                 'organizations' => $organizationsWithChildren,
                 'form_data' => $formData,
                 'document_statuses' => DocumentStatus::getCreationChoices(),
-                'users' => $availableUsers,
+                'users' => $users,
             ]);
         };
 
         if (!$request->isMethod('POST')) {
-            return $renderForm([]);
+            return $renderForm([], $initialUsers);
         }
 
         $formData = $request->request->all();
@@ -624,6 +630,13 @@ final class DocumentController extends AbstractController
                 if ($document->getOriginalFile()) {
                     $fileUploadService->deleteFile($document->getOriginalFile());
                 }
+
+                // if updated file exist then
+                // if it is .pdf -> replace it
+                // it it is .docx -> convert it
+                // if old file exist remove it from disc and replace new one
+                // to do set
+
                 $document->setOriginalFile($fileName['fileName']);
             } catch (\Exception $e) {
                 $this->addFlash('error', 'Ошибка загрузки файла: ' . $e->getMessage());
@@ -684,7 +697,7 @@ final class DocumentController extends AbstractController
                 $entityManager->flush();
             }
 
-            $this->addFlash('success', 'Документ сохранён. Создайте файл из шаблона.');
+            $this->addFlash('success', 'Документ сохранён.');
             return $this->redirectToRoute('app_edit_docx', ['id' => $document->getId()]);
         }
 
