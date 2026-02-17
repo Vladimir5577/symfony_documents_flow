@@ -1,12 +1,10 @@
-{% extends 'base_dashboard.html.twig' %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Выбор места для штампа</title>
 
-{% block title %}Подпись документа{% endblock %}
-
-{% block sidebar_list %}
-    {% include 'sidebar/sidebar_list.html.twig' %}
-{% endblock %}
-
-{% block main %}
+    <script src="/front_end/assets/static/js/sweet_alert.js"></script>
 
     <script src="https://unpkg.com/pdfjs-dist@3.7.107/build/pdf.js"></script>
     <script>
@@ -33,90 +31,93 @@
             transform: translate(-50%, -50%);
         }
     </style>
+</head>
+<body>
 
-    <h1 class="mb-0">Подписание документа</h1>
+<h2>Кликните на PDF, чтобы выбрать место для штампа</h2>
+<div id="pdf-container"></div>
 
+<script>
+    // const url = '/files/executors.pdf';
+    const url = {{ file_url|json_encode|raw }};
+    const documentId = {{ id }};
+    const container = document.getElementById('pdf-container');
+    const scale = 1.5;
 
-    <section class="section">
-        <div class="card">
+    pdfjsLib.getDocument(url).promise.then(async pdf => {
 
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
 
-            <h2>Кликните на PDF, чтобы выбрать место для штампа</h2>
-            <div id="pdf-container"></div>
+            const page = await pdf.getPage(pageNum);
+            const viewport = page.getViewport({ scale });
 
-        </div>
-    </section>
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'relative';
 
+            const canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page';
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
 
-    <script>
-        const url = {{ file_url|json_encode|raw }};
-        const container = document.getElementById('pdf-container');
-        const scale = 1.5;
+            wrapper.appendChild(canvas);
+            container.appendChild(wrapper);
 
-        pdfjsLib.getDocument({ url: url, withCredentials: true }).promise.then(async pdf => {
+            const ctx = canvas.getContext('2d');
+            await page.render({ canvasContext: ctx, viewport }).promise;
 
-            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            let indicator = null;
 
-                const page = await pdf.getPage(pageNum);
-                const viewport = page.getViewport({ scale });
+            canvas.addEventListener('click', e => {
 
-                const wrapper = document.createElement('div');
-                wrapper.style.position = 'relative';
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
 
-                const canvas = document.createElement('canvas');
-                canvas.className = 'pdf-page';
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
+                // ✔ ПРАВИЛЬНЫЕ PDF-КООРДИНАТЫ
+                const pdfX = x / scale;
+                const pdfY = (viewport.height - y) / scale;
 
-                wrapper.appendChild(canvas);
-                container.appendChild(wrapper);
+                // индикатор клика
+                if (indicator) indicator.remove();
+                indicator = document.createElement('div');
+                indicator.className = 'click-indicator';
+                indicator.style.left = `${x}px`;
+                indicator.style.top = `${y}px`;
+                wrapper.appendChild(indicator);
 
-                const ctx = canvas.getContext('2d');
-                await page.render({ canvasContext: ctx, viewport }).promise;
-
-                let indicator = null;
-
-                canvas.addEventListener('click', e => {
-
-                    const rect = canvas.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-
-                    // ✔ ПРАВИЛЬНЫЕ PDF-КООРДИНАТЫ
-                    const pdfX = x / scale;
-                    const pdfY = (viewport.height - y) / scale;
-
-                    // индикатор клика
-                    if (indicator) indicator.remove();
-                    indicator = document.createElement('div');
-                    indicator.className = 'click-indicator';
-                    indicator.style.left = `${x}px`;
-                    indicator.style.top = `${y}px`;
-                    wrapper.appendChild(indicator);
-
-                    setTimeout(() => {
-                        if (confirm(
-                            `Страница: ${pageNum}\nX: ${pdfX.toFixed(2)}\nY: ${pdfY.toFixed(2)}\n\nПоставить штамп?`
-                        )) {
-                            fetch('/executors_signature', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    page: pageNum,
-                                    x: pdfX,
-                                    y: pdfY
-                                })
+                setTimeout(() => {
+                    if (confirm(
+                        `Страница: ${pageNum}\nX: ${pdfX.toFixed(2)}\nY: ${pdfY.toFixed(2)}\n\nПоставить штамп?`
+                    )) {
+                        fetch('/executors_signature', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                id: documentId,
+                                page: pageNum,
+                                x: pdfX,
+                                y: pdfY
                             })
-                                .then(() => alert('Штамп поставлен'))
-                                .catch(console.error);
-                        } else {
-                            indicator.remove();
-                            indicator = null;
-                        }
-                    }, 50);
-                });
-            }
-        });
-    </script>
+                        })
+                            .then(() => {
+                                Swal.fire({
+                                    title: "Штамп поставлен",
+                                    icon: "success",
+                                    draggable: true
+                                }).then(() => {
+                                    window.location.replace(url);
+                                });
+                            })
+                            .catch(console.error);
+                    } else {
+                        indicator.remove();
+                        indicator = null;
+                    }
+                }, 50);
+            });
+        }
+    });
+</script>
 
-{% endblock %}
+</body>
+</html>

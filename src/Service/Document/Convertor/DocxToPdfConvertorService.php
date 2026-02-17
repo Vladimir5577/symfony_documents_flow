@@ -13,6 +13,16 @@ class DocxToPdfConvertorService
         private readonly string $documentsUpdatedDir,
     ) {
     }
+
+    public function convertDocxToPdfFromOriginals(string $fileName): void
+    {
+        $targetFile = rtrim($this->documentsOriginalsDir, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . basename($fileName);
+        if (!is_file($targetFile)) {
+            throw new \RuntimeException('Исходный файл не найден: ' . $targetFile);
+        }
+        $this->convertDocxToPdf($targetFile);
+    }
+
     public function convertDocxToPdf(string $docxFilePath): void
     {
 //        $projectDir = $this->getParameter('kernel.project_dir');

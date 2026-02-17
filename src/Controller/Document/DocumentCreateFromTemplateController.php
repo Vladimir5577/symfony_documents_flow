@@ -193,9 +193,14 @@ final class DocumentCreateFromTemplateController extends AbstractController
                 return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
             }
 
+            if ($document->getUpdatedFile()) {
+                $fileUploadService->deleteUpdatedFile($document->getUpdatedFile());
+            }
+
             // convert docx to pdf
             $docxToPdfConvertorService->convertDocxToPdf($targetPath);
             $document->setOriginalFile($uniqueName);
+            $document->setUpdatedFile(pathinfo($uniqueName, \PATHINFO_FILENAME) . '.pdf');
             $entityManager->flush();
         }
 

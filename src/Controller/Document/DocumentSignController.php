@@ -215,14 +215,27 @@ final class DocumentSignController extends AbstractController
     {
         $data = json_decode($request->getContent(), true) ?? [];
 
+        $currentUser = $this->getUser();
+        if (!$currentUser) {
+            throw $this->createAccessDeniedException('Необходима авторизация.');
+        }
+        $userName = trim(implode(' ', array_filter([
+            $currentUser->getLastname(),
+            $currentUser->getFirstname(),
+            $currentUser->getPatronymic(),
+        ])));
+        $signDate = (new \DateTime())->format('d.m.Y');
+
         $document = $documentRepository->findOneWithRelations($data['id']);
         if (!$document?->getOriginalFile()) {
             throw $this->createNotFoundException('У документа нет файла для подписания.');
         }
 
-        $sourcePdf = $originalsDir . '/' . $document->getOriginalFile();      // исходный документ
-        $outputPdf = $updatedDir . '/' . $document->getOriginalFile();   // файл с добавленной подписью
+        $sourcePdf = $updatedDir . '/' . $document->getUpdatedFile();      // исходный документ
+//        $outputPdf = $updatedDir . '/' . $document->getUpdatedAt();   // файл с добавленной подписью
+        $outputPdf = $sourcePdf;
 
+//        file_put_contents('./test.txt', $outputPdf);
 
         // координаты с фронта
         // x max = 150
@@ -270,7 +283,7 @@ final class DocumentSignController extends AbstractController
                 $pdf->MultiCell(
                     $stampWidth - 6,
                     5,
-                    "Подписано\nBob Stone Parker\n30.01.2026",
+                    "Подписано\n{$userName}\n{$signDate}",
                     0,
                     'C'
                 );
@@ -341,16 +354,19 @@ final class DocumentSignController extends AbstractController
             throw $this->createNotFoundException('У документа нет файла для подписания.');
         }
 
+        // Показываем тот файл, который будет подписываться: updated (с таблицей исполнителей) или original
+        $fileType = $document->getUpdatedFile() ? 'updated' : 'original';
         $fileUrl = $this->generateUrl(
             'app_document_download_file',
             [
                 'id' => $document->getId(),
-                'type' => 'original',
+                'type' => $fileType,
                 'inline' => 1,
-            ]
+            ],
+            UrlGeneratorInterface::ABSOLUTE_URL
         );
 
-        return $this->render('document/test.html.twig', [
+        return $this->render('document/sign_document.html.twig', [
             'active_tab' => 'incoming_documents',
             'file_url' => $fileUrl,
             'id' => $document->getId(),

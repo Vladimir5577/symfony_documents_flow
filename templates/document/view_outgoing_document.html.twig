@@ -106,23 +106,6 @@
                             </div>
                         </dd>
                     {% endif %}
-                    {% if document.updatedFile %}
-                        <dt class="col-sm-3 text-muted">Обновлённый файл</dt>
-                        <dd class="col-sm-9">
-                            <span class="text-break">{{ document.updatedFile }}</span>
-                            <div class="mt-1">
-                                <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated'}) }}" class="btn btn-sm btn-outline-primary me-1">
-                                    Скачать
-                                </a>
-                                {% set ext = document.updatedFile|split('.')|last|lower %}
-                                {% if ext in ['doc', 'docx', 'pdf'] %}
-                                    <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
-                                        Просмотр
-                                    </a>
-                                {% endif %}
-                            </div>
-                        </dd>
-                    {% endif %}
                 </dl>
 
                 {% if document.userRecipients is defined and document.userRecipients|length > 0 %}

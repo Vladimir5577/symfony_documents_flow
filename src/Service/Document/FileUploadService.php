@@ -2,8 +2,8 @@
 
 namespace App\Service\Document;
 
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 class FileUploadService
 {
@@ -21,13 +21,15 @@ class FileUploadService
     public function __construct(
         #[Autowire('%private_upload_dir_documents_originals%')]
         private readonly string $documentsOriginalsDir,
+        #[Autowire('%private_upload_dir_documents_updated%')]
+        private readonly string $documentsUpdatedDir,
     ) {
     }
 
     /**
      * Загружает файл. Возвращает массив: ['fileName' => string|null, 'error' => string|null].
      */
-    public function uploadFile(UploadedFile $file): array
+    public function uploadOriginalFile(UploadedFile $file): array
     {
         $result = [
             'fileName' => null,
@@ -61,13 +63,26 @@ class FileUploadService
     }
 
     /**
-     * Возвращает полный путь к файлу в папке оригиналов по имени файла.
-     * Имя файла — то, что возвращает uploadFile() (например, из document.originalFile).
+     * Копирует уже загруженный в originals файл в папку updated.
+     * Вызывать после uploadOriginalFile — оригинал уже перемещён, повторный move() невозможен.
      */
-    public function getOriginalFilePath(string $fileName): string
+    public function copyOriginalPDFToUpdated(string $fileName): void
     {
-        $fileName = basename($fileName);
-        return $this->documentsOriginalsDir . \DIRECTORY_SEPARATOR . $fileName;
+        $sourcePath = $this->documentsOriginalsDir . \DIRECTORY_SEPARATOR . basename($fileName);
+        $targetPath = $this->documentsUpdatedDir . \DIRECTORY_SEPARATOR . basename($fileName);
+        if (is_file($sourcePath) && is_dir($this->documentsUpdatedDir)) {
+            copy($sourcePath, $targetPath);
+        }
+    }
+
+    public function deleteOriginalFile(string $fileName): void
+    {
+        $this->deleteFile($fileName, $this->documentsOriginalsDir);
+    }
+
+    public function deleteUpdatedFile(string $fileName): void
+    {
+        $this->deleteFile($fileName, $this->documentsUpdatedDir);
     }
 
     public function generateFileName(): string
@@ -76,16 +91,18 @@ class FileUploadService
     }
 
     /**
-     * Удаляет файл из папки оригиналов по имени файла.
+     * Удаляет файл из папки по имени файла.
      * Если файла нет — метод завершается без ошибки.
      */
-    public function deleteFile(string $fileName): void
+    private function deleteFile(string $fileName, $directory): void
     {
-        $path = $this->getOriginalFilePath($fileName);
+        $fileName = basename($fileName);
+
+        $path = $directory . \DIRECTORY_SEPARATOR . $fileName;
         if (!is_file($path)) {
             return;
         }
-        $dirReal = realpath($this->documentsOriginalsDir);
+        $dirReal = realpath($directory);
         $fileReal = realpath($path);
         if ($dirReal !== false && $fileReal !== false && str_starts_with($fileReal, $dirReal . \DIRECTORY_SEPARATOR)) {
             unlink($path);
