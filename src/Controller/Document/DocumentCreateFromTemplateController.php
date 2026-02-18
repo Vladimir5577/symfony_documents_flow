@@ -117,6 +117,7 @@ final class DocumentCreateFromTemplateController extends AbstractController
         Request $request,
         #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
         #[Autowire('%private_upload_dir_documents_templates%')] string $templatesDir,
+        #[Autowire('%onlyoffice_document_server_url%')] string $onlyofficeDocumentServerUrl,
     ): Response {
         $documentId = $request->query->getInt('id') ?: null;
         $requestedFilename = $request->query->get('filename');
@@ -144,6 +145,7 @@ final class DocumentCreateFromTemplateController extends AbstractController
             'documentFileUrl' => $documentFileUrl,
             'documentId' => $documentId,
             'fromTemplate' => $fromTemplate,
+            'onlyofficeDocumentServerUrl' => $onlyofficeDocumentServerUrl,
         ]);
     }
 
@@ -244,6 +246,7 @@ final class DocumentCreateFromTemplateController extends AbstractController
     public function saveDocx(
         Request $request,
         DocxToPdfConvertorService $docxToPdfConvertorService,
+        #[Autowire('%onlyoffice_document_server_url%')] string $onlyofficeDocumentServerUrl,
     ): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
@@ -268,7 +271,10 @@ final class DocumentCreateFromTemplateController extends AbstractController
         $targetPath = $this->getParameter('private_upload_dir_documents_originals') . '/' . $filename;
 
         // ⚡ Заменяем localhost на onlyoffice для Docker-сети
-        $url = str_replace('localhost:8081', 'onlyoffice:80', $data['url']);
+        // $url = str_replace('localhost:8081', 'onlyoffice:80', $data['url']);
+
+        // ⚡ Заменяем публичный URL OnlyOffice на внутренний Docker-хост
+        $url = str_replace($onlyofficeDocumentServerUrl, 'http://onlyoffice:80', $data['url']);
         $fileContent = @file_get_contents($url);
 
         if ($fileContent === false) {
