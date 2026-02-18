@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use App\Enum\UserEmployeeStatus;
 use App\Repository\UserRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -112,9 +113,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[Assert\NotBlank(message: 'Пароль обязателен для заполнения.')]
     private ?string $password = null;
 
-    // 8) is_active
-    #[ORM\Column(options: ['default' => true])]
-    private bool $isActive = true;
+    #[ORM\Column(name: 'employee_status', length: 50, enumType: UserEmployeeStatus::class, options: ['default' => 'AT_WORK'])]
+    private UserEmployeeStatus $userEmployeeStatus = UserEmployeeStatus::AT_WORK;
 
     // work_with_documents
     #[ORM\Column(options: ['default' => false])]
@@ -205,6 +205,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
+    public function getUserEmployeeStatus(): UserEmployeeStatus
+    {
+        return $this->userEmployeeStatus;
+    }
+
+    public function setUserEmployeeStatus(UserEmployeeStatus $userEmployeeStatus): static
+    {
+        $this->userEmployeeStatus = $userEmployeeStatus;
+
+        return $this;
+    }
+
     public function getLastname(): ?string
     {
         return $this->lastname;
@@ -290,18 +302,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setEmail(?string $email): static
     {
         $this->email = $email;
-
-        return $this;
-    }
-
-    public function isActive(): bool
-    {
-        return $this->isActive;
-    }
-
-    public function setIsActive(bool $isActive): static
-    {
-        $this->isActive = $isActive;
 
         return $this;
     }

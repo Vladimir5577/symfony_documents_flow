@@ -69,6 +69,18 @@
                                             <input type="text" id="phone-column" class="form-control" name="phone-column" placeholder="+7..." value="{{ user.phone ?? '' }}">
                                         </div>
                                     </div>
+                                    {% if user_employee_status_choices is defined and user_employee_status_choices %}
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="user_employee_status">Статус сотрудника</label>
+                                            <select id="user_employee_status" class="form-control" name="user_employee_status">
+                                                {% for value, label in user_employee_status_choices %}
+                                                    <option value="{{ value }}" {% if user.userEmployeeStatus.value == value %}selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    {% endif %}
                                     {% if organizations is defined and organizations %}
                                     <div class="col-12">
                                         <div class="form-group">

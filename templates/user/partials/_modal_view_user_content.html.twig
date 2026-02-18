@@ -1,0 +1,88 @@
+{# Контент модалки просмотра пользователя (подгружается по AJAX). Переменные: user, worker #}
+<div class="user-view-modal-parts">
+    <div class="user-view-modal-body-part">
+    <table class="table table-borderless mb-0">
+        <tbody>
+            <tr>
+                <th class="text-muted" style="width: 35%;">ID:</th>
+                <td><strong>{{ user.id }}</strong></td>
+            </tr>
+            <tr>
+                <th class="text-muted">Фамилия:</th>
+                <td>{{ user.lastname ?? '-' }}</td>
+            </tr>
+            <tr>
+                <th class="text-muted">Имя:</th>
+                <td>{{ user.firstname ?? '-' }}</td>
+            </tr>
+            <tr>
+                <th class="text-muted">Отчество:</th>
+                <td>{{ user.patronymic ?? '-' }}</td>
+            </tr>
+            <tr>
+                <th class="text-muted">Логин:</th>
+                <td><code>{{ user.login }}</code></td>
+            </tr>
+            <tr>
+                <th class="text-muted">Телефон:</th>
+                <td>{{ user.phone ?? '-' }}</td>
+            </tr>
+            <tr>
+                <th class="text-muted">Статус:</th>
+                <td><span class="badge bg-secondary">{{ user.userEmployeeStatus.getLabel() }}</span></td>
+            </tr>
+            <tr>
+                <th class="text-muted">Организация:</th>
+                <td>{{ user.organization.name ?? '-' }}</td>
+            </tr>
+            <tr>
+                <th class="text-muted">Дата создания:</th>
+                <td>{{ user.createdAt ? user.createdAt|date('d.m.Y H:i') : '-' }}</td>
+            </tr>
+            <tr>
+                <th class="text-muted">Начальник:</th>
+                <td>
+                    {% if user.boss %}
+                        {{ user.boss.lastname ?? '' }} {{ user.boss.firstname ?? '' }} {{ user.boss.patronymic ?? '' }}
+                    {% else %}
+                        <span class="text-muted">-</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th class="text-muted">Роли:</th>
+                <td>
+                    {% set roles = user.roles %}
+                    {% if roles|length > 0 %}
+                        {% for role in roles %}
+                            <span class="badge bg-primary me-1">{{ role }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted">Нет ролей</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% if worker %}
+            <tr>
+                <th class="text-muted">Профессия:</th>
+                <td><strong>{{ worker.profession }}</strong></td>
+            </tr>
+            {% if worker.description %}
+            <tr>
+                <th class="text-muted">Описание:</th>
+                <td>{{ worker.description }}</td>
+            </tr>
+            {% endif %}
+            {% endif %}
+        </tbody>
+    </table>
+    </div>
+    <div class="user-view-modal-footer-part">
+        <a href="{{ path('app_view_user', {id: user.id}) }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-box-arrow-up-right me-1"></i>Открыть страницу
+        </a>
+        <a href="{{ path('app_edit_user', {id: user.id}) }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-pencil me-1"></i>Редактировать
+        </a>
+    </div>
+</div>

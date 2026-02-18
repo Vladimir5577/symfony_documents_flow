@@ -1,0 +1,66 @@
+{# Переиспользуемая модалка просмотра пользователя. Контент подгружается по AJAX в #userViewModalBody. #}
+<div class="modal fade" id="userViewModal" tabindex="-1" aria-labelledby="userViewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userViewModalLabel">Просмотр пользователя</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body" id="userViewModalBody">
+                <div class="text-center py-4 text-muted">
+                    <div class="spinner-border" role="status"><span class="visually-hidden">Загрузка…</span></div>
+                </div>
+            </div>
+            <div class="modal-footer" id="userViewModalFooter">
+                {# Ссылки подставляются скриптом после загрузки контента #}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var modalUrlTemplate = '{{ path("app_view_user_modal", {id: 0}) }}';
+    var modalEl = document.getElementById('userViewModal');
+    var bodyEl = document.getElementById('userViewModalBody');
+    var footerEl = document.getElementById('userViewModalFooter');
+    var loadingHtml = '<div class="text-center py-4 text-muted"><div class="spinner-border" role="status"><span class="visually-hidden">Загрузка…</span></div></div>';
+
+    function openUserViewModal(userId) {
+        if (!modalEl || !bodyEl || !footerEl) return;
+        var url = modalUrlTemplate.replace(/\/0\/view-modal/, '/' + String(userId) + '/view-modal');
+        bodyEl.innerHTML = loadingHtml;
+        footerEl.innerHTML = '';
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) {
+                if (!r.ok) throw new Error('Не удалось загрузить данные');
+                return r.text();
+            })
+            .then(function (html) {
+                var wrap = document.createElement('div');
+                wrap.innerHTML = html;
+                var bodyPart = wrap.querySelector('.user-view-modal-body-part');
+                var footerPart = wrap.querySelector('.user-view-modal-footer-part');
+                bodyEl.innerHTML = bodyPart ? bodyPart.innerHTML : html;
+                footerEl.innerHTML = footerPart ? footerPart.innerHTML : '';
+                var modal = window.bootstrap && bootstrap.Modal.getOrCreateInstance(modalEl);
+                if (modal) modal.show();
+            })
+            .catch(function () {
+                bodyEl.innerHTML = '<div class="alert alert-danger mb-0">Не удалось загрузить данные пользователя.</div>';
+            });
+    }
+
+    window.openUserViewModal = openUserViewModal;
+
+    document.addEventListener('click', function (e) {
+        var row = e.target.closest('tr[data-user-id]');
+        if (!row) return;
+        if (e.target.closest('a') || e.target.closest('button')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openUserViewModal(row.getAttribute('data-user-id'));
+    });
+})();
+</script>

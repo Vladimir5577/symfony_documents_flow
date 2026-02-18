@@ -148,7 +148,7 @@
                             </thead>
                             <tbody>
                                 {% for recipient in document.userRecipients %}
-                                    <tr>
+                                    <tr{% if recipient.user %} data-user-id="{{ recipient.user.id }}" role="button" tabindex="0"{% endif %}>
                                         <td>
                                             {% if recipient.user %}
                                                 {{ recipient.user.lastname }} {{ recipient.user.firstname }}{% if recipient.user.patronymic %} {{ recipient.user.patronymic }}{% endif %}
@@ -209,5 +209,14 @@
     </section>
 
 
+    {% include 'user/partials/_modal_view_user.html.twig' %}
+    <style>.table tbody tr[data-user-id] { cursor: pointer; }</style>
+    <script>
+        document.querySelectorAll('tr[data-user-id]').forEach(function (row) {
+            row.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.openUserViewModal(this.dataset.userId); }
+            });
+        });
+    </script>
     {{ include('document/partials/_preview_image_script.html.twig') }}
 {% endblock %}

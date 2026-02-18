@@ -54,7 +54,6 @@ class AdminStartFixtures extends Fixture
         $admin->setEmail('admin@admin.com');
         $admin->setOrganization($adminOrganization);
         $admin->setPassword($this->passwordHasher->hashPassword($admin, '1234'));
-        $admin->setIsActive(true);
         $admin->addRoleEntity($adminRole);
         $manager->persist($admin);
 

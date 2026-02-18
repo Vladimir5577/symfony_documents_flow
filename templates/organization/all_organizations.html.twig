@@ -59,28 +59,22 @@
                                     <th>Адрес</th>
                                     <th>Телефон</th>
                                     <th>Email</th>
-                                    <th>Действия</th>
                                 </tr>
                                 </thead>
                                 <tbody>
                                 {% if organizations|length > 0 %}
                                     {% for organization in organizations %}
-                                        <tr>
+                                        <tr data-href="{{ path('view_organization', {id: organization.id}) }}" role="button" tabindex="0">
                                             <td class="text-bold-500">{{ organization.id }}</td>
                                             <td>{{ organization.name }}</td>
                                             <td>{{ organization.address ?? '-' }}</td>
                                             <td>{{ organization.phone ?? '-' }}</td>
                                             <td>{{ organization.email ?? '-' }}</td>
-                                            <td>
-                                                <a href="{{ path('view_organization', {id: organization.id}) }}" class="btn btn-info rounded-pill">
-                                                    Просмотр
-                                                </a>
-                                            </td>
                                         </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="6" class="text-center">Организации не найдены</td>
+                                        <td colspan="5" class="text-center">Организации не найдены</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>
@@ -154,4 +148,14 @@
     </section>
 
     {% include 'organization/partials/_script_organization_search.html.twig' %}
+
+    <script>
+        document.querySelectorAll('#table-hover-row tr[data-href]').forEach(function(row) {
+            row.addEventListener('click', function() { window.location.href = this.dataset.href; });
+            row.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.location.href = this.dataset.href; }
+            });
+        });
+    </script>
+    <style>#table-hover-row tr[data-href] { cursor: pointer; }</style>
 {% endblock %}

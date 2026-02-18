@@ -68,25 +68,17 @@
                     let rows = '';
                     if (data.users.length > 0) {
                         data.users.forEach(function (u) {
-                            rows += '<tr>';
+                            rows += '<tr data-user-id="' + escapeHtml(String(u.id)) + '" role="button" tabindex="0">';
                             rows += '<td class="text-bold-500">' + escapeHtml(String(u.id)) + '</td>';
                             rows += '<td>' + escapeHtml(u.lastname) + '</td>';
                             rows += '<td>' + escapeHtml(u.firstname) + '</td>';
                             rows += '<td>' + escapeHtml(u.patronymic) + '</td>';
-                            rows += '<td>' + escapeHtml(u.login) + '</td>';
                             rows += '<td>' + escapeHtml(u.phone) + '</td>';
-                            rows += '<td>';
-                            if (u.isActive) {
-                                rows += '<span class="badge bg-success">Активен</span>';
-                            } else {
-                                rows += '<span class="badge bg-danger">Неактивен</span>';
-                            }
-                            rows += '</td>';
-                            rows += '<td><a href="' + escapeHtml(u.viewUrl) + '" title="Просмотр"><span class="badge bg-info">Просмотр</span></a></td>';
+                            rows += '<td><span class="badge bg-secondary">' + escapeHtml(u.userEmployeeStatusLabel || '') + '</span></td>';
                             rows += '</tr>';
                         });
                     } else {
-                        rows = '<tr><td colspan="8" class="text-center">Пользователи не найдены</td></tr>';
+                        rows = '<tr><td colspan="6" class="text-center">Пользователи не найдены</td></tr>';
                     }
 
                     tableBody.innerHTML = rows;

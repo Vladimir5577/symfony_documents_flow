@@ -136,7 +136,6 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
         ));
         $user->setPassword($this->passwordHasher->hashPassword($user, self::PASSWORD));
         $user->setOrganization($organization);
-        $user->setIsActive(true);
         $this->attachRole($user, $roleName);
 
         return $user;

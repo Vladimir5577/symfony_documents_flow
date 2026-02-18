@@ -4,6 +4,7 @@ namespace App\Controller\User;
 
 use App\Entity\User;
 use App\Entity\Worker;
+use App\Enum\UserEmployeeStatus;
 use App\Enum\UserRole;
 use App\Repository\OrganizationRepository;
 use App\Repository\RoleRepository;
@@ -245,7 +246,7 @@ final class UserController extends AbstractController
                 'patronymic' => $user->getPatronymic() ?? '-',
                 'login' => $user->getLogin(),
                 'phone' => $user->getPhone() ?? '-',
-                'isActive' => $user->isActive(),
+                'userEmployeeStatusLabel' => $user->getUserEmployeeStatus()->getLabel(),
                 'viewUrl' => $this->generateUrl('app_view_user', ['id' => $user->getId(), 'page' => $page]),
             ];
         }
@@ -290,6 +291,35 @@ final class UserController extends AbstractController
             'user' => $user,
             'worker' => $worker,
             'page' => $page,
+        ]);
+    }
+
+    #[Route('/user/{id}/view-modal', name: 'app_view_user_modal', methods: ['GET'], requirements: ['id' => '\d+'])]
+    public function viewUserModal(int $id, Request $request, UserRepository $userRepository, WorkerRepository $workerRepository): Response
+    {
+        if (!$request->isXmlHttpRequest()) {
+            return $this->redirectToRoute('app_view_user', ['id' => $id]);
+        }
+
+        $user = $userRepository->createQueryBuilder('u')
+            ->leftJoin('u.organization', 'org')->addSelect('org')
+            ->leftJoin('u.boss', 'boss')->addSelect('boss')
+            ->leftJoin('u.userRoles', 'ur')->addSelect('ur')
+            ->leftJoin('ur.role', 'r')->addSelect('r')
+            ->where('u.id = :id')
+            ->setParameter('id', $id)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        if (!$user) {
+            return new Response('Пользователь не найден', Response::HTTP_NOT_FOUND);
+        }
+
+        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+
+        return $this->render('user/partials/_modal_view_user_content.html.twig', [
+            'user' => $user,
+            'worker' => $worker,
         ]);
     }
 
@@ -357,6 +387,7 @@ final class UserController extends AbstractController
             'organizations' => $organizationsWithChildren,
             'roles' => $roles,
             'selected_role_id' => $selectedRoleId,
+            'user_employee_status_choices' => UserEmployeeStatus::getChoices(),
         ]);
     }
 
@@ -423,6 +454,14 @@ final class UserController extends AbstractController
         $phone = trim((string) ($formData['phone-column'] ?? '')) ?: null;
         if ($user->getPhone() !== $phone) {
             $user->setPhone($phone);
+        }
+
+        $employeeStatusValue = (string) ($formData['user_employee_status'] ?? '');
+        if ($employeeStatusValue !== '') {
+            $status = UserEmployeeStatus::tryFrom($employeeStatusValue);
+            if ($status !== null && $user->getUserEmployeeStatus() !== $status) {
+                $user->setUserEmployeeStatus($status);
+            }
         }
 
         $login = trim((string) ($formData['login'] ?? ''));

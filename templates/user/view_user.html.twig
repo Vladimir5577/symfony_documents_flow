@@ -68,13 +68,7 @@
                                             </tr>
                                             <tr>
                                                 <th class="text-muted">Статус:</th>
-                                                <td>
-                                                    {% if user.isActive %}
-                                                        <span class="badge bg-success">Активен</span>
-                                                    {% else %}
-                                                        <span class="badge bg-danger">Неактивен</span>
-                                                    {% endif %}
-                                                </td>
+                                                <td><span class="badge bg-secondary">{{ user.userEmployeeStatus.getLabel() }}</span></td>
                                             </tr>
                                             <tr>
                                                 <th class="text-muted">Организация:</th>
