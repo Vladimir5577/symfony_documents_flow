@@ -41,6 +41,12 @@ $ php bin/console doctrine:migrations:migrate
 $ php bin/console doctrine:fixtures:load --group=base
 ```
 
+9. Permissions and folders (inside php_container)
+```bash
+$ mkdir -p /var/www/.cache/dconf
+$ chown -R www-data:www-data /var/www/.cache
+```
+
 ## Xdebug
 
 1. Добавить конфигурацию для xdebug -> php web page

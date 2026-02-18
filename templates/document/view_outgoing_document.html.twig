@@ -106,6 +106,32 @@
                             </div>
                         </dd>
                     {% endif %}
+                    {% if document.updatedFile %}
+                        <dt class="col-sm-3 text-muted">Обновлённый файл</dt>
+                        <dd class="col-sm-9">
+                            <div class="mt-1">
+                                <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated'}) }}" class="btn btn-sm btn-outline-primary me-1">
+                                    Скачать
+                                </a>
+                                {% set ext = document.updatedFile|split('.')|last|lower %}
+                                {% if ext in ['pdf'] %}
+                                    <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
+                                        Просмотр
+                                    </a>
+                                {% endif %}
+                                {% if ext in ['doc', 'docx'] %}
+                                    <a href="{{ path('app_edit_docx', {id: document.id, filename: document.updatedFile}) }}" class="btn btn-sm btn-outline-warning" target="_blank" rel="noopener">
+                                        Просмотр и редактирование
+                                    </a>
+                                {% endif %}
+                                {% if ext in ['jpeg', 'jpg', 'png'] %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="{{ path('app_document_download_file', {id: document.id, type: 'updated', inline: 1}) }}">
+                                        Просмотр
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </dd>
+                    {% endif %}
                 </dl>
 
                 {% if document.userRecipients is defined and document.userRecipients|length > 0 %}
