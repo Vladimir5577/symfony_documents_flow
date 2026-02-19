@@ -1,11 +1,9 @@
 <ul class="menu">
 
-    <li class="sidebar-title">Меню</li>
-
     <li
         class="sidebar-item  {% if active_tab == 'new_document' %}active{% endif %}">
         <a href="{{ path('app_new_document') }}" class='sidebar-link'>
-            <i class="bi bi-grid-fill"></i>
+            <i class="bi bi-file-earmark-plus-fill"></i>
             <span>Новый документ</span>
         </a>
     </li>
@@ -19,7 +17,7 @@
             {% if active_tab == 'view_document' %}active{% endif %}
     ">
         <a href="#" class='sidebar-link'>
-            <i class="bi bi-stack"></i>
+            <i class="bi bi-file-earmark-text-fill"></i>
             <span>Документы</span>
         </a>
 
@@ -40,24 +38,15 @@
     <li
         class="
             sidebar-item
-            has-sub
             {% if active_tab == 'register' %}active{% endif %}
             {% if active_tab == 'all_users' %}active{% endif %}
             {% if active_tab == 'view_user' %}active{% endif %}
             {% if active_tab == 'edit_user' %}active{% endif %}
     ">
-        <a href="#" class='sidebar-link'>
-            <i class="bi bi-stack"></i>
+        <a href="{{ path('app_all_users') }}" class='sidebar-link'>
+            <i class="bi bi-people-fill"></i>
             <span>Пользователи</span>
         </a>
-
-        <ul class="submenu active">
-
-            <li class="submenu-item  {% if active_tab == 'all_users' %}active{% endif %} ">
-                <a href="{{ path('app_all_users') }}" class="submenu-link">Просмотр всех</a>
-            </li>
-
-        </ul>
     </li>
     {% endif %}
 
@@ -65,32 +54,16 @@
     <li
         class="
             sidebar-item
-            has-sub
             {% if active_tab == 'create_organization' %}active{% endif %}
             {% if active_tab == 'all_organizations' %}active{% endif %}
             {% if active_tab == 'view_organization' %}active{% endif %}
     ">
-        <a href="#" class='sidebar-link'>
-            <i class="bi bi-stack"></i>
+        <a href="{{ path('app_all_organizations') }}" class='sidebar-link'>
+            <i class="bi-diagram-3-fill"></i>
             <span>Организации</span>
         </a>
-
-        <ul class="submenu active">
-
-            <li class="submenu-item  {% if active_tab == 'all_organizations' %}active{% endif %} ">
-                <a href="{{ path('app_all_organizations') }}" class="submenu-link">Все организации</a>
-            </li>
-
-        </ul>
     </li>
     {% endif %}
-
-    <li class="sidebar-item">
-        <a href="{{ path('app_logout') }}" class="btn btn-outline-danger">
-            <span>Выйти</span>
-            <i class="bi bi-box-arrow-right ms-2"></i>
-        </a>
-    </li>
 
 
 </ul>

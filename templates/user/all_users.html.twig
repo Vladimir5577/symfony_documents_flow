@@ -2,29 +2,58 @@
 
 {% block title %}Пользователи!{% endblock %}
 
-
+{% set _fp = { search: search|default('') } %}
+{% if selected_organization_id is defined and selected_organization_id %}{% set _fp = _fp|merge({ organization_id: selected_organization_id }) %}{% endif %}
+{% if selected_status is defined and selected_status %}{% set _fp = _fp|merge({ status: selected_status }) %}{% endif %}
 
 {% block sidebar_list %}
     {% include 'sidebar/sidebar_list.html.twig' %}
 {% endblock %}
 
-
-
 {% block main %}
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="mb-0">Все пользователи</h1>
+        <h1 class="mb-0">Пользователи</h1>
         <a href="{{ path('user_register') }}" class="btn btn-primary">
             <i class="bi bi-person-plus me-1"></i>Создание пользователя
         </a>
     </div>
 
-    <div class="mb-3">
-        <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input type="text" id="user-search" class="form-control" placeholder="Поиск по фамилии, имени, логину, телефону..." value="{{ search|default('') }}" autocomplete="off">
-            <button type="button" id="user-search-clear" class="btn btn-outline-secondary {% if not search|default('') %}d-none{% endif %}">
-                <i class="bi bi-x-lg"></i>
-            </button>
+    <div class="card mb-3" id="users-filter-container" data-base-url="{{ path('app_all_users') }}">
+        <input type="hidden" id="filter-organization-id" value="{{ selected_organization_id|default('') }}">
+        <input type="hidden" id="filter-status" value="{{ selected_status|default('') }}">
+        <div class="card-body">
+            <h6 class="card-title text-muted mb-3">Фильтры</h6>
+            <div class="mb-3">
+                <label class="form-label mb-1 small text-muted">Поиск по фамилии, имени, логину, телефону</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" id="user-search" class="form-control" placeholder="Введите текст для поиска..." value="{{ search|default('') }}" autocomplete="off">
+                    <button type="button" id="user-search-clear" class="btn btn-outline-secondary {% if not search|default('') %}d-none{% endif %}">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col">
+                    <label class="form-label mb-1 small text-muted">Организация</label>
+                    <div class="input-group">
+                        <input type="text" id="org-display-filter" class="form-control" readonly placeholder="Все организации" value="{{ selected_organization ? selected_organization.name : '' }}" aria-label="Выбрать организацию"
+                            {% if organizations is defined and organizations|length > 0 %}style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModalFilter"{% else %}style="cursor:default"{% endif %}>
+                        <button type="button" class="btn btn-outline-secondary" title="Сбросить организацию" id="filter-org-clear" {% if not selected_organization_id %}style="display:none"{% endif %}>
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label mb-1 small text-muted">Статус</label>
+                    <select id="filter-status-select" class="form-select" style="min-width: 180px;" aria-label="Фильтр по статусу">
+                        <option value="">Все статусы</option>
+                        {% for value, label in status_choices|default({}) %}
+                            <option value="{{ value }}" {% if selected_status is defined and selected_status == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -77,7 +106,7 @@
                                     <ul class="pagination justify-content-center mb-0">
                                         {# Предыдущая страница #}
                                         <li class="page-item {% if pagination.current_page == 1 %}disabled{% endif %}">
-                                            <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_all_users', {page: pagination.current_page - 1, search: search|default('')}) }}{% else %}#{% endif %}" aria-label="Предыдущая">
+                                            <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_all_users', _fp|merge({page: pagination.current_page - 1})) }}{% else %}#{% endif %}" aria-label="Предыдущая">
                                                 <span aria-hidden="true">&laquo;</span>
                                             </a>
                                         </li>
@@ -88,7 +117,7 @@
 
                                         {% if start_page > 1 %}
                                             <li class="page-item">
-                                                <a class="page-link" href="{{ path('app_all_users', {page: 1, search: search|default('')}) }}">1</a>
+                                                <a class="page-link" href="{{ path('app_all_users', _fp|merge({page: 1})) }}">1</a>
                                             </li>
                                             {% if start_page > 2 %}
                                                 <li class="page-item disabled">
@@ -97,9 +126,9 @@
                                             {% endif %}
                                         {% endif %}
 
-                                        {% for page in start_page..end_page %}
-                                            <li class="page-item {% if page == pagination.current_page %}active{% endif %}">
-                                                <a class="page-link" href="{{ path('app_all_users', {page: page, search: search|default('')}) }}">{{ page }}</a>
+                                        {% for p in start_page..end_page %}
+                                            <li class="page-item {% if p == pagination.current_page %}active{% endif %}">
+                                                <a class="page-link" href="{{ path('app_all_users', _fp|merge({page: p})) }}">{{ p }}</a>
                                             </li>
                                         {% endfor %}
 
@@ -110,13 +139,13 @@
                                                 </li>
                                             {% endif %}
                                             <li class="page-item">
-                                                <a class="page-link" href="{{ path('app_all_users', {page: pagination.total_pages, search: search|default('')}) }}">{{ pagination.total_pages }}</a>
+                                                <a class="page-link" href="{{ path('app_all_users', _fp|merge({page: pagination.total_pages})) }}">{{ pagination.total_pages }}</a>
                                             </li>
                                         {% endif %}
 
                                         {# Следующая страница #}
                                         <li class="page-item {% if pagination.current_page == pagination.total_pages %}disabled{% endif %}">
-                                            <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_all_users', {page: pagination.current_page + 1, search: search|default('')}) }}{% else %}#{% endif %}" aria-label="Следующая">
+                                            <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_all_users', _fp|merge({page: pagination.current_page + 1})) }}{% else %}#{% endif %}" aria-label="Следующая">
                                                 <span aria-hidden="true">&raquo;</span>
                                             </a>
                                         </li>
@@ -138,6 +167,62 @@
 
     {% include 'user/partials/_modal_view_user.html.twig' %}
     {% include 'user/partials/_script_user_search.html.twig' %}
+
+    <script>
+        (function() {
+            var container = document.getElementById('users-filter-container');
+            if (!container) return;
+            var baseUrl = container.getAttribute('data-base-url') || '';
+            function buildUrl(organizationId, status, search, page) {
+                var params = new URLSearchParams();
+                if (search) params.set('search', search);
+                if (organizationId) params.set('organization_id', organizationId);
+                if (status) params.set('status', status);
+                params.set('page', String(page || 1));
+                var qs = params.toString();
+                return baseUrl + (qs ? '?' + qs : '');
+            }
+            function getCurrentFilter() {
+                var searchEl = document.getElementById('user-search');
+                var statusEl = document.getElementById('filter-status-select');
+                var orgEl = document.getElementById('filter-organization-id');
+                return {
+                    search: searchEl ? searchEl.value.trim() : '',
+                    status: statusEl ? statusEl.value : '',
+                    organizationId: orgEl ? orgEl.value : ''
+                };
+            }
+            document.addEventListener('DOMContentLoaded', function() {
+                var statusSelect = document.getElementById('filter-status-select');
+                if (statusSelect) {
+                    statusSelect.addEventListener('change', function() {
+                        var f = getCurrentFilter();
+                        location.href = buildUrl(f.organizationId, statusSelect.value, f.search, 1);
+                    });
+                }
+                var orgClear = document.getElementById('filter-org-clear');
+                if (orgClear) {
+                    orgClear.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        var f = getCurrentFilter();
+                        location.href = buildUrl('', f.status, f.search, 1);
+                    });
+                }
+            });
+        })();
+    </script>
+
+    {% if organizations is defined and organizations|length > 0 %}
+        <div id="org-tree-data-filter" class="d-none">
+            {% for org in organizations %}
+                {% if org %}
+                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% include 'user/partials/_org_tree_modal_filter.html.twig' %}
+        {% include 'user/partials/_script_org_filter.html.twig' %}
+    {% endif %}
 
     <script>
         document.querySelectorAll('#table-hover-row tr[data-user-id]').forEach(function(row) {

@@ -26,7 +26,7 @@
                     </div>
                     <div class="card-content">
                         <div class="card-body">
-                            <form action="{{ path('app_create_document', {'type_id': document_type.id}) }}" method="post" class="form" enctype="multipart/form-data">
+                            <form action="{{ path('app_create_document', {'type_id': document_type.id}) }}" method="post" class="form">
                                 <input type="hidden" name="_csrf_token" value="{{ csrf_token('create_document') }}">
                                 <input type="hidden" name="type_id" value="{{ document_type.id }}">
 
@@ -109,30 +109,6 @@
                                         </div>
                                     </div>
 
-                                    <div class="col-12">
-                                        <label class="form-label d-block">Источник документа</label>
-                                        <div id="file-source-choice" class="d-flex flex-wrap gap-2 mb-2">
-                                            <button type="button" class="btn btn-outline-primary" data-source="upload">
-                                                Загрузить файл с компьютера
-                                            </button>
-                                            <button type="button" class="btn btn-outline-primary" data-source="own">
-                                                Создать документ из шаблона
-                                            </button>
-                                        </div>
-
-                                        <div id="file-upload-block" class="d-none">
-                                            <label for="formFileLg" class="form-label">Выберите или перетащите файл</label>
-                                            <input class="form-control form-control-lg" id="formFileLg" type="file" name="originalFile">
-                                        </div>
-
-                                        <div id="file-from-own-block" class="d-none">
-                                            <label class="form-label d-block">Сохранить и перейти к созданию файла из шаблона</label>
-                                            <button type="submit" class="btn btn-primary" id="choose-from-own-btn" name="submit_action" value="from_template">
-                                                Сохранить документ и создать файл из шаблона
-                                            </button>
-                                        </div>
-                                    </div>
-
                                     <div class="col-12 d-flex justify-content-end">
                                         <button type="submit" class="btn btn-primary me-1 mb-1">Создать документ</button>
                                         <a href="{{ path('app_new_document') }}" class="btn btn-light-secondary me-1 mb-1">Отмена</a>
@@ -160,112 +136,6 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            (function initFileSourceChoice() {
-                const choiceBtns = document.querySelectorAll('#file-source-choice [data-source]');
-                const uploadBlock = document.getElementById('file-upload-block');
-                const fromOwnBlock = document.getElementById('file-from-own-block');
-                const formFileInput = document.getElementById('formFileLg');
-
-                if (!choiceBtns.length || !uploadBlock || !fromOwnBlock) return;
-
-                choiceBtns.forEach(function (btn) {
-                    btn.addEventListener('click', function () {
-                        const source = this.getAttribute('data-source');
-                        uploadBlock.classList.add('d-none');
-                        fromOwnBlock.classList.add('d-none');
-                        if (formFileInput) formFileInput.removeAttribute('required');
-                        if (source === 'upload') {
-                            uploadBlock.classList.remove('d-none');
-                            if (formFileInput) formFileInput.setAttribute('required', 'required');
-                        } else if (source === 'own') {
-                            fromOwnBlock.classList.remove('d-none');
-                        }
-                    });
-                });
-            })();
-
-            (function initChooseFromOwnBtn() {
-                const btn = document.getElementById('choose-from-own-btn');
-                if (!btn) return;
-                btn.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    const form = this.closest('form');
-                    const msg = 'Сохранить данные и перейти к созданию файла из шаблона?';
-                    if (!confirm(msg)) return;
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'submit_action';
-                    input.value = 'from_template';
-                    form.appendChild(input);
-                    form.submit();
-                });
-            })();
-
-            (function initFileDrop() {
-                const fileInput = document.getElementById('document_original_file');
-                const dropZone = document.getElementById('file-drop-zone');
-                const placeholder = document.getElementById('file-drop-placeholder');
-                const selectedBlock = document.getElementById('file-drop-selected');
-                const selectedName = document.getElementById('file-selected-name');
-
-                if (!fileInput || !dropZone) return;
-
-                function showFile(name) {
-                    placeholder.classList.add('d-none');
-                    selectedBlock.classList.remove('d-none');
-                    selectedName.textContent = name || 'Файл выбран';
-                }
-
-                function hideFile() {
-                    placeholder.classList.remove('d-none');
-                    selectedBlock.classList.add('d-none');
-                    selectedName.textContent = '';
-                    fileInput.value = '';
-                }
-
-                function setFile(file) {
-                    if (!file) return hideFile();
-                    if (file.size > 9 * 1024 * 1024) {
-                        alert('Файл слишком большой (макс. 5 МБ)');
-                        return;
-                    }
-                    const dt = new DataTransfer();
-                    dt.items.add(file);
-                    fileInput.files = dt.files;
-                    showFile(file.name);
-                }
-
-                dropZone.addEventListener('click', function () { fileInput.click(); });
-
-                fileInput.addEventListener('change', function () {
-                    const f = fileInput.files && fileInput.files[0];
-                    setFile(f || null);
-                });
-
-                dropZone.addEventListener('dragover', function (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    dropZone.classList.add('border-primary', 'bg-white');
-                    dropZone.classList.remove('border-secondary');
-                });
-
-                dropZone.addEventListener('dragleave', function (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    dropZone.classList.remove('border-primary', 'bg-white');
-                    dropZone.classList.add('border-secondary');
-                });
-
-                dropZone.addEventListener('drop', function (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    dropZone.classList.remove('border-primary', 'bg-white');
-                    dropZone.classList.add('border-secondary');
-                    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-                    setFile(file || null);
-                });
-            })();
-
             const usersSelect = document.getElementById('document_users');
             const usersTrigger = document.getElementById('document_users_trigger');
             let choicesInstance = null;

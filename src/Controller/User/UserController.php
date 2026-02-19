@@ -206,19 +206,51 @@ final class UserController extends AbstractController
     }
 
     #[Route('/users', name: 'app_all_users', methods: ['GET'])]
-    public function getAllUsers(Request $request, UserRepository $userRepository): Response
+    public function getAllUsers(Request $request, UserRepository $userRepository, OrganizationRepository $organizationRepository): Response
     {
         $page = max(1, (int) $request->query->get('page', 1));
         $search = trim((string) $request->query->get('search', ''));
+        $organizationId = $request->query->getInt('organization_id') ?: null;
+        $status = $request->query->get('status');
+        if ($status === '') {
+            $status = null;
+        }
         $limit = 10;
 
-        $pagination = $userRepository->findPaginated($page, $limit, $search);
+        $currentUser = $this->getUser();
+        $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
+        $userOrganization = $currentUser instanceof User ? $currentUser->getOrganization() : null;
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $userOrganization);
+
+        $organizationsWithChildren = [];
+        if (!empty($organizationTree)) {
+            foreach ($organizationTree as $org) {
+                $loadedOrg = $organizationRepository->findWithChildren($org->getId());
+                if ($loadedOrg) {
+                    $organizationsWithChildren[] = $loadedOrg;
+                }
+            }
+        }
+
+        $selectedOrganization = null;
+        if ($organizationId !== null && $organizationId > 0) {
+            $selectedOrganization = $organizationRepository->find($organizationId);
+        }
+
+        $pagination = $userRepository->findPaginated($page, $limit, $search, $organizationId, $status);
+
+        $statusChoices = UserEmployeeStatus::getChoices();
 
         return $this->render('user/all_users.html.twig', [
             'active_tab' => 'all_users',
             'controller_name' => 'UserController',
             'users' => $pagination['users'],
             'search' => $search,
+            'organizations' => $organizationsWithChildren,
+            'selected_organization_id' => $organizationId,
+            'selected_organization' => $selectedOrganization,
+            'status_choices' => $statusChoices,
+            'selected_status' => $status,
             'pagination' => [
                 'current_page' => $pagination['page'],
                 'total_pages' => $pagination['totalPages'],
@@ -233,9 +265,14 @@ final class UserController extends AbstractController
     {
         $page = max(1, (int) $request->query->get('page', 1));
         $search = trim((string) $request->query->get('search', ''));
+        $organizationId = $request->query->getInt('organization_id') ?: null;
+        $status = $request->query->get('status');
+        if ($status === '') {
+            $status = null;
+        }
         $limit = 10;
 
-        $pagination = $userRepository->findPaginated($page, $limit, $search);
+        $pagination = $userRepository->findPaginated($page, $limit, $search, $organizationId, $status);
 
         $usersData = [];
         foreach ($pagination['users'] as $user) {

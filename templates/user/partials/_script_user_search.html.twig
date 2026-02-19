@@ -58,7 +58,12 @@
 
         function doSearch(page) {
             const search = searchInput.value.trim();
-            const url = '{{ path("app_users_search") }}' + '?search=' + encodeURIComponent(search) + '&page=' + (page || 1);
+            let params = 'search=' + encodeURIComponent(search) + '&page=' + (page || 1);
+            const orgEl = document.getElementById('filter-organization-id');
+            const statusEl = document.getElementById('filter-status-select');
+            if (orgEl && orgEl.value) params += '&organization_id=' + encodeURIComponent(orgEl.value);
+            if (statusEl && statusEl.value) params += '&status=' + encodeURIComponent(statusEl.value);
+            const url = '{{ path("app_users_search") }}' + '?' + params;
 
             clearBtn.classList.toggle('d-none', search === '');
 

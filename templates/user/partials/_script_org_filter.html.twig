@@ -1,0 +1,158 @@
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var orgDataContainer = document.getElementById('org-tree-data-filter');
+        if (!orgDataContainer) return;
+
+        var nodes = Array.from(orgDataContainer.querySelectorAll('.org-node')).map(function (el) {
+            return {
+                id: el.getAttribute('data-org-id'),
+                parentId: el.getAttribute('data-parent-id') || null,
+                name: el.getAttribute('data-name')
+            };
+        });
+
+        var treeEl = document.getElementById('org-tree-filter');
+        var selectBtn = document.getElementById('org-select-btn-filter');
+        var filterContainer = document.getElementById('users-filter-container');
+        var baseUrl = filterContainer ? filterContainer.getAttribute('data-base-url') : '';
+        var selectedOrgId = null;
+
+        function getChildren(parentId) {
+            return nodes.filter(function (n) {
+                return n.parentId === parentId;
+            });
+        }
+
+        function hasChildren(id) {
+            return nodes.some(function (n) { return n.parentId === id; });
+        }
+
+        function buildTree(parentId, level) {
+            var children = getChildren(parentId);
+            if (children.length === 0) return null;
+
+            var container = document.createElement('div');
+            if (level > 0) {
+                container.className = 'org-tree-children';
+            }
+
+            children.forEach(function (node) {
+                var row = document.createElement('div');
+                row.className = 'org-tree-item';
+                row.style.paddingLeft = (level * 24 + 8) + 'px';
+                row.dataset.orgId = node.id;
+
+                var hasKids = hasChildren(node.id);
+
+                var toggle = document.createElement('span');
+                toggle.className = 'org-tree-toggle';
+                if (hasKids) {
+                    toggle.textContent = '▶';
+                }
+                row.appendChild(toggle);
+
+                var icon = document.createElement('i');
+                icon.className = 'org-tree-icon bi ' + (hasKids ? 'bi-diagram-3' : 'bi-building');
+                row.appendChild(icon);
+
+                var nameSpan = document.createElement('span');
+                nameSpan.textContent = node.name;
+                row.appendChild(nameSpan);
+
+                container.appendChild(row);
+
+                var childContainer = null;
+                if (hasKids) {
+                    childContainer = buildTree(node.id, level + 1);
+                    if (childContainer) {
+                        container.appendChild(childContainer);
+                    }
+                }
+
+                row.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var prev = treeEl.querySelector('.org-tree-item.selected');
+                    if (prev) prev.classList.remove('selected');
+                    row.classList.add('selected');
+                    selectedOrgId = node.id;
+                    selectBtn.disabled = false;
+
+                    if (hasKids && childContainer) {
+                        var isOpen = childContainer.classList.contains('open');
+                        childContainer.classList.toggle('open', !isOpen);
+                        toggle.classList.toggle('open', !isOpen);
+                    }
+                });
+            });
+
+            return container;
+        }
+
+        function renderTree() {
+            treeEl.innerHTML = '';
+            var tree = buildTree(null, 0);
+            if (tree) {
+                treeEl.appendChild(tree);
+            } else {
+                treeEl.innerHTML = '<div class="text-muted p-2">Нет организаций</div>';
+            }
+        }
+
+        function expandToNode(nodeId) {
+            var chain = [];
+            var currentId = nodeId;
+            while (currentId) {
+                var node = nodes.find(function (n) { return n.id === currentId; });
+                if (!node) break;
+                chain.unshift(node.id);
+                currentId = node.parentId;
+            }
+
+            for (var i = 0; i < chain.length - 1; i++) {
+                var itemEl = treeEl.querySelector('.org-tree-item[data-org-id="' + chain[i] + '"]');
+                if (!itemEl) continue;
+                var childContainer = itemEl.nextElementSibling;
+                if (childContainer && childContainer.classList.contains('org-tree-children')) {
+                    childContainer.classList.add('open');
+                    var tog = itemEl.querySelector('.org-tree-toggle');
+                    if (tog) tog.classList.add('open');
+                }
+            }
+
+            var targetEl = treeEl.querySelector('.org-tree-item[data-org-id="' + nodeId + '"]');
+            if (targetEl) {
+                targetEl.classList.add('selected');
+                selectedOrgId = nodeId;
+                selectBtn.disabled = false;
+            }
+        }
+
+        function buildFilterUrl(organizationId, status, search, page) {
+            var params = new URLSearchParams();
+            if (search) params.set('search', search);
+            if (organizationId) params.set('organization_id', organizationId);
+            if (status) params.set('status', status);
+            params.set('page', String(page || 1));
+            var qs = params.toString();
+            return baseUrl + (qs ? '?' + qs : '');
+        }
+
+        selectBtn.addEventListener('click', function () {
+            if (!selectedOrgId) return;
+            var searchInput = document.getElementById('user-search');
+            var statusSelect = document.getElementById('filter-status-select');
+            var search = searchInput ? searchInput.value.trim() : '';
+            var status = statusSelect ? statusSelect.value : '';
+            var url = buildFilterUrl(selectedOrgId, status, search, 1);
+            window.location.href = url;
+        });
+
+        renderTree();
+
+        var preselectedId = document.getElementById('filter-organization-id');
+        preselectedId = preselectedId ? preselectedId.value : null;
+        if (preselectedId) {
+            expandToNode(preselectedId);
+        }
+    });
+</script>

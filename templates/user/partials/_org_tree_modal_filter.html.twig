@@ -1,0 +1,59 @@
+<div class="modal fade" id="orgPickerModalFilter" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Выбор организации</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div id="org-tree-filter" style="max-height: 400px; overflow-y: auto;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="org-select-btn-filter" disabled>Выбрать</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #org-tree-filter .org-tree-item {
+        display: flex;
+        align-items: center;
+        padding: 4px 6px;
+        cursor: pointer;
+        border-radius: 4px;
+        white-space: nowrap;
+    }
+    #org-tree-filter .org-tree-item:hover {
+        background-color: rgba(0,0,0,.05);
+    }
+    #org-tree-filter .org-tree-item.selected {
+        background-color: #0d6efd;
+        color: #fff;
+    }
+    #org-tree-filter .org-tree-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        margin-right: 4px;
+        font-size: 12px;
+        transition: transform 0.15s;
+    }
+    #org-tree-filter .org-tree-toggle.open {
+        transform: rotate(90deg);
+    }
+    #org-tree-filter .org-tree-icon {
+        margin-right: 6px;
+        flex-shrink: 0;
+    }
+    #org-tree-filter .org-tree-children {
+        display: none;
+    }
+    #org-tree-filter .org-tree-children.open {
+        display: block;
+    }
+</style>

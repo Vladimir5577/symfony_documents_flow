@@ -14,8 +14,6 @@ use App\Repository\DocumentTypeRepository;
 use App\Repository\DocumentUserRecipientRepository;
 use App\Repository\OrganizationRepository;
 use App\Repository\UserRepository;
-use App\Service\Document\Convertor\DocxToPdfConvertorService;
-use App\Service\Document\FileUploadService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -49,8 +47,6 @@ final class DocumentController extends AbstractController
         UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
         ValidatorInterface     $validator,
-        FileUploadService      $fileUploadService,
-        DocxToPdfConvertorService $docxToPdfConvertorService,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -199,31 +195,6 @@ final class DocumentController extends AbstractController
             }
         }
 
-        $file = $request->files->get('originalFile');
-        if ($file) {
-            $updatedFileName = null;
-            $fileNameResponse = $fileUploadService->uploadOriginalFile($file);
-            if ($fileNameResponse['error']) {
-                $this->addFlash('error', $fileNameResponse['error']);
-                return $renderForm($formData);
-            }
-
-            // if file is .pdf extension then copy to updated folder
-            if (strtolower($file->getClientOriginalExtension()) === 'pdf') {
-                $fileUploadService->copyOriginalPDFToUpdated($fileNameResponse['fileName']);
-                $updatedFileName = $fileNameResponse['fileName'];
-            }
-
-            $ext = strtolower($file->getClientOriginalExtension());
-            if (in_array($ext, ['doc', 'docx'], true)) {
-                $docxToPdfConvertorService->convertDocxToPdfFromOriginals($fileNameResponse['fileName']);
-                $updatedFileName = pathinfo($fileNameResponse['fileName'], \PATHINFO_FILENAME) . '.pdf';
-            }
-
-            $document->setOriginalFile($fileNameResponse['fileName']);
-            $document->setUpdatedFile($updatedFileName);
-        }
-
         $document->setCreatedBy($currentUser);
 
         // Обрабатываем deadline
@@ -278,10 +249,6 @@ final class DocumentController extends AbstractController
         $entityManager->flush();
 
         $this->addFlash('success', 'Документ успешно создан.');
-
-        if (($formData['submit_action'] ?? null) === 'from_template') {
-            return $this->redirectToRoute('app_edit_docx', ['id' => $document->getId()]);
-        }
 
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
     }
@@ -486,8 +453,6 @@ final class DocumentController extends AbstractController
         UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
         ValidatorInterface     $validator,
-        FileUploadService      $fileUploadService,
-        DocxToPdfConvertorService $docxToPdfConvertorService,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -638,50 +603,6 @@ final class DocumentController extends AbstractController
             return $renderForm($formData);
         }
 
-        // Обработка загрузки файла (если есть)
-        $uploadedFile = $request->files->get('originalFile');
-        if ($uploadedFile) {
-            try {
-                $updatedFileName = null;
-                $fileNameResponse = $fileUploadService->uploadOriginalFile($uploadedFile);
-
-                // if old file exist remove it from disc and replace new one
-                if ($document->getOriginalFile()) {
-                    $fileUploadService->deleteOriginalFile($document->getOriginalFile());
-                }
-
-                if ($document->getUpdatedFile()) {
-                    $fileUploadService->deleteUpdatedFile($document->getUpdatedFile());
-                }
-
-                // if file is .pdf extension then copy to updated folder
-                if (strtolower($uploadedFile->getClientOriginalExtension()) === 'pdf') {
-                    $fileUploadService->copyOriginalPDFToUpdated($fileNameResponse['fileName']);
-                    $updatedFileName = $fileNameResponse['fileName'];
-                }
-
-
-
-                // if updated file exist then
-                // if it is .pdf -> replace it
-                // if it is .docx -> convert it
-                // if old file exist remove it from disc and replace new one
-                // to do set
-                $ext = strtolower($uploadedFile->getClientOriginalExtension());
-                if (in_array($ext, ['doc', 'docx'], true)) {
-                    $docxToPdfConvertorService->convertDocxToPdfFromOriginals($fileNameResponse['fileName']);
-                    $updatedFileName = pathinfo($fileNameResponse['fileName'], \PATHINFO_FILENAME) . '.pdf';
-                }
-
-                $document->setOriginalFile($fileNameResponse['fileName']);
-                $document->setUpdatedFile($updatedFileName);
-
-            } catch (\Exception $e) {
-                $this->addFlash('error', 'Ошибка загрузки файла: ' . $e->getMessage());
-                return $renderForm($formData);
-            }
-        }
-
         // Обновление получателей — только если список изменился
         $userIds = $formData['user_ids'] ?? [];
         if (!is_array($userIds)) {
@@ -726,18 +647,6 @@ final class DocumentController extends AbstractController
         }
 
         $entityManager->flush();
-
-        // Если выбрано «создать из шаблона» — удаляем старый файл и перенаправляем в редактор
-        if (($formData['submit_action'] ?? null) === 'from_template') {
-            if ($document->getOriginalFile()) {
-                $fileUploadService->deleteOriginalFile($document->getOriginalFile());
-                $document->setOriginalFile(null);
-                $entityManager->flush();
-            }
-
-            $this->addFlash('success', 'Документ сохранён.');
-            return $this->redirectToRoute('app_edit_docx', ['id' => $document->getId()]);
-        }
 
         $this->addFlash('success', 'Документ успешно обновлён.');
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);

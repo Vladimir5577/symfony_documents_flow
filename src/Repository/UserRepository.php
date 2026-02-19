@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\Organization;
 use App\Entity\User;
+use App\Enum\UserEmployeeStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Security\Core\Exception\UnsupportedUserException;
@@ -58,9 +59,12 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
      *
      * @param int $page Номер страницы (начиная с 1)
      * @param int $limit Количество элементов на странице
+     * @param string $search Поиск по ФИО, логину, телефону
+     * @param int|null $organizationId Фильтр по организации (null = все)
+     * @param string|null $status Фильтр по статусу (enum value, null = все)
      * @return array{users: array, total: int, page: int, limit: int, totalPages: int}
      */
-    public function findPaginated(int $page = 1, int $limit = 10, string $search = ''): array
+    public function findPaginated(int $page = 1, int $limit = 10, string $search = '', ?int $organizationId = null, ?string $status = null): array
     {
         $offset = ($page - 1) * $limit;
 
@@ -74,6 +78,17 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             $searchCondition = 'LOWER(u.lastname) LIKE LOWER(:search) OR LOWER(u.firstname) LIKE LOWER(:search) OR LOWER(u.patronymic) LIKE LOWER(:search) OR LOWER(u.login) LIKE LOWER(:search) OR LOWER(u.phone) LIKE LOWER(:search)';
             $qb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
             $countQb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
+        }
+
+        if ($organizationId !== null && $organizationId > 0) {
+            $qb->andWhere('u.organization = :orgId')->setParameter('orgId', $organizationId);
+            $countQb->andWhere('u.organization = :orgId')->setParameter('orgId', $organizationId);
+        }
+
+        $statusEnum = $status !== null && $status !== '' ? UserEmployeeStatus::tryFrom($status) : null;
+        if ($statusEnum !== null) {
+            $qb->andWhere('u.userEmployeeStatus = :status')->setParameter('status', $statusEnum);
+            $countQb->andWhere('u.userEmployeeStatus = :status')->setParameter('status', $statusEnum);
         }
 
         $total = (int) $countQb->getQuery()->getSingleScalarResult();
