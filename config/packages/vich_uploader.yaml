@@ -1,0 +1,15 @@
+vich_uploader:
+    db_driver: orm
+    metadata:
+        type: attribute
+    mappings:
+        document_files:
+            uri_prefix: /uploads/documents
+            upload_destination: '%private_upload_dir_documents_originals%'
+            namer: Vich\UploaderBundle\Naming\SmartUniqueNamer
+            directory_namer:
+                service: Vich\UploaderBundle\Naming\PropertyDirectoryNamer
+                options:
+                    property: document.id
+            delete_on_remove: true
+            delete_on_update: true

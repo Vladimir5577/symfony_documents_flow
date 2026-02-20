@@ -45,7 +45,8 @@
         "symfony/yaml": "8.0.*",
         "tecnickcom/tcpdf": "^6.10",
         "twig/extra-bundle": "^2.12|^3.0",
-        "twig/twig": "^2.12|^3.0"
+        "twig/twig": "^2.12|^3.0",
+        "vich/uploader-bundle": "^2.9"
     },
     "config": {
         "allow-plugins": {

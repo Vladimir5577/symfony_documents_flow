@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dropzone.js File Upload Example</title>
+
+    <!-- Include Dropzone CSS from CDN -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.7.0/min/dropzone.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        #myDropzone {
+            border: 2px dashed #007bff;
+            padding: 50px;
+            background-color: #f9f9f9;
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .dz-message {
+            font-size: 18px;
+            color: #007bff;
+        }
+
+        .dz-preview {
+            margin-top: 10px;
+            margin-right: 10px;
+            text-align: center;
+            width: 150px;
+        }
+
+        .dz-filename {
+            font-size: 14px;
+            color: #333;
+            font-weight: bold;
+            margin-top: 8px;
+            word-wrap: break-word;
+        }
+
+        .dz-remove {
+            color: red;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .fallback {
+            display: none; /* Hide fallback input (for browsers that don't support HTML5 file uploads) */
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Dropzone.js File Upload</h1>
+    <form action="your-upload-endpoint-here" class="dropzone" id="myDropzone">
+        <div class="fallback">
+            <!-- Fallback input for browsers that do not support drag-and-drop file upload -->
+            <input type="file" name="file" multiple />
+        </div>
+    </form>
+</div>
+
+<!-- Include Dropzone JS from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.7.0/min/dropzone.min.js"></script>
+
+<script>
+    // Initialize Dropzone.js
+    Dropzone.options.myDropzone = {
+        paramName: 'file', // The name that will be used to send the files
+        maxFilesize: 5,    // Maximum file size in MB
+        acceptedFiles: 'image/*,application/pdf', // File types you want to allow (images and PDFs here)
+        addRemoveLinks: true, // Option to show remove links for uploaded files
+        dictDefaultMessage: 'Drag & drop files here to upload or click to select files', // Custom message for the drop area
+        dictFileTooBig: 'File is too big ({{filesize}}MB). Max allowed size: {{maxFilesize}}MB.', // Custom error message for big files
+        init: function () {
+            // When a file is added, display its name below the file preview
+            this.on("addedfile", function(file) {
+                // Create a div to hold the filename
+                const previewElement = file.previewElement;
+                const fileNameElement = document.createElement("div");
+                fileNameElement.classList.add("dz-filename");
+                fileNameElement.textContent = file.name;
+                previewElement.appendChild(fileNameElement);  // Append file name below preview
+            });
+
+            // Optionally remove the file name when it's removed
+            this.on("removedfile", function(file) {
+                const previewElement = file.previewElement;
+                const fileNameElement = previewElement.querySelector(".dz-filename");
+                if (fileNameElement) {
+                    previewElement.removeChild(fileNameElement);  // Remove file name when file is removed
+                }
+            });
+        }
+    };
+</script>
+</body>
+</html>

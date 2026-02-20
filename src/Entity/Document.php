@@ -81,9 +81,14 @@ class Document
     #[ORM\OneToMany(mappedBy: 'document', targetEntity: DocumentUserRecipient::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $userRecipients;
 
+    /** @var Collection<int, File> */
+    #[ORM\OneToMany(mappedBy: 'document', targetEntity: File::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    private Collection $files;
+
     public function __construct()
     {
         $this->userRecipients = new ArrayCollection();
+        $this->files = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -266,6 +271,31 @@ class Document
                 $userRecipient->setDocument(null);
             }
         }
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, File>
+     */
+    public function getFiles(): Collection
+    {
+        return $this->files;
+    }
+
+    public function addFile(File $file): static
+    {
+        if (!$this->files->contains($file)) {
+            $this->files->add($file);
+            $file->setDocument($this);
+        }
+
+        return $this;
+    }
+
+    public function removeFile(File $file): static
+    {
+        $this->files->removeElement($file);
 
         return $this;
     }
