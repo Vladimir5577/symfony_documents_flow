@@ -83,6 +83,7 @@ final class DocumentFileController extends AbstractController
         }
 
         if ($count > 0) {
+            $document->setUpdatedAt(new \DateTimeImmutable());
             $entityManager->flush();
             $flashMsg = $count === 1 ? 'Файл прикреплён к документу.' : sprintf('Прикреплено файлов: %d.', $count);
             if ($duplicateCount > 0) {
@@ -163,7 +164,7 @@ final class DocumentFileController extends AbstractController
     }
 
     #[Route('/document_file_delete/{id}', name: 'document_file_delete', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function delete(int $id, Request $request, FileRepository $fileRepository, \Doctrine\ORM\EntityManagerInterface $entityManager): Response
+    public function delete(int $id, Request $request, FileRepository $fileRepository, DocumentRepository $documentRepository, \Doctrine\ORM\EntityManagerInterface $entityManager): Response
     {
         $fileEntity = $fileRepository->find($id);
         if (!$fileEntity instanceof File) {
@@ -188,6 +189,12 @@ final class DocumentFileController extends AbstractController
         }
 
         $entityManager->remove($fileEntity);
+        if ($documentId) {
+            $document = $documentRepository->find($documentId);
+            if ($document instanceof Document) {
+                $document->setUpdatedAt(new \DateTimeImmutable());
+            }
+        }
         $entityManager->flush();
 
         $this->addFlash('success', 'Файл удалён.');

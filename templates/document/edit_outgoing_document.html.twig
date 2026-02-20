@@ -8,9 +8,6 @@
 
 {% block main %}
 
-    {#  style for multichoice  #}
-    <link rel="stylesheet" href="/front_end/assets/compiled/css/choices.min.css">
-
     <h1 class="mb-0">Редактирование документа</h1>
 
     <section id="multiple-column-form">
@@ -66,31 +63,6 @@
                                                     <option value="">Организации не найдены</option>
                                                 {% endif %}
                                             </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="form-group">
-                                            <label for="document_users">Пользователи (получатели)</label>
-                                            <div id="document_users_trigger" style="cursor: pointer;" title="Нажмите, чтобы выбрать по организациям">
-                                                <select id="document_users" class="form-control" name="user_ids[]" multiple>
-                                                    {% if users is defined and users|length > 0 %}
-                                                        {% for user in users %}
-                                                            <option value="{{ user.id }}" selected>
-                                                                {{ user.lastname }} {{ user.firstname }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
-                                                            </option>
-                                                        {% endfor %}
-                                                    {% endif %}
-                                                </select>
-                                            </div>
-                                            <small class="text-muted">Нажмите на поле или кнопку ниже, чтобы выбрать получателей по организациям</small>
-                                            <div class="mt-1">
-                                                <button type="button"
-                                                        class="btn btn-outline-secondary btn-sm"
-                                                        data-bs-toggle="modal"
-                                                        data-bs-target="#organizationUserModal">
-                                                    Выбрать по организациям
-                                                </button>
-                                            </div>
                                         </div>
                                     </div>
                                     <div class="col-12">
@@ -153,54 +125,6 @@
             </div>
         </div>
     </section>
-
-    <div id="org-tree-data" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}">
-        {% if organizations is defined and organizations|length > 0 %}
-            {% for org in organizations %}
-                {% if org %}
-                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
-                {% endif %}
-            {% endfor %}
-        {% endif %}
-    </div>
-
-    {% include 'document/partials/_organization_user_modal.html.twig' %}
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const usersSelect = document.getElementById('document_users');
-            const usersTrigger = document.getElementById('document_users_trigger');
-            let choicesInstance = null;
-
-            if (usersSelect && window.Choices) {
-                choicesInstance = new Choices(usersSelect, {
-                    removeItemButton: true,
-                    searchEnabled: false,
-                    itemSelectText: '',
-                    noChoicesText: 'Нажмите на поле или «Выбрать по организациям»',
-                });
-            }
-
-            if (usersTrigger) {
-                usersTrigger.addEventListener('click', function (e) {
-                    if (e.target.closest('.choices__button') || e.target.closest('.choices__item')) {
-                        return;
-                    }
-                    e.preventDefault();
-                    var modalEl = document.getElementById('organizationUserModal');
-                    if (modalEl) {
-                        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-                        modal.show();
-                    }
-                });
-            }
-
-            window.__documentFlowOrgUserModalChoices = choicesInstance;
-        });
-    </script>
-    {% include 'document/partials/_organization_user_modal_script.html.twig' %}
-
-
 
     {{ include('document/partials/_preview_image_script.html.twig') }}
 

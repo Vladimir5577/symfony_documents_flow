@@ -19,7 +19,7 @@
     <section class="section">
         <div class="card">
             <div class="card-header">
-                <h4 class="card-title">{{ document.name }}</h4>
+                <h4 class="card-title mb-0">{{ document.name }}</h4>
             </div>
             <div class="card-body">
                 <dl class="row mb-0">
@@ -134,6 +134,9 @@
                     {% endif %}
                 </dl>
             </div>
+            <div class="card-footer text-end">
+                <a href="{{ path('app_edit_outgoing_document', {id: document.id}) }}" class="btn btn-warning"><i class="bi bi-pencil-square me-1"></i>Редактирование документа</a>
+            </div>
         </div>
 
         <div class="card mt-4">
@@ -143,7 +146,7 @@
             <div class="card-body">
                 {% if document.userRecipients is defined and document.userRecipients|length > 0 %}
                 <div class="table-responsive">
-                    <table class="table table-sm table-borderless mb-0">
+                    <table class="table table-sm table-borderless table-hover mb-0">
                         <thead>
                             <tr>
                                 <th>ФИО</th>
@@ -201,6 +204,9 @@
                 <p class="text-muted mb-0">Данный документ не имеет получателей.</p>
                 {% endif %}
             </div>
+            <div class="card-footer text-end">
+                <a href="{{ path('app_edit_recipients_outgoing_document', {id: document.id}) }}" class="btn btn-warning"><i class="bi bi-people me-1"></i>Редактировать получателей</a>
+            </div>
         </div>
 
         <div class="card mt-4">
@@ -235,15 +241,9 @@
                 {% endif %}
             </div>
             <div class="card-footer text-end">
-                <a href="{{ path('app_document_upload_files', {id: document.id}) }}" class="btn btn-warning">Редактировать файлы</a>
+                <a href="{{ path('app_document_upload_files', {id: document.id}) }}" class="btn btn-warning"><i class="bi bi-folder2 me-1"></i>Редактировать файлы</a>
             </div>
         </div>
-
-        {% if can_edit|default(false) %}
-        <div class="mt-4 text-end">
-            <a href="{{ path('app_edit_outgoing_document', {id: document.id}) }}" class="btn btn-warning">Редактирование документа</a>
-        </div>
-        {% endif %}
     </section>
 
 

@@ -95,7 +95,7 @@ final class DocumentController extends AbstractController
 
         $formData = [];
         $initialFormData = [
-            'status' => DocumentStatus::NEW->value,
+            'status' => DocumentStatus::DRAFT->value,
         ];
         // Устанавливаем организацию пользователя по умолчанию
         if ($userOrganization) {
@@ -104,7 +104,7 @@ final class DocumentController extends AbstractController
 
         // Пользователей для мультиселекта не грузим — выбор только через модалку по организациям.
         // При повторном отображении формы (ошибка валидации) подгружаем только выбранных по id.
-        $renderForm = function (array $data = [], array $users = []) use ($documentType, $organizationsWithChildren, $initialFormData, $userRepository): Response {
+        $renderForm = function (array $data = [], array $users = []) use ($documentType, $organizationsWithChildren, $initialFormData, $userRepository, $isAdmin, $userOrganization): Response {
             $formData = $data !== [] ? $data : $initialFormData;
             if ($users === [] && !empty($formData['user_ids'])) {
                 $users = $userRepository->findByIds((array) $formData['user_ids']);
@@ -116,6 +116,8 @@ final class DocumentController extends AbstractController
                 'form_data' => $formData,
                 'document_statuses' => DocumentStatus::getCreationChoices(),
                 'users' => $users,
+                'is_admin' => $isAdmin,
+                'user_organization' => $userOrganization,
             ]);
         };
 
@@ -138,11 +140,19 @@ final class DocumentController extends AbstractController
             return $renderForm($formData);
         }
 
-        // Получаем организацию
-        $organizationId = (int)($formData['organization_id'] ?? 0);
-        if ($organizationId <= 0) {
-            $this->addFlash('error', 'Необходимо выбрать организацию.');
-            return $renderForm($formData);
+        // Получаем организацию: для не-админа всегда берём организацию пользователя
+        if ($isAdmin) {
+            $organizationId = (int)($formData['organization_id'] ?? 0);
+            if ($organizationId <= 0) {
+                $this->addFlash('error', 'Необходимо выбрать организацию.');
+                return $renderForm($formData);
+            }
+        } else {
+            if (!$userOrganization) {
+                $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
+                return $this->redirectToRoute('app_new_document');
+            }
+            $organizationId = $userOrganization->getId();
         }
 
         $organization = $organizationRepository->find($organizationId);
@@ -151,39 +161,13 @@ final class DocumentController extends AbstractController
             return $renderForm($formData);
         }
 
-        // Проверяем права доступа к выбранной организации
-        if (!$isAdmin) {
-            if (!$userOrganization) {
-                $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
-                return $this->redirectToRoute('app_new_document');
-            }
-
-            // Разрешена организация пользователя или любая дочерняя к ней
-            $isValid = $organization->getId() === $userOrganization->getId();
-            if (!$isValid) {
-                $checkOrg = $organization;
-                while ($checkOrg->getParent() !== null) {
-                    $checkOrg = $checkOrg->getParent();
-                    if ($checkOrg->getId() === $userOrganization->getId()) {
-                        $isValid = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!$isValid) {
-                $this->addFlash('error', 'Вы не можете выбрать организацию вне вашего дерева организаций.');
-                return $renderForm($formData);
-            }
-        }
-
         // Создаем документ
         $document = new Document();
         $document->setName($name);
         $document->setDescription(trim((string)($formData['description'] ?? '')) ?: null);
         $document->setOrganizationCreator($organization);
         $document->setDocumentType($documentType);
-        // Обрабатываем статус
+        // Обрабатываем статус (по умолчанию — черновик)
         $statusStr = trim((string)($formData['status'] ?? ''));
         if ($statusStr !== '') {
             try {
@@ -193,6 +177,8 @@ final class DocumentController extends AbstractController
                 $this->addFlash('error', 'Неверный статус документа.');
                 return $renderForm($formData);
             }
+        } else {
+            $document->setStatus(DocumentStatus::DRAFT);
         }
 
         $document->setCreatedBy($currentUser);
@@ -238,7 +224,7 @@ final class DocumentController extends AbstractController
                 $recipient = new DocumentUserRecipient();
                 $recipient->setDocument($document);
                 $recipient->setUser($recipientUser);
-                $recipient->setStatus($document->getStatus() ?? DocumentStatus::NEW);
+                $recipient->setStatus($document->getStatus() ?? DocumentStatus::DRAFT);
                 $recipient->setCreatedAt($now);
                 $recipient->setUpdatedAt($now);
 
@@ -435,12 +421,9 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_incoming_documents');
         }
 
-        $canEdit = $isAdmin || $isCreator;
-
         return $this->render('document/view_outgoing_document.html.twig', [
             'active_tab' => 'outgoing_documents',
             'document' => $document,
-            'can_edit' => $canEdit,
         ]);
     }
 
@@ -502,42 +485,27 @@ final class DocumentController extends AbstractController
         }
 
         // Подготовка данных формы из документа
-        $currentRecipientIds = [];
-        foreach ($document->getUserRecipients() as $recipient) {
-            if ($recipient->getUser()) {
-                $currentRecipientIds[] = $recipient->getUser()->getId();
-            }
-        }
-
         $initialFormData = [
             'name' => $document->getName(),
             'description' => $document->getDescription(),
             'organization_id' => $document->getOrganizationCreator()->getId(),
             'status' => $document->getStatus()?->value,
             'deadline' => $document->getDeadline()?->format('Y-m-d'),
-            'user_ids' => $currentRecipientIds,
         ];
 
-        // Пользователей для мультиселекта не грузим списком — выбор только через модалку по организациям.
-        // При первом открытии показываем только текущих получателей; при повторном (ошибка) — выбранных по form_data.
-        $initialUsers = $userRepository->findByIds($currentRecipientIds);
-        $renderForm = function (array $data = [], array $users = []) use ($document, $organizationsWithChildren, $initialFormData, $userRepository): Response {
+        $renderForm = function (array $data = []) use ($document, $organizationsWithChildren, $initialFormData): Response {
             $formData = $data !== [] ? $data : $initialFormData;
-            if ($users === [] && !empty($formData['user_ids'])) {
-                $users = $userRepository->findByIds((array) $formData['user_ids']);
-            }
             return $this->render('document/edit_outgoing_document.html.twig', [
                 'active_tab' => 'outgoing_documents',
                 'document' => $document,
                 'organizations' => $organizationsWithChildren,
                 'form_data' => $formData,
                 'document_statuses' => DocumentStatus::getCreationChoices(),
-                'users' => $users,
             ]);
         };
 
         if (!$request->isMethod('POST')) {
-            return $renderForm([], $initialUsers);
+            return $renderForm([]);
         }
 
         $formData = $request->request->all();
@@ -603,7 +571,142 @@ final class DocumentController extends AbstractController
             return $renderForm($formData);
         }
 
-        // Обновление получателей — только если список изменился
+        // Обновление получателей — только если форма их передаёт (страница редактирования получателей отдельно)
+        if (array_key_exists('user_ids', $formData)) {
+            $userIds = $formData['user_ids'] ?? [];
+            if (!is_array($userIds)) {
+                $userIds = [];
+            }
+            $userIds = array_map('intval', $userIds);
+            $userIds = array_values(array_filter($userIds, fn($id) => $id > 0));
+            sort($userIds);
+
+            $currentRecipientIds = [];
+            foreach ($document->getUserRecipients() as $recipient) {
+                if ($recipient->getUser()) {
+                    $currentRecipientIds[] = $recipient->getUser()->getId();
+                }
+            }
+            sort($currentRecipientIds);
+
+            $recipientsChanged = ($userIds !== $currentRecipientIds);
+
+            if ($recipientsChanged) {
+                // Удаляем все текущие записи и сразу выполняем
+                foreach ($document->getUserRecipients()->toArray() as $recipient) {
+                    $entityManager->remove($recipient);
+                }
+                $document->getUserRecipients()->clear();
+                $entityManager->flush();
+
+                // Создаём новые записи
+                foreach ($userIds as $userId) {
+                    $user = $userRepository->find($userId);
+                    if (!$user) {
+                        continue;
+                    }
+
+                    $recipient = new DocumentUserRecipient();
+                    $recipient->setDocument($document);
+                    $recipient->setUser($user);
+                    $recipient->setStatus(DocumentStatus::NEW);
+                    $document->addUserRecipient($recipient);
+                    $entityManager->persist($recipient);
+                }
+            }
+        }
+
+        $entityManager->flush();
+
+        $this->addFlash('success', 'Документ успешно обновлён.');
+        return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
+    }
+
+    #[Route('/edit_recipients_outgoing_document/{id}', name: 'app_edit_recipients_outgoing_document', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
+    public function editRecipientsDocument(
+        int                    $id,
+        Request                $request,
+        DocumentRepository     $documentRepository,
+        OrganizationRepository $organizationRepository,
+        UserRepository         $userRepository,
+        EntityManagerInterface $entityManager,
+    ): Response {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document) {
+            throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
+        if (!$isAdmin && !$isCreator) {
+            $this->addFlash('error', 'Нет доступа к редактированию этого документа.');
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
+        }
+
+        $userOrganization = $currentUser->getOrganization();
+        $rootOrganization = $userOrganization;
+        if ($userOrganization && !$isAdmin) {
+            while ($rootOrganization->getParent() !== null) {
+                $rootOrganization = $rootOrganization->getParent();
+            }
+        }
+
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+        $organizationsWithChildren = [];
+        if (!empty($organizationTree)) {
+            foreach ($organizationTree as $org) {
+                $loadedOrg = $organizationRepository->findWithChildren($org->getId());
+                if ($loadedOrg) {
+                    $organizationsWithChildren[] = $loadedOrg;
+                }
+            }
+        }
+        if (empty($organizationsWithChildren) && $userOrganization) {
+            $loadedOrg = $organizationRepository->findWithChildren($userOrganization->getId());
+            if ($loadedOrg) {
+                $organizationsWithChildren[] = $loadedOrg;
+            }
+        }
+
+        $currentRecipientIds = [];
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser()) {
+                $currentRecipientIds[] = $recipient->getUser()->getId();
+            }
+        }
+        $initialFormData = ['user_ids' => $currentRecipientIds];
+        $initialUsers = $userRepository->findByIds($currentRecipientIds);
+
+        $renderForm = function (array $data = [], array $users = []) use ($document, $organizationsWithChildren, $initialFormData, $userRepository): Response {
+            $formData = $data !== [] ? $data : $initialFormData;
+            if ($users === [] && !empty($formData['user_ids'])) {
+                $users = $userRepository->findByIds((array) $formData['user_ids']);
+            }
+            return $this->render('document/edit_recipients_outgoing_document.html.twig', [
+                'active_tab' => 'outgoing_documents',
+                'document' => $document,
+                'organizations' => $organizationsWithChildren,
+                'form_data' => $formData,
+                'users' => $users,
+            ]);
+        };
+
+        if (!$request->isMethod('POST')) {
+            return $renderForm([], $initialUsers);
+        }
+
+        $formData = $request->request->all();
+        if (!$this->isCsrfTokenValid('edit_recipients_outgoing_document', $formData['_csrf_token'] ?? '')) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('app_edit_recipients_outgoing_document', ['id' => $id]);
+        }
+
         $userIds = $formData['user_ids'] ?? [];
         if (!is_array($userIds)) {
             $userIds = [];
@@ -612,31 +715,22 @@ final class DocumentController extends AbstractController
         $userIds = array_values(array_filter($userIds, fn($id) => $id > 0));
         sort($userIds);
 
-        $currentRecipientIds = [];
-        foreach ($document->getUserRecipients() as $recipient) {
-            if ($recipient->getUser()) {
-                $currentRecipientIds[] = $recipient->getUser()->getId();
-            }
-        }
-        sort($currentRecipientIds);
-
-        $recipientsChanged = ($userIds !== $currentRecipientIds);
+        $currentRecipientIdsSorted = $currentRecipientIds;
+        sort($currentRecipientIdsSorted);
+        $recipientsChanged = ($userIds !== $currentRecipientIdsSorted);
 
         if ($recipientsChanged) {
-            // Удаляем все текущие записи и сразу выполняем
             foreach ($document->getUserRecipients()->toArray() as $recipient) {
                 $entityManager->remove($recipient);
             }
             $document->getUserRecipients()->clear();
             $entityManager->flush();
 
-            // Создаём новые записи
             foreach ($userIds as $userId) {
                 $user = $userRepository->find($userId);
                 if (!$user) {
                     continue;
                 }
-
                 $recipient = new DocumentUserRecipient();
                 $recipient->setDocument($document);
                 $recipient->setUser($user);
@@ -644,11 +738,11 @@ final class DocumentController extends AbstractController
                 $document->addUserRecipient($recipient);
                 $entityManager->persist($recipient);
             }
+            $document->setUpdatedAt(new \DateTimeImmutable());
         }
 
         $entityManager->flush();
-
-        $this->addFlash('success', 'Документ успешно обновлён.');
+        $this->addFlash('success', 'Получатели документа обновлены.');
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
     }
 
