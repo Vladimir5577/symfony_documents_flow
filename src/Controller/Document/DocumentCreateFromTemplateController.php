@@ -14,98 +14,60 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use PhpOffice\PhpWord\TemplateProcessor;
 
 final class DocumentCreateFromTemplateController extends AbstractController
 {
-    #[Route('/document_create_from_template', name: 'app_document_create_from_template')]
-    public function index(Request $request): Response
+    #[Route('/document_create_docx_form', name: 'app_document_create_docx_form')]
+    public function creteDocxForm(): Response
     {
-//        $content = '
-//            <p>Прошу принять меня на работу.</p>
-//            <p>ФИО: Иванов Иван Иванович</p>
-//        ';
-//
-//        // если форма отправлена, подставляем новый текст
-//        if ($request->isMethod('POST')) {
-//            $content = $request->request->get('content');
-//        }
 
-        return $this->render('document_create_from_template/index.html.twig', [
-            'content' => $content,
-            'date' => (new \DateTime())->format('d.m.Y'),
+
+
+        return $this->render('document_create_from_template/create_docx_form.html.twig', [
+            'active_tab' => 'document_upload_files',
         ]);
     }
 
-    #[Route('/document_save_from_template', name: 'app_document_save_from_template')]
-    public function saveFromTemplate(
-        Request $request,
-        FileUploadService $fileUploadService,
-        #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
-        #[Autowire('%private_upload_dir_documents_updated%')] string $updatedDir,
-        #[Autowire('%kernel.project_dir%')] string $projectDir,
-    ): Response
+    #[Route('/document_create_from_form_action', name: 'app_document_create_from_form_action', methods: ['POST'])]
+    public function createFromFormAction(Request $request): Response
     {
-//        $html = $request->request->get('html');
-//        if (!$html) {
-//            return $this->json(['status' => 'error', 'message' => 'HTML не передан']);
-//        }
-//
-//        // Конвертим в UTF-8, если надо
-//        if (!mb_check_encoding($html, 'UTF-8')) {
-//            $html = mb_convert_encoding($html, 'UTF-8');
-//        }
-//
-//        $baseName = date('Y-m-d_His') . '_' . $fileUploadService->generateFileName();
-//
-//        $htmlFilename = $baseName . '.html';
-//        $htmlPath = $originalsDir . DIRECTORY_SEPARATOR . $htmlFilename;
-//        file_put_contents($htmlPath, $html);
-//
-//
-//
-//        $pdfFilename = $baseName . '.pdf';
-//        $pdfPath = $updatedDir . DIRECTORY_SEPARATOR . $pdfFilename;
-//
-//        $mpdfTempDir = $projectDir . '/var/tmp/mpdf';
-//        $mpdf = new Mpdf([
-//            'mode' => 'utf-8',
-//            'format' => 'A4',
-//            'margin_left' => 15,
-//            'margin_right' => 15,
-//            'margin_top' => 20,
-//            'margin_bottom' => 20,
-//            'tempDir' => $mpdfTempDir,
-//        ]);
-//
-//        $mpdf->setFooter('{PAGENO} / {nb}');
-//
-//        $htmlForPdf = '<!DOCTYPE html>
-//<html lang="ru">
-//<head>
-//<meta charset="UTF-8">
-//<style>
-//body { font-family: DejaVu Sans, sans-serif; font-size: 12pt; margin:0; padding:0; }
-//</style>
-//</head>
-//<body>' . $html . '</body>
-//</html>';
-//
-//        $htmlPath = '/uploads/documents/originals/2026-02-03_172046_6c7219907d1036448599efb865409e6f.html';
-//        $htmlForPdf = file_get_contents($htmlPath);
-//
-//
-//        $mpdf->WriteHTML($htmlForPdf, \Mpdf\HTMLParserMode::HTML_BODY);
-//
-////        $mpdf->SetWatermarkText('СЕКРЕТНО');
-////        $mpdf->showWatermarkText = true;
-//
-//        $mpdf->Output($pdfPath, Destination::FILE);
+        if (!$this->isCsrfTokenValid('create_docx_form', $request->request->get('_csrf_token') ?? '')) {
+            $this->addFlash('error', 'Неверный токен.');
+            return $this->redirectToRoute('app_document_create_docx_form');
+        }
 
-        return $this->json([
-            'status' => 'ok',
-            'message' => 'HTML и PDF сохранены',
-//            'html' => $htmlFilename,
-//            'pdf' => $pdfFilename,
+        $companyName = (string) $request->request->get('company_name', '');
+        $clientName = (string) $request->request->get('client_name', '');
+        $amount = (string) $request->request->get('amount', '');
+        $contractDate = (string) $request->request->get('contract_date', '');
+
+        $templatePath = $this->getParameter('kernel.project_dir') . '/public/files/word.docx';
+        if (!is_readable($templatePath)) {
+            $this->addFlash('error', 'Шаблон word.docx не найден.');
+            return $this->redirectToRoute('app_document_create_docx_form', [], 302);
+        }
+
+        $template = new TemplateProcessor($templatePath);
+        $template->setValue('company_name', $companyName);
+        $template->setValue('client_name', $clientName);
+        $template->setValue('amount', $amount);
+        $template->setValue('contract_date', $contractDate);
+
+        $filesDir = $this->getParameter('kernel.project_dir') . '/public/files';
+        $outputFilename = 'generated_' . date('Y-m-d_His') . '_' . bin2hex(random_bytes(4)) . '.docx';
+        $outputPath = $filesDir . DIRECTORY_SEPARATOR . $outputFilename;
+        $template->saveAs($outputPath);
+
+        $content = file_get_contents($outputPath);
+        if ($content === false) {
+            $this->addFlash('error', 'Не удалось прочитать созданный файл.');
+            return $this->redirectToRoute('app_document_create_docx_form');
+        }
+
+        return new Response($content, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'Content-Disposition' => 'attachment; filename="' . $outputFilename . '"',
         ]);
     }
 
