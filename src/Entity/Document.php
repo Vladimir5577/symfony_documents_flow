@@ -58,6 +58,9 @@ class Document
     #[Assert\Length(max: 255, maxMessage: 'Путь к обновлённому файлу не должен превышать {{ limit }} символов.')]
     private ?string $updatedFile = null;
 
+    #[ORM\Column(name: 'is_published', type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $isPublished = false;
+
     // created_at
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
@@ -176,6 +179,18 @@ class Document
     public function setUpdatedFile(?string $updatedFile): static
     {
         $this->updatedFile = $updatedFile;
+
+        return $this;
+    }
+
+    public function isPublished(): bool
+    {
+        return $this->isPublished;
+    }
+
+    public function setIsPublished(bool $isPublished): static
+    {
+        $this->isPublished = $isPublished;
 
         return $this;
     }

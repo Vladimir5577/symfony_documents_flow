@@ -96,6 +96,7 @@ final class DocumentController extends AbstractController
         $formData = [];
         $initialFormData = [
             'status' => DocumentStatus::DRAFT->value,
+            'is_published' => false,
         ];
         // Устанавливаем организацию пользователя по умолчанию
         if ($userOrganization) {
@@ -194,6 +195,21 @@ final class DocumentController extends AbstractController
                 return $renderForm($formData);
             }
         }
+
+        $wantsPublish = isset($formData['is_published']) && (bool) $formData['is_published'];
+        if ($wantsPublish) {
+            if ($document->getStatus() === DocumentStatus::DRAFT) {
+                $this->addFlash('error', 'Документ нельзя опубликовать в статусе черновик.');
+                return $renderForm($formData);
+            }
+            $userIds = $formData['user_ids'] ?? [];
+            if (!is_array($userIds) || empty(array_filter(array_map('intval', $userIds)))) {
+                $this->addFlash('error', 'Документ нельзя опубликовать без получателей.');
+                return $renderForm($formData);
+            }
+        }
+
+        $document->setIsPublished($wantsPublish);
 
         // Валидация документа
         $errors = $validator->validate($document);
@@ -491,6 +507,7 @@ final class DocumentController extends AbstractController
             'organization_id' => $document->getOrganizationCreator()->getId(),
             'status' => $document->getStatus()?->value,
             'deadline' => $document->getDeadline()?->format('Y-m-d'),
+            'is_published' => $document->isPublished(),
         ];
 
         $renderForm = function (array $data = []) use ($document, $organizationsWithChildren, $initialFormData): Response {
@@ -555,12 +572,25 @@ final class DocumentController extends AbstractController
             }
         }
 
+        $wantsPublish = isset($formData['is_published']) && (bool) $formData['is_published'];
+        if ($wantsPublish) {
+            if ($status === DocumentStatus::DRAFT) {
+                $this->addFlash('error', 'Документ нельзя опубликовать в статусе черновик.');
+                return $renderForm($formData);
+            }
+            if ($document->getUserRecipients()->isEmpty()) {
+                $this->addFlash('error', 'Документ нельзя опубликовать без получателей.');
+                return $renderForm($formData);
+            }
+        }
+
         // Обновление полей документа
         $document->setName($name);
         $document->setDescription(trim((string)($formData['description'] ?? '')));
         $document->setOrganizationCreator($organization);
         $document->setStatus($status);
         $document->setDeadline($deadline);
+        $document->setIsPublished($wantsPublish);
 
         // Валидация сущности
         $errors = $validator->validate($document);

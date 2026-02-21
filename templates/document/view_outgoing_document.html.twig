@@ -14,11 +14,22 @@
         </div>
     {% endfor %}
 
-    <h1 class="mb-0">Просмотр исходящего документа</h1>
+    <h1 class="mb-4">Просмотр исходящего документа</h1>
 
     <section class="section">
         <div class="card">
             <div class="card-header">
+                {% if not document.isPublished %}
+                    <div class="d-flex justify-content-between align-items-center gap-2 mb-4 p-3 rounded bg-danger bg-opacity-10 border border-danger border-2">
+                        <h2 class="h5 mb-0 text-danger fw-bold">Документ не опубликован</h2>
+                        <a href="{{ path('app_edit_outgoing_document', {id: document.id}) }}" class="btn btn-success btn-lg" role="button">Опубликовать документ</a>
+                    </div>
+                {% else %}
+                    <div class="d-flex justify-content-between align-items-center gap-2 mb-4 p-3 rounded bg-success bg-opacity-10 border border-success border-2">
+                        <h2 class="h5 mb-0 text-success fw-bold">Документ опубликован</h2>
+                        <a href="{{ path('app_edit_outgoing_document', {id: document.id}) }}" class="btn btn-outline-primary btn-lg" role="button">Редактировать</a>
+                    </div>
+                {% endif %}
                 <h4 class="card-title mb-0">{{ document.name }}</h4>
             </div>
             <div class="card-body">
