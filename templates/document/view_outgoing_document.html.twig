@@ -7,6 +7,12 @@
 {% endblock %}
 
 {% block main %}
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
     {% for message in app.flashes('success') %}
         <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
             {{ message }}
@@ -22,7 +28,10 @@
                 {% if not document.isPublished %}
                     <div class="d-flex justify-content-between align-items-center gap-2 mb-4 p-3 rounded bg-danger bg-opacity-10 border border-danger border-2">
                         <h2 class="h5 mb-0 text-danger fw-bold">Документ не опубликован</h2>
-                        <a href="{{ path('app_edit_outgoing_document', {id: document.id}) }}" class="btn btn-success btn-lg" role="button">Опубликовать документ</a>
+                        <form id="publish-document-form" action="{{ path('app_publish_outgoing_document', {id: document.id}) }}" method="post" class="d-inline">
+                            <input type="hidden" name="_token" value="{{ csrf_token('publish_document_' ~ document.id) }}">
+                            <button type="submit" class="btn btn-success btn-lg">Опубликовать документ</button>
+                        </form>
                     </div>
                 {% else %}
                     <div class="d-flex justify-content-between align-items-center gap-2 mb-4 p-3 rounded bg-success bg-opacity-10 border border-success border-2">
@@ -268,4 +277,25 @@
         });
     </script>
     {{ include('document/partials/_preview_image_script.html.twig') }}
+    <script>
+        (function () {
+            var form = document.getElementById('publish-document-form');
+            if (!form) return;
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                Swal.fire({
+                    title: "Вы хотите опубликовать документ?",
+                    text: "Редактирование опубликованного документа будет недоступно.",
+                    icon: "question",
+                    showCancelButton: true,
+                    confirmButtonText: "Опубликовать",
+                    cancelButtonText: "Отмена"
+                }).then(function (result) {
+                    if (result.isConfirmed) {
+                        form.submit();
+                    }
+                });
+            });
+        })();
+    </script>
 {% endblock %}

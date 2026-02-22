@@ -6,6 +6,7 @@ namespace App\Controller\Document;
 use App\Entity\Document;
 use App\Entity\DocumentHistory;
 use App\Entity\DocumentUserRecipient;
+use App\Entity\File;
 use App\Entity\User;
 use App\Enum\DocumentStatus;
 use App\Repository\DocumentHistoryRepository;
@@ -18,6 +19,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -220,6 +222,32 @@ final class DocumentController extends AbstractController
             return $renderForm($formData);
         }
 
+        // Валидация файлов (до создания документа)
+        $uploadedFiles = $request->files->get('files');
+        if (!\is_array($uploadedFiles)) {
+            $uploadedFiles = $uploadedFiles ? [$uploadedFiles] : [];
+        }
+        $maxFileSizeBytes = 5 * 1024 * 1024; // 5 МБ, как на странице загрузки файлов
+        foreach ($uploadedFiles as $uploadedFile) {
+            if (!$uploadedFile instanceof UploadedFile) {
+                continue;
+            }
+            if ($uploadedFile->getSize() > $maxFileSizeBytes) {
+                $this->addFlash('error', sprintf(
+                    'Файл «%s» превышает допустимый размер (макс. 5 МБ). При ошибке валидации файлы нужно выбрать заново.',
+                    $uploadedFile->getClientOriginalName()
+                ));
+                return $renderForm($formData);
+            }
+            if ($uploadedFile->getError() !== \UPLOAD_ERR_OK) {
+                $this->addFlash('error', sprintf(
+                    'Ошибка загрузки файла «%s». При ошибке валидации файлы нужно выбрать заново.',
+                    $uploadedFile->getClientOriginalName()
+                ));
+                return $renderForm($formData);
+            }
+        }
+
         // Сохраняем документ
         $entityManager->persist($document);
 
@@ -248,7 +276,32 @@ final class DocumentController extends AbstractController
             }
         }
 
-        $entityManager->flush();
+        $connection = $entityManager->getConnection();
+        $connection->beginTransaction();
+        try {
+            // Сначала сохраняем документ и получателей, чтобы у документа появился id (нужен Vich для пути загрузки)
+            $entityManager->flush();
+
+            // Прикрепляем файлы к документу (после flush document уже имеет id)
+            foreach ($uploadedFiles as $uploadedFile) {
+                if (!$uploadedFile instanceof UploadedFile) {
+                    continue;
+                }
+                $clientName = $uploadedFile->getClientOriginalName();
+                $fileEntity = new File();
+                $fileEntity->setDocument($document);
+                $fileEntity->setFile($uploadedFile);
+                $fileEntity->setTitle(pathinfo($clientName, PATHINFO_FILENAME));
+                $document->addFile($fileEntity);
+                $entityManager->persist($fileEntity);
+            }
+            $entityManager->flush();
+
+            $connection->commit();
+        } catch (\Throwable $e) {
+            $connection->rollBack();
+            throw $e;
+        }
 
         $this->addFlash('success', 'Документ успешно создан.');
 
@@ -650,6 +703,53 @@ final class DocumentController extends AbstractController
 
         $this->addFlash('success', 'Документ успешно обновлён.');
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
+    }
+
+    #[Route('/document/{id}/publish', name: 'app_publish_outgoing_document', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function publishOutgoingDocument(
+        int                    $id,
+        Request                $request,
+        DocumentRepository     $documentRepository,
+        EntityManagerInterface $entityManager,
+    ): Response {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            $this->addFlash('error', 'Необходимо войти в систему.');
+            return $this->redirectToRoute('app_login');
+        }
+
+        $document = $documentRepository->findOneWithRelations($id);
+        if (!$document) {
+            throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
+        if (!$isAdmin && !$isCreator) {
+            $this->addFlash('error', 'Нет доступа к публикации этого документа.');
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
+        }
+
+        if (!$this->isCsrfTokenValid('publish_document_' . $id, $request->request->get('_token'))) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
+        }
+
+        if ($document->getStatus() === DocumentStatus::DRAFT) {
+            $this->addFlash('error', 'Документ нельзя опубликовать в статусе черновик.');
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
+        }
+
+        if ($document->getUserRecipients()->isEmpty()) {
+            $this->addFlash('error', 'Документ нельзя опубликовать без получателей.');
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
+        }
+
+        $document->setIsPublished(true);
+        $entityManager->flush();
+
+        $this->addFlash('success', 'Документ успешно опубликован.');
+        return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
     }
 
     #[Route('/edit_recipients_outgoing_document/{id}', name: 'app_edit_recipients_outgoing_document', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]

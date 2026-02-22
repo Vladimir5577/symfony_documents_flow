@@ -67,21 +67,25 @@
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label for="document_status">Статус</label>
-                                            <select id="document_status" class="form-control" name="status" required>
-                                                {% for value, label in document_statuses %}
-                                                    <option value="{{ value }}" {% if form_data.status|default('NEW') == value %}selected{% endif %}>{{ label }}</option>
-                                                {% endfor %}
-                                            </select>
+                                            <label class="d-block mb-1 mt-3">Статус</label>
+                                            {% for value, label in document_statuses %}
+                                                <div class="form-check">
+                                                    <input type="radio" id="document_status_{{ value }}" class="form-check-input" name="status" value="{{ value }}" {% if form_data.status|default('NEW') == value %}checked{% endif %} required>
+                                                    <label class="form-check-label" for="document_status_{{ value }}">{{ label }}</label>
+                                                </div>
+                                            {% endfor %}
                                         </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label for="document_deadline">Срок выполнения</label>
+                                            <label for="document_deadline" class="mt-3">Срок выполнения</label>
                                             <input type="date" id="document_deadline" class="form-control" name="deadline" value="{{ form_data.deadline|default('') }}">
                                         </div>
                                     </div>
                                     <div class="col-12">
+                                        <div class="form-group">
+                                            <label class="d-block mt-3">Публикация докуента</label>
+                                        </div>
                                         <div class="form-check">
                                             <input type="checkbox" id="document_is_published" class="form-check-input" name="is_published" value="1" {% if form_data.is_published|default(false) %}checked{% endif %}>
                                             <label class="form-check-label" for="document_is_published">Опубликовать документ</label>

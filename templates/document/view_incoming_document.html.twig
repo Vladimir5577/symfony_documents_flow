@@ -7,6 +7,12 @@
 {% endblock %}
 
 {% block main %}
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
     {% for message in app.flashes('success') %}
         <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
             {{ message }}
@@ -20,17 +26,18 @@
         </div>
     {% endfor %}
 
-
-    <h1 class="mb-0">Просмотр входящего документа</h1>
-
+    <h1 class="mb-4">Просмотр входящего документа</h1>
 
     <section class="section">
         <div class="card">
             <div class="card-header">
-                <h4 class="card-title">{{ document.name }}</h4>
+                <h4 class="card-title mb-0">Основной</h4>
             </div>
             <div class="card-body">
                 <dl class="row mb-0">
+                    <dt class="col-sm-3 text-muted">Название</dt>
+                    <dd class="col-sm-9">{{ document.name }}</dd>
+
                     <dt class="col-sm-3 text-muted">Тип документа</dt>
                     <dd class="col-sm-9">{{ document.documentType ? document.documentType.name : '—' }}</dd>
 
@@ -85,111 +92,148 @@
                         {% endif %}
                     </dd>
 
+                    <dt class="col-sm-3 text-muted">Описание</dt>
+                    <dd class="col-sm-9">{{ document.description ? document.description|nl2br : '—' }}</dd>
+
                     {% if document.originalFile %}
-                        <dt class="col-sm-3 text-muted">Оригинальный файл</dt>
-                        <dd class="col-sm-9">
-                            <div class="mt-1">
-                                <a href="{{ path('app_document_download_file', {id: document.id, type: 'original'}) }}" class="btn btn-sm btn-outline-primary me-1">
-                                    Скачать оригинал
-                                </a>
-                                {% set ext = document.originalFile|split('.')|last|lower %}
-                                {% if document.updatedfile %}
-                                    <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
-                                        Просмотр
-                                    </a>
-                                {% endif %}
-                                <a href="{{ path('app_sign_and_save_document', {id: document.id, type: 'original', inline: 1}) }}" class="btn btn-sm btn-outline-success" target="_blank" rel="noopener">
-                                    Подписать
-                                </a>
-                            </div>
-                        </dd>
+{#                        <dt class="col-sm-3 text-muted">Оригинальный файл</dt>#}
+{#                        <dd class="col-sm-9">#}
+{#                            <div class="mt-1">#}
+{#                                <a href="{{ path('app_document_download_file', {id: document.id, type: 'original'}) }}" class="btn btn-sm btn-outline-primary me-1">#}
+{#                                    Скачать оригинал#}
+{#                                </a>#}
+{#                                {% set ext = document.originalFile|split('.')|last|lower %}#}
+{#                                {% if document.updatedFile %}#}
+{#                                    <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">#}
+{#                                        Просмотр#}
+{#                                    </a>#}
+{#                                {% endif %}#}
+{#                                <a href="{{ path('app_sign_and_save_document', {id: document.id, type: 'original', inline: 1}) }}" class="btn btn-sm btn-outline-success" target="_blank" rel="noopener">#}
+{#                                    Подписать#}
+{#                                </a>#}
+{#                            </div>#}
+{#                        </dd>#}
                     {% endif %}
                     {% if document.updatedFile %}
-                        <dt class="col-sm-3 text-muted">Обновлённый файл</dt>
-                        <dd class="col-sm-9">
-                            <div class="mt-1">
-                                <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated'}) }}" class="btn btn-sm btn-outline-primary me-1">
-                                    Скачать
-                                </a>
-                                {% set ext = document.updatedFile|split('.')|last|lower %}
-                                {% if ext in ['doc', 'docx', 'pdf'] %}
-                                    <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
-                                        Просмотр
-                                    </a>
-                                {% endif %}
-                            </div>
-                        </dd>
+{#                        <dt class="col-sm-3 text-muted">Обновлённый файл</dt>#}
+{#                        <dd class="col-sm-9">#}
+{#                            <div class="mt-1">#}
+{#                                <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated'}) }}" class="btn btn-sm btn-outline-primary me-1">#}
+{#                                    Скачать#}
+{#                                </a>#}
+{#                                {% set ext = document.updatedFile|split('.')|last|lower %}#}
+{#                                {% if ext in ['doc', 'docx', 'pdf'] %}#}
+{#                                    <a href="{{ path('app_document_download_file', {id: document.id, type: 'updated', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">#}
+{#                                        Просмотр#}
+{#                                    </a>#}
+{#                                {% endif %}#}
+{#                            </div>#}
+{#                        </dd>#}
                     {% endif %}
                 </dl>
+            </div>
+        </div>
 
-                {% if document.description %}
-                    <hr>
-                    <h6 class="text-muted">Описание</h6>
-                    <p class="mb-0">{{ document.description|nl2br }}</p>
-                {% endif %}
-
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Получатели</h4>
+            </div>
+            <div class="card-body">
                 {% if document.userRecipients is defined and document.userRecipients|length > 0 %}
-                    <hr>
-                    <h6 class="text-muted">Получатели</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-borderless mb-0">
-                            <thead>
-                                <tr>
-                                    <th>ФИО</th>
-                                    <th>Статус</th>
-                                    <th></th>
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>ФИО</th>
+                                <th>Статус</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for recipient in document.userRecipients %}
+                                <tr{% if recipient.user %} data-user-id="{{ recipient.user.id }}" role="button" tabindex="0"{% endif %}>
+                                    <td>
+                                        {% if recipient.user %}
+                                            {{ recipient.user.lastname }} {{ recipient.user.firstname }}{% if recipient.user.patronymic %} {{ recipient.user.patronymic }}{% endif %}
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if recipient.status %}
+                                            {% set status = recipient.status %}
+                                            {% if status.value == 'DRAFT' %}
+                                                <span class="badge bg-secondary">{{ status.label }}</span>
+                                            {% elseif status.value == 'NEW' %}
+                                                <span class="badge bg-primary">{{ status.label }}</span>
+                                            {% elseif status.value == 'IN_REVIEW' %}
+                                                <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                            {% elseif status.value == 'PENDING_APPROVAL' %}
+                                                <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                            {% elseif status.value == 'APPROVED' %}
+                                                <span class="badge bg-success">{{ status.label }}</span>
+                                            {% elseif status.value == 'REJECTED' %}
+                                                <span class="badge bg-danger">{{ status.label }}</span>
+                                            {% elseif status.value == 'IN_PROGRESS' %}
+                                                <span class="badge bg-info text-dark">{{ status.label }}</span>
+                                            {% elseif status.value == 'COMPLETED' %}
+                                                <span class="badge bg-success">{{ status.label }}</span>
+                                            {% elseif status.value == 'CANCELLED' %}
+                                                <span class="badge bg-dark">{{ status.label }}</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ status.label }}</span>
+                                            {% endif %}
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if recipient.user %}
+                                            <a href="{{ path('app_history_incoming_document', {'id': document.id, 'userId': recipient.user.id}) }}" class="btn btn-sm btn-outline-primary">Посмотреть историю</a>
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                {% for recipient in document.userRecipients %}
-                                    <tr>
-                                        <td>
-                                            {% if recipient.user %}
-                                                {{ recipient.user.lastname }} {{ recipient.user.firstname }}{% if recipient.user.patronymic %} {{ recipient.user.patronymic }}{% endif %}
-                                            {% else %}
-                                                —
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if recipient.status %}
-                                                {% set status = recipient.status %}
-                                                {% if status.value == 'DRAFT' %}
-                                                    <span class="badge bg-secondary">{{ status.label }}</span>
-                                                {% elseif status.value == 'NEW' %}
-                                                    <span class="badge bg-primary">{{ status.label }}</span>
-                                                {% elseif status.value == 'IN_REVIEW' %}
-                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
-                                                {% elseif status.value == 'PENDING_APPROVAL' %}
-                                                    <span class="badge bg-warning text-dark">{{ status.label }}</span>
-                                                {% elseif status.value == 'APPROVED' %}
-                                                    <span class="badge bg-success">{{ status.label }}</span>
-                                                {% elseif status.value == 'REJECTED' %}
-                                                    <span class="badge bg-danger">{{ status.label }}</span>
-                                                {% elseif status.value == 'IN_PROGRESS' %}
-                                                    <span class="badge bg-info text-dark">{{ status.label }}</span>
-                                                {% elseif status.value == 'COMPLETED' %}
-                                                    <span class="badge bg-success">{{ status.label }}</span>
-                                                {% elseif status.value == 'CANCELLED' %}
-                                                    <span class="badge bg-dark">{{ status.label }}</span>
-                                                {% else %}
-                                                    <span class="badge bg-secondary">{{ status.label }}</span>
-                                                {% endif %}
-                                            {% else %}
-                                                —
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if recipient.user %}
-                                                <a href="{{ path('app_history_incoming_document', {'id': document.id, 'userId': recipient.user.id}) }}" class="btn btn-sm btn-outline-primary">Посмотреть историю</a>
-                                            {% else %}
-                                                —
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Данный документ не имеет получателей.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Файлы</h4>
+            </div>
+            <div class="card-body">
+                {% if document.files is defined and document.files|length > 0 %}
+                <ul class="list-group list-group-flush">
+                    {% for file in document.files %}
+                    <li class="list-group-item d-flex align-items-center gap-3 px-3">
+                        <div class="flex-shrink-0 rounded bg-light d-flex align-items-center justify-content-center text-muted" style="width: 40px; height: 40px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+                        </div>
+                        <span class="flex-grow-1">
+                            {% if file.filePath %}
+                                {{ (file.title ?: file.filePath|split('.')|first) ~ '.' ~ (file.filePath|split('.')|last) }}
+                            {% else %}
+                                {{ file.title ?: '—' }}
+                            {% endif %}
+                        </span>
+                        {% if file.filePath %}
+                        <a href="{{ path('document_file_download', {id: file.id}) }}" class="btn btn-sm btn-outline-primary flex-shrink-0" download target="_blank" rel="noopener">
+                            Скачать
+                        </a>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted mb-0">К документу не прикреплены файлы.</p>
                 {% endif %}
             </div>
         </div>
@@ -219,4 +263,16 @@
             </form>
         </div>
     {% endif %}
+
+
+    {% include 'user/partials/_modal_view_user.html.twig' %}
+    <style>.table tbody tr[data-user-id] { cursor: pointer; }</style>
+    <script>
+        document.querySelectorAll('tr[data-user-id]').forEach(function (row) {
+            row.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.openUserViewModal(this.dataset.userId); }
+            });
+        });
+    </script>
+
 {% endblock %}
