@@ -268,7 +268,7 @@ final class DocumentController extends AbstractController
                 $recipient = new DocumentUserRecipient();
                 $recipient->setDocument($document);
                 $recipient->setUser($recipientUser);
-                $recipient->setStatus($document->getStatus() ?? DocumentStatus::DRAFT);
+                $recipient->setStatus(DocumentStatus::NEW);
                 $recipient->setCreatedAt($now);
                 $recipient->setUpdatedAt($now);
 
@@ -324,31 +324,6 @@ final class DocumentController extends AbstractController
         $organization = $organizationRepository->find($id);
         if (!$organization) {
             return new JsonResponse(['error' => 'Organization not found'], JsonResponse::HTTP_NOT_FOUND);
-        }
-
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
-        $userOrganization = $currentUser->getOrganization();
-
-        if (!$isAdmin) {
-            if (!$userOrganization) {
-                return new JsonResponse(['error' => 'Organization not defined'], JsonResponse::HTTP_FORBIDDEN);
-            }
-
-            $isValid = $organization->getId() === $userOrganization->getId();
-            if (!$isValid) {
-                $checkOrg = $organization;
-                while ($checkOrg->getParent() !== null) {
-                    $checkOrg = $checkOrg->getParent();
-                    if ($checkOrg->getId() === $userOrganization->getId()) {
-                        $isValid = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!$isValid) {
-                return new JsonResponse(['error' => 'Forbidden'], JsonResponse::HTTP_FORBIDDEN);
-            }
         }
 
         $users = $userRepository->findWorkWithDocumentsByOrganization($organization);
@@ -421,7 +396,11 @@ final class DocumentController extends AbstractController
     }
 
     #[Route('/view_incoming_document/{id}', name: 'app_view_incoming_document', requirements: ['id' => '\d+'])]
-    public function viewIncomingDocument(int $id, DocumentRepository $documentRepository): Response
+    public function viewIncomingDocument(
+        int $id,
+        EntityManagerInterface $entityManager,
+        DocumentRepository $documentRepository,
+    ): Response
     {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
@@ -443,6 +422,23 @@ final class DocumentController extends AbstractController
             if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
                 $isRecipient = true;
                 $userRecipient = $recipient;
+
+                // when user open document set status to viewed and add to history
+                if ($recipient->getStatus() === DocumentStatus::NEW) {
+                    $recipient->setStatus(DocumentStatus::VIEWED);
+                    $entityManager->persist($recipient);
+
+                    $history = new DocumentHistory();
+                    $history->setDocument($document);
+                    $history->setUser($currentUser);
+                    $history->setAction('Пользователь просмотрел документ');
+                    $history->setOldStatus(DocumentStatus::NEW);
+                    $history->setNewStatus(DocumentStatus::VIEWED);
+                    $history->setCreatedAt(new \DateTimeImmutable());
+
+                    $entityManager->persist($history);
+                    $entityManager->flush();
+                }
                 break;
             }
         }

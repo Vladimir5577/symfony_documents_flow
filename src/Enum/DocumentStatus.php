@@ -8,6 +8,7 @@ enum DocumentStatus: string
 {
     case DRAFT = 'DRAFT';                    // Черновик
     case NEW = 'NEW';                        // Новый
+    case VIEWED = 'VIEWED';                  // Просмотрен
     case IN_REVIEW = 'IN_REVIEW';            // На рассмотрении
     case PENDING_APPROVAL = 'PENDING_APPROVAL'; // На согласовании
     case APPROVED = 'APPROVED';              // Утвержден
@@ -21,6 +22,7 @@ enum DocumentStatus: string
         return match ($this) {
             self::DRAFT => 'Черновик',
             self::NEW => 'Новый',
+            self::VIEWED => 'Просмотрен',
             self::IN_REVIEW => 'На рассмотрении',
             self::PENDING_APPROVAL => 'На согласовании',
             self::APPROVED => 'Утвержден',

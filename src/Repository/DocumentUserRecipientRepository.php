@@ -50,8 +50,11 @@ class DocumentUserRecipientRepository extends ServiceEntityRepository
 
         $total = (int) $this->createQueryBuilder('r')
             ->select('COUNT(r.id)')
+            ->innerJoin('r.document', 'd')
             ->where('r.user = :user')
+            ->andWhere('d.isPublished = :published')
             ->setParameter('user', $user)
+            ->setParameter('published', true)
             ->getQuery()
             ->getSingleScalarResult();
 
@@ -61,7 +64,9 @@ class DocumentUserRecipientRepository extends ServiceEntityRepository
             ->leftJoin('d.organizationCreator', 'o')->addSelect('o')
             ->leftJoin('d.createdBy', 'cb')->addSelect('cb')
             ->where('r.user = :user')
+            ->andWhere('d.isPublished = :published')
             ->setParameter('user', $user)
+            ->setParameter('published', true)
             ->orderBy('d.createdAt', 'DESC')
             ->setFirstResult($offset)
             ->setMaxResults($limit)

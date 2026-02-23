@@ -31,12 +31,12 @@
                                     <th>Дата создания</th>
                                     <th>Срок</th>
                                     <th>Статус</th>
-                                    <th></th>
+                                    <th>Опубликован</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for doc in documents %}
-                                    <tr>
+                                    <tr class="document-row" data-href="{{ path('app_view_outgoing_document', {id: doc.id}) }}" role="button" tabindex="0">
                                         <td>{{ doc.id }}</td>
                                         <td>{{ doc.name }}</td>
                                         <td>{{ doc.documentType ? doc.documentType.name : '—' }}</td>
@@ -72,7 +72,11 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            <a href="{{ path('app_view_outgoing_document', {id: doc.id}) }}" class="btn btn-sm btn-outline-primary">Просмотр</a>
+                                            {% if doc.isPublished %}
+                                                <span class="badge bg-success">Да</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Нет</span>
+                                            {% endif %}
                                         </td>
                                     </tr>
                                 {% endfor %}
@@ -146,4 +150,20 @@
             </div>
         </div>
     </section>
+
+    <style>.document-row { cursor: pointer; }</style>
+    <script>
+        document.querySelectorAll('.document-row').forEach(function (row) {
+            row.addEventListener('click', function () {
+                window.location.href = this.dataset.href;
+            });
+            row.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    window.location.href = this.dataset.href;
+                }
+            });
+        });
+    </script>
+
 {% endblock %}

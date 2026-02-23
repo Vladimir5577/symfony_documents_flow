@@ -32,13 +32,12 @@
                                     <th>Срок</th>
                                     <th>Статус</th>
                                     <th>Создал</th>
-                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for recipient in recipients %}
                                     {% set doc = recipient.document %}
-                                    <tr>
+                                    <tr class="document-row" data-href="{{ path('app_view_incoming_document', {id: doc.id}) }}" role="button" tabindex="0">
                                         <td>{{ doc.id }}</td>
                                         <td>{{ doc.name }}</td>
                                         <td>{{ doc.documentType ? doc.documentType.name : '—' }}</td>
@@ -79,9 +78,6 @@
                                             {% else %}
                                                 —
                                             {% endif %}
-                                        </td>
-                                        <td>
-                                            <a href="{{ path('app_view_incoming_document', {id: doc.id}) }}" class="btn btn-sm btn-outline-primary">Просмотр</a>
                                         </td>
                                     </tr>
                                 {% endfor %}
@@ -155,4 +151,22 @@
             </div>
         </div>
     </section>
+
+
+    <style>.document-row { cursor: pointer; }</style>
+    <script>
+        document.querySelectorAll('.document-row').forEach(function (row) {
+            row.addEventListener('click', function () {
+                window.location.href = this.dataset.href;
+            });
+            row.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    window.location.href = this.dataset.href;
+                }
+            });
+        });
+    </script>
+
+
 {% endblock %}
