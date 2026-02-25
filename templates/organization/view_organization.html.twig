@@ -214,18 +214,30 @@
             if (!form) return;
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
+                var countdown = 10;
+                var countdownEl;
+                var intervalId;
                 Swal.fire({
                     title: "Удалить организацию?",
-                    text: "Дочерние организации станут корневыми. Вы уверены?",
+                    html: "Дочерние организации станут корневыми.<br><strong>Удаление через <span id=\"delete-countdown\">10</span> сек.</strong>",
                     icon: "warning",
                     showCancelButton: true,
-                    confirmButtonColor: "#d33",
-                    cancelButtonColor: "#6c757d",
-                    confirmButtonText: "Да, удалить",
-                    cancelButtonText: "Отмена"
-                }).then(function (result) {
-                    if (result.isConfirmed) {
-                        form.submit();
+                    cancelButtonText: "Отмена",
+                    showConfirmButton: false,
+                    didOpen: function () {
+                        countdownEl = document.getElementById('delete-countdown');
+                        intervalId = setInterval(function () {
+                            countdown--;
+                            if (countdownEl) countdownEl.textContent = countdown;
+                            if (countdown <= 0) {
+                                clearInterval(intervalId);
+                                Swal.close();
+                                form.submit();
+                            }
+                        }, 1000);
+                    },
+                    didClose: function () {
+                        clearInterval(intervalId);
                     }
                 });
             });

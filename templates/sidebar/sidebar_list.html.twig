@@ -3,35 +3,57 @@
     <li
         class="sidebar-item  {% if active_tab == 'new_document' %}active{% endif %}">
         <a href="{{ path('app_new_document') }}" class='sidebar-link'>
-            <i class="bi bi-file-earmark-plus-fill"></i>
+            <i class="bi bi-file-earmark-plus-fill fs-5"></i>
             <span>Новый документ</span>
+        </a>
+    </li>
+
+{#    <li#}
+{#        class="#}
+{#            sidebar-item#}
+{#            has-sub#}
+{#            {% if active_tab == 'incoming_documents' %}active{% endif %}#}
+{#            {% if active_tab == 'outgoing_documents' %}active{% endif %}#}
+{#            {% if active_tab == 'view_document' %}active{% endif %}#}
+{#    ">#}
+{#        <a href="#" class='sidebar-link'>#}
+{#            <i class="bi bi-file-earmark-text-fill"></i>#}
+{#            <span>Документы</span>#}
+{#        </a>#}
+
+{#        <ul class="submenu active">#}
+
+{#            <li class="submenu-item {% if active_tab == 'incoming_documents' %}active{% endif %} ">#}
+{#                <a href="{{ path('app_incoming_documents') }}" class="submenu-link">Входящие</a>#}
+{#            </li>#}
+
+{#            <li class="submenu-item  {% if active_tab == 'outgoing_documents' %}active{% endif %} ">#}
+{#                <a href="{{ path('app_outgoing_documents') }}" class="submenu-link">Исходящие</a>#}
+{#            </li>#}
+
+{#        </ul>#}
+{#    </li>#}
+
+    <li
+        class="
+            sidebar-item
+            {% if active_tab == 'incoming_documents' %}active{% endif %}
+    ">
+        <a href="{{ path('app_incoming_documents') }}" class='sidebar-link'>
+            <i class="bi bi-file-earmark-arrow-down fs-5"></i>
+            <span>Входящие документы</span>
         </a>
     </li>
 
     <li
         class="
             sidebar-item
-            has-sub
-            {% if active_tab == 'incoming_documents' %}active{% endif %}
             {% if active_tab == 'outgoing_documents' %}active{% endif %}
-            {% if active_tab == 'view_document' %}active{% endif %}
     ">
-        <a href="#" class='sidebar-link'>
-            <i class="bi bi-file-earmark-text-fill"></i>
-            <span>Документы</span>
+        <a href="{{ path('app_outgoing_documents') }}" class='sidebar-link'>
+            <i class="bi bi-file-earmark-arrow-up fs-5"></i>
+            <span>Исходящие документы</span>
         </a>
-
-        <ul class="submenu active">
-
-            <li class="submenu-item {% if active_tab == 'incoming_documents' %}active{% endif %} ">
-                <a href="{{ path('app_incoming_documents') }}" class="submenu-link">Входящие</a>
-            </li>
-
-            <li class="submenu-item  {% if active_tab == 'outgoing_documents' %}active{% endif %} ">
-                <a href="{{ path('app_outgoing_documents') }}" class="submenu-link">Исходящие</a>
-            </li>
-
-        </ul>
     </li>
 
     {% if is_granted('ROLE_MANAGER') %}
@@ -44,7 +66,7 @@
             {% if active_tab == 'edit_user' %}active{% endif %}
     ">
         <a href="{{ path('app_all_users') }}" class='sidebar-link'>
-            <i class="bi bi-people-fill"></i>
+            <i class="bi bi-people-fill fs-5"></i>
             <span>Пользователи</span>
         </a>
     </li>
@@ -59,7 +81,7 @@
             {% if active_tab == 'view_organization' %}active{% endif %}
     ">
         <a href="{{ path('app_all_organizations') }}" class='sidebar-link'>
-            <i class="bi-diagram-3-fill"></i>
+            <i class="bi bi-diagram-3-fill fs-5"></i>
             <span>Организации</span>
         </a>
     </li>

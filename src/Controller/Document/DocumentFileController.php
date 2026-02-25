@@ -16,21 +16,6 @@ use Symfony\Component\Routing\Attribute\Route;
 
 final class DocumentFileController extends AbstractController
 {
-    #[Route('/document_upload_files/{id}', name: 'app_document_upload_files', requirements: ['id' => '\d+'])]
-    public function index(int $id, DocumentRepository $documentRepository): Response
-    {
-        $document = $documentRepository->find($id);
-        if (!$document) {
-            throw $this->createNotFoundException('Документ не найден.');
-        }
-
-        return $this->render('document_files/files_upload_document.twig', [
-            'active_tab' => 'document_upload_files',
-            'document_id' => $id,
-            'document' => $document,
-        ]);
-    }
-
     #[Route('/document_upload_files_action/{id}', name: 'document_upload_files_action', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function new(Request $request, int $id, DocumentRepository $documentRepository, \Doctrine\ORM\EntityManagerInterface $entityManager): Response
     {
@@ -113,7 +98,7 @@ final class DocumentFileController extends AbstractController
             ], Response::HTTP_OK);
         }
 
-        return $this->redirectToRoute('app_document_upload_files', ['id' => $id], Response::HTTP_SEE_OTHER);
+        return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id], Response::HTTP_SEE_OTHER);
     }
 
     #[Route('/document_file_download/{id}', name: 'document_file_download', requirements: ['id' => '\d+'])]
@@ -176,7 +161,7 @@ final class DocumentFileController extends AbstractController
         $csrfToken = 'document_file_delete_'.$id;
         if (!$this->isCsrfTokenValid($csrfToken, $request->request->get('_token'))) {
             $this->addFlash('error', 'Неверный токен. Попробуйте снова.');
-            return $this->redirectToRoute('app_document_upload_files', ['id' => $documentId], Response::HTTP_SEE_OTHER);
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $documentId], Response::HTTP_SEE_OTHER);
         }
 
         $uploadDir = $this->getParameter('private_upload_dir_documents_originals');
@@ -198,6 +183,6 @@ final class DocumentFileController extends AbstractController
         $entityManager->flush();
 
         $this->addFlash('success', 'Файл удалён.');
-        return $this->redirectToRoute('app_document_upload_files', ['id' => $documentId], Response::HTTP_SEE_OTHER);
+        return $this->redirectToRoute('app_view_outgoing_document', ['id' => $documentId], Response::HTTP_SEE_OTHER);
     }
 }
