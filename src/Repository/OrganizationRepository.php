@@ -2,20 +2,21 @@
 
 namespace App\Repository;
 
+use App\Entity\AbstractOrganization;
 use App\Entity\Organization;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
- * @extends ServiceEntityRepository<Organization>
+ * @extends ServiceEntityRepository<AbstractOrganization>
  */
 class OrganizationRepository extends ServiceEntityRepository
 {
     public const ADMIN_ORGANIZATION_NAME = 'Admin Organization';
-    
+
     public function __construct(ManagerRegistry $registry)
     {
-        parent::__construct($registry, Organization::class);
+        parent::__construct($registry, AbstractOrganization::class);
     }
 
     /**
@@ -26,10 +27,10 @@ class OrganizationRepository extends ServiceEntityRepository
      * UniqueEntity передает массив критериев и текущий объект как последний параметр при редактировании
      *
      * @param array<string, mixed> $criteria Массив критериев (ключ 'name' содержит название организации)
-     * @param Organization|null $excludeOrganization Организация, которую нужно исключить из проверки (для редактирования)
-     * @return Organization|null
+     * @param AbstractOrganization|null $excludeOrganization Организация, которую нужно исключить из проверки (для редактирования)
+     * @return AbstractOrganization|null
      */
-    public function findOneByName(array $criteria, ?Organization $excludeOrganization = null): ?Organization
+    public function findOneByName(array $criteria, ?AbstractOrganization $excludeOrganization = null): ?AbstractOrganization
     {
         $name = $criteria['name'] ?? null;
         if ($name === null) {
@@ -168,7 +169,7 @@ class OrganizationRepository extends ServiceEntityRepository
     public function deleteById(int $id): bool
     {
         $organization = $this->find($id);
-        if (!$organization instanceof Organization) {
+        if (!$organization instanceof AbstractOrganization) {
             return false;
         }
 

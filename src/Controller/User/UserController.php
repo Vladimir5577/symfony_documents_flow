@@ -38,7 +38,7 @@ final class UserController extends AbstractController
 
         // Получаем дерево организаций
         $userOrganization = $currentUser instanceof User ? $currentUser->getOrganization() : null;
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $userOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : ($userOrganization ? $userOrganization->getRootOrganization() : null));
 
         // Загружаем организации с дочерними для отображения дерева
         $organizationsWithChildren = [];
@@ -220,7 +220,7 @@ final class UserController extends AbstractController
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
         $userOrganization = $currentUser instanceof User ? $currentUser->getOrganization() : null;
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $userOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : ($userOrganization ? $userOrganization->getRootOrganization() : null));
 
         $organizationsWithChildren = [];
         if (!empty($organizationTree)) {
@@ -391,7 +391,7 @@ final class UserController extends AbstractController
 
         // Получаем дерево организаций
         $currentUserOrg = $currentUser instanceof User ? $currentUser->getOrganization() : null;
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $currentUserOrg);
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : ($currentUserOrg ? $currentUserOrg->getRootOrganization() : null));
 
         // Загружаем организации с дочерними для отображения дерева
         $organizationsWithChildren = [];

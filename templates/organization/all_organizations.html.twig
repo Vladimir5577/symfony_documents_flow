@@ -54,7 +54,6 @@
                             <table class="table table-hover mb-0">
                                 <thead>
                                 <tr>
-                                    <th>ID</th>
                                     <th>Название</th>
                                     <th>Адрес</th>
                                     <th>Телефон</th>
@@ -65,7 +64,6 @@
                                 {% if organizations|length > 0 %}
                                     {% for organization in organizations %}
                                         <tr data-href="{{ path('view_organization', {id: organization.id}) }}" role="button" tabindex="0">
-                                            <td class="text-bold-500">{{ organization.id }}</td>
                                             <td>{{ organization.name }}</td>
                                             <td>{{ organization.address ?? '-' }}</td>
                                             <td>{{ organization.phone ?? '-' }}</td>
@@ -74,7 +72,7 @@
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="5" class="text-center">Организации не найдены</td>
+                                        <td colspan="4" class="text-center">Организации не найдены</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>

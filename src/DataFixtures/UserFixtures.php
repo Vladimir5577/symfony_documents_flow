@@ -2,6 +2,9 @@
 
 namespace App\DataFixtures;
 
+use App\Entity\AbstractOrganization;
+use App\Entity\Department;
+use App\Entity\Filial;
 use App\Entity\Organization;
 use App\Entity\User;
 use App\Enum\UserRole;
@@ -16,8 +19,12 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
 {
     private const PASSWORD = '1234';
 
-    /** Ограничение числа организаций для ускорения загрузки (null = все) */
-    private const MAX_ORGANIZATIONS = null;
+    /** Работников в департаменте: от N до M */
+    private const WORKERS_PER_DEPARTMENT_MIN = 5;
+    private const WORKERS_PER_DEPARTMENT_MAX = 15;
+
+    /** Flush + clear каждые N департаментов */
+    private const DEPARTMENT_CHUNK_SIZE = 5;
 
     private static array $lastnames = [
         'Иванов', 'Петров', 'Сидоров', 'Смирнов', 'Кузнецов', 'Попов', 'Соколов',
@@ -25,31 +32,16 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
         'Васильев', 'Зайцев', 'Павлов', 'Семенов', 'Голубев', 'Виноградов', 'Богданов',
         'Воробьев', 'Федоров', 'Михайлов', 'Белов', 'Тарасов', 'Беляев', 'Комаров',
         'Орлов', 'Киселев', 'Макаров', 'Андреев', 'Ковалев', 'Ильин', 'Гусев', 'Титов',
-        'Кузьмин', 'Кудрявцев', 'Баранов', 'Куликов', 'Алексеев', 'Степанов', 'Яковлев',
-        'Сорокин', 'Сергеев', 'Романов', 'Захаров', 'Борисов', 'Королев', 'Герасимов',
-        'Пономарев', 'Григорьев', 'Лазарев', 'Медведев', 'Ершов', 'Никитин', 'Соболев',
     ];
 
     private static array $firstnames = [
         'Александр', 'Дмитрий', 'Максим', 'Сергей', 'Андрей', 'Алексей', 'Артем',
-        'Илья', 'Кирилл', 'Михаил', 'Никита', 'Матвей', 'Роман', 'Егор', 'Арсений',
-        'Иван', 'Денис', 'Евгений', 'Тимур', 'Владислав', 'Игорь', 'Владимир',
-        'Павел', 'Руслан', 'Марк', 'Лев', 'Анна', 'Мария', 'Елена', 'Ольга', 'Татьяна',
-        'Наталья', 'Екатерина', 'Ирина', 'Светлана', 'Юлия', 'Анастасия', 'Дарья',
-        'Валерия', 'Полина', 'Виктория', 'Ксения', 'София', 'Александра', 'Василиса',
-        'Вероника', 'Маргарита', 'Диана', 'Алиса', 'Елизавета', 'Арина', 'Милана',
+        'Илья', 'Кирилл', 'Михаил', 'Никита', 'Иван', 'Анна', 'Мария', 'Елена', 'Ольга',
     ];
 
     private static array $patronymics = [
         'Александрович', 'Дмитриевич', 'Максимович', 'Сергеевич', 'Андреевич',
-        'Алексеевич', 'Артемович', 'Ильич', 'Кириллович', 'Михайлович', 'Никитич',
-        'Матвеевич', 'Романович', 'Егорович', 'Арсеньевич', 'Иванович', 'Денисович',
-        'Евгеньевич', 'Тимурович', 'Владиславович', 'Игоревич', 'Владимирович',
-        'Павлович', 'Русланович', 'Маркович', 'Львович', 'Александровна', 'Дмитриевна',
-        'Максимовна', 'Сергеевна', 'Андреевна', 'Алексеевна', 'Артемовна', 'Ильинична',
-        'Кирилловна', 'Михайловна', 'Никитична', 'Матвеевна', 'Романовна', 'Егоровна',
-        'Арсеньевна', 'Ивановна', 'Денисовна', 'Евгеньевна', 'Тимуровна', 'Владиславовна',
-        'Игоревна', 'Владимировна', 'Павловна', 'Руслановна', 'Марковна', 'Львовна',
+        'Иванович', 'Михайлович', 'Александровна', 'Дмитриевна', 'Сергеевна', 'Ивановна',
     ];
 
     public function __construct(
@@ -73,51 +65,93 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
 
     public function load(ObjectManager $manager): void
     {
-        $orgIndex = 1;
-        while (true) {
-            if (self::MAX_ORGANIZATIONS !== null && $orgIndex > self::MAX_ORGANIZATIONS) {
-                break;
-            }
-            $refName = 'organization_' . $orgIndex;
-            if (!$this->hasReference($refName, Organization::class)) {
-                break;
-            }
-            $organization = $this->getReference($refName, Organization::class);
+        $this->log('UserFixtures: начало загрузки пользователей…');
 
-            if (self::MAX_ORGANIZATIONS !== null || ($orgIndex - 1) % 10 === 0) {
-                echo "UserFixtures: org {$orgIndex}…\n";
-            }
-
+        // Организации: 1 директор + 2 работника
+        $this->log('Организации (1 директор + 2 работника):');
+        for ($orgIndex = 1; $orgIndex <= 2; $orgIndex++) {
+            $organization = $this->getReference('organization_' . $orgIndex, Organization::class);
             $prefix = 'org' . $orgIndex;
-
-            $director = $this->createOrgUser($organization, $prefix . '_director', 'ROLE_MANAGER');
+            $director = $this->createUnitUser($organization, $prefix . '_director', 'ROLE_MANAGER', null);
             $director->setWorkWithDocuments(true);
             $manager->persist($director);
-
-            $managers = [];
             for ($m = 1; $m <= 2; $m++) {
-                $managerUser = $this->createOrgUser($organization, $prefix . '_manager_' . $m, 'ROLE_MANAGER');
-                $managerUser->setWorkWithDocuments(true);
-                $managerUser->setBoss($director);
-                $manager->persist($managerUser);
-                $managers[] = $managerUser;
+                $u = $this->createUnitUser($organization, $prefix . '_user_' . $m, 'ROLE_MANAGER', $director);
+                $u->setWorkWithDocuments(true);
+                $manager->persist($u);
             }
-
-            $userCount = random_int(2, 4);
-            for ($u = 1; $u <= $userCount; $u++) {
-                $user = $this->createOrgUser($organization, $prefix . '_user_' . $u, 'ROLE_USER');
-                $user->setBoss($managers[array_rand($managers)]);
-                $manager->persist($user);
-            }
-
             $manager->flush();
-            $orgIndex++;
+            $manager->clear();
+            $this->log("  org{$orgIndex}: 3 пользователя — flush");
         }
+        $this->log('');
 
-        echo "UserFixtures: done, " . ($orgIndex - 1) . " organizations.\n";
+        // Филиалы: 1 директор + 2 работника на каждый
+        $this->log('Филиалы (1 директор + 2 работника на каждый):');
+        $filialIndex = 1;
+        while ($this->hasReference('filial_' . $filialIndex, Filial::class)) {
+            $filial = $this->getReference('filial_' . $filialIndex, Filial::class);
+            $prefix = 'filial' . $filialIndex;
+            $director = $this->createUnitUser($filial, $prefix . '_director', 'ROLE_MANAGER', null);
+            $director->setWorkWithDocuments(true);
+            $manager->persist($director);
+            for ($m = 1; $m <= 2; $m++) {
+                $u = $this->createUnitUser($filial, $prefix . '_user_' . $m, 'ROLE_MANAGER', $director);
+                $u->setWorkWithDocuments(true);
+                $manager->persist($u);
+            }
+            $manager->flush();
+            $manager->clear();
+            $this->log("  filial{$filialIndex}: 3 пользователя — flush");
+            $filialIndex++;
+        }
+        $filialCount = $filialIndex - 1;
+        $this->log('');
+
+        // Департаменты: 5–15 работников на каждый, чанками
+        $this->log('Департаменты (5–15 работников на каждый, чанки по ' . self::DEPARTMENT_CHUNK_SIZE . '):');
+        $deptIndex = 1;
+        $deptInChunk = 0;
+        $totalDeptUsers = 0;
+        while ($this->hasReference('department_' . $deptIndex, Department::class)) {
+            $department = $this->getReference('department_' . $deptIndex, Department::class);
+            $count = random_int(self::WORKERS_PER_DEPARTMENT_MIN, self::WORKERS_PER_DEPARTMENT_MAX);
+            $totalDeptUsers += $count;
+            $prefix = 'dept' . $deptIndex;
+            for ($i = 1; $i <= $count; $i++) {
+                $u = $this->createUnitUser($department, $prefix . '_' . $i, 'ROLE_USER', null);
+                $manager->persist($u);
+            }
+            $deptInChunk++;
+            $deptIndex++;
+
+            if ($deptInChunk >= self::DEPARTMENT_CHUNK_SIZE) {
+                $manager->flush();
+                $manager->clear();
+                $from = $deptIndex - self::DEPARTMENT_CHUNK_SIZE;
+                $to = $deptIndex - 1;
+                $this->log("  департаменты {$from}–{$to} — flush");
+                $deptInChunk = 0;
+            }
+        }
+        if ($deptInChunk > 0) {
+            $manager->flush();
+            $manager->clear();
+            $this->log("  департаменты " . ($deptIndex - $deptInChunk) . "–" . ($deptIndex - 1) . " — flush (остаток)");
+        }
+        $deptCount = $deptIndex - 1;
+        $this->log('');
+
+        $totalUsers = 6 + $filialCount * 3 + $totalDeptUsers;
+        $this->log("UserFixtures: готово. Организаций: 2, филиалов: {$filialCount}, департаментов: {$deptCount}, пользователей: {$totalUsers}");
     }
 
-    private function createOrgUser(Organization $organization, string $login, string $roleName): User
+    private function log(string $message): void
+    {
+        echo $message . \PHP_EOL;
+    }
+
+    private function createUnitUser(AbstractOrganization $unit, string $login, string $roleName, ?User $boss): User
     {
         $user = new User();
         $user->setLogin($login);
@@ -135,7 +169,10 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
             random_int(10, 99)
         ));
         $user->setPassword($this->passwordHasher->hashPassword($user, self::PASSWORD));
-        $user->setOrganization($organization);
+        $user->setOrganization($unit);
+        if ($boss) {
+            $user->setBoss($boss);
+        }
         $this->attachRole($user, $roleName);
 
         return $user;

@@ -2,7 +2,7 @@
 
 namespace App\Repository;
 
-use App\Entity\Organization;
+use App\Entity\AbstractOrganization;
 use App\Entity\User;
 use App\Enum\UserEmployeeStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
@@ -140,7 +140,7 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
      *
      * @return User[]
      */
-    public function findWorkWithDocumentsByOrganization(Organization $organization): array
+    public function findWorkWithDocumentsByOrganization(AbstractOrganization $organization): array
     {
         return $this->createQueryBuilder('u')
             ->where('u.organization = :org')
@@ -197,7 +197,7 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
      *
      * @return User[]
      */
-    public function findByOrganization(Organization $organization): array
+    public function findByOrganization(AbstractOrganization $organization): array
     {
         return $this->createQueryBuilder('u')
             ->leftJoin('u.userRoles', 'ur')->addSelect('ur')

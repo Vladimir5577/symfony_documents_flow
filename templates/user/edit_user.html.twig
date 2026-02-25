@@ -84,7 +84,7 @@
                                     {% if organizations is defined and organizations %}
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label for="organization_id">Организация к которой принадлежит пользователь <span class="text-danger">*</span></label>
+                                            <label for="organization_id">Подразделение к которому принадлежит пользователь <span class="text-danger">*</span></label>
                                             <input type="hidden" id="organization_id" name="organization_id" value="{{ user.organization ? user.organization.id : '' }}" required>
                                             <div class="input-group">
                                                 <input type="text" id="org-display" class="form-control" readonly placeholder="— Выберите организацию —" value="" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModal">

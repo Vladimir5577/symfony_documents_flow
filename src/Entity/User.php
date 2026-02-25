@@ -31,11 +31,11 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column]
     private ?int $id = null;
 
-    // organization
-    #[ORM\ManyToOne(targetEntity: Organization::class)]
+    // organization (может быть Organization, Filial или Department)
+    #[ORM\ManyToOne(targetEntity: AbstractOrganization::class)]
     #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     #[Assert\NotNull(message: 'Организация обязательна для заполнения.')]
-    private Organization $organization;
+    private AbstractOrganization $organization;
 
 
     // 1) lastname
@@ -365,12 +365,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    public function getOrganization(): Organization
+    public function getOrganization(): AbstractOrganization
     {
         return $this->organization;
     }
 
-    public function setOrganization(Organization $organization): static
+    public function setOrganization(AbstractOrganization $organization): static
     {
         $this->organization = $organization;
 

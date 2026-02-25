@@ -64,14 +64,7 @@ final class DocumentController extends AbstractController
 
         $isAdmin = $this->isGranted('ROLE_ADMIN');
         $userOrganization = $currentUser->getOrganization();
-
-        // Для обычного пользователя находим корневую организацию (если он в дочерней)
-        $rootOrganization = $userOrganization;
-        if ($userOrganization && !$isAdmin) {
-            while ($rootOrganization->getParent() !== null) {
-                $rootOrganization = $rootOrganization->getParent();
-            }
-        }
+        $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
 
         // Получаем дерево организаций для пользователя
         $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
@@ -524,12 +517,7 @@ final class DocumentController extends AbstractController
         }
 
         $userOrganization = $currentUser->getOrganization();
-        $rootOrganization = $userOrganization;
-        if ($userOrganization && !$isAdmin) {
-            while ($rootOrganization->getParent() !== null) {
-                $rootOrganization = $rootOrganization->getParent();
-            }
-        }
+        $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
 
         $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
         $organizationsWithChildren = [];
@@ -776,12 +764,7 @@ final class DocumentController extends AbstractController
         }
 
         $userOrganization = $currentUser->getOrganization();
-        $rootOrganization = $userOrganization;
-        if ($userOrganization && !$isAdmin) {
-            while ($rootOrganization->getParent() !== null) {
-                $rootOrganization = $rootOrganization->getParent();
-            }
-        }
+        $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
 
         $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
         $organizationsWithChildren = [];

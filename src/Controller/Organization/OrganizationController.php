@@ -2,6 +2,7 @@
 
 namespace App\Controller\Organization;
 
+use App\Entity\AbstractOrganization;
 use App\Entity\Organization;
 use App\Entity\User;
 use App\Repository\OrganizationRepository;
@@ -18,9 +19,10 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 final class OrganizationController extends AbstractController
 {
     #[Route('/view_organization/{id}', name: 'view_organization', requirements: ['id' => '\d+'])]
-    public function viewOrganization(int $id, Request $request, OrganizationRepository $organizationRepository, UserRepository $userRepository): Response
+    public function viewOrganization(int $id, Request $request, EntityManagerInterface $em, UserRepository $userRepository): Response
     {
-        $organization = $organizationRepository->createQueryBuilder('o')
+        $unitRepo = $em->getRepository(AbstractOrganization::class);
+        $organization = $unitRepo->createQueryBuilder('o')
             ->leftJoin('o.childOrganizations', 'co')
             ->addSelect('co')
             ->leftJoin('co.childOrganizations', 'co2')
@@ -41,9 +43,9 @@ final class OrganizationController extends AbstractController
         $fromId = $request->query->get('from');
         $backOrganization = null;
         if ($fromId !== null && $fromId !== '' && (int) $fromId !== $id) {
-            $fromOrg = $organizationRepository->find((int) $fromId);
-            if ($fromOrg !== null) {
-                $backOrganization = $fromOrg;
+            $fromUnit = $unitRepo->find((int) $fromId);
+            if ($fromUnit !== null) {
+                $backOrganization = $fromUnit;
             }
         }
 
@@ -209,7 +211,7 @@ final class OrganizationController extends AbstractController
         $userOrganization = $currentUser instanceof User ? $currentUser->getOrganization() : null;
 
         // Загружаем дерево организаций для пикера
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $userOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : ($userOrganization ? $userOrganization->getRootOrganization() : null));
         $organizationsWithChildren = [];
         if (!empty($organizationTree)) {
             foreach ($organizationTree as $org) {
@@ -287,7 +289,7 @@ final class OrganizationController extends AbstractController
         $userOrganization = $currentUser instanceof User ? $currentUser->getOrganization() : null;
 
         // Загружаем дерево организаций для пикера
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $userOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : ($userOrganization ? $userOrganization->getRootOrganization() : null));
         $organizationsWithChildren = [];
         if (!empty($organizationTree)) {
             foreach ($organizationTree as $org) {

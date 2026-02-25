@@ -2,23 +2,39 @@
 
 {% block title %}Просмотр организации!{% endblock %}
 
-{# Рекурсивный макрос для отображения дерева организаций в простом виде. from_org — организация, с которой переходят (текущая страница). #}
+{# Рекурсивный макрос для отображения дерева организаций в виде аккордеона. from_org — организация, с которой переходят (текущая страница). #}
 {% macro renderOrganizationTree(organization, level, from_org) %}
     {% import _self as self %}
-    {% set indent = level * 25 %}
-    <div style="margin-left: {{ indent }}px; padding: 3px 0;">
-        <span style="font-weight: 500; font-size: 15px;">
-            — <a href="{{ path('view_organization', {'id': organization.id, 'from': from_org.id}) }}"
-                 style="text-decoration: none; color: inherit;"
-                 onmouseover="this.style.color='#0d6efd';"
-                 onmouseout="this.style.color='inherit';">
+    {% set collapseId = 'org-collapse-' ~ organization.id ~ '-' ~ level %}
+    <div class="org-tree-item mb-1">
+        <div class="d-flex align-items-center gap-2 py-2 px-2 rounded org-tree-row">
+            {% if organization.childOrganizations|length > 0 %}
+                <button class="btn btn-link btn-sm p-0 org-tree-toggle" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#{{ collapseId }}"
+                        aria-expanded="false" aria-controls="{{ collapseId }}"
+                        style="min-width: 24px; text-decoration: none;">
+                    <i class="bi bi-chevron-right org-tree-icon" style="transition: transform 0.2s;"></i>
+                </button>
+            {% else %}
+                <span class="d-inline-block" style="width: 24px;"></span>
+            {% endif %}
+            <a href="{{ path('view_organization', {'id': organization.id, 'from': from_org.id}) }}"
+               class="flex-grow-1 text-decoration-none org-tree-link fw-medium"
+               style="font-size: 15px;">
                 {{ organization.name }}
             </a>
-        </span>
+            {% if organization.childOrganizations|length > 0 %}
+                <span class="badge org-tree-badge">{{ organization.childOrganizations|length }}</span>
+            {% endif %}
+        </div>
         {% if organization.childOrganizations|length > 0 %}
-            {% for childOrg in organization.childOrganizations %}
-                {{ self.renderOrganizationTree(childOrg, level + 1, from_org) }}
-            {% endfor %}
+            <div class="collapse" id="{{ collapseId }}">
+                <div class="ps-2 border-start border-2 org-tree-border ms-2 mt-1">
+                    {% for childOrg in organization.childOrganizations %}
+                        {{ self.renderOrganizationTree(childOrg, level + 1, from_org) }}
+                    {% endfor %}
+                </div>
+            </div>
         {% endif %}
     </div>
 {% endmacro %}
@@ -109,7 +125,7 @@
                     <div class="card mb-4">
                         <div class="card-header">
                             <h4 class="card-title">
-                                Структура дочерних организаций
+                                Структура подразделения
                                 <span class="badge bg-success ms-2">{{ organization.childOrganizations|length }}</span>
                             </h4>
                         </div>
@@ -129,7 +145,7 @@
                 <div class="card mb-4">
                     <div class="card-header">
                         <h4 class="card-title">
-                            Работники организации
+                            Работники подразделения
                             <span class="badge bg-primary ms-2">{{ users|length }}</span>
                         </h4>
                     </div>
@@ -197,7 +213,26 @@
 
     {% include 'user/partials/_modal_view_user.html.twig' %}
 
-    <style>.table-hover tbody tr[data-user-id] { cursor: pointer; }</style>
+    <style>
+        .table-hover tbody tr[data-user-id] { cursor: pointer; }
+        /* Дерево организаций — светлая тема */
+        .org-tree-row { background: rgba(0,0,0,0.02); }
+        .org-tree-row:hover { background: rgba(0,0,0,0.04) !important; }
+        .org-tree-toggle { color: #6c757d !important; }
+        .org-tree-link { color: #212529; }
+        .org-tree-link:hover { color: #0d6efd !important; }
+        .org-tree-badge { background: #e9ecef; color: #212529; }
+        .org-tree-border { border-color: #e9ecef !important; }
+        .org-tree-toggle[aria-expanded="true"] .org-tree-icon { transform: rotate(90deg); }
+        /* Дерево организаций — тёмная тема */
+        [data-bs-theme="dark"] .org-tree-row { background: rgba(255,255,255,0.05); }
+        [data-bs-theme="dark"] .org-tree-row:hover { background: rgba(255,255,255,0.08) !important; }
+        [data-bs-theme="dark"] .org-tree-toggle { color: #adb5bd !important; }
+        [data-bs-theme="dark"] .org-tree-link { color: #e9ecef; }
+        [data-bs-theme="dark"] .org-tree-link:hover { color: #6ea8fe !important; }
+        [data-bs-theme="dark"] .org-tree-badge { background: rgba(255,255,255,0.15); color: #fff; }
+        [data-bs-theme="dark"] .org-tree-border { border-color: rgba(255,255,255,0.15) !important; }
+    </style>
     <script>
         document.querySelectorAll('tr[data-user-id]').forEach(function (row) {
             row.addEventListener('keydown', function (e) {
