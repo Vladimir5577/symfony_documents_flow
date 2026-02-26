@@ -2,19 +2,19 @@
 
 namespace App\Controller\Document;
 
-use App\Repository\DocumentRepository;
+use App\Repository\Document\DocumentRepository;
 use App\Service\Document\Convertor\DocxToPdfConvertorService;
 use App\Service\Document\FileUploadService;
 use Doctrine\ORM\EntityManagerInterface;
 use Mpdf\Mpdf;
 use Mpdf\Output\Destination;
+use PhpOffice\PhpWord\TemplateProcessor;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use PhpOffice\PhpWord\TemplateProcessor;
 
 final class DocumentCreateFromTemplateController extends AbstractController
 {

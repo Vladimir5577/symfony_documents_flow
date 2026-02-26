@@ -6,7 +6,7 @@
 {%- endfor -%}
 {%- set prefix = level > 0 ? '└─ ' : '' -%}
 <option value="{{ organization.id }}" {% if selected_id == organization.id %}selected{% endif %}>
-    {{ indent|raw }}{{ prefix }}{{ organization.name }}
+    {{ indent|raw }}{{ prefix }}{{ organization.shortName }}
 </option>
 {% if organization.childOrganizations|length > 0 %}
     {% for childOrg in organization.childOrganizations %}

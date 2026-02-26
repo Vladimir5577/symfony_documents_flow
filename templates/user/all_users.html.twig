@@ -37,7 +37,7 @@
                 <div class="col">
                     <label class="form-label mb-1 small text-muted">Организация</label>
                     <div class="input-group">
-                        <input type="text" id="org-display-filter" class="form-control" readonly placeholder="Все организации" value="{{ selected_organization ? selected_organization.name : '' }}" aria-label="Выбрать организацию"
+                        <input type="text" id="org-display-filter" class="form-control" readonly placeholder="Все организации" value="{{ selected_organization ? selected_organization.shortName : '' }}" aria-label="Выбрать организацию"
                             {% if organizations is defined and organizations|length > 0 %}style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModalFilter"{% else %}style="cursor:default"{% endif %}>
                         <button type="button" class="btn btn-outline-secondary" title="Сбросить организацию" id="filter-org-clear" {% if not selected_organization_id %}style="display:none"{% endif %}>
                             <i class="bi bi-x-lg"></i>

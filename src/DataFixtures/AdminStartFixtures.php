@@ -2,13 +2,13 @@
 
 namespace App\DataFixtures;
 
-use App\Entity\Role;
-use App\Entity\User;
+use App\Entity\Organization\Organization;
+use App\Entity\User\Role;
+use App\Entity\User\User;
 use App\Enum\UserRole;
-use App\Entity\Organization;
-use Doctrine\Persistence\ObjectManager;
-use App\Repository\OrganizationRepository;
+use App\Repository\Organization\OrganizationRepository;
 use Doctrine\Bundle\FixturesBundle\Fixture;
+use Doctrine\Persistence\ObjectManager;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 class AdminStartFixtures extends Fixture
@@ -22,9 +22,11 @@ class AdminStartFixtures extends Fixture
     {
         // Создаем админскую организацию
         $adminOrganization = new Organization();
-        $adminOrganization->setName(OrganizationRepository::ADMIN_ORGANIZATION_NAME);
+        $adminOrganization->setShortName('Admin');
+        $adminOrganization->setFullName(OrganizationRepository::ADMIN_ORGANIZATION_NAME);
         $adminOrganization->setDescription('Организация для системных администраторов');
-        $adminOrganization->setAddress('г. Ростов-на-Дону, ул. Административная, д. 1');
+        $adminOrganization->setLegalAddress('г. Ростов-на-Дону, ул. Административная, д. 1');
+        $adminOrganization->setActualAddress('г. Ростов-на-Дону, ул. Административная, д. 1');
         $adminOrganization->setPhone('+7 (863) 000-00-01');
         $adminOrganization->setEmail('admin@system.local');
         $manager->persist($adminOrganization);

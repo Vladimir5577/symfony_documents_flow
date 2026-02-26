@@ -13,12 +13,15 @@
 {% block main %}
     <h1>Вы залогинились успешно!</h1>
     <p>Здравствуйте, <strong>{{ user_display_name }}</strong>!</p>
-    <p>Организация: <strong>{{ organization.name }}</strong></p>
+    <p>Организация: <strong>{{ organization.shortName }}</strong></p>
     {% if organization.description %}
         <p>{{ organization.description }}</p>
     {% endif %}
-    {% if organization.address %}
-        <p>Адрес: {{ organization.address }}</p>
+    {% if organization.legalAddress %}
+        <p>Юридический адрес: {{ organization.legalAddress }}</p>
+    {% endif %}
+    {% if organization.actualAddress %}
+        <p>Фактический адрес: {{ organization.actualAddress }}</p>
     {% endif %}
     {% if organization.phone %}
         <p>Телефон: {{ organization.phone }}</p>

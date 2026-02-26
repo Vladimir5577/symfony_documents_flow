@@ -3,26 +3,28 @@
 
 namespace App\Controller\Document;
 
-use App\Entity\Document;
-use App\Entity\DocumentHistory;
-use App\Entity\DocumentUserRecipient;
-use App\Entity\File;
-use App\Entity\User;
+use App\Entity\Document\Document;
+use App\Entity\Document\DocumentHistory;
+use App\Entity\Document\DocumentUserRecipient;
+use App\Entity\Document\File;
+use App\Entity\Organization\AbstractOrganization;
+use App\Entity\Organization\Department;
+use App\Entity\User\User;
 use App\Enum\DocumentStatus;
-use App\Repository\DocumentHistoryRepository;
-use App\Repository\DocumentRepository;
-use App\Repository\DocumentTypeRepository;
-use App\Repository\DocumentUserRecipientRepository;
-use App\Repository\OrganizationRepository;
-use App\Repository\UserRepository;
+use App\Repository\Document\DocumentHistoryRepository;
+use App\Repository\Document\DocumentRepository;
+use App\Repository\Document\DocumentTypeRepository;
+use App\Repository\Document\DocumentUserRecipientRepository;
+use App\Repository\Organization\OrganizationRepository;
+use App\Repository\User\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
@@ -305,7 +307,7 @@ final class DocumentController extends AbstractController
     public function getOrganizationUsers(
         int                    $id,
         Request                $request,
-        OrganizationRepository $organizationRepository,
+        EntityManagerInterface $entityManager,
         UserRepository         $userRepository
     ): JsonResponse
     {
@@ -314,12 +316,14 @@ final class DocumentController extends AbstractController
             return new JsonResponse(['error' => 'Unauthorized'], JsonResponse::HTTP_UNAUTHORIZED);
         }
 
-        $organization = $organizationRepository->find($id);
+        $organization = $entityManager->find(AbstractOrganization::class, $id);
         if (!$organization) {
             return new JsonResponse(['error' => 'Organization not found'], JsonResponse::HTTP_NOT_FOUND);
         }
 
-        $users = $userRepository->findWorkWithDocumentsByOrganization($organization);
+        $users = $organization instanceof Department
+            ? $userRepository->findByOrganization($organization)
+            : $userRepository->findWorkWithDocumentsByOrganization($organization);
         $data = [];
         foreach ($users as $user) {
             $data[] = [

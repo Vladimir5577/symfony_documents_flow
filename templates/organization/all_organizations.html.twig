@@ -64,8 +64,8 @@
                                 {% if organizations|length > 0 %}
                                     {% for organization in organizations %}
                                         <tr data-href="{{ path('view_organization', {id: organization.id}) }}" role="button" tabindex="0">
-                                            <td>{{ organization.name }}</td>
-                                            <td>{{ organization.address ?? '-' }}</td>
+                                            <td>{{ organization.shortName }}</td>
+                                            <td>{{ organization.legalAddress ?? '-' }}</td>
                                             <td>{{ organization.phone ?? '-' }}</td>
                                             <td>{{ organization.email ?? '-' }}</td>
                                         </tr>

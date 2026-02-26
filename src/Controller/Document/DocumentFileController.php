@@ -2,10 +2,10 @@
 
 namespace App\Controller\Document;
 
-use App\Entity\Document;
-use App\Entity\File;
-use App\Repository\DocumentRepository;
-use App\Repository\FileRepository;
+use App\Entity\Document\Document;
+use App\Entity\Document\File;
+use App\Repository\Document\DocumentRepository;
+use App\Repository\Document\FileRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;

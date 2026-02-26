@@ -1,7 +1,7 @@
 <div class="org-node"
      data-org-id="{{ organization.id }}"
      data-parent-id="{{ organization.parent ? organization.parent.id : '' }}"
-     data-name="{{ organization.name }}">
+     data-name="{{ organization.shortName }}">
 </div>
 
 {% if organization.childOrganizations is defined and organization.childOrganizations|length > 0 %}

@@ -41,7 +41,7 @@
                                         <td>{{ doc.id }}</td>
                                         <td>{{ doc.name }}</td>
                                         <td>{{ doc.documentType ? doc.documentType.name : '—' }}</td>
-                                        <td>{{ doc.organizationCreator ? doc.organizationCreator.name : '—' }}</td>
+                                        <td>{{ doc.organizationCreator ? doc.organizationCreator.shortName : '—' }}</td>
                                         <td>{{ doc.createdAt ? doc.createdAt|date('d.m.Y H:i') : '—' }}</td>
                                         <td>{{ doc.deadline ? doc.deadline|date('d.m.Y') : '—' }}</td>
                                         <td>

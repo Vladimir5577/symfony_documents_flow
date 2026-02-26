@@ -1,0 +1,70 @@
+<script>
+(function () {
+    'use strict';
+
+    // =========================================================================
+    // Валидация телефона
+    // =========================================================================
+    (function () {
+        var input = document.getElementById('phone');
+        if (!input) return;
+
+        function formatPhone(value) {
+            var digits = value.replace(/\D/g, '');
+            if (digits.charAt(0) === '8') digits = '7' + digits.slice(1);
+            if (digits.charAt(0) !== '7') digits = '7' + digits;
+            digits = digits.slice(0, 11);
+            if (digits.length <= 1) return digits === '7' ? '+7' : '+7';
+            var s = '+7 (' + digits.slice(1, 4);
+            if (digits.length > 4) s += ') ' + digits.slice(4, 7);
+            if (digits.length > 7) s += ' ' + digits.slice(7, 9);
+            if (digits.length > 9) s += ' ' + digits.slice(9, 11);
+            return s;
+        }
+
+        function onPhoneInput() {
+            var start = input.selectionStart, oldLen = input.value.length;
+            input.value = formatPhone(input.value);
+            var newLen = input.value.length;
+            var newStart = Math.max(0, start + (newLen - oldLen));
+            if (input === document.activeElement) input.setSelectionRange(newStart, newStart);
+        }
+
+        input.addEventListener('input', onPhoneInput);
+        input.addEventListener('paste', function () { setTimeout(onPhoneInput, 0); });
+        if (input.value) input.value = formatPhone(input.value);
+    })();
+
+    // =========================================================================
+    // Валидация реквизитов: ИНН, КПП, ОГРН, БИК, расчётный счёт
+    // =========================================================================
+    (function () {
+        var requisiteFields = [
+            { id: 'inn', maxLen: 12 },        // ИНН: 10 или 12 цифр
+            { id: 'kpp', maxLen: 9 },          // КПП: 9 цифр
+            { id: 'ogrn', maxLen: 15 },       // ОГРН/ОГРНИП: 13 или 15 цифр
+            { id: 'bik', maxLen: 9 },         // БИК: 9 цифр
+            { id: 'bank_account', maxLen: 20 } // Расчётный счёт: 20 цифр
+        ];
+
+        function onlyDigitsAndLimit(input, maxLen) {
+            var start = input.selectionStart;
+            var digits = input.value.replace(/\D/g, '').slice(0, maxLen);
+            var oldLen = input.value.length;
+            input.value = digits;
+            var newLen = input.value.length;
+            var newStart = Math.max(0, Math.min(start + (newLen - oldLen), newLen));
+            if (input === document.activeElement) input.setSelectionRange(newStart, newStart);
+        }
+
+        requisiteFields.forEach(function (cfg) {
+            var el = document.getElementById(cfg.id);
+            if (!el) return;
+            function onInput() { onlyDigitsAndLimit(el, cfg.maxLen); }
+            el.addEventListener('input', onInput);
+            el.addEventListener('paste', function () { setTimeout(onInput, 0); });
+            if (el.value) onlyDigitsAndLimit(el, cfg.maxLen);
+        });
+    })();
+})();
+</script>

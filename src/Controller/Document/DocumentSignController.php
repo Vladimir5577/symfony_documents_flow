@@ -2,15 +2,15 @@
 
 namespace App\Controller\Document;
 
+use App\Repository\Document\DocumentRepository;
 use App\Service\Document\FileUploadService;
 use setasign\Fpdi\Tcpdf\Fpdi;
-use App\Repository\DocumentRepository;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 
 final class DocumentSignController extends AbstractController
 {

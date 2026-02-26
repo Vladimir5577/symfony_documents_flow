@@ -45,8 +45,14 @@
                                 <div class="row">
                                     <div class="col-md-6 col-12">
                                         <div class="form-group">
-                                            <label for="name">Название организации <span class="text-danger">*</span></label>
-                                            <input type="text" id="name" class="form-control" placeholder="Название организации" name="name" value="{{ organization.name }}" required>
+                                            <label for="short_name">Короткое название <span class="text-danger">*</span></label>
+                                            <input type="text" id="short_name" class="form-control" placeholder="Короткое название" name="short_name" value="{{ organization.shortName }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="full_name">Полное название <span class="text-danger">*</span></label>
+                                            <input type="text" id="full_name" class="form-control" placeholder="Полное название" name="full_name" value="{{ organization.fullName }}" required>
                                         </div>
                                     </div>
                                     {% if organizations is defined and organizations|length > 0 %}
@@ -55,7 +61,7 @@
                                             <label for="parent_id">Родительская организация</label>
                                             <input type="hidden" id="organization_id" name="parent_id" value="{{ organization.parent ? organization.parent.id : '' }}">
                                             <div class="input-group">
-                                                <input type="text" id="org-display" class="form-control" readonly placeholder="— Без родительской организации —" value="{{ organization.parent ? organization.parent.name : '' }}" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
+                                                <input type="text" id="org-display" class="form-control" readonly placeholder="— Без родительской организации —" value="{{ organization.parent ? organization.parent.shortName : '' }}" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
                                                 <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
                                                     <i class="bi bi-building"></i> Выбрать
                                                 </button>
@@ -75,20 +81,86 @@
                                     </div>
                                     <div class="col-md-6 col-12">
                                         <div class="form-group">
-                                            <label for="address">Адрес</label>
-                                            <input type="text" id="address" class="form-control" name="address" placeholder="Адрес организации" value="{{ organization.address ?? '' }}">
+                                            <label for="legal_address">Юридический адрес</label>
+                                            <input type="text" id="legal_address" class="form-control" name="legal_address" placeholder="Юридический адрес" value="{{ organization.legalAddress ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="actual_address">Фактический адрес</label>
+                                            <input type="text" id="actual_address" class="form-control" name="actual_address" placeholder="Фактический адрес" value="{{ organization.actualAddress ?? '' }}">
                                         </div>
                                     </div>
                                     <div class="col-md-6 col-12">
                                         <div class="form-group">
                                             <label for="phone">Телефон</label>
-                                            <input type="text" id="phone" class="form-control" name="phone" placeholder="+7 (XXX) XXX-XX-XX" value="{{ organization.phone ?? '' }}">
+                                            <input type="text" id="phone" class="form-control" name="phone" placeholder="+7 (___) ___ __ __" value="{{ organization.phone ?? '' }}" inputmode="tel" maxlength="18" autocomplete="tel">
                                         </div>
                                     </div>
                                     <div class="col-md-6 col-12">
                                         <div class="form-group">
                                             <label for="email">Email</label>
                                             <input type="email" id="email" class="form-control" name="email" placeholder="email@example.com" value="{{ organization.email ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-12"><hr class="my-3"><h5 class="mb-2">Реквизиты и банк</h5></div>
+                                    <div class="col-md-4 col-12">
+                                        <div class="form-group">
+                                            <label for="inn">ИНН</label>
+                                            <input type="text" id="inn" class="form-control" name="inn" placeholder="10 или 12 цифр" value="{{ organization.inn ?? '' }}" maxlength="12" inputmode="numeric" autocomplete="off">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4 col-12">
+                                        <div class="form-group">
+                                            <label for="kpp">КПП</label>
+                                            <input type="text" id="kpp" class="form-control" name="kpp" placeholder="9 цифр" value="{{ organization.kpp ?? '' }}" maxlength="9" inputmode="numeric" autocomplete="off">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4 col-12">
+                                        <div class="form-group">
+                                            <label for="ogrn">ОГРН / ОГРНИП</label>
+                                            <input type="text" id="ogrn" class="form-control" name="ogrn" placeholder="13 или 15 цифр" value="{{ organization.ogrn ?? '' }}" maxlength="15" inputmode="numeric" autocomplete="off">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="registration_date">Дата регистрации</label>
+                                            <input type="date" id="registration_date" class="form-control" name="registration_date" value="{{ organization.registrationDate ? organization.registrationDate|date('Y-m-d') : '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="tax_type">Тип налогообложения</label>
+                                            <select id="tax_type" class="form-control" name="tax_type">
+                                                <option value="">— Не указано —</option>
+                                                {% for value, label in tax_type_choices|default([]) %}
+                                                    <option value="{{ value }}" {{ (organization.taxType ? organization.taxType.value : '') == value ? 'selected' : '' }}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="registration_organ">Орган регистрации</label>
+                                            <input type="text" id="registration_organ" class="form-control" name="registration_organ" placeholder="Например: ИФНС № 5 по г. Москве" value="{{ organization.registrationOrgan ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="bank_name">Наименование банка</label>
+                                            <input type="text" id="bank_name" class="form-control" name="bank_name" placeholder="Наименование банка" value="{{ organization.bankName ?? '' }}">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="bik">БИК</label>
+                                            <input type="text" id="bik" class="form-control" name="bik" placeholder="9 цифр" value="{{ organization.bik ?? '' }}" maxlength="9" inputmode="numeric" autocomplete="off">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="bank_account">Расчётный счёт</label>
+                                            <input type="text" id="bank_account" class="form-control" name="bank_account" placeholder="20 цифр" value="{{ organization.bankAccount ?? '' }}" maxlength="20" inputmode="numeric" autocomplete="off">
                                         </div>
                                     </div>
                                 </div>
@@ -154,4 +226,7 @@
             });
         </script>
     {% endif %}
+
+    {% include 'organization/partials/_script_organization_form_validation.html.twig' %}
+
 {% endblock %}

@@ -2,11 +2,16 @@
 
 namespace App\Controller\Organization;
 
-use App\Entity\AbstractOrganization;
-use App\Entity\Organization;
-use App\Entity\User;
-use App\Repository\OrganizationRepository;
-use App\Repository\UserRepository;
+use App\Entity\Organization\AbstractOrganization;
+use App\Entity\Organization\AbstractOrganizationWithDetails;
+use App\Entity\Organization\Department;
+use App\Entity\Organization\Filial;
+use App\Entity\Organization\Organization;
+use App\Entity\User\User;
+use App\Enum\OrganizationType;
+use App\Enum\TaxType;
+use App\Repository\Organization\OrganizationRepository;
+use App\Repository\User\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -49,11 +54,70 @@ final class OrganizationController extends AbstractController
             }
         }
 
+        $organizationType = $organization instanceof Filial
+            ? OrganizationType::FILIAL
+            : ($organization instanceof Department ? OrganizationType::DEPARTMENT : OrganizationType::ORGANIZATION);
+
         return $this->render('organization/view_organization.html.twig', [
             'active_tab' => 'view_organization',
             'organization' => $organization,
+            'organization_type' => $organizationType,
+            'type_organization' => $organizationType->getLabel(),
             'users' => $users,
             'back_organization' => $backOrganization,
+        ]);
+    }
+
+    #[Route('/organization/{id}/requisites.txt', name: 'organization_download_requisites', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function downloadRequisites(int $id, EntityManagerInterface $em): Response
+    {
+        $organization = $em->getRepository(AbstractOrganization::class)->find($id);
+        if (!$organization) {
+            throw $this->createNotFoundException('Организация не найдена');
+        }
+
+        $lines = [
+            'РЕКВИЗИТЫ',
+            str_repeat('—', 40),
+            'Краткое наименование: ' . ($organization->getShortName() ?? ''),
+            'Полное наименование: ' . ($organization->getFullName() ?? ''),
+            '',
+            'Юридический адрес: ' . ($organization->getLegalAddress() ?? ''),
+            'Фактический адрес: ' . ($organization->getActualAddress() ?? ''),
+            '',
+            'Телефон: ' . ($organization->getPhone() ?? ''),
+            'Email: ' . ($organization->getEmail() ?? ''),
+        ];
+
+        if ($organization->getDescription()) {
+            $lines[] = '';
+            $lines[] = 'Описание: ' . $organization->getDescription();
+        }
+
+        if ($organization instanceof AbstractOrganizationWithDetails) {
+            $lines[] = '';
+            $lines[] = str_repeat('—', 40);
+            $lines[] = 'ИНН: ' . ($organization->getInn() ?? '');
+            $lines[] = 'КПП: ' . ($organization->getKpp() ?? '');
+            $lines[] = 'ОГРН/ОГРНИП: ' . ($organization->getOgrn() ?? '');
+            $regDate = $organization->getRegistrationDate();
+            $lines[] = 'Дата регистрации: ' . ($regDate ? $regDate->format('d.m.Y') : '');
+            $lines[] = 'Орган регистрации: ' . ($organization->getRegistrationOrgan() ?? '');
+            $lines[] = '';
+            $lines[] = 'Банк: ' . ($organization->getBankName() ?? '');
+            $lines[] = 'БИК: ' . ($organization->getBik() ?? '');
+            $lines[] = 'Расчётный счёт: ' . ($organization->getBankAccount() ?? '');
+            $taxType = $organization->getTaxType();
+            $lines[] = 'Тип налогообложения: ' . ($taxType ? $taxType->getLabel() : '');
+        }
+
+        $content = implode("\r\n", $lines);
+
+        $filename = sprintf('requisites-%d.txt', $id);
+
+        return new Response($content, 200, [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
     }
 
@@ -103,8 +167,10 @@ final class OrganizationController extends AbstractController
         if ($search !== '') {
             $term = mb_strtolower($search);
             $match = false
-                || ($userOrganization->getName() && mb_strpos(mb_strtolower($userOrganization->getName()), $term) !== false)
-                || ($userOrganization->getAddress() && mb_strpos(mb_strtolower($userOrganization->getAddress()), $term) !== false)
+                || ($userOrganization->getShortName() && mb_strpos(mb_strtolower($userOrganization->getShortName()), $term) !== false)
+                || ($userOrganization->getFullName() && mb_strpos(mb_strtolower($userOrganization->getFullName()), $term) !== false)
+                || ($userOrganization->getLegalAddress() && mb_strpos(mb_strtolower($userOrganization->getLegalAddress()), $term) !== false)
+                || ($userOrganization->getActualAddress() && mb_strpos(mb_strtolower($userOrganization->getActualAddress()), $term) !== false)
                 || ($userOrganization->getPhone() && mb_strpos(mb_strtolower($userOrganization->getPhone()), $term) !== false)
                 || ($userOrganization->getEmail() && mb_strpos(mb_strtolower($userOrganization->getEmail()), $term) !== false);
             if (!$match) {
@@ -156,8 +222,10 @@ final class OrganizationController extends AbstractController
                 } else {
                     $term = mb_strtolower($search);
                     $match = false
-                        || ($userOrganization->getName() && mb_strpos(mb_strtolower($userOrganization->getName()), $term) !== false)
-                        || ($userOrganization->getAddress() && mb_strpos(mb_strtolower($userOrganization->getAddress()), $term) !== false)
+                        || ($userOrganization->getShortName() && mb_strpos(mb_strtolower($userOrganization->getShortName()), $term) !== false)
+                        || ($userOrganization->getFullName() && mb_strpos(mb_strtolower($userOrganization->getFullName()), $term) !== false)
+                        || ($userOrganization->getLegalAddress() && mb_strpos(mb_strtolower($userOrganization->getLegalAddress()), $term) !== false)
+                || ($userOrganization->getActualAddress() && mb_strpos(mb_strtolower($userOrganization->getActualAddress()), $term) !== false)
                         || ($userOrganization->getPhone() && mb_strpos(mb_strtolower($userOrganization->getPhone()), $term) !== false)
                         || ($userOrganization->getEmail() && mb_strpos(mb_strtolower($userOrganization->getEmail()), $term) !== false);
                     if ($match) {
@@ -177,8 +245,10 @@ final class OrganizationController extends AbstractController
         foreach ($organizations as $org) {
             $organizationsData[] = [
                 'id' => $org->getId(),
-                'name' => $org->getName(),
-                'address' => $org->getAddress() ?? '-',
+                'shortName' => $org->getShortName(),
+                'fullName' => $org->getFullName(),
+                'legalAddress' => $org->getLegalAddress() ?? '-',
+                'actualAddress' => $org->getActualAddress() ?? '-',
                 'phone' => $org->getPhone() ?? '-',
                 'email' => $org->getEmail() ?? '-',
                 'viewUrl' => $this->generateUrl('view_organization', ['id' => $org->getId()]),
@@ -231,11 +301,23 @@ final class OrganizationController extends AbstractController
                 return $this->redirectToRoute('edit_organization', ['id' => $id]);
             }
 
-            $organization->setName(trim((string) ($formData['name'] ?? '')));
+            $organization->setShortName(trim((string) ($formData['short_name'] ?? '')));
+            $organization->setFullName(trim((string) ($formData['full_name'] ?? '')));
             $organization->setDescription(trim((string) ($formData['description'] ?? '')) ?: null);
-            $organization->setAddress(trim((string) ($formData['address'] ?? '')) ?: null);
+            $organization->setLegalAddress(trim((string) ($formData['legal_address'] ?? '')) ?: null);
+            $organization->setActualAddress(trim((string) ($formData['actual_address'] ?? '')) ?: null);
             $organization->setPhone(trim((string) ($formData['phone'] ?? '')) ?: null);
             $organization->setEmail(trim((string) ($formData['email'] ?? '')) ?: null);
+            $organization->setInn(trim((string) ($formData['inn'] ?? '')) ?: null);
+            $organization->setKpp(trim((string) ($formData['kpp'] ?? '')) ?: null);
+            $organization->setOgrn(trim((string) ($formData['ogrn'] ?? '')) ?: null);
+            $organization->setRegistrationOrgan(trim((string) ($formData['registration_organ'] ?? '')) ?: null);
+            $organization->setBankName(trim((string) ($formData['bank_name'] ?? '')) ?: null);
+            $organization->setBik(trim((string) ($formData['bik'] ?? '')) ?: null);
+            $organization->setBankAccount(trim((string) ($formData['bank_account'] ?? '')) ?: null);
+            $organization->setTaxType(TaxType::tryFrom(trim((string) ($formData['tax_type'] ?? ''))));
+            $regDate = trim((string) ($formData['registration_date'] ?? ''));
+            $organization->setRegistrationDate($regDate !== '' ? (\DateTimeImmutable::createFromFormat('Y-m-d', $regDate) ?: null) : null);
 
             // Обрабатываем родительскую организацию
             $parentId = (int) ($formData['parent_id'] ?? 0);
@@ -259,6 +341,7 @@ final class OrganizationController extends AbstractController
                     'organization' => $organization,
                     'is_admin' => $isAdmin,
                     'organizations' => $organizationsWithChildren,
+                    'tax_type_choices' => TaxType::getChoices(),
                 ]);
             }
 
@@ -273,6 +356,7 @@ final class OrganizationController extends AbstractController
             'organization' => $organization,
             'is_admin' => $isAdmin,
             'organizations' => $organizationsWithChildren,
+            'tax_type_choices' => TaxType::getChoices(),
         ]);
     }
 
@@ -306,6 +390,7 @@ final class OrganizationController extends AbstractController
                 'form_data' => $formData,
                 'is_admin' => $isAdmin,
                 'organizations' => $organizationsWithChildren,
+                'tax_type_choices' => TaxType::getChoices(),
             ]);
         };
 
@@ -326,19 +411,52 @@ final class OrganizationController extends AbstractController
             return $this->redirectToRoute('create_organization');
         }
 
-        // Создаем новую организацию
-        $organization = new Organization();
-        $organization->setName(trim((string) ($formData['name'] ?? '')));
+        $organizationType = OrganizationType::tryFrom((string) ($formData['discriminator'] ?? '')) ?? OrganizationType::ORGANIZATION;
+
+        $parentId = (int) ($formData['parent_id'] ?? 0);
+        $parentOrg = null;
+
+        // Для филиала и департамента родитель обязателен
+        if ($organizationType->requiresParent()) {
+            if ($parentId <= 0) {
+                $this->addFlash('error', 'Для филиала и департамента необходимо выбрать родительскую организацию или филиал.');
+                return $renderForm($formData);
+            }
+            $parentOrg = $organizationRepository->find($parentId);
+            if (!$parentOrg) {
+                $this->addFlash('error', 'Выбранная родительская организация не найдена.');
+                return $renderForm($formData);
+            }
+        }
+
+        // Создаём сущность по типу
+        $organization = match ($organizationType) {
+            OrganizationType::FILIAL => new Filial(),
+            OrganizationType::DEPARTMENT => new Department(),
+            OrganizationType::ORGANIZATION => new Organization(),
+        };
+
+        $organization->setShortName(trim((string) ($formData['short_name'] ?? '')));
+        $organization->setFullName(trim((string) ($formData['full_name'] ?? '')));
         $organization->setDescription(trim((string) ($formData['description'] ?? '')) ?: null);
-        $organization->setAddress(trim((string) ($formData['address'] ?? '')) ?: null);
+        $organization->setLegalAddress(trim((string) ($formData['legal_address'] ?? '')) ?: null);
+        $organization->setActualAddress(trim((string) ($formData['actual_address'] ?? '')) ?: null);
         $organization->setPhone(trim((string) ($formData['phone'] ?? '')) ?: null);
         $organization->setEmail(trim((string) ($formData['email'] ?? '')) ?: null);
+        $organization->setInn(trim((string) ($formData['inn'] ?? '')) ?: null);
+        $organization->setKpp(trim((string) ($formData['kpp'] ?? '')) ?: null);
+        $organization->setOgrn(trim((string) ($formData['ogrn'] ?? '')) ?: null);
+        $organization->setRegistrationOrgan(trim((string) ($formData['registration_organ'] ?? '')) ?: null);
+        $organization->setBankName(trim((string) ($formData['bank_name'] ?? '')) ?: null);
+        $organization->setBik(trim((string) ($formData['bik'] ?? '')) ?: null);
+        $organization->setBankAccount(trim((string) ($formData['bank_account'] ?? '')) ?: null);
+        $organization->setTaxType(TaxType::tryFrom(trim((string) ($formData['tax_type'] ?? ''))));
+        $regDate = trim((string) ($formData['registration_date'] ?? ''));
+        $organization->setRegistrationDate($regDate !== '' ? (\DateTimeImmutable::createFromFormat('Y-m-d', $regDate) ?: null) : null);
 
-        // Обрабатываем родительскую организацию
-        $parentId = (int) ($formData['parent_id'] ?? 0);
         if ($parentId > 0) {
-            $parentOrg = $organizationRepository->find($parentId);
-            if ($parentOrg) {
+            $parentOrg = $parentOrg ?? $organizationRepository->find($parentId);
+            if ($parentOrg instanceof AbstractOrganization) {
                 $organization->setParent($parentOrg);
             }
         }

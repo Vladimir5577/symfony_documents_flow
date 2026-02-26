@@ -2,9 +2,8 @@
 
 namespace App\DataFixtures;
 
-use App\Entity\User;
-use App\Entity\Worker;
-use App\Repository\UserRepository;
+use App\Entity\User\Worker;
+use App\Repository\User\UserRepository;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
@@ -20,7 +19,7 @@ class WorkerFixtures extends Fixture implements DependentFixtureInterface
     {
         // Получаем всех пользователей
         $users = $this->userRepository->findAll();
-        
+
         if (empty($users)) {
             return; // Если нет пользователей, не создаем работников
         }
@@ -67,7 +66,7 @@ class WorkerFixtures extends Fixture implements DependentFixtureInterface
             $worker = new Worker();
             $worker->setUserId($user->getId());
             $worker->setProfession($professions[array_rand($professions)]);
-            
+
             // Случайное описание (70% имеют описание)
             if (rand(0, 100) < 70) {
                 $description = $descriptions[array_rand($descriptions)];

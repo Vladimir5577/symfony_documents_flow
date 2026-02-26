@@ -91,7 +91,7 @@
                                                 <label for="organization_id">Организация отправитель</label>
                                                 {% if user_organization|default(null) %}
                                                     <input type="hidden" name="organization_id" value="{{ user_organization.id }}">
-                                                    <input type="text" id="organization_id" class="form-control" value="{{ user_organization.name }}" readonly disabled>
+                                                    <input type="text" id="organization_id" class="form-control" value="{{ user_organization.shortName }}" readonly disabled>
                                                 {% else %}
                                                     <p class="form-control-plaintext text-muted mb-0">Организация не назначена. Обратитесь к администратору.</p>
                                                 {% endif %}

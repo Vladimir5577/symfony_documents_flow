@@ -2,19 +2,19 @@
 
 namespace App\Controller\User;
 
-use App\Entity\User;
-use App\Entity\Worker;
+use App\Entity\User\User;
+use App\Entity\User\Worker;
 use App\Enum\UserEmployeeStatus;
 use App\Enum\UserRole;
-use App\Repository\OrganizationRepository;
-use App\Repository\RoleRepository;
-use App\Repository\UserRepository;
-use App\Repository\WorkerRepository;
-use App\Utils\LoginGenerator;
+use App\Repository\Organization\OrganizationRepository;
+use App\Repository\User\RoleRepository;
+use App\Repository\User\UserRepository;
+use App\Repository\User\WorkerRepository;
+use App\Service\User\LoginGeneratorService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
@@ -24,14 +24,14 @@ final class UserController extends AbstractController
 {
     #[Route(path: '/register', name: 'user_register', methods: ['GET', 'POST'])]
     public function register(
-        Request $request,
+        Request                     $request,
         UserPasswordHasherInterface $passwordHasher,
-        EntityManagerInterface $entityManager,
-        RoleRepository $roleRepository,
-        UserRepository $userRepository,
-        OrganizationRepository $organizationRepository,
-        LoginGenerator $loginGenerator,
-        ValidatorInterface $validator
+        EntityManagerInterface      $entityManager,
+        RoleRepository              $roleRepository,
+        UserRepository              $userRepository,
+        OrganizationRepository      $organizationRepository,
+        LoginGeneratorService       $loginGenerator,
+        ValidatorInterface          $validator
     ): Response {
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');

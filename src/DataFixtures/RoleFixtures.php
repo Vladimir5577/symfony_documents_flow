@@ -2,7 +2,7 @@
 
 namespace App\DataFixtures;
 
-use App\Entity\Role;
+use App\Entity\User\Role;
 use App\Enum\UserRole;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;

@@ -81,11 +81,37 @@
             {% if active_tab == 'view_organization' %}active{% endif %}
     ">
         <a href="{{ path('app_all_organizations') }}" class='sidebar-link'>
-            <i class="bi bi-diagram-3-fill fs-5"></i>
+            <i class="bi bi-building fs-5"></i>
             <span>Организации</span>
         </a>
     </li>
     {% endif %}
+
+
+    <li
+        class="
+            sidebar-item
+            has-sub
+            {% if active_tab == 'personal_kanban_projects' %}active{% endif %}
+            {% if active_tab == 'public_kanban_projects' %}active{% endif %}
+    ">
+        <a href="#" class='sidebar-link'>
+            <i class="bi bi-kanban-fill fs-5"></i>
+            <span>Канбан проекты</span>
+        </a>
+
+        <ul class="submenu active">
+
+            <li class="submenu-item {% if active_tab == 'personal_kanban_projects' %}active{% endif %} ">
+                <a href="{{ path('app_personal_kanban_projects') }}" class="submenu-link">Личные</a>
+            </li>
+
+            <li class="submenu-item  {% if active_tab == 'public_kanban_projects' %}active{% endif %} ">
+                <a href="{{ path('app_public_kanban_projects') }}" class="submenu-link">Публичные</a>
+            </li>
+
+        </ul>
+    </li>
 
 
 </ul>

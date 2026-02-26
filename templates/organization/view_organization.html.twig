@@ -1,6 +1,6 @@
 {% extends 'base_dashboard.html.twig' %}
 
-{% block title %}Просмотр организации!{% endblock %}
+{% block title %}Просмотр организации: {{ organization.shortName }}{% endblock %}
 
 {# Рекурсивный макрос для отображения дерева организаций в виде аккордеона. from_org — организация, с которой переходят (текущая страница). #}
 {% macro renderOrganizationTree(organization, level, from_org) %}
@@ -21,7 +21,7 @@
             <a href="{{ path('view_organization', {'id': organization.id, 'from': from_org.id}) }}"
                class="flex-grow-1 text-decoration-none org-tree-link fw-medium"
                style="font-size: 15px;">
-                {{ organization.name }}
+                {{ organization.shortName }}
             </a>
             {% if organization.childOrganizations|length > 0 %}
                 <span class="badge org-tree-badge">{{ organization.childOrganizations|length }}</span>
@@ -49,16 +49,23 @@
 
 {% block main %}
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1>Просмотр организации</h1>
-        {% if back_organization %}
-            <a href="{{ path('view_organization', {id: back_organization.id}) }}" class="btn btn-secondary rounded-pill" title="Вернуться к {{ back_organization.name }}">
-                <i class="bi bi-arrow-left"></i> Назад к «{{ back_organization.name }}»
-            </a>
-        {% else %}
-            <a href="{{ path('app_all_organizations') }}" class="btn btn-secondary rounded-pill">
-                <i class="bi bi-arrow-left"></i> Назад к списку
-            </a>
-        {% endif %}
+        <h1>{{ type_organization }}</h1>
+        <div class="d-flex gap-2 align-items-center">
+            {% if organization_type.value != 'department' %}
+                <a href="{{ path('organization_download_requisites', {id: organization.id}) }}" class="btn btn-outline-success rounded-pill" title="Скачать реквизиты в TXT">
+                    <i class="bi bi-download"></i> Скачать реквизиты
+                </a>
+            {% endif %}
+            {% if back_organization %}
+                <a href="{{ path('view_organization', {id: back_organization.id}) }}" class="btn btn-secondary rounded-pill" title="Вернуться к {{ back_organization.shortName }}">
+                    <i class="bi bi-arrow-left"></i> Назад к «{{ back_organization.shortName }}»
+                </a>
+            {% else %}
+                <a href="{{ path('app_all_organizations') }}" class="btn btn-secondary rounded-pill">
+                    <i class="bi bi-arrow-left"></i> Назад к списку
+                </a>
+            {% endif %}
+        </div>
     </div>
 
     {% for message in app.flashes('success') %}
@@ -89,20 +96,44 @@
                                 <div class="col-md-6">
                                     <table class="table table-borderless">
                                         <tr>
-                                            <th>Название:</th>
-                                            <td><strong>{{ organization.name }}</strong></td>
+                                            <th width="180">Короткое название:</th>
+                                            <td><strong>{{ organization.shortName }}</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <th>Полное название:</th>
+                                            <td><strong>{{ organization.fullName }}</strong></td>
                                         </tr>
                                         <tr>
                                             <th>Описание:</th>
                                             <td>{{ organization.description ?? '-' }}</td>
+                                        </tr>
+                                        {% if organization.parent %}
+                                        <tr>
+                                            <th>Родительская организация:</th>
+                                            <td>
+                                                <a href="{{ path('view_organization', {id: organization.parent.id}) }}">{{ organization.parent.shortName }}</a>
+                                            </td>
+                                        </tr>
+                                        {% endif %}
+                                        <tr>
+                                            <th>Дата создания:</th>
+                                            <td>{{ organization.createdAt ? organization.createdAt|date('d.m.Y H:i') : '-' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Дата обновления:</th>
+                                            <td>{{ organization.updatedAt ? organization.updatedAt|date('d.m.Y H:i') : '-' }}</td>
                                         </tr>
                                     </table>
                                 </div>
                                 <div class="col-md-6">
                                     <table class="table table-borderless">
                                         <tr>
-                                            <th width="200">Адрес:</th>
-                                            <td>{{ organization.address ?? '-' }}</td>
+                                            <th width="200">Юридический адрес:</th>
+                                            <td>{{ organization.legalAddress ?? '-' }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Фактический адрес:</th>
+                                            <td>{{ organization.actualAddress ?? '-' }}</td>
                                         </tr>
                                         <tr>
                                             <th>Телефон:</th>
@@ -115,6 +146,28 @@
                                     </table>
                                 </div>
                             </div>
+                            {% if organization.inn or organization.kpp or organization.ogrn or organization.registrationDate or organization.taxType or organization.registrationOrgan or organization.bankName or organization.bik or organization.bankAccount %}
+                            <div class="row mt-3">
+                                <div class="col-12"><h5 class="mb-2">Реквизиты и банк</h5></div>
+                                <div class="col-md-6">
+                                    <table class="table table-borderless">
+                                        <tr><th width="220">ИНН:</th><td>{{ organization.inn ?? '-' }}</td></tr>
+                                        <tr><th>КПП:</th><td>{{ organization.kpp ?? '-' }}</td></tr>
+                                        <tr><th>ОГРН / ОГРНИП:</th><td>{{ organization.ogrn ?? '-' }}</td></tr>
+                                        <tr><th>Дата регистрации:</th><td>{{ organization.registrationDate ? organization.registrationDate|date('d.m.Y') : '-' }}</td></tr>
+                                        <tr><th>Тип налогообложения:</th><td>{{ organization.taxType ? organization.taxType.getLabel() : '-' }}</td></tr>
+                                        <tr><th>Орган регистрации:</th><td>{{ organization.registrationOrgan ?? '-' }}</td></tr>
+                                    </table>
+                                </div>
+                                <div class="col-md-6">
+                                    <table class="table table-borderless">
+                                        <tr><th width="220">Наименование банка:</th><td>{{ organization.bankName ?? '-' }}</td></tr>
+                                        <tr><th>БИК:</th><td>{{ organization.bik ?? '-' }}</td></tr>
+                                        <tr><th>Расчётный счёт:</th><td>{{ organization.bankAccount ?? '-' }}</td></tr>
+                                    </table>
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

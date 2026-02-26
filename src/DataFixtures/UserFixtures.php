@@ -2,13 +2,13 @@
 
 namespace App\DataFixtures;
 
-use App\Entity\AbstractOrganization;
-use App\Entity\Department;
-use App\Entity\Filial;
-use App\Entity\Organization;
-use App\Entity\User;
+use App\Entity\Organization\AbstractOrganization;
+use App\Entity\Organization\Department;
+use App\Entity\Organization\Filial;
+use App\Entity\Organization\Organization;
+use App\Entity\User\User;
 use App\Enum\UserRole;
-use App\Repository\RoleRepository;
+use App\Repository\User\RoleRepository;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
