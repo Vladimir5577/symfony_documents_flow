@@ -1,0 +1,1710 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Канбан доска!{% endblock %}
+
+
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+
+
+{% block main %}
+
+    <link rel="stylesheet" href="/front_end/assets/extensions/dragula/dragula.min.css">
+    <style>
+        /* Kanban Board Styles */
+        .kanban-board {
+            display: flex;
+            gap: 1.25rem;
+            overflow-x: auto;
+            padding-bottom: 1rem;
+            min-height: calc(100vh - 220px);
+        }
+
+        .kanban-column {
+            flex: 0 0 320px;
+            min-width: 320px;
+            background: var(--bs-secondary-bg, #f8f9fa);
+            border-radius: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 200px);
+            border: 1px solid var(--bs-border-color, #dee2e6);
+        }
+
+        [data-bs-theme="dark"] .kanban-column {
+            background: var(--bs-tertiary-bg);
+        }
+
+        .kanban-column-header {
+            padding: 1rem 1.25rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .kanban-column-header .badge {
+            font-size: 0.75rem;
+        }
+
+        .kanban-add-btn {
+            padding: 0.25rem 0.5rem;
+            line-height: 1;
+        }
+
+        .kanban-add-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .kanban-new-task-wrap {
+            margin-bottom: 0.75rem;
+        }
+
+        .kanban-new-task-input {
+            border-radius: 0.375rem;
+        }
+
+        .kanban-column-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.75rem;
+            min-height: 120px;
+        }
+
+        .kanban-card {
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color, #dee2e6);
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            cursor: grab;
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+
+        .kanban-card:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .kanban-card:active {
+            cursor: grabbing;
+        }
+
+        .kanban-card:last-child {
+            margin-bottom: 0;
+        }
+
+        .gu-transit .kanban-card {
+            opacity: 0.5;
+        }
+
+        .kanban-card-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .kanban-card-description {
+            font-size: 0.85rem;
+            color: var(--bs-secondary-color);
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .kanban-card-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            font-size: 0.8rem;
+        }
+
+        .kanban-add-card {
+            padding: 0.5rem;
+            color: var(--bs-secondary-color);
+            text-align: center;
+            border: 1px dashed var(--bs-border-color, #dee2e6);
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: transparent;
+            width: 100%;
+            font-size: 0.9rem;
+        }
+
+        .kanban-add-card:hover {
+            color: var(--bs-primary);
+            border-color: var(--bs-primary);
+        }
+
+        /* Task detail sidebar (YouGile style) */
+        .task-sidebar {
+            position: fixed;
+            inset: 0;
+            z-index: 1050;
+            pointer-events: none;
+            visibility: hidden;
+            transition: visibility 0.2s ease;
+        }
+
+        .task-sidebar[aria-hidden="false"] {
+            visibility: visible;
+        }
+
+        .task-sidebar-backdrop {
+            position: absolute;
+            inset: 0;
+            pointer-events: none; /* allow clicks to pass through to board so another task can be selected */
+        }
+
+        .task-sidebar-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100%;
+            max-width: 420px;
+            height: 100%;
+            background: var(--bs-body-bg);
+            border-left: 1px solid var(--bs-border-color, #dee2e6);
+            box-shadow: -4px 0 24px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            transition: transform 0.25s ease;
+            pointer-events: auto; /* panel receives clicks; rest of overlay is pass-through */
+        }
+
+        .task-sidebar[aria-hidden="false"] .task-sidebar-panel {
+            transform: translateX(0);
+        }
+
+        .task-sidebar-header {
+            flex-shrink: 0;
+            padding: 1rem 1.25rem 0.75rem;
+            border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+        }
+
+        .task-sidebar-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .task-sidebar-back {
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .task-sidebar-expand {
+            font-size: 1.1rem;
+            color: var(--bs-secondary-color) !important;
+        }
+
+        .task-sidebar-title-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .task-sidebar-title-block {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+            min-width: 0;
+        }
+
+        .task-sidebar-status {
+            font-size: 1.25rem;
+            flex-shrink: 0;
+            margin-top: 0.15rem;
+        }
+
+        .task-sidebar-title-block > div {
+            min-width: 0;
+        }
+
+        .task-sidebar-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 0 0 0.2rem 0;
+            line-height: 1.3;
+            color: var(--bs-body-color);
+        }
+
+        .task-sidebar-id {
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .task-sidebar-icons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            flex-shrink: 0;
+        }
+
+        .task-sidebar-icon-btn {
+            width: 2rem;
+            height: 2rem;
+            padding: 0;
+            border: none;
+            background: transparent;
+            color: var(--bs-secondary-color);
+            border-radius: 0.375rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .task-sidebar-icon-btn:hover {
+            background: var(--bs-tertiary-bg);
+            color: var(--bs-body-color);
+        }
+
+        .task-sidebar-tabs {
+            display: flex;
+            gap: 0;
+            padding: 0 1.25rem;
+            border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+            flex-shrink: 0;
+            background: var(--bs-body-bg);
+        }
+
+        .task-sidebar-tab {
+            padding: 0.75rem 0.5rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--bs-secondary-color);
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            cursor: pointer;
+            transition: color 0.15s, border-color 0.15s;
+        }
+
+        .task-sidebar-tab:hover {
+            color: var(--bs-body-color);
+        }
+
+        .task-sidebar-tab.active {
+            color: var(--bs-primary);
+            border-bottom-color: var(--bs-primary);
+        }
+
+        .task-sidebar-content {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .task-sidebar-tab-pane {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem 1.25rem;
+        }
+
+        .task-sidebar-tab-pane.active {
+            display: block;
+        }
+
+        #pane-chat.task-sidebar-tab-pane.active {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 1rem 1.25rem;
+        }
+
+        .task-chat-messages {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex: 1;
+            min-height: 0;
+            padding-bottom: 0.5rem;
+        }
+
+        .task-chat-msg {
+            min-width: 0;
+        }
+
+        .task-chat-msg-bubble {
+            max-width: 85%;
+            min-width: 0;
+            padding: 0.6rem 0.9rem;
+            border-radius: 1rem 1rem 1rem 0.25rem;
+            background: rgba(13, 110, 253, 0.12);
+            color: var(--bs-body-color);
+            font-size: 0.9rem;
+            line-height: 1.4;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .task-chat-msg-bubble .task-chat-msg-text {
+            margin-bottom: 0.5rem;
+        }
+
+        [data-bs-theme="dark"] .task-chat-msg-bubble {
+            background: rgba(13, 110, 253, 0.2);
+        }
+
+        .task-chat-msg-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.75rem;
+            color: var(--bs-secondary-color);
+            margin-top: 0.5rem;
+        }
+
+        .task-chat-msg-time {
+            white-space: nowrap;
+        }
+
+        .task-chat-input-wrap {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-end;
+            flex-shrink: 0;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--bs-border-color, #dee2e6);
+        }
+
+        .task-chat-input {
+            flex: 1;
+            min-width: 0;
+            border-radius: 1rem;
+            resize: none;
+            min-height: 4.5rem;
+            max-height: 10rem;
+            overflow-y: auto;
+        }
+
+        .task-chat-send {
+            width: 2.5rem;
+            height: 2.5rem;
+            padding: 0;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .task-info-block {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .task-info-row-inline {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .task-info-label {
+            color: var(--bs-secondary-color);
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .task-info-value {
+            color: var(--bs-body-color);
+            font-size: 0.9rem;
+        }
+
+        .task-info-edit-btn {
+            margin-left: 0.15rem;
+            font-size: 0.85rem;
+            line-height: 1;
+            opacity: 0.7;
+        }
+
+        .task-info-edit-btn:hover {
+            opacity: 1;
+        }
+
+        .task-info-field {
+            margin-bottom: 1rem;
+        }
+
+        .task-info-field-label {
+            display: block;
+            font-size: 0.7rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            color: var(--bs-secondary-color);
+            margin-bottom: 0.35rem;
+        }
+
+        .task-info-input-wrap {
+            position: relative;
+        }
+
+        .task-info-input-wrap .task-info-input {
+            padding-right: 2.25rem;
+        }
+
+        .task-info-input-icon {
+            position: absolute;
+            right: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1rem;
+            color: var(--bs-secondary-color);
+            pointer-events: none;
+        }
+
+        .task-info-input {
+            font-size: 0.9rem;
+        }
+
+        .task-info-field-with-unit {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .task-info-input-num {
+            width: 5rem;
+            max-width: 100%;
+        }
+
+        .task-info-unit {
+            font-size: 0.9rem;
+            color: var(--bs-secondary-color);
+        }
+
+        .task-info-timestamps {
+            margin-top: 1.25rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--bs-border-color, #dee2e6);
+        }
+
+        .task-info-timestamps .task-info-row-inline {
+            margin-bottom: 0.5rem;
+        }
+
+        .task-info-timestamps .task-info-row-inline:last-child {
+            margin-bottom: 0;
+        }
+
+        .task-description-pane {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .task-description-toolbar {
+            display: flex;
+            justify-content: flex-start;
+            margin-bottom: 0.5rem;
+        }
+
+        .task-description-edit-btn {
+            font-size: 0.9rem;
+        }
+
+        .task-description-view {
+            white-space: pre-wrap;
+            font-size: 0.9rem;
+            color: var(--bs-body-color);
+        }
+
+        .task-description-empty {
+            color: var(--bs-secondary-color);
+            font-size: 0.9rem;
+        }
+
+        .task-description-edit {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .task-description-textarea {
+            width: 100%;
+            min-height: 6rem;
+            max-height: 14rem;
+            resize: vertical;
+            font-size: 0.9rem;
+        }
+
+        .task-description-edit-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .task-description-body {
+            padding: 0.25rem 0;
+        }
+
+        .task-subtasks-pane {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .task-subtasks-list {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .task-subtasks-empty {
+            color: var(--bs-secondary-color);
+            font-size: 0.9rem;
+        }
+
+        .task-subtask-card {
+            background: var(--bs-secondary-bg, #f8f9fa);
+            border-radius: 0.375rem;
+            border: 1px solid var(--bs-border-color, #dee2e6);
+            padding: 0.5rem 0.75rem;
+        }
+
+        .task-subtask-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+
+        .task-subtask-title {
+            font-size: 0.9rem;
+            font-weight: 500;
+            flex: 1;
+            min-width: 0;
+            color: var(--bs-body-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .task-subtask-status {
+            flex: 0 0 auto;
+            min-width: 120px;
+            max-width: 130px;
+            width: auto;
+            font-size: 0.8rem;
+            padding-top: 0.15rem;
+            padding-bottom: 0.15rem;
+        }
+
+        .task-subtask-remove {
+            border: none;
+            background: transparent;
+            color: var(--bs-secondary-color);
+            padding: 0;
+            margin-left: 0.25rem;
+        }
+
+        .task-subtask-remove:hover {
+            color: var(--bs-danger);
+        }
+
+        .task-subtask-toggle {
+            border: none;
+            background: transparent;
+            padding: 0;
+            margin-right: 0.25rem;
+            color: var(--bs-secondary-color);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .task-subtask-body {
+            margin-top: 0.5rem;
+        }
+
+        .task-subtask-card.task-subtask-collapsed .task-subtask-body {
+            display: none;
+        }
+
+        .task-subtask-card.task-subtask-completed .task-subtask-title {
+            text-decoration: line-through;
+            color: var(--bs-secondary-color);
+        }
+
+        .card-subtasks {
+            margin-top: 0.5rem;
+            padding-top: 0.35rem;
+            border-top: 1px solid var(--bs-border-color, #dee2e6);
+            font-size: 0.8rem;
+        }
+
+        .card-subtasks-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.25rem;
+            color: var(--bs-secondary-color);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .card-subtasks-header-main {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .card-subtasks-header-add {
+            margin-left: 0.25rem;
+        }
+
+        .card-subtasks-toggle {
+            border: none;
+            background: transparent;
+            padding: 0;
+            margin-right: 0.15rem;
+            color: var(--bs-secondary-color);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+
+        .card-subtasks-label {
+            font-weight: 500;
+            margin-right: 0.25rem;
+        }
+
+        .card-subtasks-counter {
+            font-size: 0.75rem;
+        }
+
+        .card-subtasks-body {
+            margin-top: 0.25rem;
+        }
+
+        .card-subtasks-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+            max-height: 7rem;
+            overflow-y: auto;
+        }
+
+        .card-subtasks-item .card-subtasks-text {
+            font-size: 0.8rem;
+        }
+
+        .card-subtasks-item-completed .card-subtasks-text {
+            text-decoration: line-through;
+            color: var(--bs-secondary-color);
+        }
+
+        .card-subtasks.card-subtasks-collapsed .card-subtasks-body {
+            display: none;
+        }
+
+    </style>
+
+{#    <div class="page-heading">#}
+        <div class="page-title">
+            <div class="row">
+                <div class="col-12">
+{#                    <h3>Kanban Board</h3>#}
+                    <p class="text-subtitle text-muted">Drag and drop tasks between columns to manage your workflow.</p>
+                </div>
+            </div>
+        </div>
+{#    </div>#}
+
+    <section class="page-content">
+        <div class="kanban-board">
+            <!-- To Do Column -->
+            <div class="kanban-column">
+                <div class="kanban-column-header">
+                    <span><i class="bi bi-circle me-2"></i>To Do</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Add task">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                </div>
+                <div class="kanban-column-body">
+                    <div class="kanban-card" data-task-id="TODO-1">
+                        <div class="kanban-card-title">Add SCSS and JS files</div>
+                        <div class="kanban-card-description">Add required stylesheet and script files for the new feature.</div>
+                        <div class="kanban-card-meta">
+                            <span class="badge bg-light-success text-success">frontend</span>
+                            <span class="text-muted"><i class="bi bi-calendar3"></i> Feb 18</span>
+                        </div>
+                    </div>
+                    <div class="kanban-card" data-task-id="TODO-2">
+                        <div class="kanban-card-title">Setup API endpoints</div>
+                        <div class="kanban-card-description">Create REST API endpoints for user authentication.</div>
+                        <div class="kanban-card-meta">
+                            <span class="badge bg-light-danger text-danger">backend</span>
+                            <span class="text-muted"><i class="bi bi-calendar3"></i> Feb 20</span>
+                        </div>
+                    </div>
+                    <div class="kanban-card" data-task-id="TODO-3">
+                        <div class="kanban-card-title">Write documentation</div>
+                        <div class="kanban-card-description">Document the new API and update README.</div>
+                        <div class="kanban-card-meta">
+                            <span class="badge bg-light-info text-info">docs</span>
+                            <span class="text-muted"><i class="bi bi-calendar3"></i> Feb 22</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- In Progress Column -->
+            <div class="kanban-column">
+                <div class="kanban-column-header">
+                    <span><i class="bi bi-arrow-repeat me-2"></i>In Progress</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Add task">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                </div>
+                <div class="kanban-column-body">
+                    <div class="kanban-card" data-task-id="IP-1">
+                        <div class="kanban-card-title">Implement Kanban board</div>
+                        <div class="kanban-card-description">Create drag-and-drop Kanban board with Mazer design.</div>
+                        <div class="kanban-card-meta">
+                            <span class="badge bg-light-primary text-primary">UI/UX</span>
+                            <span class="text-muted"><i class="bi bi-person"></i> You</span>
+                        </div>
+                    </div>
+                    <div class="kanban-card" data-task-id="IP-2">
+                        <div class="kanban-card-title">Database migrations</div>
+                        <div class="kanban-card-description">Add migrations for tasks and boards tables.</div>
+                        <div class="kanban-card-meta">
+                            <span class="badge bg-light-warning text-warning">database</span>
+                            <span class="text-muted"><i class="bi bi-calendar3"></i> Feb 19</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Review Column -->
+            <div class="kanban-column">
+                <div class="kanban-column-header">
+                    <span><i class="bi bi-eye me-2"></i>Review</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Add task">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                </div>
+                <div class="kanban-column-body">
+                    <div class="kanban-card" data-task-id="REV-1">
+                        <div class="kanban-card-title">User dashboard redesign</div>
+                        <div class="kanban-card-description">New layout and components for the main dashboard page.</div>
+                        <div class="kanban-card-meta">
+                            <span class="badge bg-light-info text-info">Design</span>
+                            <span class="text-muted"><i class="bi bi-person"></i> Designer</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Done Column -->
+            <div class="kanban-column">
+                <div class="kanban-column-header">
+                    <span><i class="bi bi-check-circle me-2"></i>Done</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Add task">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                </div>
+                <div class="kanban-column-body">
+                    <div class="kanban-card" data-task-id="DONE-1">
+                        <div class="kanban-card-title">Login page styling</div>
+                        <div class="kanban-card-description">Updated auth pages with Mazer theme.</div>
+                        <div class="kanban-card-meta">
+                            <span class="badge bg-light-success text-success">frontend</span>
+                            <span class="text-muted"><i class="bi bi-check2"></i> Completed</span>
+                        </div>
+                    </div>
+                    <div class="kanban-card" data-task-id="DONE-2">
+                        <div class="kanban-card-title">Setup project structure</div>
+                        <div class="kanban-card-description">Initial project setup with Mazer template.</div>
+                        <div class="kanban-card-meta">
+                            <span class="badge bg-light-secondary text-secondary">setup</span>
+                            <span class="text-muted"><i class="bi bi-check2"></i> Completed</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- Task detail sidebar (YouGile style)
+    ######################################################### -->
+
+    <div id="task-sidebar" class="task-sidebar" aria-hidden="true">
+        <div class="task-sidebar-backdrop" aria-label="Close"></div>
+        <div class="task-sidebar-panel">
+            <div class="task-sidebar-header">
+                <div class="task-sidebar-nav">
+                    <button type="button" class="task-sidebar-back btn btn-link p-0 text-primary text-decoration-none" id="task-sidebar-close">
+                        <i class="bi bi-arrow-left"></i> Go to all chats
+                    </button>
+                    <button type="button" class="task-sidebar-expand btn btn-link p-0 text-body" title="Expand" aria-label="Expand">
+                        <i class="bi bi-fullscreen"></i>
+                    </button>
+                </div>
+                <div class="task-sidebar-title-row">
+                    <div class="task-sidebar-title-block">
+{#                        <span class="task-sidebar-status text-success" aria-hidden="true"><i class="bi bi-check-circle-fill"></i></span>#}
+                        <div>
+                            <h5 class="task-sidebar-title" id="task-sidebar-title">Task title</h5>
+                            <span class="task-sidebar-id text-primary" id="task-sidebar-id">EXA-25</span>
+                        </div>
+                    </div>
+{#                    <div class="task-sidebar-icons">#}
+{#                        <button type="button" class="task-sidebar-icon-btn" title="More options" aria-label="More options"><i class="bi bi-three-dots-vertical"></i></button>#}
+{#                        <button type="button" class="task-sidebar-icon-btn" title="Search" aria-label="Search"><i class="bi bi-search"></i></button>#}
+{#                        <button type="button" class="task-sidebar-icon-btn" title="Attachments" aria-label="Attachments"><i class="bi bi-paperclip"></i></button>#}
+{#                        <button type="button" class="task-sidebar-icon-btn" title="Watch" aria-label="Watch"><i class="bi bi-star"></i></button>#}
+{#                        <button type="button" class="task-sidebar-icon-btn" title="Notifications" aria-label="Notifications"><i class="bi bi-bell"></i></button>#}
+{#                    </div>#}
+                </div>
+            </div>
+            <nav class="task-sidebar-tabs" role="tablist">
+                <button type="button" class="task-sidebar-tab active" role="tab" aria-selected="true" data-tab="chat">Chat</button>
+                <button type="button" class="task-sidebar-tab" role="tab" aria-selected="false" data-tab="info">Info / Log</button>
+            <button type="button" class="task-sidebar-tab" role="tab" aria-selected="false" data-tab="description">Description</button>
+            <button type="button" class="task-sidebar-tab" role="tab" aria-selected="false" data-tab="subtasks">Subtasks</button>
+            </nav>
+            <div class="task-sidebar-content">
+                <div class="task-sidebar-tab-pane active" id="pane-chat" role="tabpanel">
+                    <div class="task-chat-messages">
+                        <div class="task-chat-msg task-chat-msg-placeholder" data-placeholder="true">
+                            <div class="task-chat-msg-bubble">
+                                <div class="task-chat-msg-text">No messages yet. Start the conversation.</div>
+                                <div class="task-chat-msg-meta"><span class="task-chat-msg-time">—</span> <i class="bi bi-check2 text-muted"></i></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="task-chat-input-wrap">
+                        <textarea class="task-chat-input form-control" id="task-chat-input" placeholder="Написать сообщение..." autocomplete="off" rows="4"></textarea>
+                        <button type="button" class="task-chat-send btn btn-primary" id="task-chat-send" title="Send" aria-label="Send"><i class="bi bi-send"></i></button>
+                    </div>
+                </div>
+                <div class="task-sidebar-tab-pane" id="pane-info" role="tabpanel" hidden>
+                    <div class="task-info-block">
+                        <div class="task-info-row task-info-row-inline">
+                            <span class="task-info-label">Исполнитель</span>
+                            <span class="task-info-value">admin</span>
+                            <button type="button" class="task-info-edit-btn btn btn-link p-0 text-secondary" title="Изменить" aria-label="Изменить"><i class="bi bi-pencil"></i></button>
+                        </div>
+                        <div class="task-info-row task-info-row-inline">
+                            <span class="task-info-label">Создатель</span>
+                            <span class="task-info-value">admin</span>
+                        </div>
+
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">СРОК</label>
+                            <div class="task-info-input-wrap">
+                                <input type="text" class="form-control task-info-input" value="02/20/2026, 12:57 PM" readonly>
+                                <i class="bi bi-calendar3 task-info-input-icon"></i>
+                            </div>
+                        </div>
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">ДАТА НАЧАЛА</label>
+                            <div class="task-info-input-wrap">
+                                <input type="text" class="form-control task-info-input" value="02/26/2026, 12:57 PM" readonly>
+                                <i class="bi bi-calendar3 task-info-input-icon"></i>
+                            </div>
+                        </div>
+
+                        <!-- ############################################
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">ОЦЕНКА ВРЕМЕНИ</label>
+                            <div class="task-info-field-with-unit">
+                                <input type="number" class="form-control task-info-input task-info-input-num" value="0" min="0" step="1">
+                                <span class="task-info-unit">часов</span>
+                            </div>
+                        </div>
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">ЗАТРАЧЕНО ВРЕМЕНИ</label>
+                            <div class="task-info-field-with-unit">
+                                <input type="number" class="form-control task-info-input task-info-input-num" value="0" min="0" step="1">
+                                <span class="task-info-unit">часов</span>
+                            </div>
+                        </div>
+                        ###################################################### -->
+
+                        <div class="task-info-timestamps">
+                            <div class="task-info-row task-info-row-inline">
+                                <span class="task-info-label">Создана</span>
+                                <span class="task-info-value">18.02.2026, 09:57</span>
+                            </div>
+                            <div class="task-info-row task-info-row-inline">
+                                <span class="task-info-label">Изменена</span>
+                                <span class="task-info-value">18.02.2026, 11:22</span>
+                            </div>
+                            <div class="task-info-row task-info-row-inline">
+                                <span class="task-info-label">Перемещена</span>
+                                <span class="task-info-value">18.02.2026, 09:57</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="task-sidebar-tab-pane" id="pane-description" role="tabpanel" hidden>
+                    <div class="task-description-pane">
+                        <div class="task-description-toolbar">
+                            <button type="button" class="btn btn-primary btn-sm task-description-edit-btn" id="task-desc-edit-btn">
+                                Редактировать описание
+                            </button>
+                        </div>
+                        <div class="task-description-view" id="task-description-view">
+                            <div class="task-description-body" id="task-sidebar-description"></div>
+                        </div>
+                        <div class="task-description-edit" id="task-description-edit" hidden>
+                            <textarea class="form-control task-description-textarea" id="task-description-textarea" placeholder="Введите описание задачи..."></textarea>
+                            <div class="task-description-edit-actions">
+                                <button type="button" class="btn btn-primary btn-sm" id="task-desc-save-btn">Сохранить</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="task-desc-cancel-btn">Отмена</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="task-sidebar-tab-pane" id="pane-subtasks" role="tabpanel" hidden>
+                    <div class="task-subtasks-sidebar-host"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="/front_end/assets/extensions/dragula/dragula.min.js"></script>
+
+    <script>
+        // Kanban Board - Drag and drop between columns using Dragula
+        (function () {
+            const kanbanColumns = document.querySelectorAll(".kanban-column-body");
+            const taskSidebar = document.getElementById("task-sidebar");
+            const taskSidebarTitle = document.getElementById("task-sidebar-title");
+            const taskSidebarId = document.getElementById("task-sidebar-id");
+            const taskSidebarDescription = document.getElementById("task-sidebar-description");
+
+            // Shared in-memory store for subtasks (per taskId)
+            var subtasksStore = {}; // { [taskId]: [ { id, title, done } ] }
+            var subtasksHosts = []; // all widgets (cards + sidebar)
+
+            function getTaskSubtasks(taskId) {
+                if (!subtasksStore[taskId]) {
+                    subtasksStore[taskId] = [];
+                }
+                return subtasksStore[taskId];
+            }
+
+            function refreshSubtasks(taskId) {
+                subtasksHosts.forEach(function (hostInfo) {
+                    try {
+                        if (hostInfo.getTaskId() === taskId) {
+                            hostInfo.render();
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+                });
+            }
+
+            if (kanbanColumns.length === 0) return;
+
+            const containers = Array.from(kanbanColumns);
+
+            dragula(containers, {
+                moves: function (el) {
+                    return el.classList.contains("kanban-card");
+                },
+            });
+
+            function scrollChatToBottom() {
+                var paneChat = document.getElementById("pane-chat");
+                var messagesEl = paneChat && paneChat.querySelector(".task-chat-messages");
+                if (messagesEl) {
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                }
+            }
+
+            function formatChatTime(date) {
+                return date.toLocaleDateString(undefined, { day: "numeric", month: "short" }) + ", " + date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+            }
+
+            function appendChatMessage(text, sender, time) {
+                var paneChat = document.getElementById("pane-chat");
+                var messagesEl = paneChat && paneChat.querySelector(".task-chat-messages");
+                if (!messagesEl) return;
+                var placeholder = messagesEl.querySelector(".task-chat-msg-placeholder");
+                if (placeholder) placeholder.remove();
+                var timeStr = time ? formatChatTime(time) : "—";
+                var msg = document.createElement("div");
+                msg.className = "task-chat-msg";
+                msg.innerHTML =
+                    '<div class="task-chat-msg-bubble">' +
+                    '<div class="task-chat-msg-text">' + escapeHtml(text) + '</div>' +
+                    '<div class="task-chat-msg-meta"><span class="task-chat-msg-time">' + escapeHtml(sender) + " · " + timeStr + '</span> <i class="bi bi-check2 text-muted"></i></div>' +
+                    '</div>';
+                messagesEl.appendChild(msg);
+                scrollChatToBottom();
+            }
+
+            function sendChatMessage() {
+                var input = document.getElementById("task-chat-input");
+                if (!input) return;
+                var text = (input.value || "").trim();
+                if (!text) return;
+                input.value = "";
+                appendChatMessage(text, "You", new Date());
+            }
+
+            function enterDescriptionEdit() {
+                var descEl = document.getElementById("task-sidebar-description");
+                var viewWrap = document.getElementById("task-description-view");
+                var editWrap = document.getElementById("task-description-edit");
+                var textarea = document.getElementById("task-description-textarea");
+                if (!descEl || !viewWrap || !editWrap || !textarea) return;
+                textarea.value = (descEl.textContent || "").trim();
+                viewWrap.hidden = true;
+                editWrap.hidden = false;
+                textarea.focus();
+                textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+            }
+
+            function exitDescriptionEdit(save) {
+                var descEl = document.getElementById("task-sidebar-description");
+                var viewWrap = document.getElementById("task-description-view");
+                var editWrap = document.getElementById("task-description-edit");
+                var textarea = document.getElementById("task-description-textarea");
+                if (!descEl || !viewWrap || !editWrap || !textarea) return;
+                if (save) {
+                    descEl.textContent = textarea.value;
+                }
+                editWrap.hidden = true;
+                viewWrap.hidden = false;
+            }
+
+            // Open task sidebar when clicking a card (ignore drag)
+            function openTaskSidebar(card) {
+                if (!taskSidebar || !card) return;
+                var titleEl = card.querySelector(".kanban-card-title");
+                var descEl = card.querySelector(".kanban-card-description");
+                var taskId = card.getAttribute("data-task-id") || "TASK";
+                taskSidebarTitle.textContent = titleEl ? titleEl.textContent : "Task";
+                taskSidebarId.textContent = taskId;
+                taskSidebarDescription.textContent = descEl ? descEl.textContent : "";
+                taskSidebar.setAttribute("aria-hidden", "false");
+                refreshSubtasks(taskId);
+                setTimeout(scrollChatToBottom, 0);
+            }
+
+            function closeTaskSidebar() {
+                if (taskSidebar) taskSidebar.setAttribute("aria-hidden", "true");
+            }
+
+            var board = document.querySelector(".kanban-board");
+            if (board) {
+                board.addEventListener("click", function (e) {
+                    var card = e.target.closest(".kanban-card");
+                    if (!card || e.target.closest(".kanban-add-btn")) return;
+                    openTaskSidebar(card);
+                });
+            }
+
+            if (taskSidebar) {
+                var backBtn = document.getElementById("task-sidebar-close");
+                if (backBtn) backBtn.addEventListener("click", closeTaskSidebar);
+            }
+
+            // Close sidebar on Escape
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape" && taskSidebar && taskSidebar.getAttribute("aria-hidden") === "false") {
+                    closeTaskSidebar();
+                }
+            });
+
+            // Close sidebar on click outside (empty area; not on panel and not on a card)
+            document.addEventListener("click", function (e) {
+                if (!taskSidebar || taskSidebar.getAttribute("aria-hidden") !== "false") return;
+                if (e.target.closest(".task-sidebar-panel")) return;
+                if (e.target.closest(".kanban-card")) return;
+                closeTaskSidebar();
+            });
+
+            // Tab switching
+            document.querySelectorAll(".task-sidebar-tab").forEach(function (tab) {
+                tab.addEventListener("click", function () {
+                    var targetId = "pane-" + this.getAttribute("data-tab");
+                    document.querySelectorAll(".task-sidebar-tab").forEach(function (t) {
+                        t.classList.remove("active");
+                        t.setAttribute("aria-selected", "false");
+                    });
+                    document.querySelectorAll(".task-sidebar-tab-pane").forEach(function (pane) {
+                        pane.classList.remove("active");
+                        pane.hidden = true;
+                    });
+                    this.classList.add("active");
+                    this.setAttribute("aria-selected", "true");
+                    var pane = document.getElementById(targetId);
+                    if (pane) {
+                        pane.classList.add("active");
+                        pane.hidden = false;
+                        if (targetId === "pane-chat") scrollChatToBottom();
+                    }
+                });
+            });
+
+            // Chat: send message
+            var chatSendBtn = document.getElementById("task-chat-send");
+            var chatInput = document.getElementById("task-chat-input");
+            if (chatSendBtn) chatSendBtn.addEventListener("click", sendChatMessage);
+            if (chatInput) {
+                chatInput.addEventListener("keydown", function (e) {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendChatMessage();
+                    }
+                });
+            }
+
+            // Description: edit handlers
+            var descEditBtn = document.getElementById("task-desc-edit-btn");
+            var descSaveBtn = document.getElementById("task-desc-save-btn");
+            var descCancelBtn = document.getElementById("task-desc-cancel-btn");
+            if (descEditBtn) descEditBtn.addEventListener("click", function () { enterDescriptionEdit(); });
+            if (descSaveBtn) descSaveBtn.addEventListener("click", function () { exitDescriptionEdit(true); });
+            if (descCancelBtn) descCancelBtn.addEventListener("click", function () { exitDescriptionEdit(false); });
+
+            // Initialize shared subtasks checklist widget for cards
+            function initCardSubtasks(host, getTaskId) {
+                if (!host || host.__subtasksWidgetInitialized) return;
+                host.__subtasksWidgetInitialized = true;
+
+                var container = document.createElement("div");
+                container.className = "card-subtasks card-subtasks-collapsed";
+                container.innerHTML =
+                    '<div class="card-subtasks-header">' +
+                        '<div class="card-subtasks-header-main">' +
+                            '<button type="button" class="card-subtasks-toggle" aria-label="Показать/скрыть подзадачи">' +
+                                '<i class="bi bi-chevron-right"></i>' +
+                            '</button>' +
+                            '<span class="card-subtasks-label">Подзадачи</span>' +
+                            '<span class="card-subtasks-counter text-muted">(0/0)</span>' +
+                        '</div>' +
+                        '<button type="button" class="btn btn-sm btn-outline-secondary card-subtasks-header-add" title="Добавить подзадачу" aria-label="Добавить подзадачу">' +
+                            '<i class="bi bi-plus-lg"></i>' +
+                        '</button>' +
+                    '</div>' +
+                    '<div class="card-subtasks-body">' +
+                        '<div class="card-subtasks-input-wrap mt-1" style="display: none;">' +
+                            '<div class="input-group input-group-sm">' +
+                                '<input type="text" class="form-control card-subtasks-input" placeholder="Новая подзадача...">' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="card-subtasks-items"></div>' +
+                    '</div>';
+
+                host.appendChild(container);
+
+                var header = container.querySelector(".card-subtasks-header");
+                var toggleBtn = container.querySelector(".card-subtasks-toggle");
+                var headerAddBtn = container.querySelector(".card-subtasks-header-add");
+                var counterEl = container.querySelector(".card-subtasks-counter");
+                var itemsEl = container.querySelector(".card-subtasks-items");
+                var inputWrap = container.querySelector(".card-subtasks-input-wrap");
+                var input = container.querySelector(".card-subtasks-input");
+
+                function resolveTaskId() {
+                    if (typeof getTaskId === "function") {
+                        return getTaskId();
+                    }
+                    var idFromAttr = host.getAttribute("data-task-id");
+                    if (idFromAttr) return idFromAttr;
+                    if (host.matches && host.matches(".task-subtasks-sidebar-host") && taskSidebarId) {
+                        return taskSidebarId.textContent || "TASK";
+                    }
+                    return "TASK";
+                }
+
+                function updateCounter(taskId) {
+                    var items = getTaskSubtasks(taskId);
+                    var total = items.length;
+                    var done = items.filter(function (it) { return !!it.done; }).length;
+                    if (counterEl) {
+                        counterEl.textContent = total ? (done + "/" + total) : "(0/0)";
+                    }
+                }
+
+                function toggleCollapsed() {
+                    container.classList.toggle("card-subtasks-collapsed");
+                    var icon = toggleBtn && toggleBtn.querySelector("i");
+                    if (icon) {
+                        if (container.classList.contains("card-subtasks-collapsed")) {
+                            icon.classList.remove("bi-chevron-down");
+                            icon.classList.add("bi-chevron-right");
+                        } else {
+                            icon.classList.remove("bi-chevron-right");
+                            icon.classList.add("bi-chevron-down");
+                        }
+                    }
+                }
+
+                function render() {
+                    var taskId = resolveTaskId();
+                    var items = getTaskSubtasks(taskId);
+
+                    itemsEl.innerHTML = "";
+                    items.forEach(function (item) {
+                        var row = document.createElement("div");
+                        row.className = "form-check card-subtasks-item" + (item.done ? " card-subtasks-item-completed" : "");
+                        row.setAttribute("data-subtask-id", item.id);
+                        row.innerHTML =
+                            '<input class="form-check-input card-subtasks-checkbox" type="checkbox"' + (item.done ? " checked" : "") + ">" +
+                            '<label class="form-check-label ms-1 card-subtasks-text">' +
+                            escapeHtml(item.title) +
+                            "</label>";
+
+                        itemsEl.appendChild(row);
+
+                        var checkbox = row.querySelector(".card-subtasks-checkbox");
+                        if (checkbox) {
+                            checkbox.addEventListener("change", function (ev) {
+                                ev.stopPropagation();
+                                item.done = !!checkbox.checked;
+                                row.classList.toggle("card-subtasks-item-completed", item.done);
+                                updateCounter(taskId);
+                                refreshSubtasks(taskId);
+                            });
+                        }
+
+                        row.addEventListener("click", function (ev) {
+                            ev.stopPropagation();
+                        });
+                    });
+
+                    updateCounter(taskId);
+                }
+
+                if (header) {
+                    header.addEventListener("click", function (ev) {
+                        if (ev.target.closest(".card-subtasks-header-add") || ev.target.closest(".card-subtasks-input")) {
+                            return;
+                        }
+                        ev.stopPropagation();
+                        toggleCollapsed();
+                    });
+                }
+
+                function addSubtaskFromInput() {
+                    var title = (input.value || "").trim();
+                    if (!title) return;
+                    input.value = "";
+
+                    var taskId = resolveTaskId();
+                    var items = getTaskSubtasks(taskId);
+                    items.unshift({
+                        id: String(Date.now()) + Math.random().toString(36).slice(2, 8),
+                        title: title,
+                        done: false
+                    });
+
+                    inputWrap.style.display = "none";
+                    refreshSubtasks(taskId);
+                }
+
+                if (headerAddBtn && input && inputWrap) {
+                    headerAddBtn.addEventListener("click", function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+
+                        if (container.classList.contains("card-subtasks-collapsed")) {
+                            toggleCollapsed();
+                        }
+
+                        inputWrap.style.display = "";
+                        input.focus();
+                    });
+                }
+
+                if (input && inputWrap) {
+                    input.addEventListener("keydown", function (ev) {
+                        if (ev.key === "Enter") {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            addSubtaskFromInput();
+                        } else if (ev.key === "Escape") {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            input.value = "";
+                            inputWrap.style.display = "none";
+                        }
+                    });
+
+                    input.addEventListener("click", function (ev) {
+                        ev.stopPropagation();
+                    });
+                }
+
+                var hostInfo = {
+                    host: host,
+                    render: render,
+                    getTaskId: resolveTaskId
+                };
+                subtasksHosts.push(hostInfo);
+
+                render();
+            }
+
+            document.querySelectorAll(".kanban-card").forEach(function (card) {
+                initCardSubtasks(card, function () {
+                    return card.getAttribute("data-task-id") || "TASK";
+                });
+            });
+
+            // Initialize detailed subtasks accordion widget in sidebar (extended editor)
+            function initSidebarSubtasks(host) {
+                if (!host || host.__sidebarSubtasksInitialized) return;
+                host.__sidebarSubtasksInitialized = true;
+
+                var container = document.createElement("div");
+                container.className = "task-subtasks-pane";
+                container.innerHTML =
+                    '<div class="d-flex justify-content-between align-items-center mb-2">' +
+                        '<h6 class="mb-0">Подзадачи</h6>' +
+                        '<button type="button" class="btn btn-sm btn-outline-primary task-subtasks-add-btn">' +
+                            '<i class="bi bi-plus-lg"></i>' +
+                            '<span class="d-none d-sm-inline">Добавить подзадачу</span>' +
+                        '</button>' +
+                    '</div>' +
+                    '<div class="task-subtasks-list" id="task-subtasks-list">' +
+                        '<div class="task-subtasks-empty small">Подзадач пока нет.</div>' +
+                    '</div>';
+
+                host.appendChild(container);
+
+                var subtasksList = container.querySelector(".task-subtasks-list");
+                var addBtn = container.querySelector(".task-subtasks-add-btn");
+
+                function resolveTaskId() {
+                    return (taskSidebarId && taskSidebarId.textContent) || "TASK";
+                }
+
+                function render() {
+                    var taskId = resolveTaskId();
+                    var items = getTaskSubtasks(taskId);
+
+                    subtasksList.innerHTML = "";
+
+                    if (!items.length) {
+                        var empty = document.createElement("div");
+                        empty.className = "task-subtasks-empty small";
+                        empty.textContent = "Подзадач пока нет.";
+                        subtasksList.appendChild(empty);
+                        return;
+                    }
+
+                    items.forEach(function (item) {
+                        var card = document.createElement("div");
+                        card.className = "task-subtask-card mb-2 task-subtask-collapsed";
+                        card.setAttribute("data-subtask-id", item.id);
+
+                        var status = item.status || (item.done ? "done" : "todo");
+                        var estimate = typeof item.estimate === "number" ? item.estimate : 0;
+                        var spent = typeof item.spent === "number" ? item.spent : 0;
+                        var assignee = item.assignee || "";
+
+                        card.innerHTML =
+                            '<div class="task-subtask-header">' +
+                                '<button type="button" class="task-subtask-toggle" aria-label="Развернуть/свернуть">' +
+                                    '<i class="bi bi-chevron-right"></i>' +
+                                '</button>' +
+                                '<div class="task-subtask-title">' + escapeHtml(item.title || "") + '</div>' +
+                                '<select class="form-select form-select-sm task-subtask-status" aria-label="Статус подзадачи">' +
+                                    '<option value="todo"' + (status === "todo" ? " selected" : "") + '>К выполнению</option>' +
+                                    '<option value="in_progress"' + (status === "in_progress" ? " selected" : "") + '>В работе</option>' +
+                                    '<option value="done"' + (status === "done" ? " selected" : "") + '>Выполнена</option>' +
+                                '</select>' +
+                                '<button type="button" class="task-subtask-remove" title="Удалить подзадачу" aria-label="Удалить подзадачу">' +
+                                    '<i class="bi bi-x-lg"></i>' +
+                                '</button>' +
+                            '</div>' +
+                            '<div class="task-subtask-body">' +
+                                '<div class="row g-2 small">' +
+                                    '<div class="col-6">' +
+                                        '<label class="form-label mb-1">Оценка</label>' +
+                                        '<div class="d-flex align-items-center gap-1">' +
+                                            '<input type="number" min="0" step="1" class="form-control form-control-sm task-subtask-estimate" value="' + estimate + '">' +
+                                            '<span class="text-muted">ч</span>' +
+                                        '</div>' +
+                                    '</div>' +
+                                    '<div class="col-6">' +
+                                        '<label class="form-label mb-1">Затрачено</label>' +
+                                        '<div class="d-flex align-items-center gap-1">' +
+                                            '<input type="number" min="0" step="1" class="form-control form-control-sm task-subtask-spent" value="' + spent + '">' +
+                                            '<span class="text-muted">ч</span>' +
+                                        '</div>' +
+                                    '</div>' +
+                                    '<div class="col-12">' +
+                                        '<label class="form-label mb-1">Исполнитель</label>' +
+                                        '<input type="text" class="form-control form-control-sm task-subtask-assignee" placeholder="Не назначен" value="' + escapeHtml(assignee) + '">' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>';
+
+                        subtasksList.appendChild(card);
+
+                        var headerEl = card.querySelector(".task-subtask-header");
+                        var statusSelect = card.querySelector(".task-subtask-status");
+                        var removeBtn = card.querySelector(".task-subtask-remove");
+                        var estimateInput = card.querySelector(".task-subtask-estimate");
+                        var spentInput = card.querySelector(".task-subtask-spent");
+                        var assigneeInput = card.querySelector(".task-subtask-assignee");
+
+                        if (headerEl) {
+                            headerEl.addEventListener("click", function (ev) {
+                                if (ev.target.closest(".task-subtask-status") || ev.target.closest(".task-subtask-remove")) {
+                                    return;
+                                }
+                                var isCollapsed = card.classList.toggle("task-subtask-collapsed");
+                                var icon = card.querySelector(".task-subtask-toggle i");
+                                if (icon) {
+                                    if (isCollapsed) {
+                                        icon.classList.remove("bi-chevron-down");
+                                        icon.classList.add("bi-chevron-right");
+                                    } else {
+                                        icon.classList.remove("bi-chevron-right");
+                                        icon.classList.add("bi-chevron-down");
+                                    }
+                                }
+                            });
+                        }
+
+                        if (statusSelect) {
+                            statusSelect.addEventListener("change", function () {
+                                var taskIdLocal = resolveTaskId();
+                                var itemsLocal = getTaskSubtasks(taskIdLocal);
+                                var target = itemsLocal.find(function (it) { return it.id === item.id; });
+                                if (target) {
+                                    target.status = statusSelect.value;
+                                    target.done = statusSelect.value === "done";
+                                }
+                                refreshSubtasks(taskIdLocal);
+                            });
+                        }
+
+                        if (removeBtn) {
+                            removeBtn.addEventListener("click", function (ev) {
+                                ev.preventDefault();
+                                ev.stopPropagation();
+                                if (!window.confirm("Удалить подзадачу?")) return;
+                                var taskIdLocal = resolveTaskId();
+                                var itemsLocal = getTaskSubtasks(taskIdLocal);
+                                var idx = itemsLocal.findIndex(function (it) { return it.id === item.id; });
+                                if (idx !== -1) {
+                                    itemsLocal.splice(idx, 1);
+                                }
+                                refreshSubtasks(taskIdLocal);
+                            });
+                        }
+
+                        if (estimateInput) {
+                            estimateInput.addEventListener("change", function () {
+                                var taskIdLocal = resolveTaskId();
+                                var itemsLocal = getTaskSubtasks(taskIdLocal);
+                                var target = itemsLocal.find(function (it) { return it.id === item.id; });
+                                if (target) {
+                                    target.estimate = Number(estimateInput.value) || 0;
+                                }
+                            });
+                        }
+
+                        if (spentInput) {
+                            spentInput.addEventListener("change", function () {
+                                var taskIdLocal = resolveTaskId();
+                                var itemsLocal = getTaskSubtasks(taskIdLocal);
+                                var target = itemsLocal.find(function (it) { return it.id === item.id; });
+                                if (target) {
+                                    target.spent = Number(spentInput.value) || 0;
+                                }
+                            });
+                        }
+
+                        if (assigneeInput) {
+                            assigneeInput.addEventListener("change", function () {
+                                var taskIdLocal = resolveTaskId();
+                                var itemsLocal = getTaskSubtasks(taskIdLocal);
+                                var target = itemsLocal.find(function (it) { return it.id === item.id; });
+                                if (target) {
+                                    target.assignee = assigneeInput.value || "";
+                                }
+                            });
+                        }
+                    });
+                }
+
+                if (addBtn) {
+                    addBtn.addEventListener("click", function (e) {
+                        e.preventDefault();
+
+                        var existingInput = container.querySelector(".task-subtasks-new-input");
+                        if (existingInput) {
+                            existingInput.focus();
+                            return;
+                        }
+
+                        var inputWrap = document.createElement("div");
+                        inputWrap.className = "mb-2";
+                        inputWrap.innerHTML =
+                            '<input type="text" class="form-control form-control-sm task-subtasks-new-input" placeholder="Название подзадачи...">';
+                        subtasksList.insertBefore(inputWrap, subtasksList.firstChild);
+
+                        var inputEl = inputWrap.querySelector("input");
+                        inputEl.focus();
+
+                        var committed = false;
+
+                        function commitSubtask() {
+                            if (committed) return;
+                            committed = true;
+
+                            var title = (inputEl.value || "").trim();
+                            inputWrap.remove();
+                            if (!title) return;
+
+                            var taskIdLocal = resolveTaskId();
+                            var itemsLocal = getTaskSubtasks(taskIdLocal);
+                            itemsLocal.unshift({
+                                id: String(Date.now()) + Math.random().toString(36).slice(2, 8),
+                                title: title,
+                                status: "todo",
+                                done: false,
+                                estimate: 0,
+                                spent: 0,
+                                assignee: ""
+                            });
+                            refreshSubtasks(taskIdLocal);
+                        }
+
+                        function cancelSubtask() {
+                            if (committed) return;
+                            committed = true;
+                            inputWrap.remove();
+                        }
+
+                        inputEl.addEventListener("keydown", function (ev) {
+                            if (ev.key === "Enter") {
+                                ev.preventDefault();
+                                commitSubtask();
+                            } else if (ev.key === "Escape") {
+                                ev.preventDefault();
+                                cancelSubtask();
+                            }
+                        });
+
+                        inputEl.addEventListener("blur", function () {
+                            setTimeout(function () {
+                                commitSubtask();
+                            }, 150);
+                        });
+                    });
+                }
+
+                var hostInfo = {
+                    host: host,
+                    render: render,
+                    getTaskId: resolveTaskId
+                };
+                subtasksHosts.push(hostInfo);
+
+                render();
+            }
+
+            var sidebarSubtasksHost = document.querySelector("#pane-subtasks .task-subtasks-sidebar-host");
+            if (sidebarSubtasksHost) {
+                initSidebarSubtasks(sidebarSubtasksHost);
+            }
+
+            // Add task button handlers
+            document.querySelectorAll(".kanban-add-btn").forEach(function (btn) {
+                btn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    var columnBody = this.closest(".kanban-column").querySelector(".kanban-column-body");
+                    var existingInput = columnBody.querySelector(".kanban-new-task-input");
+                    if (existingInput) return;
+
+                    var inputWrap = document.createElement("div");
+                    inputWrap.className = "kanban-new-task-wrap";
+                    inputWrap.innerHTML =
+                        '<input type="text" class="form-control form-control-sm kanban-new-task-input" placeholder="Task name...">';
+                    columnBody.insertBefore(inputWrap, columnBody.firstChild);
+
+                    var input = inputWrap.querySelector("input");
+                    input.focus();
+
+                    var committed = false;
+                    function commitTask() {
+                        if (committed) return;
+                        committed = true;
+                        var title = input.value.trim();
+                        inputWrap.remove();
+                        document.removeEventListener("click", clickOutsideHandler);
+                        if (!title) return;
+
+                        var newCard = document.createElement("div");
+                        newCard.className = "kanban-card";
+                        newCard.setAttribute("data-task-id", "TASK");
+                        newCard.innerHTML =
+                            '<div class="kanban-card-title">' +
+                            escapeHtml(title) +
+                            "</div>" +
+                            '<div class="kanban-card-description"></div>' +
+                            '<div class="kanban-card-meta"></div>';
+                        columnBody.insertBefore(newCard, columnBody.firstChild);
+                        initCardSubtasks(newCard);
+                    }
+
+                    function clickOutsideHandler(ev) {
+                        if (!inputWrap.contains(ev.target) && !btn.contains(ev.target)) {
+                            commitTask();
+                        }
+                    }
+
+                    input.addEventListener("keydown", function (e) {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            commitTask();
+                        }
+                    });
+
+                    input.addEventListener("blur", function () {
+                        setTimeout(function () {
+                            commitTask();
+                        }, 150);
+                    });
+
+                    document.addEventListener("click", clickOutsideHandler, true);
+                });
+            });
+
+            function escapeHtml(text) {
+                var div = document.createElement("div");
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        })();
+
+    </script>
+
+{% endblock %}

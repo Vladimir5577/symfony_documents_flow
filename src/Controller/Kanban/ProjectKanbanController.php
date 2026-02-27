@@ -23,4 +23,12 @@ final class ProjectKanbanController extends AbstractController
             'active_tab' => 'public_kanban_projects',
         ]);
     }
+
+    #[Route('/kanban_board', name: 'app_kanban_board')]
+    public function kanbanBoard(): Response
+    {
+        return $this->render('kanban/kanban_board.html.twig', [
+            'active_tab' => 'public_kanban_projects',
+        ]);
+    }
 }

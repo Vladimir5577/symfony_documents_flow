@@ -45,7 +45,7 @@
                         </thead>
                         <tbody>
                             {% for project in demo_projects %}
-                                <tr data-href="#" role="button" tabindex="0" class="project-row">
+                                <tr data-href="{{ path('app_kanban_board') }}" role="button" tabindex="0" class="project-row">
                                     <td>{{ project.name }}</td>
                                     <td class="text-muted">{{ project.description }}</td>
                                     <td>{{ project.createdAt }}</td>
