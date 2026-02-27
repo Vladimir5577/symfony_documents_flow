@@ -91,26 +91,12 @@
     <li
         class="
             sidebar-item
-            has-sub
-            {% if active_tab == 'personal_kanban_projects' %}active{% endif %}
-            {% if active_tab == 'public_kanban_projects' %}active{% endif %}
+            {% if active_tab == 'kanban_boards' %}active{% endif %}
     ">
-        <a href="#" class='sidebar-link'>
+        <a href="{{ path('app_kanban_boards') }}" class='sidebar-link'>
             <i class="bi bi-kanban-fill fs-5"></i>
-            <span>Канбан проекты</span>
+            <span>Канбан доски</span>
         </a>
-
-        <ul class="submenu active">
-
-            <li class="submenu-item {% if active_tab == 'personal_kanban_projects' %}active{% endif %} ">
-                <a href="{{ path('app_personal_kanban_projects') }}" class="submenu-link">Личные</a>
-            </li>
-
-            <li class="submenu-item  {% if active_tab == 'public_kanban_projects' %}active{% endif %} ">
-                <a href="{{ path('app_public_kanban_projects') }}" class="submenu-link">Публичные</a>
-            </li>
-
-        </ul>
     </li>
 
 

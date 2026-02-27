@@ -12,6 +12,8 @@ parameters:
     private_upload_dir_documents_originals: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_ORIGINALS)%'
     private_upload_dir_documents_updated: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_UPDATED)%'
     private_upload_dir_documents_templates: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_TEMPLATES)%'
+    # kanban uploads
+    kanban_upload_dir: '%kernel.project_dir%/var/uploads/kanban'
     # onlyoffice url
     onlyoffice_document_server_url: '%env(resolve:ONLYOFFICE_DOCUMENT_SERVER_URL)%'
 
@@ -29,6 +31,10 @@ services:
     App\DataFixtures\:
         resource: '../src/DataFixtures/'
         tags: ['doctrine.fixture.orm']
+
+    App\Service\Kanban\KanbanAttachmentService:
+        arguments:
+            $kanbanUploadDir: '%kanban_upload_dir%'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
