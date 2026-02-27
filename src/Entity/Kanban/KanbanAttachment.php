@@ -13,7 +13,7 @@ class KanbanAttachment
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
-    #[ORM\Column(type: 'integer')]
+    #[ORM\Column]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
