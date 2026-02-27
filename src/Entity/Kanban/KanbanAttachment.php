@@ -6,15 +6,15 @@ use App\Repository\Kanban\KanbanAttachmentRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: KanbanAttachmentRepository::class)]
 #[ORM\Table(name: 'kanban_attachment')]
 class KanbanAttachment
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'uuid')]
-    private Uuid $id;
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
     #[ORM\Column(length: 255)]
     private string $filename;
@@ -36,12 +36,7 @@ class KanbanAttachment
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
 
-    public function __construct()
-    {
-        $this->id = Uuid::v4();
-    }
-
-    public function getId(): Uuid
+    public function getId(): ?int
     {
         return $this->id;
     }

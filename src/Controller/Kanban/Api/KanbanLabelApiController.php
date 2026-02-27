@@ -30,7 +30,7 @@ final class KanbanLabelApiController extends AbstractController
     }
 
     #[Route('', name: 'api_kanban_labels_list', methods: ['GET'])]
-    public function list(string $boardId): JsonResponse
+    public function list(int $boardId): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -45,7 +45,7 @@ final class KanbanLabelApiController extends AbstractController
         $labels = $this->labelRepo->findBy(['board' => $board]);
 
         $data = array_map(fn(KanbanLabel $l) => [
-            'id' => (string) $l->getId(),
+            'id' => $l->getId(),
             'name' => $l->getName(),
             'color' => $l->getColor()->value,
         ], $labels);
@@ -54,7 +54,7 @@ final class KanbanLabelApiController extends AbstractController
     }
 
     #[Route('', name: 'api_kanban_labels_create', methods: ['POST'])]
-    public function create(string $boardId, Request $request): JsonResponse
+    public function create(int $boardId, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -83,14 +83,14 @@ final class KanbanLabelApiController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'id' => (string) $label->getId(),
+            'id' => $label->getId(),
             'name' => $label->getName(),
             'color' => $label->getColor()->value,
         ], Response::HTTP_CREATED);
     }
 
     #[Route('/{id}', name: 'api_kanban_labels_delete', methods: ['DELETE'])]
-    public function delete(string $boardId, string $id): JsonResponse
+    public function delete(int $boardId, int $id): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -103,7 +103,7 @@ final class KanbanLabelApiController extends AbstractController
         $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
 
         $label = $this->labelRepo->find($id);
-        if (!$label || (string) $label->getBoard()->getId() !== $boardId) {
+        if (!$label || $label->getBoard()->getId() !== $boardId) {
             return $this->json(['error' => 'Метка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
@@ -114,7 +114,7 @@ final class KanbanLabelApiController extends AbstractController
     }
 
     #[Route('/cards/{cardId}/{labelId}', name: 'api_kanban_labels_toggle', methods: ['POST'])]
-    public function toggleLabel(string $boardId, string $cardId, string $labelId): JsonResponse
+    public function toggleLabel(int $boardId, int $cardId, int $labelId): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -132,7 +132,7 @@ final class KanbanLabelApiController extends AbstractController
         }
 
         $label = $this->labelRepo->find($labelId);
-        if (!$label || (string) $label->getBoard()->getId() !== $boardId) {
+        if (!$label || $label->getBoard()->getId() !== $boardId) {
             return $this->json(['error' => 'Метка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
@@ -146,6 +146,6 @@ final class KanbanLabelApiController extends AbstractController
 
         $this->em->flush();
 
-        return $this->json(['action' => $action, 'labelId' => (string) $label->getId()]);
+        return $this->json(['action' => $action, 'labelId' => $label->getId()]);
     }
 }

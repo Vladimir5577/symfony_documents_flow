@@ -6,7 +6,6 @@ use App\Entity\User\User;
 use App\Enum\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanBoardMemberRepository;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: KanbanBoardMemberRepository::class)]
 #[ORM\Table(name: 'kanban_board_member')]
@@ -14,8 +13,9 @@ use Symfony\Component\Uid\Uuid;
 class KanbanBoardMember
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'uuid')]
-    private Uuid $id;
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: KanbanBoard::class, inversedBy: 'members')]
     #[ORM\JoinColumn(name: 'board_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
@@ -28,12 +28,7 @@ class KanbanBoardMember
     #[ORM\Column(length: 20, enumType: KanbanBoardMemberRole::class)]
     private KanbanBoardMemberRole $role;
 
-    public function __construct()
-    {
-        $this->id = Uuid::v4();
-    }
-
-    public function getId(): Uuid
+    public function getId(): ?int
     {
         return $this->id;
     }

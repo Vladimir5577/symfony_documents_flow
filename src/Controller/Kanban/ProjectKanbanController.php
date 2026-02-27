@@ -50,7 +50,7 @@ final class ProjectKanbanController extends AbstractController
     }
 
     #[Route('/kanban_board/{id}', name: 'app_kanban_board')]
-    public function kanbanBoard(string $id): Response
+    public function kanbanBoard(int $id): Response
     {
         /** @var User $user */
         $user = $this->getUser();

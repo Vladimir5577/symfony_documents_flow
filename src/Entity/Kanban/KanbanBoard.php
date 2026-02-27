@@ -9,7 +9,6 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: KanbanBoardRepository::class)]
 #[ORM\Table(name: 'kanban_board')]
@@ -17,8 +16,9 @@ use Symfony\Component\Uid\Uuid;
 class KanbanBoard
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'uuid')]
-    private Uuid $id;
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
     #[ORM\Column(length: 200)]
     private string $title;
@@ -53,13 +53,12 @@ class KanbanBoard
 
     public function __construct()
     {
-        $this->id = Uuid::v4();
         $this->columns = new ArrayCollection();
         $this->members = new ArrayCollection();
         $this->labels = new ArrayCollection();
     }
 
-    public function getId(): Uuid
+    public function getId(): ?int
     {
         return $this->id;
     }

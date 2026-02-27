@@ -39,6 +39,11 @@ class KanbanAttachmentService
 
         $this->validateMagicBytes($file, $ext);
 
+        // Capture metadata before move() invalidates the temp file
+        $originalName = $file->getClientOriginalName();
+        $contentType = $file->getClientMimeType() ?: 'application/octet-stream';
+        $sizeBytes = $file->getSize() ?: 0;
+
         $storageKey = sprintf('%s/%s.%s', $card->getId(), bin2hex(random_bytes(16)), $ext);
         $targetDir = $this->kanbanUploadDir . '/' . dirname($storageKey);
 
@@ -49,10 +54,10 @@ class KanbanAttachmentService
         $file->move($targetDir, basename($storageKey));
 
         $attachment = new KanbanAttachment();
-        $attachment->setFilename($file->getClientOriginalName());
+        $attachment->setFilename($originalName);
         $attachment->setStorageKey($storageKey);
-        $attachment->setContentType($file->getClientMimeType() ?: 'application/octet-stream');
-        $attachment->setSizeBytes($file->getSize() ?: 0);
+        $attachment->setContentType($contentType);
+        $attachment->setSizeBytes($sizeBytes);
         $attachment->setCard($card);
 
         $this->em->persist($attachment);

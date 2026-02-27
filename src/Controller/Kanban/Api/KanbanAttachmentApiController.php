@@ -28,7 +28,7 @@ final class KanbanAttachmentApiController extends AbstractController
     }
 
     #[Route('', name: 'api_kanban_attachments_upload', methods: ['POST'])]
-    public function upload(string $cardId, Request $request): JsonResponse
+    public function upload(int $cardId, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -48,7 +48,7 @@ final class KanbanAttachmentApiController extends AbstractController
         $attachment = $this->attachmentService->upload($file, $card);
 
         return $this->json([
-            'id' => (string) $attachment->getId(),
+            'id' => $attachment->getId(),
             'filename' => $attachment->getFilename(),
             'contentType' => $attachment->getContentType(),
             'sizeBytes' => $attachment->getSizeBytes(),
@@ -57,7 +57,7 @@ final class KanbanAttachmentApiController extends AbstractController
     }
 
     #[Route('/{id}/download', name: 'api_kanban_attachments_download', methods: ['GET'])]
-    public function download(string $cardId, string $id): Response
+    public function download(int $cardId, int $id): Response
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -70,7 +70,7 @@ final class KanbanAttachmentApiController extends AbstractController
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::VIEWER);
 
         $attachment = $this->attachmentRepo->find($id);
-        if (!$attachment || (string) $attachment->getCard()->getId() !== $cardId) {
+        if (!$attachment || $attachment->getCard()->getId() !== $cardId) {
             return $this->json(['error' => 'Вложение не найдено.'], Response::HTTP_NOT_FOUND);
         }
 
@@ -86,7 +86,7 @@ final class KanbanAttachmentApiController extends AbstractController
     }
 
     #[Route('/{id}', name: 'api_kanban_attachments_delete', methods: ['DELETE'])]
-    public function delete(string $cardId, string $id): JsonResponse
+    public function delete(int $cardId, int $id): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -99,7 +99,7 @@ final class KanbanAttachmentApiController extends AbstractController
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::EDITOR);
 
         $attachment = $this->attachmentRepo->find($id);
-        if (!$attachment || (string) $attachment->getCard()->getId() !== $cardId) {
+        if (!$attachment || $attachment->getCard()->getId() !== $cardId) {
             return $this->json(['error' => 'Вложение не найдено.'], Response::HTTP_NOT_FOUND);
         }
 

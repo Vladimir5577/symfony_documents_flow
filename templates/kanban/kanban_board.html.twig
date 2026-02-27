@@ -30,11 +30,20 @@
             border: 1px solid var(--bs-border-color, #dee2e6);
         }
 
+        /* Column top-accent line */
+        .kanban-column[data-header-color="bg-primary"] { border-top: 10px solid var(--bs-primary); }
+        .kanban-column[data-header-color="bg-success"] { border-top: 10px solid var(--bs-success); }
+        .kanban-column[data-header-color="bg-warning"] { border-top: 10px solid var(--bs-warning); }
+        .kanban-column[data-header-color="bg-danger"]  { border-top: 10px solid var(--bs-danger); }
+        .kanban-column[data-header-color="bg-info"]    { border-top: 10px solid var(--bs-info); }
+        .kanban-column[data-header-color="bg-dark"]    { border-top: 10px solid var(--bs-dark); }
+
         [data-bs-theme="dark"] .kanban-column {
             background: var(--bs-tertiary-bg);
         }
 
         .kanban-column-header {
+            position: relative;
             padding: 1rem 1.25rem;
             font-weight: 600;
             font-size: 1rem;
@@ -42,6 +51,45 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+        }
+
+        .column-color-btn {
+            padding: 0.2rem 0.35rem;
+            line-height: 1;
+            font-size: 1rem;
+            border-radius: 0.25rem;
+            border: 1px solid transparent;
+            transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .column-color-btn:hover {
+            background-color: var(--bs-secondary-bg);
+            color: var(--bs-body-color) !important;
+            border-color: var(--bs-border-color);
+        }
+        .column-color-popover {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            z-index: 200;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.375rem;
+            padding: 0.4rem 0.5rem;
+            display: flex;
+            gap: 0.4rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        .column-color-swatch {
+            width: 1.4rem;
+            height: 1.4rem;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .column-color-swatch:hover { transform: scale(1.15); }
+        .column-color-swatch.active {
+            box-shadow: 0 0 0 2px var(--bs-body-bg), 0 0 0 4px var(--bs-body-color);
         }
 
         .kanban-column-header .badge {
@@ -79,7 +127,7 @@
             padding: 1rem;
             margin-bottom: 0.75rem;
             cursor: grab;
-            transition: box-shadow 0.2s, transform 0.2s;
+            transition: box-shadow 0.05s, transform 0.1s, background 0.05s;
         }
 
         .kanban-card:hover {
@@ -92,6 +140,11 @@
 
         .kanban-card:last-child {
             margin-bottom: 0;
+        }
+
+        .kanban-card--open {
+            box-shadow: 0 0 0 5px var(--bs-primary), 0 4px 12px rgba(0, 0, 0, 0.12);
+            background: color-mix(in srgb, var(--bs-primary) 13%, var(--bs-body-bg));
         }
 
         .gu-transit .kanban-card {
@@ -611,6 +664,58 @@
             border-bottom: 1px solid var(--bs-border-color, #dee2e6);
         }
         .attachment-item:last-child { border-bottom: none; }
+
+        /* Card left-accent border colours */
+        .kanban-card[data-border-color="primary"] { border-left: 10px solid var(--bs-primary); }
+        .kanban-card[data-border-color="success"] { border-left: 10px solid var(--bs-success); }
+        .kanban-card[data-border-color="warning"] { border-left: 10px solid var(--bs-warning); }
+        .kanban-card[data-border-color="danger"]  { border-left: 10px solid var(--bs-danger); }
+        .kanban-card[data-border-color="info"]    { border-left: 10px solid var(--bs-info); }
+        .kanban-card[data-border-color="dark"]    { border-left: 10px solid var(--bs-dark); }
+
+        /* Colour swatches */
+        .card-color-swatch {
+            width: 1.75rem;
+            height: 1.75rem;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: box-shadow 0.15s;
+        }
+        .card-color-swatch.swatch-none {
+            background: var(--bs-secondary-bg);
+            border-color: var(--bs-border-color);
+            font-size: 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--bs-secondary-color);
+        }
+        .card-color-swatch.active {
+            box-shadow: 0 0 0 2px var(--bs-body-bg), 0 0 0 4px var(--bs-body-color);
+        }
+
+        /* Chat image preview */
+        .chat-img-preview {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 0.375rem;
+            display: block;
+            cursor: pointer;
+        }
+
+        /* Chat attach button */
+        .task-chat-attach {
+            width: 2.5rem;
+            height: 2.5rem;
+            padding: 0;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
     </style>
 
     <div class="page-title">
@@ -634,22 +739,26 @@
     <section class="page-content">
         <div class="kanban-board" id="kanban-board">
             {% for column in board.columns %}
-            <div class="kanban-column" data-column-id="{{ column.id }}">
+            <div class="kanban-column" data-column-id="{{ column.id }}" data-header-color="{{ column.headerColor.value }}">
                 <div class="kanban-column-header">
                     <span>
-                        <span class="badge {{ column.headerColor.value }} me-2">&nbsp;</span>
                         <span class="column-title">{{ column.title }}</span>
                         <span class="badge bg-secondary ms-2 column-count">{{ column.cards|filter(c => not c.archived)|length }}</span>
                     </span>
-                    {% if memberRole.value != 'VIEWER' %}
-                    <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Добавить карточку">
-                        <i class="bi bi-plus-lg"></i>
-                    </button>
-                    {% endif %}
+                    <div class="d-flex align-items-center gap-3">
+                        {% if memberRole.value != 'VIEWER' %}
+                        <button type="button" class="btn btn-sm btn-link text-secondary column-color-btn p-0" title="Цвет столбца" data-column-id="{{ column.id }}">
+                            <i class="bi bi-palette"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Добавить карточку">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                        {% endif %}
+                    </div>
                 </div>
                 <div class="kanban-column-body" data-column-id="{{ column.id }}">
                     {% for card in column.cards|filter(c => not c.archived) %}
-                    <div class="kanban-card" data-card-id="{{ card.id }}" data-position="{{ card.position }}" data-updated-at="{{ card.updatedAt ? card.updatedAt|date('c') : '' }}">
+                    <div class="kanban-card" data-card-id="{{ card.id }}" data-position="{{ card.position }}" data-updated-at="{{ card.updatedAt ? card.updatedAt|date('c') : '' }}" data-border-color="{{ card.borderColor ?? '' }}">
                         <div class="kanban-card-title">{{ card.title }}</div>
                         {% if card.description %}
                         <div class="kanban-card-description">{{ card.description|length > 80 ? card.description|slice(0, 80) ~ '...' : card.description }}</div>
@@ -688,9 +797,12 @@
         <div class="task-sidebar-panel">
             <div class="task-sidebar-header">
                 <div class="task-sidebar-nav">
-                    <button type="button" class="task-sidebar-back btn btn-link p-0 text-primary text-decoration-none" id="task-sidebar-close">
-                        <i class="bi bi-arrow-left"></i> Назад
-                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="task-sidebar-back btn btn-link p-0 text-primary text-decoration-none" id="task-sidebar-close">
+                            <i class="bi bi-arrow-left"></i> Назад
+                        </button>
+                        <span id="save-status" class="badge bg-secondary" style="display:none"></span>
+                    </div>
                     {% if memberRole.value != 'VIEWER' %}
                     <button type="button" class="btn btn-sm btn-outline-danger" id="task-sidebar-delete" title="Удалить карточку">
                         <i class="bi bi-trash"></i>
@@ -698,9 +810,13 @@
                     {% endif %}
                 </div>
                 <div class="task-sidebar-title-row">
-                    <div class="task-sidebar-title-block">
-                        <div>
-                            <h5 class="task-sidebar-title" id="task-sidebar-title">Task title</h5>
+                    <div class="task-sidebar-title-block" style="width:100%">
+                        <div style="width:100%">
+                            {% if memberRole.value != 'VIEWER' %}
+                            <input type="text" class="form-control form-control-sm fw-bold task-sidebar-title-input mb-1" id="task-sidebar-title-input" placeholder="Название задачи" style="font-size:1.05rem;border:none;padding-left:0;box-shadow:none;background:transparent;">
+                            {% else %}
+                            <h5 class="task-sidebar-title" id="task-sidebar-title-input" style="pointer-events:none"></h5>
+                            {% endif %}
                             <span class="task-sidebar-id text-muted" id="task-sidebar-id"></span>
                         </div>
                     </div>
@@ -724,7 +840,9 @@
                     </div>
                     {% if memberRole.value != 'VIEWER' %}
                     <div class="task-chat-input-wrap">
+                        <input type="file" id="task-chat-file-input" style="display:none" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx">
                         <textarea class="task-chat-input form-control" id="task-chat-input" placeholder="Написать сообщение..." autocomplete="off" rows="4"></textarea>
+                        <button type="button" class="task-chat-attach btn btn-outline-secondary" id="task-chat-attach-btn" title="Прикрепить файл"><i class="bi bi-paperclip"></i></button>
                         <button type="button" class="task-chat-send btn btn-primary" id="task-chat-send" title="Отправить"><i class="bi bi-send"></i></button>
                     </div>
                     {% endif %}
@@ -733,38 +851,7 @@
                 {# Description Tab #}
                 <div class="task-sidebar-tab-pane" id="pane-description" role="tabpanel" hidden>
                     <div class="task-description-pane">
-                        {% if memberRole.value != 'VIEWER' %}
-                        <div class="task-description-toolbar">
-                            <button type="button" class="btn btn-primary btn-sm" id="task-desc-edit-btn">Редактировать</button>
-                        </div>
-                        {% endif %}
-                        <div class="task-description-view" id="task-description-view">
-                            <div class="task-description-body" id="task-sidebar-description"></div>
-                        </div>
-                        <div class="task-description-edit" id="task-description-edit" hidden>
-                            <textarea class="form-control task-description-textarea" id="task-description-textarea" placeholder="Введите описание задачи..."></textarea>
-                            <div class="mb-3">
-                                <label class="task-info-field-label">КОЛОНКА</label>
-                                <select class="form-select form-select-sm" id="task-column-select">
-                                    {% for col in board.columns %}
-                                    <option value="{{ col.id }}">{{ col.title }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="task-info-field-label">ПРИОРИТЕТ</label>
-                                <select class="form-select form-select-sm" id="task-priority-select">
-                                    <option value="">Не задан</option>
-                                    <option value="1">Низкий</option>
-                                    <option value="2">Средний</option>
-                                    <option value="3">Высокий</option>
-                                </select>
-                            </div>
-                            <div class="task-description-edit-actions">
-                                <button type="button" class="btn btn-primary btn-sm" id="task-desc-save-btn">Сохранить</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="task-desc-cancel-btn">Отмена</button>
-                            </div>
-                        </div>
+                        <textarea class="form-control task-description-textarea" id="task-description-textarea" placeholder="Введите описание задачи..." {% if memberRole.value == 'VIEWER' %}readonly{% endif %}></textarea>
                     </div>
                 </div>
 
@@ -786,16 +873,81 @@
                 {# Info Tab #}
                 <div class="task-sidebar-tab-pane" id="pane-info" role="tabpanel" hidden>
                     <div class="task-info-block">
+                        {% if memberRole.value != 'VIEWER' %}
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">ЦВЕТ КАРТОЧКИ</label>
+                            <div class="d-flex gap-2 flex-wrap align-items-center" id="card-border-color-picker">
+                                <button type="button" class="card-color-swatch swatch-none" data-color="" title="Без цвета">✕</button>
+                                <button type="button" class="card-color-swatch bg-primary"  data-color="primary" title="Синий"></button>
+                                <button type="button" class="card-color-swatch bg-success"  data-color="success" title="Зелёный"></button>
+                                <button type="button" class="card-color-swatch bg-warning"  data-color="warning" title="Жёлтый"></button>
+                                <button type="button" class="card-color-swatch bg-danger"   data-color="danger"  title="Красный"></button>
+                                <button type="button" class="card-color-swatch bg-info"     data-color="info"    title="Голубой"></button>
+                                <button type="button" class="card-color-swatch bg-dark"     data-color="dark"    title="Тёмный"></button>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">ПРИОРИТЕТ</label>
+                            {% if memberRole.value != 'VIEWER' %}
+                            <select class="form-select form-select-sm" id="task-priority-select">
+                                <option value="">Не задан</option>
+                                <option value="1">Низкий</option>
+                                <option value="2">Средний</option>
+                                <option value="3">Высокий</option>
+                            </select>
+                            {% else %}
+                            <span id="task-info-priority" class="task-info-value">—</span>
+                            {% endif %}
+                        </div>
                         <div class="task-info-field">
                             <label class="task-info-field-label">СРОК</label>
                             <div class="task-info-input-wrap">
-                                <input type="datetime-local" class="form-control task-info-input" id="task-due-at">
+                                <input type="datetime-local" class="form-control task-info-input" id="task-due-at" {% if memberRole.value == 'VIEWER' %}disabled{% endif %}>
                                 <i class="bi bi-calendar3 task-info-input-icon"></i>
                             </div>
                         </div>
                         <div class="task-info-field">
-                            <label class="task-info-field-label">ПРИОРИТЕТ</label>
-                            <span id="task-info-priority" class="task-info-value">—</span>
+                            <label class="task-info-field-label">ИСПОЛНИТЕЛИ</label>
+                            <div id="assignees-block" class="d-flex align-items-center flex-wrap gap-1 position-relative">
+                                <div id="assignees-chips" class="d-flex flex-wrap gap-1"></div>
+                                {% if memberRole.value != 'VIEWER' %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="assignee-add-btn" title="Добавить исполнителя" style="padding:0.1rem 0.4rem;font-size:0.8rem;">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                                <div id="assignee-dropdown" class="dropdown-menu p-2" style="display:none;min-width:220px;position:absolute;top:100%;left:0;z-index:200;">
+                                    <input type="text" id="assignee-search" class="form-control form-control-sm mb-2" placeholder="Поиск...">
+                                    <div id="assignee-results" style="max-height:160px;overflow-y:auto;"></div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">МЕТКИ</label>
+                            <div id="labels-block" class="d-flex align-items-center flex-wrap gap-1 position-relative">
+                                <div id="labels-chips" class="d-flex flex-wrap gap-1"></div>
+                                {% if memberRole.value != 'VIEWER' %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="labels-add-btn" title="Добавить метку" style="padding:0.1rem 0.4rem;font-size:0.8rem;">
+                                    <i class="bi bi-plus-lg"></i> Метка
+                                </button>
+                                <div id="label-dropdown" class="dropdown-menu p-2" style="display:none;min-width:220px;position:absolute;top:100%;left:0;z-index:200;">
+                                    <div id="label-list" style="max-height:140px;overflow-y:auto;"></div>
+                                    <hr class="my-2">
+                                    <div class="px-1">
+                                        <input type="text" id="new-label-name" placeholder="Название..." class="form-control form-control-sm mb-1">
+                                        <select id="new-label-color" class="form-select form-select-sm mb-1">
+                                            <option value="bg-primary">Синий</option>
+                                            <option value="bg-success">Зелёный</option>
+                                            <option value="bg-warning">Жёлтый</option>
+                                            <option value="bg-danger">Красный</option>
+                                            <option value="bg-info">Голубой</option>
+                                            <option value="bg-dark">Тёмный</option>
+                                        </select>
+                                        <button id="create-label-btn" class="btn btn-sm btn-primary w-100">Создать</button>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
                         </div>
                         <div class="task-info-field">
                             <label class="task-info-field-label">ВЛОЖЕНИЯ</label>

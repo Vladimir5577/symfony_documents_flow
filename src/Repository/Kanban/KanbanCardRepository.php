@@ -32,7 +32,7 @@ class KanbanCardRepository extends ServiceEntityRepository
     /**
      * Карточка со всеми связями.
      */
-    public function findOneWithRelations(string $id): ?KanbanCard
+    public function findOneWithRelations(int $id): ?KanbanCard
     {
         return $this->createQueryBuilder('c')
             ->leftJoin('c.column', 'col')->addSelect('col')
@@ -42,6 +42,7 @@ class KanbanCardRepository extends ServiceEntityRepository
             ->leftJoin('com.author', 'a')->addSelect('a')
             ->leftJoin('c.attachments', 'att')->addSelect('att')
             ->leftJoin('c.labels', 'lbl')->addSelect('lbl')
+            ->leftJoin('c.assignees', 'asgn')->addSelect('asgn')
             ->where('c.id = :id')
             ->setParameter('id', $id)
             ->getQuery()

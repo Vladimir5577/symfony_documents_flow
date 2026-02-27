@@ -27,7 +27,7 @@ final class KanbanChecklistApiController extends AbstractController
     }
 
     #[Route('', name: 'api_kanban_checklist_create', methods: ['POST'])]
-    public function create(string $cardId, Request $request): JsonResponse
+    public function create(int $cardId, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -56,7 +56,7 @@ final class KanbanChecklistApiController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'id' => (string) $item->getId(),
+            'id' => $item->getId(),
             'title' => $item->getTitle(),
             'isCompleted' => $item->isCompleted(),
             'position' => $item->getPosition(),
@@ -64,7 +64,7 @@ final class KanbanChecklistApiController extends AbstractController
     }
 
     #[Route('/{id}', name: 'api_kanban_checklist_update', methods: ['PATCH'])]
-    public function update(string $cardId, string $id, Request $request): JsonResponse
+    public function update(int $cardId, int $id, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -77,7 +77,7 @@ final class KanbanChecklistApiController extends AbstractController
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::EDITOR);
 
         $item = $this->checklistRepo->find($id);
-        if (!$item || (string) $item->getCard()->getId() !== $cardId) {
+        if (!$item || $item->getCard()->getId() !== $cardId) {
             return $this->json(['error' => 'Элемент не найден.'], Response::HTTP_NOT_FOUND);
         }
 
@@ -93,7 +93,7 @@ final class KanbanChecklistApiController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'id' => (string) $item->getId(),
+            'id' => $item->getId(),
             'title' => $item->getTitle(),
             'isCompleted' => $item->isCompleted(),
             'position' => $item->getPosition(),
@@ -101,7 +101,7 @@ final class KanbanChecklistApiController extends AbstractController
     }
 
     #[Route('/{id}', name: 'api_kanban_checklist_delete', methods: ['DELETE'])]
-    public function delete(string $cardId, string $id): JsonResponse
+    public function delete(int $cardId, int $id): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -114,7 +114,7 @@ final class KanbanChecklistApiController extends AbstractController
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::EDITOR);
 
         $item = $this->checklistRepo->find($id);
-        if (!$item || (string) $item->getCard()->getId() !== $cardId) {
+        if (!$item || $item->getCard()->getId() !== $cardId) {
             return $this->json(['error' => 'Элемент не найден.'], Response::HTTP_NOT_FOUND);
         }
 

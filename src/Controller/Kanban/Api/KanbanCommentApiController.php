@@ -27,7 +27,7 @@ final class KanbanCommentApiController extends AbstractController
     }
 
     #[Route('', name: 'api_kanban_comments_list', methods: ['GET'])]
-    public function list(string $cardId): JsonResponse
+    public function list(int $cardId): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -42,7 +42,7 @@ final class KanbanCommentApiController extends AbstractController
         $comments = $this->commentRepo->findByCard($card);
 
         $data = array_map(fn(KanbanCardComment $c) => [
-            'id' => (string) $c->getId(),
+            'id' => $c->getId(),
             'body' => $c->getBody(),
             'authorName' => $c->getAuthor()->getFirstname() . ' ' . $c->getAuthor()->getLastname(),
             'authorId' => $c->getAuthor()->getId(),
@@ -53,7 +53,7 @@ final class KanbanCommentApiController extends AbstractController
     }
 
     #[Route('', name: 'api_kanban_comments_create', methods: ['POST'])]
-    public function create(string $cardId, Request $request): JsonResponse
+    public function create(int $cardId, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -80,7 +80,7 @@ final class KanbanCommentApiController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'id' => (string) $comment->getId(),
+            'id' => $comment->getId(),
             'body' => $comment->getBody(),
             'authorName' => $user->getFirstname() . ' ' . $user->getLastname(),
             'authorId' => $user->getId(),

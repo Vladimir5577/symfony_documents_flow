@@ -7,6 +7,7 @@ use App\Enum\KanbanBoardMemberRole;
 use App\Enum\KanbanCardPriority;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanColumnRepository;
+use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -23,6 +24,7 @@ final class KanbanCardApiController extends AbstractController
         private readonly KanbanColumnRepository $columnRepo,
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $em,
+        private readonly UserRepository $userRepo,
     ) {
     }
 
@@ -50,15 +52,15 @@ final class KanbanCardApiController extends AbstractController
         $card = $this->kanbanService->createCard($column, $title);
 
         return $this->json([
-            'id' => (string) $card->getId(),
+            'id' => $card->getId(),
             'title' => $card->getTitle(),
             'position' => $card->getPosition(),
-            'columnId' => (string) $column->getId(),
+            'columnId' => $column->getId(),
         ], Response::HTTP_CREATED);
     }
 
     #[Route('/{id}', name: 'api_kanban_cards_show', methods: ['GET'])]
-    public function show(string $id): JsonResponse
+    public function show(int $id): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -73,7 +75,7 @@ final class KanbanCardApiController extends AbstractController
         $checklist = [];
         foreach ($card->getChecklistItems() as $ci) {
             $checklist[] = [
-                'id' => (string) $ci->getId(),
+                'id' => $ci->getId(),
                 'title' => $ci->getTitle(),
                 'isCompleted' => $ci->isCompleted(),
                 'position' => $ci->getPosition(),
@@ -83,7 +85,7 @@ final class KanbanCardApiController extends AbstractController
         $comments = [];
         foreach ($card->getComments() as $com) {
             $comments[] = [
-                'id' => (string) $com->getId(),
+                'id' => $com->getId(),
                 'body' => $com->getBody(),
                 'authorName' => $com->getAuthor()->getFirstname() . ' ' . $com->getAuthor()->getLastname(),
                 'createdAt' => $com->getCreatedAt()?->format('c'),
@@ -93,7 +95,7 @@ final class KanbanCardApiController extends AbstractController
         $attachments = [];
         foreach ($card->getAttachments() as $att) {
             $attachments[] = [
-                'id' => (string) $att->getId(),
+                'id' => $att->getId(),
                 'filename' => $att->getFilename(),
                 'contentType' => $att->getContentType(),
                 'sizeBytes' => $att->getSizeBytes(),
@@ -104,14 +106,19 @@ final class KanbanCardApiController extends AbstractController
         $labels = [];
         foreach ($card->getLabels() as $lbl) {
             $labels[] = [
-                'id' => (string) $lbl->getId(),
+                'id' => $lbl->getId(),
                 'name' => $lbl->getName(),
                 'color' => $lbl->getColor()->value,
             ];
         }
 
+        $assignees = [];
+        foreach ($card->getAssignees() as $u) {
+            $assignees[] = ['id' => $u->getId(), 'name' => $u->getFirstname() . ' ' . $u->getLastname()];
+        }
+
         return $this->json([
-            'id' => (string) $card->getId(),
+            'id' => $card->getId(),
             'title' => $card->getTitle(),
             'description' => $card->getDescription(),
             'position' => $card->getPosition(),
@@ -120,20 +127,22 @@ final class KanbanCardApiController extends AbstractController
             'priorityColor' => $card->getPriority()?->getColor(),
             'dueAt' => $card->getDueAt()?->format('c'),
             'isArchived' => $card->isArchived(),
-            'columnId' => (string) $card->getColumn()->getId(),
+            'columnId' => $card->getColumn()->getId(),
             'columnTitle' => $card->getColumn()->getTitle(),
-            'boardId' => (string) $card->getColumn()->getBoard()->getId(),
+            'boardId' => $card->getColumn()->getBoard()->getId(),
             'checklist' => $checklist,
             'comments' => $comments,
             'attachments' => $attachments,
             'labels' => $labels,
+            'assignees' => $assignees,
+            'borderColor' => $card->getBorderColor(),
             'createdAt' => $card->getCreatedAt()?->format('c'),
             'updatedAt' => $card->getUpdatedAt()?->format('c'),
         ]);
     }
 
     #[Route('/{id}', name: 'api_kanban_cards_update', methods: ['PATCH'])]
-    public function update(string $id, Request $request): JsonResponse
+    public function update(int $id, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -159,21 +168,65 @@ final class KanbanCardApiController extends AbstractController
         if (array_key_exists('dueAt', $payload)) {
             $card->setDueAt($payload['dueAt'] ? new \DateTimeImmutable($payload['dueAt']) : null);
         }
+        $allowedColors = ['primary', 'success', 'warning', 'danger', 'info', 'dark'];
+        if (array_key_exists('borderColor', $payload)) {
+            $color = $payload['borderColor'];
+            $card->setBorderColor(
+                ($color !== null && $color !== '' && in_array($color, $allowedColors, true)) ? $color : null
+            );
+        }
 
         $this->em->flush();
 
         return $this->json([
-            'id' => (string) $card->getId(),
+            'id' => $card->getId(),
             'title' => $card->getTitle(),
             'description' => $card->getDescription(),
             'priority' => $card->getPriority()?->value,
+            'priorityLabel' => $card->getPriority()?->getLabel(),
+            'priorityColor' => $card->getPriority()?->getColor(),
             'dueAt' => $card->getDueAt()?->format('c'),
+            'borderColor' => $card->getBorderColor(),
             'updatedAt' => $card->getUpdatedAt()?->format('c'),
         ]);
     }
 
+    #[Route('/{id}/assignees', name: 'api_kanban_cards_assignees', methods: ['PUT'])]
+    public function setAssignees(int $id, Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $card = $this->cardRepo->find($id);
+        if (!$card) {
+            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::EDITOR);
+
+        $payload = json_decode($request->getContent(), true) ?? [];
+        $userIds = array_slice(array_map('intval', array_filter($payload['user_ids'] ?? [], 'is_numeric')), 0, 1);
+
+        foreach ($card->getAssignees() as $existing) {
+            $card->removeAssignee($existing);
+        }
+
+        foreach ($this->userRepo->findByIds($userIds) as $assignee) {
+            $card->addAssignee($assignee);
+        }
+
+        $this->em->flush();
+
+        $assignees = [];
+        foreach ($card->getAssignees() as $u) {
+            $assignees[] = ['id' => $u->getId(), 'name' => $u->getFirstname() . ' ' . $u->getLastname()];
+        }
+
+        return $this->json(['assignees' => $assignees]);
+    }
+
     #[Route('/{id}/move', name: 'api_kanban_cards_move', methods: ['POST'])]
-    public function move(string $id, Request $request): JsonResponse
+    public function move(int $id, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -205,15 +258,15 @@ final class KanbanCardApiController extends AbstractController
         $this->kanbanService->moveCard($card, $targetColumn, (float) $position, $prevUpdatedAt);
 
         return $this->json([
-            'id' => (string) $card->getId(),
-            'columnId' => (string) $targetColumn->getId(),
+            'id' => $card->getId(),
+            'columnId' => $targetColumn->getId(),
             'position' => $card->getPosition(),
             'updatedAt' => $card->getUpdatedAt()?->format('c'),
         ]);
     }
 
     #[Route('/{id}', name: 'api_kanban_cards_delete', methods: ['DELETE'])]
-    public function deleteCard(string $id): JsonResponse
+    public function deleteCard(int $id): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -232,7 +285,7 @@ final class KanbanCardApiController extends AbstractController
     }
 
     #[Route('/{id}/archive', name: 'api_kanban_cards_archive', methods: ['PATCH'])]
-    public function archive(string $id): JsonResponse
+    public function archive(int $id): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -248,7 +301,7 @@ final class KanbanCardApiController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'id' => (string) $card->getId(),
+            'id' => $card->getId(),
             'isArchived' => $card->isArchived(),
         ]);
     }

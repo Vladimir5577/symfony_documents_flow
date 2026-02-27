@@ -4,15 +4,15 @@ namespace App\Entity\Kanban;
 
 use App\Repository\Kanban\KanbanChecklistItemRepository;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: KanbanChecklistItemRepository::class)]
 #[ORM\Table(name: 'kanban_checklist_item')]
 class KanbanChecklistItem
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'uuid')]
-    private Uuid $id;
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
     #[ORM\Column(length: 500)]
     private string $title;
@@ -27,12 +27,7 @@ class KanbanChecklistItem
     #[ORM\JoinColumn(name: 'card_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private KanbanCard $card;
 
-    public function __construct()
-    {
-        $this->id = Uuid::v4();
-    }
-
-    public function getId(): Uuid
+    public function getId(): ?int
     {
         return $this->id;
     }

@@ -27,7 +27,7 @@ final class KanbanColumnApiController extends AbstractController
     }
 
     #[Route('', name: 'api_kanban_columns_create', methods: ['POST'])]
-    public function create(string $boardId, Request $request): JsonResponse
+    public function create(int $boardId, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -49,7 +49,7 @@ final class KanbanColumnApiController extends AbstractController
         $column = $this->kanbanService->createColumn($board, $title, $color);
 
         return $this->json([
-            'id' => (string) $column->getId(),
+            'id' => $column->getId(),
             'title' => $column->getTitle(),
             'headerColor' => $column->getHeaderColor()->value,
             'position' => $column->getPosition(),
@@ -57,7 +57,7 @@ final class KanbanColumnApiController extends AbstractController
     }
 
     #[Route('/{id}', name: 'api_kanban_columns_update', methods: ['PATCH'])]
-    public function update(string $boardId, string $id, Request $request): JsonResponse
+    public function update(int $boardId, int $id, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -70,7 +70,7 @@ final class KanbanColumnApiController extends AbstractController
         $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::EDITOR);
 
         $column = $this->columnRepo->find($id);
-        if (!$column || (string) $column->getBoard()->getId() !== $boardId) {
+        if (!$column || $column->getBoard()->getId() !== $boardId) {
             return $this->json(['error' => 'Колонка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
@@ -92,7 +92,7 @@ final class KanbanColumnApiController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'id' => (string) $column->getId(),
+            'id' => $column->getId(),
             'title' => $column->getTitle(),
             'headerColor' => $column->getHeaderColor()->value,
             'position' => $column->getPosition(),
@@ -100,7 +100,7 @@ final class KanbanColumnApiController extends AbstractController
     }
 
     #[Route('/{id}', name: 'api_kanban_columns_delete', methods: ['DELETE'])]
-    public function delete(string $boardId, string $id): JsonResponse
+    public function delete(int $boardId, int $id): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -113,7 +113,7 @@ final class KanbanColumnApiController extends AbstractController
         $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
 
         $column = $this->columnRepo->find($id);
-        if (!$column || (string) $column->getBoard()->getId() !== $boardId) {
+        if (!$column || $column->getBoard()->getId() !== $boardId) {
             return $this->json(['error' => 'Колонка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 

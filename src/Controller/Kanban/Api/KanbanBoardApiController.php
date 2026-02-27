@@ -33,7 +33,7 @@ final class KanbanBoardApiController extends AbstractController
         $boards = $this->boardRepo->findByMember($user);
 
         $data = array_map(fn(KanbanBoard $b) => [
-            'id' => (string) $b->getId(),
+            'id' => $b->getId(),
             'title' => $b->getTitle(),
             'createdAt' => $b->getCreatedAt()?->format('c'),
             'updatedAt' => $b->getUpdatedAt()?->format('c'),
@@ -57,13 +57,13 @@ final class KanbanBoardApiController extends AbstractController
         $board = $this->kanbanService->createBoard($title, $user);
 
         return $this->json([
-            'id' => (string) $board->getId(),
+            'id' => $board->getId(),
             'title' => $board->getTitle(),
         ], Response::HTTP_CREATED);
     }
 
     #[Route('/{id}', name: 'api_kanban_boards_show', methods: ['GET'])]
-    public function show(string $id): JsonResponse
+    public function show(int $id): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -85,7 +85,7 @@ final class KanbanBoardApiController extends AbstractController
                 $labels = [];
                 foreach ($card->getLabels() as $lbl) {
                     $labels[] = [
-                        'id' => (string) $lbl->getId(),
+                        'id' => $lbl->getId(),
                         'name' => $lbl->getName(),
                         'color' => $lbl->getColor()->value,
                     ];
@@ -94,7 +94,7 @@ final class KanbanBoardApiController extends AbstractController
                 $checklistDone = $card->getChecklistItems()->filter(fn($ci) => $ci->isCompleted())->count();
 
                 $cards[] = [
-                    'id' => (string) $card->getId(),
+                    'id' => $card->getId(),
                     'title' => $card->getTitle(),
                     'description' => $card->getDescription(),
                     'position' => $card->getPosition(),
@@ -111,7 +111,7 @@ final class KanbanBoardApiController extends AbstractController
                 ];
             }
             $columns[] = [
-                'id' => (string) $col->getId(),
+                'id' => $col->getId(),
                 'title' => $col->getTitle(),
                 'headerColor' => $col->getHeaderColor()->value,
                 'position' => $col->getPosition(),
@@ -120,14 +120,14 @@ final class KanbanBoardApiController extends AbstractController
         }
 
         return $this->json([
-            'id' => (string) $board->getId(),
+            'id' => $board->getId(),
             'title' => $board->getTitle(),
             'columns' => $columns,
         ]);
     }
 
     #[Route('/{id}', name: 'api_kanban_boards_update', methods: ['PATCH'])]
-    public function update(string $id, Request $request): JsonResponse
+    public function update(int $id, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -146,11 +146,11 @@ final class KanbanBoardApiController extends AbstractController
 
         $this->em->flush();
 
-        return $this->json(['id' => (string) $board->getId(), 'title' => $board->getTitle()]);
+        return $this->json(['id' => $board->getId(), 'title' => $board->getTitle()]);
     }
 
     #[Route('/{id}', name: 'api_kanban_boards_delete', methods: ['DELETE'])]
-    public function delete(string $id): JsonResponse
+    public function delete(int $id): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -169,7 +169,7 @@ final class KanbanBoardApiController extends AbstractController
     }
 
     #[Route('/{id}/members', name: 'api_kanban_boards_add_member', methods: ['POST'])]
-    public function addMember(string $id, Request $request): JsonResponse
+    public function addMember(int $id, Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -203,7 +203,7 @@ final class KanbanBoardApiController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'id' => (string) $member->getId(),
+            'id' => $member->getId(),
             'role' => $member->getRole()->value,
         ], Response::HTTP_CREATED);
     }

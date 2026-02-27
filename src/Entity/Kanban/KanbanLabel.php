@@ -7,15 +7,15 @@ use App\Repository\Kanban\KanbanLabelRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: KanbanLabelRepository::class)]
 #[ORM\Table(name: 'kanban_label')]
 class KanbanLabel
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'uuid')]
-    private Uuid $id;
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
     #[ORM\Column(length: 100)]
     private string $name;
@@ -33,11 +33,10 @@ class KanbanLabel
 
     public function __construct()
     {
-        $this->id = Uuid::v4();
         $this->cards = new ArrayCollection();
     }
 
-    public function getId(): Uuid
+    public function getId(): ?int
     {
         return $this->id;
     }

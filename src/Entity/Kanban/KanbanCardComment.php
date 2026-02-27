@@ -7,15 +7,15 @@ use App\Repository\Kanban\KanbanCardCommentRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: KanbanCardCommentRepository::class)]
 #[ORM\Table(name: 'kanban_card_comment')]
 class KanbanCardComment
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'uuid')]
-    private Uuid $id;
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
     #[ORM\Column(type: Types::TEXT, length: 10000)]
     private string $body;
@@ -32,12 +32,7 @@ class KanbanCardComment
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
 
-    public function __construct()
-    {
-        $this->id = Uuid::v4();
-    }
-
-    public function getId(): Uuid
+    public function getId(): ?int
     {
         return $this->id;
     }

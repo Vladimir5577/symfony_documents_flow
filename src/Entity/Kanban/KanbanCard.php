@@ -2,6 +2,7 @@
 
 namespace App\Entity\Kanban;
 
+use App\Entity\User\User;
 use App\Enum\KanbanCardPriority;
 use App\Repository\Kanban\KanbanCardRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -9,15 +10,15 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: KanbanCardRepository::class)]
 #[ORM\Table(name: 'kanban_card')]
 class KanbanCard
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'uuid')]
-    private Uuid $id;
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
     #[ORM\Column(length: 500)]
     private string $title;
@@ -60,6 +61,16 @@ class KanbanCard
     #[ORM\JoinTable(name: 'kanban_card_label')]
     private Collection $labels;
 
+    /** @var Collection<int, User> */
+    #[ORM\ManyToMany(targetEntity: User::class)]
+    #[ORM\JoinTable(name: 'kanban_card_assignee')]
+    #[ORM\JoinColumn(name: 'card_id', referencedColumnName: 'id', onDelete: 'CASCADE')]
+    #[ORM\InverseJoinColumn(name: 'user_id', referencedColumnName: 'id', onDelete: 'CASCADE')]
+    private Collection $assignees;
+
+    #[ORM\Column(name: 'border_color', length: 20, nullable: true)]
+    private ?string $borderColor = null;
+
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
@@ -70,14 +81,14 @@ class KanbanCard
 
     public function __construct()
     {
-        $this->id = Uuid::v4();
         $this->checklistItems = new ArrayCollection();
         $this->comments = new ArrayCollection();
         $this->attachments = new ArrayCollection();
         $this->labels = new ArrayCollection();
+        $this->assignees = new ArrayCollection();
     }
 
-    public function getId(): Uuid
+    public function getId(): ?int
     {
         return $this->id;
     }
@@ -221,6 +232,37 @@ class KanbanCard
     public function removeLabel(KanbanLabel $label): static
     {
         $this->labels->removeElement($label);
+        return $this;
+    }
+
+    /** @return Collection<int, User> */
+    public function getAssignees(): Collection
+    {
+        return $this->assignees;
+    }
+
+    public function addAssignee(User $user): static
+    {
+        if (!$this->assignees->contains($user)) {
+            $this->assignees->add($user);
+        }
+        return $this;
+    }
+
+    public function removeAssignee(User $user): static
+    {
+        $this->assignees->removeElement($user);
+        return $this;
+    }
+
+    public function getBorderColor(): ?string
+    {
+        return $this->borderColor;
+    }
+
+    public function setBorderColor(?string $borderColor): static
+    {
+        $this->borderColor = $borderColor;
         return $this;
     }
 

@@ -7,15 +7,15 @@ use App\Repository\Kanban\KanbanColumnRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: KanbanColumnRepository::class)]
 #[ORM\Table(name: 'kanban_column')]
 class KanbanColumn
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'uuid')]
-    private Uuid $id;
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
     #[ORM\Column(length: 200)]
     private string $title;
@@ -37,11 +37,10 @@ class KanbanColumn
 
     public function __construct()
     {
-        $this->id = Uuid::v4();
         $this->cards = new ArrayCollection();
     }
 
-    public function getId(): Uuid
+    public function getId(): ?int
     {
         return $this->id;
     }

@@ -36,7 +36,7 @@ class KanbanBoardRepository extends ServiceEntityRepository
     /**
      * Доска со всеми связями (колонки, карточки, чеклист, метки).
      */
-    public function findOneWithRelations(string $id): ?KanbanBoard
+    public function findOneWithRelations(int $id): ?KanbanBoard
     {
         return $this->createQueryBuilder('b')
             ->leftJoin('b.columns', 'col')->addSelect('col')
