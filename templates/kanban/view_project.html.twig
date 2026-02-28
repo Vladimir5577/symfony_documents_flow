@@ -1,0 +1,124 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}{{ project.name }} — Просмотр проекта{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">{{ project.name }}</h1>
+        <a href="{{ path('app_kanban_personal_projects') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>
+            К проектам
+        </a>
+    </div>
+
+    {# Информация о проекте #}
+    <section class="section mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Информация о проекте</h4>
+            </div>
+            <div class="card-content">
+                <div class="card-body">
+                    {% if project.description %}
+                        <div class="mb-3">
+                            <label class="form-label text-muted small">Описание</label>
+                            <p class="mb-0">{{ project.description }}</p>
+                        </div>
+                    {% endif %}
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Владелец</label>
+                            <p class="mb-0">
+                                {% if project.owner %}
+                                    {{ project.owner.lastname }} {{ project.owner.firstname }}{% if project.owner.patronymic %} {{ project.owner.patronymic }}{% endif %}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">Создан</label>
+                            <p class="mb-0">{{ project.createdAt ? project.createdAt|date('d.m.Y H:i') : '—' }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# Участники проекта #}
+    <section class="section mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Участники проекта</h4>
+            </div>
+            <div class="card-content">
+                <div class="card-body">
+                    {% if projectUsers|length > 0 %}
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Пользователь</th>
+                                        <th>Роль</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for pu in projectUsers %}
+                                        <tr>
+                                            <td>
+                                                {% if pu.user %}
+                                                    {{ pu.user.lastname }} {{ pu.user.firstname }}{% if pu.user.patronymic %} {{ pu.user.patronymic }}{% endif %}
+                                                {% else %}
+                                                    —
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-secondary">{{ pu.role ? pu.role.getLabel : '—' }}</span>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">Нет участников в проекте.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# Доски проекта #}
+    <section class="section">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Доски проекта</h4>
+            </div>
+            <div class="card-content">
+                <div class="card-body">
+                    {% if project.boards|length > 0 %}
+                        <div class="list-group">
+                            {% for board in project.boards %}
+                                <a href="{{ path('app_kanban_board', {id: board.id}) }}" class="list-group-item list-group-item-action d-flex align-items-center">
+                                    <i class="bi bi-kanban me-2 text-primary fs-5"></i>
+                                    <div class="flex-grow-1">
+                                        <strong>{{ board.title }}</strong>
+                                        <small class="text-muted d-block">Обновлено: {{ board.updatedAt ? board.updatedAt|date('d.m.Y H:i') : '—' }}</small>
+                                    </div>
+                                    <i class="bi bi-chevron-right text-muted"></i>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">Нет досок в проекте.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

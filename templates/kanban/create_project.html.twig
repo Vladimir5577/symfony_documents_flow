@@ -1,0 +1,256 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Создать проект{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <link rel="stylesheet" href="/front_end/assets/compiled/css/choices.min.css">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">Создать проект</h1>
+        <a href="{{ path('app_kanban_personal_projects') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>
+            Назад к проектам
+        </a>
+    </div>
+
+    <section class="section">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title">Новый проект</h4>
+            </div>
+            <div class="card-content">
+                <div class="card-body">
+                    <form action="{{ path('app_kanban_project_create') }}" method="post" class="form">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token('create_kanban_project') }}">
+
+                        {% for message in app.flashes('error') %}
+                            <div class="alert alert-danger">{{ message }}</div>
+                        {% endfor %}
+
+                        <div class="mb-3">
+                            <label for="projectName" class="form-label">Название <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="projectName" name="name" required maxlength="255" autofocus placeholder="Например: Проект Договоры" value="{{ form_data.name|default('') }}">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="projectDescription" class="form-label">Описание</label>
+                            <textarea class="form-control" id="projectDescription" name="description" rows="3" placeholder="Краткое описание проекта">{{ form_data.description|default('') }}</textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="document_users">Участники проекта</label>
+                            <div id="document_users_trigger" style="cursor: pointer;" title="Нажмите, чтобы выбрать по организациям">
+                                <select id="document_users" class="form-control" name="user_ids[]" multiple>
+                                    {% if users is defined and users|length > 0 %}
+                                        {% for u in users %}
+                                            <option value="{{ u.id }}" selected>
+                                                {{ u.lastname }} {{ u.firstname }}{% if u.patronymic %} {{ u.patronymic }}{% endif %}
+                                            </option>
+                                        {% endfor %}
+                                    {% endif %}
+                                </select>
+                            </div>
+                            <small class="text-muted">Нажмите на поле или кнопку ниже, чтобы выбрать участников по организациям</small>
+                            <div class="mt-1">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#organizationUserModal">
+                                    Выбрать по организациям
+                                </button>
+                            </div>
+                        </div>
+
+                        {# Блок создания досок #}
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">Доски проекта</label>
+                            <p class="text-muted small">Настройте доски и столбцы. Можно редактировать названия, удалять или добавлять столбцы и доски.</p>
+                            <div id="boards-container">
+                                <div class="board-block card mb-3" data-board-index="0">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h5 class="card-title mb-0 h6">Доска 1</h5>
+                                            <button type="button" class="btn btn-outline-danger btn-sm remove-board-btn" title="Удалить доску">Удалить доску</button>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small">Название доски</label>
+                                            <input type="text" class="form-control form-control-sm board-title" name="boards[0][title]" value="Главная доска" maxlength="200" placeholder="Название доски">
+                                        </div>
+                                        <div class="board-columns">
+                                            <label class="form-label small">Столбцы</label>
+                                            <div class="column-rows">
+                                                <div class="input-group input-group-sm mb-2 column-row">
+                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="Backlog" maxlength="200" placeholder="Название столбца">
+                                                    <button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
+                                                </div>
+                                                <div class="input-group input-group-sm mb-2 column-row">
+                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="To Do" maxlength="200" placeholder="Название столбца">
+                                                    <button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
+                                                </div>
+                                                <div class="input-group input-group-sm mb-2 column-row">
+                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="In Progress" maxlength="200" placeholder="Название столбца">
+                                                    <button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
+                                                </div>
+                                                <div class="input-group input-group-sm mb-2 column-row">
+                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="Done" maxlength="200" placeholder="Название столбца">
+                                                    <button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
+                                                </div>
+                                            </div>
+                                            <button type="button" class="btn btn-outline-primary btn-sm add-column-btn">Добавить столбец</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" id="add-board-btn" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-plus-lg me-1"></i>
+                                Добавить доску
+                            </button>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-plus-lg me-1"></i>
+                            Создать проект
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="org-tree-data" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}">
+        {% if organizations is defined and organizations|length > 0 %}
+            {% for org in organizations %}
+                {% if org %}
+                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    {% include 'document/partials/_organization_user_modal.html.twig' %}
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var usersSelect = document.getElementById('document_users');
+            var usersTrigger = document.getElementById('document_users_trigger');
+            var choicesInstance = null;
+
+            if (usersSelect && window.Choices) {
+                choicesInstance = new Choices(usersSelect, {
+                    removeItemButton: true,
+                    searchEnabled: false,
+                    itemSelectText: '',
+                    noChoicesText: 'Нажмите на поле или «Выбрать по организациям»',
+                });
+            }
+
+            if (usersTrigger) {
+                usersTrigger.addEventListener('click', function (e) {
+                    if (e.target.closest('.choices__button') || e.target.closest('.choices__item')) {
+                        return;
+                    }
+                    e.preventDefault();
+                    var modalEl = document.getElementById('organizationUserModal');
+                    if (modalEl) {
+                        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                        modal.show();
+                    }
+                });
+            }
+
+            window.__documentFlowOrgUserModalChoices = choicesInstance;
+
+            (function () {
+                var container = document.getElementById('boards-container');
+                var addBoardBtn = document.getElementById('add-board-btn');
+                var defaultColumns = ['Backlog', 'To Do', 'In Progress', 'Done'];
+
+                function getBoardBlocks() {
+                    return Array.from(container.querySelectorAll('.board-block'));
+                }
+
+                function updateBoardIndices() {
+                    getBoardBlocks().forEach(function (block, index) {
+                        block.dataset.boardIndex = String(index);
+                        block.querySelector('.card-title').textContent = 'Доска ' + (index + 1);
+                        block.querySelector('.board-title').name = 'boards[' + index + '][title]';
+                        block.querySelectorAll('.board-columns .column-row input').forEach(function (input) {
+                            input.name = 'boards[' + index + '][columns][]';
+                        });
+                    });
+                }
+
+                function addColumn(block) {
+                    var rows = block.querySelector('.board-columns .column-rows');
+                    var lastRow = rows.querySelector('.column-row:last-child');
+                    var newRow = document.createElement('div');
+                    newRow.className = 'input-group input-group-sm mb-2 column-row';
+                    var idx = block.dataset.boardIndex;
+                    newRow.innerHTML = '<input type="text" class="form-control" name="boards[' + idx + '][columns][]" value="" maxlength="200" placeholder="Название столбца">' +
+                        '<button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>';
+                    rows.appendChild(newRow);
+                    newRow.querySelector('.remove-column-btn').addEventListener('click', function () {
+                        if (rows.querySelectorAll('.column-row').length > 1) {
+                            newRow.remove();
+                        }
+                    });
+                }
+
+                container.addEventListener('click', function (e) {
+                    var addColBtn = e.target.closest('.add-column-btn');
+                    var removeColBtn = e.target.closest('.remove-column-btn');
+                    var removeBoardBtn = e.target.closest('.remove-board-btn');
+                    if (addColBtn) {
+                        var block = addColBtn.closest('.board-block');
+                        addColumn(block);
+                    } else if (removeColBtn) {
+                        var row = removeColBtn.closest('.column-row');
+                        var rows = row.closest('.column-rows');
+                        if (rows && rows.querySelectorAll('.column-row').length > 1) {
+                            row.remove();
+                        }
+                    } else if (removeBoardBtn) {
+                        var block = removeBoardBtn.closest('.board-block');
+                        if (getBoardBlocks().length > 1) {
+                            block.remove();
+                            updateBoardIndices();
+                        }
+                    }
+                });
+
+                if (addBoardBtn) {
+                    addBoardBtn.addEventListener('click', function () {
+                        var blocks = getBoardBlocks();
+                        var template = blocks[0];
+                        var clone = template.cloneNode(true);
+                        clone.querySelector('.board-title').value = 'Другая доска';
+                        var columnRows = clone.querySelectorAll('.column-row');
+                        columnRows.forEach(function (row, i) {
+                            row.querySelector('input').value = defaultColumns[i] || '';
+                        });
+                        clone.querySelectorAll('.remove-column-btn').forEach(function (btn) {
+                            btn.addEventListener('click', function () {
+                                var r = btn.closest('.column-row');
+                                if (clone.querySelectorAll('.column-row').length > 1) r.remove();
+                            });
+                        });
+                        container.appendChild(clone);
+                        updateBoardIndices();
+                    });
+                }
+
+                container.querySelectorAll('.remove-column-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var row = btn.closest('.column-row');
+                        var rows = row.closest('.column-rows');
+                        if (rows && rows.querySelectorAll('.column-row').length > 1) {
+                            row.remove();
+                        }
+                    });
+                });
+            })();
+        });
+    </script>
+    {% include 'document/partials/_organization_user_modal_script.html.twig' %}
+{% endblock %}

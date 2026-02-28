@@ -18,15 +18,17 @@ class KanbanBoardRepository extends ServiceEntityRepository
     }
 
     /**
-     * Доски, в которых пользователь является участником.
+     * Доски проектов, в которых пользователь является владельцем или участником.
      *
      * @return KanbanBoard[]
      */
     public function findByMember(User $user): array
     {
         return $this->createQueryBuilder('b')
-            ->innerJoin('b.members', 'm')
-            ->where('m.user = :user')
+            ->innerJoin('b.project', 'p')
+            ->leftJoin('App\Entity\Kanban\Project\KanbanProjectUser', 'pu', 'WITH', 'pu.kanbanProject = p AND pu.user = :user')
+            ->where('p.owner = :user')
+            ->orWhere('pu.id IS NOT NULL')
             ->setParameter('user', $user)
             ->orderBy('b.updatedAt', 'DESC')
             ->getQuery()
@@ -39,12 +41,11 @@ class KanbanBoardRepository extends ServiceEntityRepository
     public function findOneWithRelations(int $id): ?KanbanBoard
     {
         return $this->createQueryBuilder('b')
+            ->leftJoin('b.project', 'p')->addSelect('p')
             ->leftJoin('b.columns', 'col')->addSelect('col')
             ->leftJoin('col.cards', 'card')->addSelect('card')
             ->leftJoin('card.labels', 'lbl')->addSelect('lbl')
             ->leftJoin('card.checklistItems', 'ci')->addSelect('ci')
-            ->leftJoin('b.members', 'mem')->addSelect('mem')
-            ->leftJoin('mem.user', 'mu')->addSelect('mu')
             ->where('b.id = :id')
             ->setParameter('id', $id)
             ->getQuery()

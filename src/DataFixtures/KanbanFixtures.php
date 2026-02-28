@@ -3,10 +3,11 @@
 namespace App\DataFixtures;
 
 use App\Entity\Kanban\KanbanBoard;
-use App\Entity\Kanban\KanbanBoardMember;
 use App\Entity\Kanban\KanbanCard;
 use App\Entity\Kanban\KanbanChecklistItem;
 use App\Entity\Kanban\KanbanColumn;
+use App\Entity\Kanban\Project\KanbanProject;
+use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
 use App\Enum\KanbanBoardMemberRole;
 use App\Enum\KanbanCardPriority;
@@ -26,24 +27,32 @@ class KanbanFixtures extends Fixture implements FixtureGroupInterface
     {
         // Берём первого пользователя (ID=1)
         $user = $manager->getRepository(User::class)->find(1);
-        if (!$user) {
+        if (!$user instanceof User) {
             echo "KanbanFixtures: пользователь с ID=1 не найден, пропуск.\n";
             return;
         }
 
+        // --- Проект ---
+        $project = new KanbanProject();
+        $project->setName('Донснабкомплект');
+        $project->setDescription('Проект документооборота');
+        $project->setOwner($user);
+        $project->setCreatedBy($user);
+        $manager->persist($project);
+
+        // --- Участник проекта ---
+        $projectUser = new KanbanProjectUser();
+        $projectUser->setKanbanProject($project);
+        $projectUser->setUser($user);
+        $projectUser->setRole(KanbanBoardMemberRole::ADMIN);
+        $manager->persist($projectUser);
+
         // --- Доска ---
         $board = new KanbanBoard();
+        $board->setProject($project);
         $board->setTitle('Донснабкомплект — Договоры');
         $board->setCreatedBy($user);
         $manager->persist($board);
-
-        // --- Участник ---
-        $member = new KanbanBoardMember();
-        $member->setBoard($board);
-        $member->setUser($user);
-        $member->setRole(KanbanBoardMemberRole::ADMIN);
-        $board->addMember($member);
-        $manager->persist($member);
 
         // --- Колонки ---
         $colNew = new KanbanColumn();

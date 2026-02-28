@@ -2,6 +2,7 @@
 
 namespace App\Entity\Kanban;
 
+use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\User\User;
 use App\Repository\Kanban\KanbanBoardRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -23,6 +24,10 @@ class KanbanBoard
     #[ORM\Column(length: 200)]
     private string $title;
 
+    #[ORM\ManyToOne(targetEntity: KanbanProject::class)]
+    #[ORM\JoinColumn(name: 'kanban_project_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    private ?KanbanProject $project = null;
+
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'created_by_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private User $createdBy;
@@ -31,10 +36,6 @@ class KanbanBoard
     #[ORM\OneToMany(mappedBy: 'board', targetEntity: KanbanColumn::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['position' => 'ASC'])]
     private Collection $columns;
-
-    /** @var Collection<int, KanbanBoardMember> */
-    #[ORM\OneToMany(mappedBy: 'board', targetEntity: KanbanBoardMember::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
-    private Collection $members;
 
     /** @var Collection<int, KanbanLabel> */
     #[ORM\OneToMany(mappedBy: 'board', targetEntity: KanbanLabel::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
@@ -54,7 +55,6 @@ class KanbanBoard
     public function __construct()
     {
         $this->columns = new ArrayCollection();
-        $this->members = new ArrayCollection();
         $this->labels = new ArrayCollection();
     }
 
@@ -71,6 +71,17 @@ class KanbanBoard
     public function setTitle(string $title): static
     {
         $this->title = $title;
+        return $this;
+    }
+
+    public function getProject(): ?KanbanProject
+    {
+        return $this->project;
+    }
+
+    public function setProject(?KanbanProject $project): static
+    {
+        $this->project = $project;
         return $this;
     }
 
@@ -96,21 +107,6 @@ class KanbanBoard
         if (!$this->columns->contains($column)) {
             $this->columns->add($column);
             $column->setBoard($this);
-        }
-        return $this;
-    }
-
-    /** @return Collection<int, KanbanBoardMember> */
-    public function getMembers(): Collection
-    {
-        return $this->members;
-    }
-
-    public function addMember(KanbanBoardMember $member): static
-    {
-        if (!$this->members->contains($member)) {
-            $this->members->add($member);
-            $member->setBoard($this);
         }
         return $this;
     }

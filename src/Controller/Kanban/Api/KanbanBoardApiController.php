@@ -3,10 +3,13 @@
 namespace App\Controller\Kanban\Api;
 
 use App\Entity\Kanban\KanbanBoard;
-use App\Entity\Kanban\KanbanBoardMember;
+use App\Entity\Kanban\Project\KanbanProject;
+use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
 use App\Enum\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanBoardRepository;
+use App\Repository\Kanban\Project\KanbanProjectRepository;
+use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -20,6 +23,8 @@ final class KanbanBoardApiController extends AbstractController
 {
     public function __construct(
         private readonly KanbanBoardRepository $boardRepo,
+        private readonly KanbanProjectRepository $projectRepo,
+        private readonly KanbanProjectUserRepository $projectUserRepo,
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $em,
     ) {
@@ -49,12 +54,18 @@ final class KanbanBoardApiController extends AbstractController
         $user = $this->getUser();
 
         $payload = json_decode($request->getContent(), true) ?? [];
+        $projectId = $payload['project_id'] ?? null;
         $title = trim($payload['title'] ?? '');
-        if ($title === '') {
-            return $this->json(['error' => 'Название обязательно.'], Response::HTTP_BAD_REQUEST);
+        if (!$projectId || $title === '') {
+            return $this->json(['error' => 'project_id и title обязательны.'], Response::HTTP_BAD_REQUEST);
         }
 
-        $board = $this->kanbanService->createBoard($title, $user);
+        $project = $this->projectRepo->find($projectId);
+        if (!$project instanceof KanbanProject) {
+            return $this->json(['error' => 'Проект не найден.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $board = $this->kanbanService->createBoard($project, $title, $user);
 
         return $this->json([
             'id' => $board->getId(),
@@ -181,6 +192,11 @@ final class KanbanBoardApiController extends AbstractController
 
         $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
 
+        $project = $board->getProject();
+        if (!$project) {
+            return $this->json(['error' => 'Проект не найден.'], Response::HTTP_NOT_FOUND);
+        }
+
         $payload = json_decode($request->getContent(), true) ?? [];
         $userId = $payload['user_id'] ?? null;
         $role = KanbanBoardMemberRole::tryFrom($payload['role'] ?? '');
@@ -190,21 +206,26 @@ final class KanbanBoardApiController extends AbstractController
         }
 
         $targetUser = $this->em->getRepository(User::class)->find($userId);
-        if (!$targetUser) {
+        if (!$targetUser instanceof User) {
             return $this->json(['error' => 'Пользователь не найден.'], Response::HTTP_NOT_FOUND);
         }
 
-        $member = new KanbanBoardMember();
-        $member->setBoard($board);
-        $member->setUser($targetUser);
-        $member->setRole($role);
+        $existing = $this->projectUserRepo->findByProjectAndUser($project, $targetUser);
+        if ($existing) {
+            return $this->json(['error' => 'Пользователь уже добавлен в проект.'], Response::HTTP_CONFLICT);
+        }
 
-        $this->em->persist($member);
+        $projectUser = new KanbanProjectUser();
+        $projectUser->setKanbanProject($project);
+        $projectUser->setUser($targetUser);
+        $projectUser->setRole($role);
+
+        $this->em->persist($projectUser);
         $this->em->flush();
 
         return $this->json([
-            'id' => $member->getId(),
-            'role' => $member->getRole()->value,
+            'id' => $projectUser->getId(),
+            'role' => $projectUser->getRole()->value,
         ], Response::HTTP_CREATED);
     }
 }
