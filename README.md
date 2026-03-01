@@ -108,3 +108,39 @@ apt-get install -y wget fontconfig libxrender1 xfonts-75dpi xfonts-base
 wget https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.buster_amd64.deb
 
 dpkg -i wkhtmltox_0.12.6-1.buster_amd64.deb
+
+// ====================================
+
+    Grafana.
+    --------
+Run docker:
+$ docker compose -f docker-compose.monitoring.yml up
+
+Дальше по шагам:
+1. Добавить источник данных Prometheus
+   Слева нажмите ☰ (меню).
+   Выберите Connections → Data sources (или Administration → Data sources).
+   Нажмите Add data source.
+   Выберите Prometheus.
+   В поле URL введите: http://prometheus:9090 (остальное можно не менять).
+   Внизу нажмите Save & test — должно появиться зелёное сообщение «Data source is working».
+   Если тест не прошёл — проверьте, что контейнеры мониторинга запущены:
+   docker compose -f docker-compose.monitoring.yml ps.
+
+2. Посмотреть метрики
+   Быстрый способ — Explore:
+   Слева ☰ → Explore (иконка компаса).
+   Вверху в выпадающем списке выберите Prometheus.
+   В поле запроса введите, например: nginx_http_requests_total и нажмите Run query (или Ctrl+Enter).
+   Ниже появятся график или таблица (если есть трафик к приложению).
+   Другие примеры запросов:
+   rate(nginx_http_requests_total[5m]) — запросов в секунду (Nginx).
+   pg_stat_database_numbackends — число соединений с БД.
+
+-------------------------------
+   Удобный способ — готовые дашборды:
+   Слева ☰ → Dashboards → New → Import.
+   В поле Import via dashboard ID введите: 9628 → Load.
+   Выберите источник Prometheus → Import — откроется дашборд по PostgreSQL (соединения, транзакции и т.д.).
+   Чтобы добавить дашборд по Nginx: снова Dashboards → New → Import → введите 12708 → Load → Prometheus → Import.
+   После этого в меню Dashboards будут ваши дашборды — открывайте их и смотрите графики.
