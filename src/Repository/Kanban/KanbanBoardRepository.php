@@ -3,6 +3,7 @@
 namespace App\Repository\Kanban;
 
 use App\Entity\Kanban\KanbanBoard;
+use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\User\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -31,6 +32,21 @@ class KanbanBoardRepository extends ServiceEntityRepository
             ->orWhere('pu.id IS NOT NULL')
             ->setParameter('user', $user)
             ->orderBy('b.updatedAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Доски проекта (для табов переключения).
+     *
+     * @return KanbanBoard[]
+     */
+    public function findByProject(KanbanProject $project): array
+    {
+        return $this->createQueryBuilder('b')
+            ->where('b.project = :project')
+            ->setParameter('project', $project)
+            ->orderBy('b.id', 'ASC')
             ->getQuery()
             ->getResult();
     }

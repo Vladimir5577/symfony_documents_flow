@@ -1,17 +1,130 @@
 {% extends 'base_dashboard.html.twig' %}
 
-{% block title %}Редактирование пользователей проекта{% endblock %}
+{% block title %}Редактирование участников: {{ project.name }}{% endblock %}
 
 {% block sidebar_list %}
     {% include 'sidebar/sidebar_list.html.twig' %}
 {% endblock %}
 
 {% block main %}
+    <link rel="stylesheet" href="/front_end/assets/compiled/css/choices.min.css">
 
-    <h1>Редактирование пользователей проекта</h1>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">Редактирование участников проекта</h1>
+        <a href="{{ path('app_kanban_project', {id: project.id}) }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>
+            К проекту
+        </a>
+    </div>
 
-    <section class="section">
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title mb-0">{{ project.name }}</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('app_kanban_edit_project_members', {id: project.id}) }}" method="post" class="form">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_project_members') }}">
 
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                {% endfor %}
+
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                    </div>
+                                {% endfor %}
+
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="project_member_users">Участники проекта</label>
+                                            <div id="project_member_users_trigger" style="cursor: pointer;" title="Нажмите, чтобы выбрать по организациям">
+                                                <select id="project_member_users" class="form-control" name="user_ids[]" multiple>
+                                                    {% if users is defined and users|length > 0 %}
+                                                        {% for user in users %}
+                                                            <option value="{{ user.id }}" selected>
+                                                                {{ user.lastname }} {{ user.firstname }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
+                                                            </option>
+                                                        {% endfor %}
+                                                    {% endif %}
+                                                </select>
+                                            </div>
+                                            <small class="text-muted">Нажмите на поле или кнопку ниже, чтобы выбрать участников по организациям</small>
+                                            <div class="mt-1">
+                                                <button type="button"
+                                                        class="btn btn-outline-secondary btn-sm"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#organizationUserModal">
+                                                    Выбрать по организациям
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 d-flex justify-content-end">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить участников</button>
+                                        <a href="{{ path('app_kanban_project', {id: project.id}) }}" class="btn btn-light-secondary me-1 mb-1">Отмена</a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </section>
 
+    <div id="org-tree-data" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}">
+        {% if organizations is defined and organizations|length > 0 %}
+            {% for org in organizations %}
+                {% if org %}
+                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    {% include 'document/partials/_organization_user_modal.html.twig' %}
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const usersSelect = document.getElementById('project_member_users');
+            const usersTrigger = document.getElementById('project_member_users_trigger');
+            let choicesInstance = null;
+
+            if (usersSelect && window.Choices) {
+                choicesInstance = new Choices(usersSelect, {
+                    removeItemButton: true,
+                    searchEnabled: false,
+                    itemSelectText: '',
+                    noChoicesText: 'Нажмите на поле или «Выбрать по организациям»',
+                });
+            }
+
+            if (usersTrigger) {
+                usersTrigger.addEventListener('click', function (e) {
+                    if (e.target.closest('.choices__button') || e.target.closest('.choices__item')) {
+                        return;
+                    }
+                    e.preventDefault();
+                    var modalEl = document.getElementById('organizationUserModal');
+                    if (modalEl) {
+                        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                        modal.show();
+                    }
+                });
+            }
+
+            window.__projectFlowOrgUserModalChoices = choicesInstance;
+        });
+    </script>
+    {% include 'kanban/partials/_organization_user_modal_script.html.twig' %}
 {% endblock %}

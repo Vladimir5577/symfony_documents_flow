@@ -63,22 +63,22 @@
                         </div>
 
                         {# Блок создания досок #}
-                        <div class="mb-4">
-                            <label class="form-label fw-semibold">Доски проекта</label>
-                            <p class="text-muted small">Настройте доски и столбцы. Можно редактировать названия, удалять или добавлять столбцы и доски.</p>
+                        <div class="mb-4 p-3 border rounded-3 boards-section-block">
+                            <label class="form-label fw-semibold text-body">Доски проекта</label>
+                            <p class="text-body small mb-3">Настройте доски и столбцы. Можно редактировать названия, удалять или добавлять столбцы и доски.</p>
                             <div id="boards-container">
-                                <div class="board-block card mb-3" data-board-index="0">
+                                <div class="board-block card mb-3 border shadow-sm board-card-block" data-board-index="0">
                                     <div class="card-body">
                                         <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <h5 class="card-title mb-0 h6">Доска 1</h5>
+                                            <h5 class="card-title mb-0 h6 text-body">Доска 1</h5>
                                             <button type="button" class="btn btn-outline-danger btn-sm remove-board-btn" title="Удалить доску">Удалить доску</button>
                                         </div>
                                         <div class="mb-3">
-                                            <label class="form-label small">Название доски</label>
+                                            <label class="form-label small text-body">Название доски</label>
                                             <input type="text" class="form-control form-control-sm board-title" name="boards[0][title]" value="Главная доска" maxlength="200" placeholder="Название доски">
                                         </div>
                                         <div class="board-columns">
-                                            <label class="form-label small">Столбцы</label>
+                                            <label class="form-label small text-body">Столбцы</label>
                                             <div class="column-rows">
                                                 <div class="input-group input-group-sm mb-2 column-row">
                                                     <input type="text" class="form-control" name="boards[0][columns][]" value="Backlog" maxlength="200" placeholder="Название столбца">
@@ -97,12 +97,12 @@
                                                     <button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
                                                 </div>
                                             </div>
-                                            <button type="button" class="btn btn-outline-primary btn-sm add-column-btn">Добавить столбец</button>
+                                            <button type="button" class="btn btn-primary btn-sm add-column-btn">Добавить столбец</button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            <button type="button" id="add-board-btn" class="btn btn-outline-secondary btn-sm">
+                            <button type="button" id="add-board-btn" class="btn btn-primary btn-sm mt-2">
                                 <i class="bi bi-plus-lg me-1"></i>
                                 Добавить доску
                             </button>
@@ -130,6 +130,10 @@
 
     {% include 'document/partials/_organization_user_modal.html.twig' %}
 
+    <style>
+        .boards-section-block { border-color: var(--bs-border-color, rgba(0,0,0,.175)); }
+        .board-card-block .card-body { color: var(--bs-body-color); }
+    </style>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             var usersSelect = document.getElementById('document_users');
