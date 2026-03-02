@@ -262,6 +262,7 @@ var KanbanApp = (function () {
                     }).then(function (data) {
                         var card = createCardElement(data);
                         body.appendChild(card);
+                        initCardSubtasksWidgets();
                         updateColumnCounts();
                     }).catch(function (err) {
                         showToast(err.message);
@@ -333,6 +334,21 @@ var KanbanApp = (function () {
             html += '<div class="kanban-card-description">' + escapeHtml(desc) + "</div>";
         }
         html += buildCardMeta(data);
+        html += '<div class="card-subtasks card-subtasks-collapsed" data-card-id="' + data.id + '" data-subtasks-host">' +
+            '<div class="card-subtasks-header">' +
+            '<div class="card-subtasks-header-main">' +
+            '<button type="button" class="card-subtasks-toggle" aria-label="Показать/скрыть подзадачи"><i class="bi bi-chevron-right"></i></button>' +
+            '<span class="card-subtasks-label">Подзадачи</span>' +
+            '<span class="card-subtasks-counter text-muted">(0/0)</span>' +
+            '</div>' +
+            (config.canEdit ? '<button type="button" class="btn btn-sm btn-outline-secondary card-subtasks-header-add" title="Добавить подзадачу"><i class="bi bi-plus-lg"></i></button>' : '') +
+            '</div>' +
+            '<div class="card-subtasks-body">' +
+            '<div class="card-subtasks-input-wrap mt-1" style="display:none;">' +
+            '<div class="input-group input-group-sm"><input type="text" class="form-control card-subtasks-input" placeholder="Новая подзадача..."></div>' +
+            '</div>' +
+            '<div class="card-subtasks-items"></div>' +
+            '</div></div>';
         card.innerHTML = html;
 
         return card;
@@ -473,6 +489,8 @@ var KanbanApp = (function () {
                 if (!card || e.target.closest(".kanban-add-btn") || e.target.closest(".kanban-new-card-input")) return;
                 // Ignore clicks on card menu button and dropdown
                 if (e.target.closest(".kanban-card-menu-btn") || e.target.closest(".kanban-card-dropdown")) return;
+                // Ignore clicks on card subtasks (toggle, add, checkbox) so they don't open sidebar
+                if (e.target.closest(".card-subtasks")) return;
                 var cardId = card.getAttribute("data-card-id");
                 if (cardId) openSidebar(cardId);
             });
@@ -534,9 +552,11 @@ var KanbanApp = (function () {
         initDescription();
         initPriority();
         initChecklist();
+        initCardSubtasksWidgets();
         initAttachments();
         initDueAt();
         initAssignees();
+        initAssignNewUserModal();
         initLabels();
         initBorderColor();
     }
@@ -609,8 +629,8 @@ var KanbanApp = (function () {
             renderComments(data.comments || []);
             startCommentPolling(cardId);
 
-            // Checklist
-            renderChecklist(data.checklist || []);
+            // Checklist (подзадачи): синхронизация сайдбар + блок на карточке
+            refreshChecklistViews(currentCardId, data.checklist || []);
 
             // Attachments
             renderAttachments(data.attachments || []);
@@ -911,7 +931,48 @@ var KanbanApp = (function () {
         });
     }
 
-    // ── Checklist ──
+    // ── Checklist (подзадачи): один источник — currentCardData.checklist / API; синхронизация карточка + сайдбар ──
+
+    function renderCardSubtasks(cardId, items) {
+        var block = document.querySelector('.card-subtasks[data-card-id="' + cardId + '"]');
+        if (!block) return;
+        var counterEl = block.querySelector(".card-subtasks-counter");
+        var itemsEl = block.querySelector(".card-subtasks-items");
+        var barEl = block.querySelector(".card-subtasks-progress-fill");
+        if (!itemsEl) return;
+
+        items = items || [];
+        var done = items.filter(function (c) { return c.isCompleted; }).length;
+        var total = items.length;
+        if (counterEl) counterEl.textContent = total ? "(" + done + "/" + total + ")" : "(0/0)";
+        if (barEl) {
+            var percent = total ? (done / total) * 100 : 0;
+            barEl.style.width = percent + "%";
+        }
+
+        itemsEl.innerHTML = "";
+        items.forEach(function (item) {
+            var row = document.createElement("div");
+            row.className = "form-check card-subtasks-item" + (item.isCompleted ? " card-subtasks-item-completed" : "");
+            row.setAttribute("data-checklist-id", item.id);
+            row.innerHTML =
+                '<input class="form-check-input card-subtasks-checkbox" type="checkbox"' + (item.isCompleted ? " checked" : "") + ">" +
+                '<label class="form-check-label ms-1 card-subtasks-text">' + escapeHtml(item.title) + "</label>";
+            itemsEl.appendChild(row);
+        });
+    }
+
+    function refreshChecklistViews(cardId, items) {
+        items = items || [];
+        if (String(cardId) === String(currentCardId)) {
+            if (currentCardData) currentCardData.checklist = items;
+            renderChecklist(items);
+        }
+        renderCardSubtasks(cardId, items);
+        if (currentCardData && currentCardData.id === parseInt(cardId, 10)) {
+            updateCardOnBoard(currentCardData);
+        }
+    }
 
     function renderChecklist(items) {
         var container = document.getElementById("checklist-items");
@@ -945,12 +1006,11 @@ var KanbanApp = (function () {
                         method: "PATCH",
                         body: JSON.stringify({ isCompleted: checkbox.checked })
                     }).then(function () {
-                        // Sync currentCardData.checklist
                         if (currentCardData && currentCardData.checklist) {
                             var ci = currentCardData.checklist.find(function (c) { return c.id === item.id; });
                             if (ci) ci.isCompleted = checkbox.checked;
                         }
-                        refreshChecklistProgress();
+                        refreshChecklistViews(currentCardId, currentCardData ? currentCardData.checklist : []);
                     }).catch(function (err) {
                         checkbox.checked = !checkbox.checked;
                         if (label) {
@@ -968,11 +1028,9 @@ var KanbanApp = (function () {
                     apiFetch("/api/kanban/cards/" + currentCardId + "/checklist/" + item.id, {
                         method: "DELETE"
                     }).then(function () {
-                        row.remove();
-                        if (currentCardData && currentCardData.checklist) {
-                            currentCardData.checklist = currentCardData.checklist.filter(function (c) { return c.id !== item.id; });
-                        }
-                        refreshChecklistProgress();
+                        var next = (currentCardData && currentCardData.checklist) ? currentCardData.checklist.filter(function (c) { return c.id !== item.id; }) : [];
+                        if (currentCardData) currentCardData.checklist = next;
+                        refreshChecklistViews(currentCardId, next);
                     }).catch(function (err) { showToast(err.message); });
                 });
             }
@@ -1011,9 +1069,7 @@ var KanbanApp = (function () {
                         currentCardData.checklist = currentCardData.checklist || [];
                         currentCardData.checklist.push(newItem);
                     }
-                    // Re-render checklist from currentCardData
-                    renderChecklist(currentCardData ? currentCardData.checklist : []);
-                    refreshChecklistProgress();
+                    refreshChecklistViews(currentCardId, currentCardData ? currentCardData.checklist : []);
                 }).catch(function (err) { showToast(err.message); });
             }
 
@@ -1027,7 +1083,117 @@ var KanbanApp = (function () {
 
     function refreshChecklistProgress() {
         if (!currentCardId || !currentCardData) return;
-        updateCardOnBoard(currentCardData);
+        refreshChecklistViews(currentCardId, currentCardData.checklist || []);
+    }
+
+    function fetchCardChecklist(cardId) {
+        return apiFetch("/api/kanban/cards/" + cardId).then(function (data) {
+            return data.checklist || [];
+        });
+    }
+
+    function initCardSubtasksWidgets() {
+        document.querySelectorAll(".card-subtasks[data-card-id]").forEach(function (block) {
+            if (block.__cardSubtasksBound) return;
+            block.__cardSubtasksBound = true;
+            var cardId = block.getAttribute("data-card-id");
+            var header = block.querySelector(".card-subtasks-header");
+            var toggleBtn = block.querySelector(".card-subtasks-toggle");
+            var addBtn = block.querySelector(".card-subtasks-header-add");
+            var inputWrap = block.querySelector(".card-subtasks-input-wrap");
+            var input = block.querySelector(".card-subtasks-input");
+            var itemsEl = block.querySelector(".card-subtasks-items");
+
+            function toggleCollapsed() {
+                block.classList.toggle("card-subtasks-collapsed");
+                var icon = toggleBtn && toggleBtn.querySelector("i");
+                if (icon) {
+                    icon.classList.toggle("bi-chevron-right", block.classList.contains("card-subtasks-collapsed"));
+                    icon.classList.toggle("bi-chevron-down", !block.classList.contains("card-subtasks-collapsed"));
+                }
+            }
+
+            if (header) {
+                header.addEventListener("click", function (ev) {
+                    if (ev.target.closest(".card-subtasks-header-add") || ev.target.closest(".card-subtasks-input")) return;
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    toggleCollapsed();
+                });
+            }
+
+            if (addBtn && config.canEdit) {
+                addBtn.addEventListener("click", function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    if (!inputWrap || !input) return;
+                    if (block.classList.contains("card-subtasks-collapsed")) toggleCollapsed();
+                    inputWrap.style.display = "";
+                    input.value = "";
+                    input.focus();
+                });
+            }
+
+            if (input && inputWrap && config.canEdit) {
+                function commitSubtaskFromInput() {
+                    var title = (input.value || "").trim();
+                    if (!title) {
+                        input.value = "";
+                        inputWrap.style.display = "none";
+                        return;
+                    }
+                    input.value = "";
+                    inputWrap.style.display = "none";
+                    apiFetch("/api/kanban/cards/" + cardId + "/checklist", {
+                        method: "POST",
+                        body: JSON.stringify({ title: title })
+                    }).then(function () {
+                        return fetchCardChecklist(cardId);
+                    }).then(function (list) {
+                        refreshChecklistViews(cardId, list);
+                        if (String(cardId) === String(currentCardId) && currentCardData) currentCardData.checklist = list;
+                    }).catch(function (err) { showToast(err.message); });
+                }
+
+                input.addEventListener("keydown", function (ev) {
+                    if (ev.key === "Enter") {
+                        ev.preventDefault();
+                        commitSubtaskFromInput();
+                    } else if (ev.key === "Escape") {
+                        input.value = "";
+                        inputWrap.style.display = "none";
+                    }
+                });
+
+                input.addEventListener("blur", function () {
+                    // При потере фокуса (клик в любое место) создаём подзадачу, если что-то введено
+                    if (inputWrap.style.display === "none") return;
+                    commitSubtaskFromInput();
+                });
+            }
+
+            if (itemsEl && config.canEdit) {
+                itemsEl.addEventListener("change", function (ev) {
+                    var checkbox = ev.target;
+                    if (!checkbox || !checkbox.classList.contains("card-subtasks-checkbox")) return;
+                    var row = checkbox.closest("[data-checklist-id]");
+                    if (!row) return;
+                    var itemId = row.getAttribute("data-checklist-id");
+                    apiFetch("/api/kanban/cards/" + cardId + "/checklist/" + itemId, {
+                        method: "PATCH",
+                        body: JSON.stringify({ isCompleted: checkbox.checked })
+                    }).then(function () {
+                        return fetchCardChecklist(cardId);
+                    }).then(function (list) {
+                        refreshChecklistViews(cardId, list);
+                        if (String(cardId) === String(currentCardId) && currentCardData) currentCardData.checklist = list;
+                    }).catch(function (err) {
+                        checkbox.checked = !checkbox.checked;
+                        showToast(err.message);
+                    });
+                });
+            }
+        });
     }
 
     // ── Attachments ──
@@ -1151,6 +1317,29 @@ var KanbanApp = (function () {
                 searchUsers(searchInput.value);
             }, 300));
         }
+    }
+
+    function initAssignNewUserModal() {
+        var addNewBtn = document.getElementById("assignee-add-new-user-btn");
+        var modalEl = document.getElementById("assignNewUserOrgModal");
+        if (!addNewBtn || !modalEl) return;
+
+        window.__kanbanRefreshAssignees = function (assignees) {
+            currentAssigneeIds = (assignees || []).map(function (a) { return a.id; });
+            if (currentCardData) currentCardData.assignees = assignees;
+            renderAssignees(assignees || []);
+            setSaveStatus("saved");
+        };
+        window.__kanbanShowToast = showToast;
+
+        addNewBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var dropdown = document.getElementById("assignee-dropdown");
+            if (dropdown) dropdown.style.display = "none";
+            window.__currentCardIdForAssignNewUser = currentCardId;
+            var modal = window.bootstrap && bootstrap.Modal.getOrCreateInstance(modalEl);
+            if (modal) modal.show();
+        });
     }
 
     function searchUsers(query) {

@@ -81,19 +81,19 @@
                                             <label class="form-label small text-body">Столбцы</label>
                                             <div class="column-rows">
                                                 <div class="input-group input-group-sm mb-2 column-row">
-                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="Backlog" maxlength="200" placeholder="Название столбца">
+                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="Запланированные" maxlength="200" placeholder="Название столбца">
                                                     <button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
                                                 </div>
                                                 <div class="input-group input-group-sm mb-2 column-row">
-                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="To Do" maxlength="200" placeholder="Название столбца">
+                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="К выполнению" maxlength="200" placeholder="Название столбца">
                                                     <button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
                                                 </div>
                                                 <div class="input-group input-group-sm mb-2 column-row">
-                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="In Progress" maxlength="200" placeholder="Название столбца">
+                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="В работе" maxlength="200" placeholder="Название столбца">
                                                     <button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
                                                 </div>
                                                 <div class="input-group input-group-sm mb-2 column-row">
-                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="Done" maxlength="200" placeholder="Название столбца">
+                                                    <input type="text" class="form-control" name="boards[0][columns][]" value="Сделаны" maxlength="200" placeholder="Название столбца">
                                                     <button type="button" class="btn btn-outline-secondary remove-column-btn" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
                                                 </div>
                                             </div>
@@ -168,7 +168,7 @@
             (function () {
                 var container = document.getElementById('boards-container');
                 var addBoardBtn = document.getElementById('add-board-btn');
-                var defaultColumns = ['Backlog', 'To Do', 'In Progress', 'Done'];
+                var defaultColumns = ['Запланированные', 'К выполнению', 'В работе', 'Сделаны'];
 
                 function getBoardBlocks() {
                     return Array.from(container.querySelectorAll('.board-block'));

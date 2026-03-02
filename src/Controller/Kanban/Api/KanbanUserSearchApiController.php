@@ -38,7 +38,7 @@ final class KanbanUserSearchApiController extends AbstractController
             $user = $this->getUser();
             $firstBoard = $project->getBoards()->first();
             if ($firstBoard) {
-                $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::VIEWER);
+                $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
             } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
                 return $this->json([]);
             }

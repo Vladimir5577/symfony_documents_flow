@@ -2,6 +2,7 @@
 
 namespace App\Repository\Kanban;
 
+use App\Entity\Kanban\KanbanCard;
 use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\User\User;
@@ -49,6 +50,48 @@ class KanbanBoardRepository extends ServiceEntityRepository
             ->orderBy('b.id', 'ASC')
             ->getQuery()
             ->getResult();
+    }
+
+    /**
+     * Доски проекта, в которых у пользователя есть назначенные карточки.
+     *
+     * @return KanbanBoard[]
+     */
+    public function findByProjectAndUserWithAssignedCards(KanbanProject $project, User $user): array
+    {
+        return $this->createQueryBuilder('b')
+            ->distinct()
+            ->innerJoin('b.columns', 'col')
+            ->innerJoin('col.cards', 'card')
+            ->innerJoin('card.assignees', 'assignee')
+            ->where('b.project = :project')
+            ->andWhere('assignee = :user')
+            ->setParameter('project', $project)
+            ->setParameter('user', $user)
+            ->orderBy('b.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Есть ли у пользователя назначенные карточки на данной доске.
+     */
+    public function userHasAssignedCardsOnBoard(KanbanBoard $board, User $user): bool
+    {
+        $result = $this->getEntityManager()->createQueryBuilder()
+            ->select('1')
+            ->from(KanbanCard::class, 'card')
+            ->innerJoin('card.column', 'col')
+            ->innerJoin('card.assignees', 'a')
+            ->where('col.board = :board')
+            ->andWhere('a = :user')
+            ->setParameter('board', $board)
+            ->setParameter('user', $user)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        return $result !== null;
     }
 
     /**

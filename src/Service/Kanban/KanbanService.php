@@ -64,7 +64,7 @@ class KanbanService
 
         $hierarchy = [
             KanbanBoardMemberRole::KANBAN_VIEWER->value => 1,
-            KanbanBoardMemberRole::KANAN_EDITOR->value => 2,
+            KanbanBoardMemberRole::KANBAN_EDITOR->value => 2,
             KanbanBoardMemberRole::KANBAN_ADMIN->value => 3,
         ];
 
@@ -120,7 +120,7 @@ class KanbanService
             $member = new KanbanProjectUser();
             $member->setKanbanProject($project);
             $member->setUser($memberUser);
-            $member->setRole(KanbanBoardMemberRole::KANAN_EDITOR);
+            $member->setRole(KanbanBoardMemberRole::KANBAN_EDITOR);
             $this->em->persist($member);
         }
 

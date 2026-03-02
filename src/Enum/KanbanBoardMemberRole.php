@@ -7,7 +7,7 @@ namespace App\Enum;
 enum KanbanBoardMemberRole: string
 {
     case KANBAN_ADMIN = 'KANBAN_ADMIN';
-    case KANAN_EDITOR = 'KANBAN_EDITOR';
+    case KANBAN_EDITOR = 'KANBAN_EDITOR';
 
     case KANBAN_VIEWER = 'KANBAN_VIEWER';
 
@@ -15,7 +15,7 @@ enum KanbanBoardMemberRole: string
     {
         return match ($this) {
             self::KANBAN_ADMIN => 'Администратор канбан',
-            self::KANAN_EDITOR => 'Редактор канбан',
+            self::KANBAN_EDITOR => 'Редактор канбан',
             self::KANBAN_VIEWER => 'Наблюдатель канбан',
         };
     }

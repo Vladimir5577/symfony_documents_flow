@@ -826,8 +826,7 @@
         }
 
         .task-subtasks-list {
-            max-height: 60vh;
-            overflow-y: auto;
+            /* Показываем все подзадачи без внутреннего скролла */
         }
 
         .task-subtasks-empty {
@@ -894,6 +893,22 @@
             gap: 0.25rem;
         }
 
+        .card-subtasks-header-add {
+            margin-left: 0.25rem;
+        }
+
+        .card-subtasks-toggle {
+            border: none;
+            background: transparent;
+            padding: 0;
+            margin-right: 0.15rem;
+            color: var(--bs-secondary-color);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+
         .card-subtasks-label {
             font-weight: 500;
             margin-right: 0.25rem;
@@ -901,6 +916,26 @@
 
         .card-subtasks-counter {
             font-size: 0.75rem;
+        }
+
+        .card-subtasks-progress {
+            margin-top: 0.25rem;
+        }
+
+        .card-subtasks-progress-track {
+            position: relative;
+            height: 4px;
+            border-radius: 999px;
+            background: var(--bs-border-color, #dee2e6);
+            overflow: hidden;
+        }
+
+        .card-subtasks-progress-fill {
+            height: 100%;
+            width: 0;
+            background: var(--bs-primary);
+            border-radius: 999px;
+            transition: width 0.2s ease-in-out;
         }
 
         .card-subtasks-body {
@@ -911,8 +946,6 @@
             display: flex;
             flex-direction: column;
             gap: 0.1rem;
-            max-height: 7rem;
-            overflow-y: auto;
         }
 
         .card-subtasks-item .card-subtasks-text {
@@ -1007,11 +1040,6 @@
                         <i class="bi bi-arrow-left"></i> Все проекты
                     </a>
                 </div>
-                {% if memberRole.value != 'VIEWER' %}
-                <button type="button" class="btn btn-sm btn-outline-primary" id="add-column-btn">
-                    <i class="bi bi-plus-lg me-1"></i>Колонка
-                </button>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -1074,19 +1102,19 @@
                             <label class="form-label">Столбцы</label>
                             <div id="create-board-columns" class="column-rows">
                                 <div class="input-group input-group-sm mb-2 column-row">
-                                    <input type="text" class="form-control" name="columns[]" value="Backlog" maxlength="200" placeholder="Название столбца">
+                                    <input type="text" class="form-control" name="columns[]" value="Запланированные" maxlength="200" placeholder="Название столбца">
                                     <button type="button" class="btn btn-outline-secondary create-board-remove-column" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
                                 </div>
                                 <div class="input-group input-group-sm mb-2 column-row">
-                                    <input type="text" class="form-control" name="columns[]" value="To Do" maxlength="200" placeholder="Название столбца">
+                                    <input type="text" class="form-control" name="columns[]" value="К выполнению" maxlength="200" placeholder="Название столбца">
                                     <button type="button" class="btn btn-outline-secondary create-board-remove-column" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
                                 </div>
                                 <div class="input-group input-group-sm mb-2 column-row">
-                                    <input type="text" class="form-control" name="columns[]" value="In Progress" maxlength="200" placeholder="Название столбца">
+                                    <input type="text" class="form-control" name="columns[]" value="В работе" maxlength="200" placeholder="Название столбца">
                                     <button type="button" class="btn btn-outline-secondary create-board-remove-column" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
                                 </div>
                                 <div class="input-group input-group-sm mb-2 column-row">
-                                    <input type="text" class="form-control" name="columns[]" value="Done" maxlength="200" placeholder="Название столбца">
+                                    <input type="text" class="form-control" name="columns[]" value="Сделаны" maxlength="200" placeholder="Название столбца">
                                     <button type="button" class="btn btn-outline-secondary create-board-remove-column" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
                                 </div>
                             </div>
@@ -1101,6 +1129,19 @@
             </div>
         </div>
     </div>
+
+    {# Данные дерева организаций для модалки «Добавить пользователя» #}
+    <div id="org-tree-data-assign-new" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}" class="d-none">
+        {% if organizations is defined and organizations|length > 0 %}
+            {% for org in organizations %}
+                {% if org %}
+                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% include 'kanban/partials/_assign_new_user_org_modal.html.twig' %}
+    {% include 'kanban/partials/_assign_new_user_org_modal_script.html.twig' %}
     {% endif %}
 
     <section class="page-content">
@@ -1189,11 +1230,57 @@
                             <span class="text-muted"><i class="bi bi-chat-dots"></i> {{ card.comments|length }}</span>
                             {% endif %}
                         </div>
+                        {% set _subtasksDone = card.checklistItems|filter(ci => ci.completed)|length %}
+                        {% set _subtasksTotal = card.checklistItems|length %}
+                        {% set _subtasksPercent = _subtasksTotal > 0 ? (_subtasksDone / _subtasksTotal * 100) : 0 %}
+                        <div class="card-subtasks card-subtasks-collapsed" data-card-id="{{ card.id }}" data-subtasks-host>
+                            <div class="card-subtasks-header">
+                                <div class="card-subtasks-header-main">
+                                    <button type="button" class="card-subtasks-toggle" aria-label="Показать/скрыть подзадачи">
+                                        <i class="bi bi-chevron-right"></i>
+                                    </button>
+                                    <span class="card-subtasks-label">Подзадачи</span>
+                                    <span class="card-subtasks-counter text-muted">({{ _subtasksDone }}/{{ _subtasksTotal }})</span>
+                                </div>
+                                {% if memberRole.value != 'VIEWER' %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary card-subtasks-header-add" title="Добавить подзадачу" aria-label="Добавить подзадачу">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            <div class="card-subtasks-progress">
+                                <div class="card-subtasks-progress-track">
+                                    <div class="card-subtasks-progress-fill" style="width: {{ _subtasksPercent }}%;"></div>
+                                </div>
+                            </div>
+                            <div class="card-subtasks-body">
+                                <div class="card-subtasks-input-wrap mt-1" style="display: none;">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control card-subtasks-input" placeholder="Новая подзадача...">
+                                    </div>
+                                </div>
+                                <div class="card-subtasks-items">
+                                    {% for ci in card.checklistItems %}
+                                    <div class="form-check card-subtasks-item {{ ci.completed ? 'card-subtasks-item-completed' : '' }}" data-checklist-id="{{ ci.id }}">
+                                        <input class="form-check-input card-subtasks-checkbox" type="checkbox" {{ ci.completed ? 'checked' : '' }}>
+                                        <label class="form-check-label ms-1 card-subtasks-text">{{ ci.title }}</label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
             </div>
             {% endfor %}
+            {% if memberRole.value != 'VIEWER' %}
+            <div class="kanban-add-column-wrap d-flex align-items-start flex-shrink-0 pt-1">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="add-column-btn">
+                    <i class="bi bi-plus-lg me-1"></i>Колонка
+                </button>
+            </div>
+            {% endif %}
         </div>
     </section>
 
@@ -1268,11 +1355,12 @@
                             <h6 class="mb-0">Подзадачи</h6>
                             {% if memberRole.value != 'VIEWER' %}
                             <button type="button" class="btn btn-sm btn-outline-primary" id="add-checklist-btn">
-                                <i class="bi bi-plus-lg"></i> Добавить
+                                <i class="bi bi-plus-lg"></i>
+                                <span class="d-none d-sm-inline">Добавить подзадачу</span>
                             </button>
                             {% endif %}
                         </div>
-                        <div id="checklist-items"></div>
+                        <div class="task-subtasks-list" id="checklist-items"></div>
                     </div>
                 </div>
 
@@ -1322,7 +1410,14 @@
                                     Назначить
                                 </button>
                                 <div id="assignee-dropdown" class="dropdown-menu p-2" style="display:none;min-width:220px;position:absolute;top:100%;left:0;z-index:200;">
-                                    <input type="text" id="assignee-search" class="form-control form-control-sm mb-2" placeholder="Поиск...">
+                                    <div class="d-flex gap-1 mb-2 align-items-center">
+                                        <input type="text" id="assignee-search" class="form-control form-control-sm flex-grow-1" placeholder="Поиск...">
+                                        {% if board.project is defined and board.project %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0" id="assignee-add-new-user-btn" title="Добавить пользователя в проект и назначить на задачу">
+                                            <i class="bi bi-person-plus"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
                                     <div id="assignee-results" style="max-height:160px;overflow-y:auto;"></div>
                                 </div>
                                 {% endif %}

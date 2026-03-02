@@ -59,7 +59,7 @@ final class ProjectKanbanController extends AbstractController
     }
 
     #[Route('/kanban_board/{id}', name: 'app_kanban_board')]
-    public function kanbanBoard(int $id): Response
+    public function kanbanBoard(int $id, OrganizationRepository $organizationRepository): Response
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -73,9 +73,35 @@ final class ProjectKanbanController extends AbstractController
 
         $memberRole = $this->kanbanService->getMemberRole($board, $user);
 
+        if ($memberRole !== KanbanBoardMemberRole::KANBAN_ADMIN && !$this->boardRepo->userHasAssignedCardsOnBoard($board, $user)) {
+            throw $this->createAccessDeniedException('Нет доступа к этой доске: на вас не назначены задачи.');
+        }
+
         $projectBoards = [];
+        $organizations = [];
         if ($board->getProject() !== null) {
-            $projectBoards = $this->boardRepo->findByProject($board->getProject());
+            $project = $board->getProject();
+            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
+                $projectBoards = $this->boardRepo->findByProject($project);
+            } else {
+                $projectBoards = $this->boardRepo->findByProjectAndUserWithAssignedCards($project, $user);
+            }
+            $isAdmin = $this->isGranted('ROLE_ADMIN');
+            $userOrganization = $user->getOrganization();
+            $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
+            $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+            foreach ($organizationTree as $org) {
+                $loadedOrg = $organizationRepository->findWithChildren($org->getId());
+                if ($loadedOrg) {
+                    $organizations[] = $loadedOrg;
+                }
+            }
+            if ($organizations === [] && $userOrganization) {
+                $loadedOrg = $organizationRepository->findWithChildren($userOrganization->getId());
+                if ($loadedOrg) {
+                    $organizations[] = $loadedOrg;
+                }
+            }
         }
 
         return $this->render('kanban/kanban_board.html.twig', [
@@ -84,6 +110,7 @@ final class ProjectKanbanController extends AbstractController
             'memberRole' => $memberRole,
             'currentUser' => $user,
             'projectBoards' => $projectBoards,
+            'organizations' => $organizations,
         ]);
     }
 
@@ -100,7 +127,7 @@ final class ProjectKanbanController extends AbstractController
 
         $firstBoard = $project->getBoards()->first();
         if ($firstBoard) {
-            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANAN_EDITOR);
+            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
@@ -308,7 +335,7 @@ final class ProjectKanbanController extends AbstractController
             $pu = new KanbanProjectUser();
             $pu->setKanbanProject($project);
             $pu->setUser($memberUser);
-            $pu->setRole($memberUser->getId() === $ownerId ? KanbanBoardMemberRole::KANBAN_ADMIN : KanbanBoardMemberRole::KANAN_EDITOR);
+            $pu->setRole($memberUser->getId() === $ownerId ? KanbanBoardMemberRole::KANBAN_ADMIN : KanbanBoardMemberRole::KANBAN_EDITOR);
             $entityManager->persist($pu);
         }
         $entityManager->flush();
@@ -450,7 +477,7 @@ final class ProjectKanbanController extends AbstractController
         }
 
         try {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANAN_EDITOR);
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
         } catch (\Exception $e) {
             return $this->json(['success' => false, 'error' => 'Недостаточно прав для редактирования.'], 403);
         }
