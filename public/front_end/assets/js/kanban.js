@@ -285,7 +285,49 @@ var KanbanApp = (function () {
         card.setAttribute("data-updated-at", data.updatedAt || "");
         card.setAttribute("data-border-color", data.borderColor || "");
 
-        var html = '<div class="kanban-card-title">' + escapeHtml(data.title) + "</div>";
+        var html = '<div class="kanban-card-header">' +
+            '<div class="kanban-card-title">' + escapeHtml(data.title) + "</div>";
+
+        if (config.canEdit) {
+            html += '<button type="button" class="kanban-card-menu-btn" data-card-id="' + data.id + '" title="Меню карточки">' +
+                '<i class="bi bi-three-dots-vertical"></i>' +
+                '</button>' +
+                '<div class="kanban-card-dropdown" data-card-id="' + data.id + '" style="display:none;">' +
+                '<button type="button" class="kanban-card-dropdown-item rename-card-btn" data-card-id="' + data.id + '">' +
+                '<i class="bi bi-pencil"></i> Переименовать' +
+                '</button>' +
+                '<div class="kanban-card-color-section">' +
+                '<div class="kanban-card-color-label">Цвет карточки:</div>' +
+                '<button type="button" class="card-color-option" data-color="" title="Без цвета">' +
+                '<span class="color-preview swatch-none">✕</span>' +
+                '</button>' +
+                '<button type="button" class="card-color-option" data-color="primary" title="Синий">' +
+                '<span class="color-preview bg-primary"></span>' +
+                '</button>' +
+                '<button type="button" class="card-color-option" data-color="success" title="Зелёный">' +
+                '<span class="color-preview bg-success"></span>' +
+                '</button>' +
+                '<button type="button" class="card-color-option" data-color="warning" title="Жёлтый">' +
+                '<span class="color-preview bg-warning"></span>' +
+                '</button>' +
+                '<button type="button" class="card-color-option" data-color="danger" title="Красный">' +
+                '<span class="color-preview bg-danger"></span>' +
+                '</button>' +
+                '<button type="button" class="card-color-option" data-color="info" title="Голубой">' +
+                '<span class="color-preview bg-info"></span>' +
+                '</button>' +
+                '<button type="button" class="card-color-option" data-color="dark" title="Тёмный">' +
+                '<span class="color-preview bg-dark"></span>' +
+                '</button>' +
+                '</div>' +
+                '<button type="button" class="kanban-card-dropdown-item delete-card-btn" data-card-id="' + data.id + '">' +
+                '<i class="bi bi-trash"></i> Удалить' +
+                '</button>' +
+                '</div>';
+        }
+
+        html += '</div>';
+
         if (data.description) {
             var desc = data.description.length > 80 ? data.description.substring(0, 80) + "..." : data.description;
             html += '<div class="kanban-card-description">' + escapeHtml(desc) + "</div>";
@@ -429,6 +471,8 @@ var KanbanApp = (function () {
             board.addEventListener("click", function (e) {
                 var card = e.target.closest(".kanban-card");
                 if (!card || e.target.closest(".kanban-add-btn") || e.target.closest(".kanban-new-card-input")) return;
+                // Ignore clicks on card menu button and dropdown
+                if (e.target.closest(".kanban-card-menu-btn") || e.target.closest(".kanban-card-dropdown")) return;
                 var cardId = card.getAttribute("data-card-id");
                 if (cardId) openSidebar(cardId);
             });

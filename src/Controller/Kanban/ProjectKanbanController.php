@@ -13,6 +13,7 @@ use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -435,5 +436,86 @@ final class ProjectKanbanController extends AbstractController
             $result[] = ['title' => $title, 'columns' => $columns];
         }
         return $result;
+    }
+
+    #[Route('/kanban/board/{id}/rename', name: 'app_kanban_board_rename', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function renameBoard(int $id, Request $request, EntityManagerInterface $entityManager): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $board = $this->boardRepo->find($id);
+        if (!$board) {
+            return $this->json(['success' => false, 'error' => 'Доска не найдена.'], 404);
+        }
+
+        try {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::EDITOR);
+        } catch (\Exception $e) {
+            return $this->json(['success' => false, 'error' => 'Недостаточно прав для редактирования.'], 403);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        $newTitle = trim($data['title'] ?? '');
+
+        if ($newTitle === '') {
+            return $this->json(['success' => false, 'error' => 'Название доски не может быть пустым.'], 400);
+        }
+
+        if (mb_strlen($newTitle) > 200) {
+            return $this->json(['success' => false, 'error' => 'Название доски слишком длинное (максимум 200 символов).'], 400);
+        }
+
+        $board->setTitle($newTitle);
+        $entityManager->flush();
+
+        return $this->json(['success' => true, 'title' => $newTitle]);
+    }
+
+    #[Route('/kanban/board/{id}/delete', name: 'app_kanban_board_delete', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function deleteBoard(int $id, EntityManagerInterface $entityManager): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $board = $this->boardRepo->find($id);
+        if (!$board) {
+            return $this->json(['success' => false, 'error' => 'Доска не найдена.'], 404);
+        }
+
+        try {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
+        } catch (\Exception $e) {
+            return $this->json(['success' => false, 'error' => 'Недостаточно прав для удаления доски.'], 403);
+        }
+
+        $project = $board->getProject();
+        $redirectUrl = null;
+
+        // Если доска принадлежит проекту, перенаправляем на другую доску проекта или на проект
+        if ($project) {
+            $projectBoards = $this->boardRepo->findByProject($project);
+            $otherBoard = null;
+            foreach ($projectBoards as $b) {
+                if ($b->getId() !== $board->getId()) {
+                    $otherBoard = $b;
+                    break;
+                }
+            }
+
+            if ($otherBoard) {
+                $redirectUrl = $this->generateUrl('app_kanban_board', ['id' => $otherBoard->getId()]);
+            } else {
+                $redirectUrl = $this->generateUrl('app_kanban_project', ['id' => $project->getId()]);
+            }
+        } else {
+            // Персональная доска - перенаправляем на список проектов
+            $redirectUrl = $this->generateUrl('app_kanban_personal_projects');
+        }
+
+        $entityManager->remove($board);
+        $entityManager->flush();
+
+        return $this->json(['success' => true, 'redirectUrl' => $redirectUrl]);
     }
 }

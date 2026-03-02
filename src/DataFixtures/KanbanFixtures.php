@@ -44,7 +44,7 @@ class KanbanFixtures extends Fixture implements FixtureGroupInterface
         $projectUser = new KanbanProjectUser();
         $projectUser->setKanbanProject($project);
         $projectUser->setUser($user);
-        $projectUser->setRole(KanbanBoardMemberRole::ADMIN);
+        $projectUser->setRole(KanbanBoardMemberRole::KANBAN_ADMIN);
         $manager->persist($projectUser);
 
         // --- Доска ---

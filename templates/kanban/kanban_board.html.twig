@@ -128,6 +128,7 @@
             margin-bottom: 0.75rem;
             cursor: grab;
             transition: box-shadow 0.05s, transform 0.1s, background 0.05s;
+            position: relative;
         }
 
         .kanban-card:hover {
@@ -151,10 +152,142 @@
             opacity: 0.5;
         }
 
+        .kanban-card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+
         .kanban-card-title {
             font-weight: 600;
-            margin-bottom: 0.5rem;
             font-size: 0.95rem;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .kanban-card-menu-btn {
+            background: transparent;
+            border: none;
+            color: var(--bs-secondary-color);
+            padding: 0.2rem;
+            margin-top: -0.2rem;
+            margin-right: -0.2rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.25rem;
+            transition: background-color 0.15s, color 0.15s;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+            line-height: 1;
+            min-width: 1.5rem;
+            min-height: 1.5rem;
+        }
+
+        .kanban-card-menu-btn:hover {
+            background-color: var(--bs-secondary-bg);
+            color: var(--bs-body-color);
+        }
+
+        .kanban-card-menu-btn i {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .kanban-card-dropdown {
+            position: fixed;
+            z-index: 1100;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 200px;
+            padding: 0.25rem 0;
+        }
+
+        .kanban-card-dropdown-item {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            border: none;
+            background: transparent;
+            color: var(--bs-body-color);
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            transition: background-color 0.15s;
+        }
+
+        .kanban-card-dropdown-item:hover {
+            background-color: var(--bs-secondary-bg);
+        }
+
+        .kanban-card-dropdown-item.delete-card-btn {
+            color: var(--bs-danger);
+        }
+
+        .kanban-card-dropdown-item.delete-card-btn:hover {
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+
+        .kanban-card-color-section {
+            padding: 0.5rem 0.75rem;
+            border-top: 1px solid var(--bs-border-color);
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+
+        .kanban-card-color-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            color: var(--bs-secondary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .card-color-option {
+            padding: 0;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 0.35rem;
+            margin-bottom: 0.35rem;
+            transition: transform 0.1s;
+        }
+
+        .card-color-option:hover {
+            transform: scale(1.15);
+        }
+
+        .card-color-option .color-preview {
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            flex-shrink: 0;
+            border: 2px solid var(--bs-border-color);
+            transition: box-shadow 0.15s;
+        }
+
+        .card-color-option:hover .color-preview {
+            box-shadow: 0 0 0 2px var(--bs-body-bg), 0 0 0 4px var(--bs-primary);
+        }
+
+        .card-color-option .color-preview.swatch-none {
+            background: var(--bs-secondary-bg);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            color: var(--bs-secondary-color);
         }
 
         .kanban-card-description {
@@ -277,6 +410,22 @@
             color: var(--bs-body-color);
         }
 
+        .task-sidebar-title-input {
+            font-size: 1.05rem !important;
+            font-weight: 700;
+            border: 1px solid transparent !important;
+            border-radius: 6px;
+            padding: 0.25rem 0.5rem !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+        .task-sidebar-title-input:focus {
+            border-color: var(--bs-primary) !important;
+            background: rgba(var(--bs-primary-rgb), 0.06) !important;
+            box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.2) !important;
+            outline: none !important;
+        }
+
         .task-sidebar-id {
             font-size: 0.875rem;
             font-weight: 500;
@@ -351,13 +500,19 @@
             padding: 0;
             list-style: none;
         }
+        .board-tab-item {
+            position: relative;
+            display: flex;
+            align-items: stretch;
+        }
         .board-tabs .board-tab-link {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
             padding: 0.5rem 1rem;
             font-size: 0.9rem;
             font-weight: 500;
             color: var(--bs-secondary-color);
-            text-decoration: none;
             border-radius: 0.375rem 0.375rem 0 0;
             margin-bottom: -1px;
             border: 1px solid transparent;
@@ -374,6 +529,85 @@
             border-bottom: none;
             margin-bottom: -4px;
             font-weight: 600;
+            padding: 0.5rem 0.75rem 0.5rem 1rem;
+        }
+        .board-tab-link-inner {
+            display: inline-flex;
+            align-items: center;
+            color: inherit;
+            text-decoration: none;
+            flex: 1;
+        }
+        .board-tab-link-inner:hover {
+            color: inherit;
+        }
+        .board-tab-input {
+            border: none;
+            background: transparent;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--bs-primary);
+            padding: 0;
+            outline: none;
+            width: 100%;
+            min-width: 100px;
+        }
+        .board-tab-input:focus {
+            outline: 1px solid var(--bs-primary);
+            padding: 0.1rem 0.25rem;
+            border-radius: 0.25rem;
+        }
+        .board-tab-menu-btn {
+            background: transparent;
+            border: none;
+            color: var(--bs-primary);
+            padding: 0.25rem 0.4rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.25rem;
+            transition: background-color 0.15s;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .board-tab-menu-btn:hover {
+            background-color: rgba(var(--bs-primary-rgb), 0.1);
+        }
+        .board-tab-dropdown {
+            position: absolute;
+            top: calc(100% + 2px);
+            right: 0;
+            z-index: 1000;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 180px;
+            padding: 0.25rem 0;
+        }
+        .board-tab-dropdown-item {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            border: none;
+            background: transparent;
+            color: var(--bs-body-color);
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            transition: background-color 0.15s;
+        }
+        .board-tab-dropdown-item:hover {
+            background-color: var(--bs-secondary-bg, rgba(0,0,0,.04));
+        }
+        .board-tab-dropdown-item.delete-board-btn {
+            color: var(--bs-danger);
+        }
+        .board-tab-dropdown-item.delete-board-btn:hover {
+            background-color: rgba(220, 53, 69, 0.1);
         }
         .board-tab-add-btn {
             flex-shrink: 0;
@@ -787,8 +1021,28 @@
     <div class="board-tabs-wrap mb-3 d-flex align-items-center flex-wrap gap-2">
         <ul class="board-tabs mb-0">
             {% for b in _project_boards %}
-            <li>
-                <a href="{{ path('app_kanban_board', {id: b.id}) }}" class="board-tab-link {{ b.id == board.id ? 'active' : '' }}">{{ b.title }}</a>
+            <li class="board-tab-item" data-board-id="{{ b.id }}">
+                <div class="board-tab-link {{ b.id == board.id ? 'active' : '' }}">
+                    <a href="{{ path('app_kanban_board', {id: b.id}) }}" class="board-tab-link-inner">
+                        <span class="board-tab-title">{{ b.title }}</span>
+                        <input type="text" class="board-tab-input" value="{{ b.title }}" style="display:none;">
+                    </a>
+                    {% if memberRole.value != 'VIEWER' and b.id == board.id %}
+                    <button type="button" class="board-tab-menu-btn" data-board-id="{{ b.id }}" title="Меню доски">
+                        <i class="bi bi-three-dots-vertical"></i>
+                    </button>
+                    {% endif %}
+                </div>
+                {% if memberRole.value != 'VIEWER' and b.id == board.id %}
+                <div class="board-tab-dropdown" data-board-id="{{ b.id }}" style="display:none;">
+                    <button type="button" class="board-tab-dropdown-item rename-board-btn" data-board-id="{{ b.id }}">
+                        <i class="bi bi-pencil"></i> Переименовать
+                    </button>
+                    <button type="button" class="board-tab-dropdown-item delete-board-btn" data-board-id="{{ b.id }}">
+                        <i class="bi bi-trash"></i> Удалить
+                    </button>
+                </div>
+                {% endif %}
             </li>
             {% endfor %}
         </ul>
@@ -872,7 +1126,46 @@
                 <div class="kanban-column-body" data-column-id="{{ column.id }}">
                     {% for card in column.cards|filter(c => not c.archived) %}
                     <div class="kanban-card" data-card-id="{{ card.id }}" data-position="{{ card.position }}" data-updated-at="{{ card.updatedAt ? card.updatedAt|date('c') : '' }}" data-border-color="{{ card.borderColor ?? '' }}">
-                        <div class="kanban-card-title">{{ card.title }}</div>
+                        <div class="kanban-card-header">
+                            <div class="kanban-card-title">{{ card.title }}</div>
+                            {% if memberRole.value != 'VIEWER' %}
+                            <button type="button" class="kanban-card-menu-btn" data-card-id="{{ card.id }}" title="Меню карточки">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <div class="kanban-card-dropdown" data-card-id="{{ card.id }}" style="display:none;">
+                                <button type="button" class="kanban-card-dropdown-item rename-card-btn" data-card-id="{{ card.id }}">
+                                    <i class="bi bi-pencil"></i> Переименовать
+                                </button>
+                                <div class="kanban-card-color-section">
+                                    <div class="kanban-card-color-label">Цвет карточки:</div>
+                                    <button type="button" class="card-color-option" data-color="" title="Без цвета">
+                                        <span class="color-preview swatch-none">✕</span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="primary" title="Синий">
+                                        <span class="color-preview bg-primary"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="success" title="Зелёный">
+                                        <span class="color-preview bg-success"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="warning" title="Жёлтый">
+                                        <span class="color-preview bg-warning"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="danger" title="Красный">
+                                        <span class="color-preview bg-danger"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="info" title="Голубой">
+                                        <span class="color-preview bg-info"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="dark" title="Тёмный">
+                                        <span class="color-preview bg-dark"></span>
+                                    </button>
+                                </div>
+                                <button type="button" class="kanban-card-dropdown-item delete-card-btn" data-card-id="{{ card.id }}">
+                                    <i class="bi bi-trash"></i> Удалить
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
                         {% if card.description %}
                         <div class="kanban-card-description">{{ card.description|length > 80 ? card.description|slice(0, 80) ~ '...' : card.description }}</div>
                         {% endif %}
@@ -926,7 +1219,7 @@
                     <div class="task-sidebar-title-block" style="width:100%">
                         <div style="width:100%">
                             {% if memberRole.value != 'VIEWER' %}
-                            <input type="text" class="form-control form-control-sm fw-bold task-sidebar-title-input mb-1" id="task-sidebar-title-input" placeholder="Название задачи" style="font-size:1.05rem;border:none;padding-left:0;box-shadow:none;background:transparent;">
+                            <input type="text" class="form-control form-control-sm fw-bold task-sidebar-title-input mb-1" id="task-sidebar-title-input" placeholder="Название задачи">
                             {% else %}
                             <h5 class="task-sidebar-title" id="task-sidebar-title-input" style="pointer-events:none"></h5>
                             {% endif %}
@@ -1026,7 +1319,7 @@
                                 <div id="assignees-chips" class="d-flex flex-wrap gap-1"></div>
                                 {% if memberRole.value != 'VIEWER' %}
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="assignee-add-btn" title="Добавить исполнителя" style="padding:0.1rem 0.4rem;font-size:0.8rem;">
-                                    <i class="bi bi-plus-lg"></i>
+                                    Назначить
                                 </button>
                                 <div id="assignee-dropdown" class="dropdown-menu p-2" style="display:none;min-width:220px;position:absolute;top:100%;left:0;z-index:200;">
                                     <input type="text" id="assignee-search" class="form-control form-control-sm mb-2" placeholder="Поиск...">
@@ -1126,6 +1419,433 @@
                 canEdit: {{ memberRole.value != 'VIEWER' ? 'true' : 'false' }},
                 currentUserId: {{ currentUser.id }},
                 currentUserName: '{{ currentUser.firstname }} {{ currentUser.lastname }}'
+            });
+
+            // Board tabs menu functionality
+            var currentOpenDropdown = null;
+
+            // Toggle dropdown menu
+            document.querySelectorAll('.board-tab-menu-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var boardId = this.getAttribute('data-board-id');
+                    var dropdown = document.querySelector('.board-tab-dropdown[data-board-id="' + boardId + '"]');
+
+                    // Close other dropdowns
+                    document.querySelectorAll('.board-tab-dropdown').forEach(function(dd) {
+                        if (dd !== dropdown) dd.style.display = 'none';
+                    });
+
+                    // Toggle current dropdown
+                    if (dropdown.style.display === 'none' || !dropdown.style.display) {
+                        dropdown.style.display = 'block';
+                        currentOpenDropdown = dropdown;
+                    } else {
+                        dropdown.style.display = 'none';
+                        currentOpenDropdown = null;
+                    }
+                });
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (currentOpenDropdown && !e.target.closest('.board-tab-dropdown') && !e.target.closest('.board-tab-menu-btn')) {
+                    currentOpenDropdown.style.display = 'none';
+                    currentOpenDropdown = null;
+                }
+            });
+
+            // Rename board
+            document.querySelectorAll('.rename-board-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var boardId = this.getAttribute('data-board-id');
+                    var tabItem = document.querySelector('.board-tab-item[data-board-id="' + boardId + '"]');
+                    var tabLinkInner = tabItem.querySelector('.board-tab-link-inner');
+                    var titleSpan = tabItem.querySelector('.board-tab-title');
+                    var input = tabItem.querySelector('.board-tab-input');
+                    var dropdown = document.querySelector('.board-tab-dropdown[data-board-id="' + boardId + '"]');
+
+                    // Close dropdown
+                    dropdown.style.display = 'none';
+                    currentOpenDropdown = null;
+
+                    // Show input, hide title
+                    titleSpan.style.display = 'none';
+                    input.style.display = 'inline-block';
+                    input.focus();
+                    input.select();
+
+                    // Prevent link navigation
+                    tabLinkInner.style.pointerEvents = 'none';
+
+                    // Save on blur or Enter
+                    var saveRename = function() {
+                        var newTitle = input.value.trim();
+                        if (newTitle && newTitle !== titleSpan.textContent.trim()) {
+                            // Send rename request
+                            fetch('/kanban/board/' + boardId + '/rename', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: JSON.stringify({ title: newTitle })
+                            })
+                            .then(function(response) {
+                                if (response.ok) {
+                                    return response.json();
+                                }
+                                throw new Error('Ошибка переименования');
+                            })
+                            .then(function(data) {
+                                if (data.success) {
+                                    titleSpan.textContent = newTitle;
+                                } else {
+                                    input.value = titleSpan.textContent;
+                                    alert('Ошибка: ' + (data.error || 'Не удалось переименовать доску'));
+                                }
+                            })
+                            .catch(function(error) {
+                                console.error('Error:', error);
+                                input.value = titleSpan.textContent;
+                                alert('Ошибка: ' + error.message);
+                            });
+                        } else {
+                            input.value = titleSpan.textContent;
+                        }
+
+                        titleSpan.style.display = 'inline';
+                        input.style.display = 'none';
+                        tabLinkInner.style.pointerEvents = 'auto';
+                    };
+
+                    input.addEventListener('blur', saveRename, { once: true });
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            input.blur();
+                        } else if (e.key === 'Escape') {
+                            input.value = titleSpan.textContent;
+                            titleSpan.style.display = 'inline';
+                            input.style.display = 'none';
+                            tabLinkInner.style.pointerEvents = 'auto';
+                        }
+                    });
+                });
+            });
+
+            // Delete board
+            document.querySelectorAll('.delete-board-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var boardId = this.getAttribute('data-board-id');
+                    var dropdown = document.querySelector('.board-tab-dropdown[data-board-id="' + boardId + '"]');
+
+                    // Close dropdown
+                    dropdown.style.display = 'none';
+                    currentOpenDropdown = null;
+
+                    // Confirm deletion
+                    if (confirm('Вы уверены, что хотите удалить эту доску? Это действие нельзя отменить.')) {
+                        // Send delete request
+                        fetch('/kanban/board/' + boardId + '/delete', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        })
+                        .then(function(response) {
+                            if (response.ok) {
+                                return response.json();
+                            }
+                            throw new Error('Ошибка удаления');
+                        })
+                        .then(function(data) {
+                            if (data.success) {
+                                // Redirect to project boards list or another board
+                                if (data.redirectUrl) {
+                                    window.location.href = data.redirectUrl;
+                                } else {
+                                    window.location.href = '/kanban/personal-projects';
+                                }
+                            } else {
+                                alert('Ошибка: ' + (data.error || 'Не удалось удалить доску'));
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('Error:', error);
+                            alert('Ошибка: ' + error.message);
+                        });
+                    }
+                });
+            });
+
+            // Card menu functionality
+            var currentOpenCardDropdown = null;
+
+            // Toggle card dropdown menu
+            document.addEventListener('click', function(e) {
+                var menuBtn = e.target.closest('.kanban-card-menu-btn');
+                if (menuBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    var cardId = menuBtn.getAttribute('data-card-id');
+                    var dropdown = document.querySelector('.kanban-card-dropdown[data-card-id="' + cardId + '"]');
+
+                    // Close other dropdowns
+                    document.querySelectorAll('.kanban-card-dropdown').forEach(function(dd) {
+                        if (dd !== dropdown) dd.style.display = 'none';
+                    });
+
+                    // Toggle current dropdown
+                    if (dropdown.style.display === 'none' || !dropdown.style.display) {
+                        // Position dropdown relative to button
+                        var rect = menuBtn.getBoundingClientRect();
+                        var dropdownWidth = 200; // min-width from CSS
+                        var dropdownHeight = dropdown.offsetHeight || 200;
+
+                        // Calculate position
+                        var top = rect.bottom + 4; // 4px gap
+                        var left = rect.right - dropdownWidth;
+
+                        // Adjust if dropdown goes off screen
+                        var viewportWidth = window.innerWidth;
+                        var viewportHeight = window.innerHeight;
+
+                        // Check right edge
+                        if (left < 10) {
+                            left = rect.left;
+                        }
+                        if (left + dropdownWidth > viewportWidth - 10) {
+                            left = viewportWidth - dropdownWidth - 10;
+                        }
+
+                        // Check bottom edge - open upwards if needed
+                        if (top + dropdownHeight > viewportHeight - 10) {
+                            top = rect.top - dropdownHeight - 4;
+                            // If still off screen, position at bottom with scroll
+                            if (top < 10) {
+                                top = Math.max(10, viewportHeight - dropdownHeight - 10);
+                            }
+                        }
+
+                        dropdown.style.top = top + 'px';
+                        dropdown.style.left = left + 'px';
+                        dropdown.style.display = 'block';
+                        menuBtn.classList.add('active');
+                        currentOpenCardDropdown = dropdown;
+                    } else {
+                        dropdown.style.display = 'none';
+                        menuBtn.classList.remove('active');
+                        currentOpenCardDropdown = null;
+                    }
+                    return false;
+                }
+            });
+
+            // Prevent clicks inside dropdown from bubbling to card
+            document.addEventListener('click', function(e) {
+                var dropdown = e.target.closest('.kanban-card-dropdown');
+                if (dropdown) {
+                    e.stopPropagation();
+                }
+            });
+
+            // Close card dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (currentOpenCardDropdown && !e.target.closest('.kanban-card-dropdown') && !e.target.closest('.kanban-card-menu-btn')) {
+                    currentOpenCardDropdown.style.display = 'none';
+                    currentOpenCardDropdown = null;
+                    document.querySelectorAll('.kanban-card-menu-btn.active').forEach(function(btn) {
+                        btn.classList.remove('active');
+                    });
+                }
+            });
+
+            // Change card color
+            document.addEventListener('click', function(e) {
+                var colorOption = e.target.closest('.card-color-option');
+                if (colorOption) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    var color = colorOption.getAttribute('data-color');
+                    var dropdown = colorOption.closest('.kanban-card-dropdown');
+                    var cardId = dropdown.getAttribute('data-card-id');
+                    var card = document.querySelector('.kanban-card[data-card-id="' + cardId + '"]');
+
+                    // Send color change request
+                    fetch('/api/kanban/cards/' + cardId, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ borderColor: color || null })
+                    })
+                    .then(function(response) {
+                        if (response.ok) {
+                            return response.json();
+                        }
+                        return response.json().then(function(data) {
+                            throw new Error(data.error || 'Ошибка изменения цвета');
+                        });
+                    })
+                    .then(function(data) {
+                        // Update card color
+                        card.removeAttribute('data-border-color');
+                        if (data.borderColor) {
+                            card.setAttribute('data-border-color', data.borderColor);
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('Error:', error);
+                        alert('Ошибка: ' + error.message);
+                    });
+
+                    // Close menu
+                    dropdown.style.display = 'none';
+                    currentOpenCardDropdown = null;
+                    document.querySelectorAll('.kanban-card-menu-btn.active').forEach(function(btn) {
+                        btn.classList.remove('active');
+                    });
+                }
+            });
+
+            // Rename card
+            document.addEventListener('click', function(e) {
+                var renameBtn = e.target.closest('.rename-card-btn');
+                if (renameBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    var cardId = renameBtn.getAttribute('data-card-id');
+                    var card = document.querySelector('.kanban-card[data-card-id="' + cardId + '"]');
+                    var titleDiv = card.querySelector('.kanban-card-title');
+                    var dropdown = document.querySelector('.kanban-card-dropdown[data-card-id="' + cardId + '"]');
+                    var originalTitle = titleDiv.textContent.trim();
+
+                    // Close dropdown
+                    dropdown.style.display = 'none';
+                    currentOpenCardDropdown = null;
+                    document.querySelectorAll('.kanban-card-menu-btn.active').forEach(function(btn) {
+                        btn.classList.remove('active');
+                    });
+
+                    // Create input
+                    var input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'form-control form-control-sm';
+                    input.value = originalTitle;
+                    input.style.fontWeight = '600';
+                    input.style.fontSize = '0.95rem';
+
+                    titleDiv.style.display = 'none';
+                    titleDiv.parentNode.insertBefore(input, titleDiv);
+                    input.focus();
+                    input.select();
+
+                    var saveRename = function() {
+                        var newTitle = input.value.trim();
+                        if (newTitle && newTitle !== originalTitle) {
+                            // Send rename request
+                            fetch('/api/kanban/cards/' + cardId, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: JSON.stringify({ title: newTitle })
+                            })
+                            .then(function(response) {
+                                if (response.ok) {
+                                    return response.json();
+                                }
+                                return response.json().then(function(data) {
+                                    throw new Error(data.error || 'Ошибка переименования');
+                                });
+                            })
+                            .then(function(data) {
+                                // Update title with the response data
+                                titleDiv.textContent = data.title;
+                            })
+                            .catch(function(error) {
+                                console.error('Error:', error);
+                                alert('Ошибка: ' + error.message);
+                            });
+                        }
+
+                        input.remove();
+                        titleDiv.style.display = 'block';
+                    };
+
+                    input.addEventListener('blur', saveRename);
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            input.blur();
+                        } else if (e.key === 'Escape') {
+                            input.remove();
+                            titleDiv.style.display = 'block';
+                        }
+                    });
+                }
+            });
+
+            // Delete card
+            document.addEventListener('click', function(e) {
+                var deleteBtn = e.target.closest('.delete-card-btn');
+                if (deleteBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    var cardId = deleteBtn.getAttribute('data-card-id');
+                    var card = document.querySelector('.kanban-card[data-card-id="' + cardId + '"]');
+                    var dropdown = document.querySelector('.kanban-card-dropdown[data-card-id="' + cardId + '"]');
+
+                    // Close dropdown
+                    dropdown.style.display = 'none';
+                    currentOpenCardDropdown = null;
+
+                    // Confirm deletion
+                    if (confirm('Вы уверены, что хотите удалить эту карточку?')) {
+                        // Send delete request
+                        fetch('/api/kanban/cards/' + cardId, {
+                            method: 'DELETE',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        })
+                        .then(function(response) {
+                            if (response.ok || response.status === 204) {
+                                // Remove card from DOM
+                                card.remove();
+                                // Update column counter
+                                var column = card.closest('.kanban-column');
+                                if (column) {
+                                    var counter = column.querySelector('.column-count');
+                                    if (counter) {
+                                        var count = parseInt(counter.textContent) - 1;
+                                        counter.textContent = count;
+                                    }
+                                }
+                            } else {
+                                return response.json().then(function(data) {
+                                    throw new Error(data.error || 'Не удалось удалить карточку');
+                                });
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('Error:', error);
+                            alert('Ошибка: ' + error.message);
+                        });
+                    }
+                }
             });
         });
     </script>
