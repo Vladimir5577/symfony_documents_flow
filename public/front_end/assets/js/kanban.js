@@ -1113,7 +1113,9 @@ var KanbanApp = (function () {
         var results = document.getElementById("assignee-results");
         if (!results) return;
 
-        apiFetch("/api/kanban/users/search?query=" + encodeURIComponent(query))
+        var url = "/api/kanban/users/search?query=" + encodeURIComponent(query);
+        if (config.projectId) url += "&project_id=" + config.projectId;
+        apiFetch(url)
             .then(function (users) {
                 results.innerHTML = "";
                 (users || []).forEach(function (u) {

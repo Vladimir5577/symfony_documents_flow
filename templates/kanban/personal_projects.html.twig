@@ -26,17 +26,23 @@
                                 <th>Название</th>
                                 <th>Создан</th>
                                 <th>Обновлён</th>
+                                <th class="text-end" style="width: 1%"></th>
                             </tr>
                             </thead>
                             <tbody>
                             {% for project in projects %}
-                                <tr data-href="{{ path('app_kanban_project', {id: project.id}) }}" role="button" tabindex="0" class="project-row">
+                                <tr data-href="{{ project.boards|length > 0 ? path('app_kanban_board', {id: project.boards|first.id}) : path('app_kanban_project', {id: project.id}) }}" role="button" tabindex="0" class="project-row">
                                     <td>
                                         <i class="bi bi-folder2 me-2 text-primary"></i>
                                         {{ project.name }}
                                     </td>
                                     <td class="text-muted">{{ project.createdAt ? project.createdAt|date('d.m.Y H:i') : '—' }}</td>
                                     <td class="text-muted">{{ project.updatedAt ? project.updatedAt|date('d.m.Y H:i') : '—' }}</td>
+                                    <td class="text-end">
+                                        <a href="{{ path('app_kanban_project', {id: project.id}) }}" class="btn btn-sm btn-warning text-dark rounded-3 project-edit-btn d-inline-flex align-items-center flex-nowrap" title="Редактировать">
+                                            <i class="bi bi-pencil-square me-1"></i><span>Редактировать</span>
+                                        </a>
+                                    </td>
                                 </tr>
                             {% endfor %}
                             </tbody>
@@ -54,8 +60,12 @@
 
     <script>
         document.querySelectorAll('#projects-table-section tr[data-href]').forEach(function(row) {
-            row.addEventListener('click', function() { window.location.href = this.dataset.href; });
+            row.addEventListener('click', function(e) {
+                if (e.target.closest('.project-edit-btn')) return;
+                window.location.href = this.dataset.href;
+            });
             row.addEventListener('keydown', function(e) {
+                if (e.target.closest('.project-edit-btn')) return;
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.location.href = this.dataset.href; }
             });
         });

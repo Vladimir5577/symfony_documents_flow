@@ -44,6 +44,39 @@ class KanbanProjectUserRepository extends ServiceEntityRepository
             ->getResult();
     }
 
+    /**
+     * Возвращает пользователей — участников проекта (владелец + добавленные в проект).
+     *
+     * @return User[]
+     */
+    public function findProjectMemberUsers(KanbanProject $project, string $search = '', int $limit = 20): array
+    {
+        $users = [];
+        $owner = $project->getOwner();
+        if ($owner) {
+            $users[$owner->getId()] = $owner;
+        }
+        foreach ($this->findByProject($project) as $pu) {
+            $u = $pu->getUser();
+            if ($u) {
+                $users[$u->getId()] = $u;
+            }
+        }
+        $users = array_values($users);
+
+        if ($search !== '') {
+            $searchLower = mb_strtolower($search);
+            $users = array_filter($users, function (User $u) use ($searchLower) {
+                return mb_strpos(mb_strtolower($u->getLastname() ?? ''), $searchLower) !== false
+                    || mb_strpos(mb_strtolower($u->getFirstname() ?? ''), $searchLower) !== false
+                    || mb_strpos(mb_strtolower($u->getPatronymic() ?? ''), $searchLower) !== false
+                    || mb_strpos(mb_strtolower($u->getLogin() ?? ''), $searchLower) !== false;
+            });
+        }
+
+        return array_slice(array_values($users), 0, $limit);
+    }
+
     //    /**
     //     * @return KanbanProjectUser[] Returns an array of KanbanProjectUser objects
     //     */

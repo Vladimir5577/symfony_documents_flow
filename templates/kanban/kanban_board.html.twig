@@ -1122,6 +1122,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             KanbanApp.init({
                 boardId: '{{ board.id }}',
+                projectId: {{ board.project ? board.project.id : 'null' }},
                 canEdit: {{ memberRole.value != 'VIEWER' ? 'true' : 'false' }},
                 currentUserId: {{ currentUser.id }},
                 currentUserName: '{{ currentUser.firstname }} {{ currentUser.lastname }}'

@@ -27,7 +27,7 @@ final class ProjectKanbanController extends AbstractController
     ) {
     }
 
-    #[Route('/personalprojects', name: 'app_kanban_personal_projects')]
+    #[Route('/personal_projects', name: 'app_kanban_personal_projects')]
     public function personalProjects(): Response
     {
         /** @var User $user */
