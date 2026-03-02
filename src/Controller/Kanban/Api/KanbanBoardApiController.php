@@ -84,7 +84,7 @@ final class KanbanBoardApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::VIEWER);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
 
         $columns = [];
         foreach ($board->getColumns() as $col) {
@@ -148,7 +148,7 @@ final class KanbanBoardApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
 
         $payload = json_decode($request->getContent(), true) ?? [];
         if (isset($payload['title']) && trim($payload['title']) !== '') {
@@ -171,7 +171,7 @@ final class KanbanBoardApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
 
         $this->em->remove($board);
         $this->em->flush();
@@ -190,7 +190,7 @@ final class KanbanBoardApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
 
         $project = $board->getProject();
         if (!$project) {

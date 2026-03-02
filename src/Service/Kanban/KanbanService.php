@@ -35,7 +35,7 @@ class KanbanService
     public function getMemberRole(KanbanBoard $board, User $user): ?KanbanBoardMemberRole
     {
         if (in_array('ROLE_ADMIN', $user->getRoles(), true)) {
-            return KanbanBoardMemberRole::ADMIN;
+            return KanbanBoardMemberRole::KANBAN_ADMIN;
         }
 
         $project = $board->getProject();
@@ -44,7 +44,7 @@ class KanbanService
         }
 
         if ($project->getOwner() === $user) {
-            return KanbanBoardMemberRole::ADMIN;
+            return KanbanBoardMemberRole::KANBAN_ADMIN;
         }
 
         $projectUser = $this->projectUserRepo->findByProjectAndUser($project, $user);
@@ -63,9 +63,9 @@ class KanbanService
         }
 
         $hierarchy = [
-            KanbanBoardMemberRole::VIEWER->value => 1,
-            KanbanBoardMemberRole::EDITOR->value => 2,
-            KanbanBoardMemberRole::ADMIN->value => 3,
+            KanbanBoardMemberRole::KANBAN_VIEWER->value => 1,
+            KanbanBoardMemberRole::KANAN_EDITOR->value => 2,
+            KanbanBoardMemberRole::KANBAN_ADMIN->value => 3,
         ];
 
         if ($hierarchy[$role->value] < $hierarchy[$minRole->value]) {
@@ -101,7 +101,7 @@ class KanbanService
         $projectUser = new KanbanProjectUser();
         $projectUser->setKanbanProject($project);
         $projectUser->setUser($creator);
-        $projectUser->setRole(KanbanBoardMemberRole::ADMIN);
+        $projectUser->setRole(KanbanBoardMemberRole::KANBAN_ADMIN);
 
         $this->em->persist($project);
         $this->em->persist($projectUser);
@@ -120,7 +120,7 @@ class KanbanService
             $member = new KanbanProjectUser();
             $member->setKanbanProject($project);
             $member->setUser($memberUser);
-            $member->setRole(KanbanBoardMemberRole::EDITOR);
+            $member->setRole(KanbanBoardMemberRole::KANAN_EDITOR);
             $this->em->persist($member);
         }
 

@@ -40,7 +40,7 @@ final class KanbanLabelApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::VIEWER);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
 
         $labels = $this->labelRepo->findBy(['board' => $board]);
 
@@ -64,7 +64,7 @@ final class KanbanLabelApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::EDITOR);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANAN_EDITOR);
 
         $payload = json_decode($request->getContent(), true) ?? [];
         $name = trim($payload['name'] ?? '');
@@ -100,7 +100,7 @@ final class KanbanLabelApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
 
         $label = $this->labelRepo->find($id);
         if (!$label || $label->getBoard()->getId() !== $boardId) {
@@ -124,7 +124,7 @@ final class KanbanLabelApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::EDITOR);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANAN_EDITOR);
 
         $card = $this->cardRepo->find($cardId);
         if (!$card) {

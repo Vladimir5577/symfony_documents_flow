@@ -69,7 +69,7 @@ final class ProjectKanbanController extends AbstractController
             throw $this->createNotFoundException('Доска не найдена.');
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::VIEWER);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
 
         $memberRole = $this->kanbanService->getMemberRole($board, $user);
 
@@ -100,7 +100,7 @@ final class ProjectKanbanController extends AbstractController
 
         $firstBoard = $project->getBoards()->first();
         if ($firstBoard) {
-            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::EDITOR);
+            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANAN_EDITOR);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
@@ -149,7 +149,7 @@ final class ProjectKanbanController extends AbstractController
 
         $board = $project->getBoards()->first();
         if ($board) {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::VIEWER);
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
@@ -176,7 +176,7 @@ final class ProjectKanbanController extends AbstractController
 
         $board = $project->getBoards()->first();
         if ($board) {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::VIEWER);
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
@@ -228,7 +228,7 @@ final class ProjectKanbanController extends AbstractController
 
         $board = $project->getBoards()->first();
         if ($board) {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::VIEWER);
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
@@ -308,7 +308,7 @@ final class ProjectKanbanController extends AbstractController
             $pu = new KanbanProjectUser();
             $pu->setKanbanProject($project);
             $pu->setUser($memberUser);
-            $pu->setRole($memberUser->getId() === $ownerId ? KanbanBoardMemberRole::ADMIN : KanbanBoardMemberRole::EDITOR);
+            $pu->setRole($memberUser->getId() === $ownerId ? KanbanBoardMemberRole::KANBAN_ADMIN : KanbanBoardMemberRole::KANAN_EDITOR);
             $entityManager->persist($pu);
         }
         $entityManager->flush();
@@ -450,7 +450,7 @@ final class ProjectKanbanController extends AbstractController
         }
 
         try {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::EDITOR);
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANAN_EDITOR);
         } catch (\Exception $e) {
             return $this->json(['success' => false, 'error' => 'Недостаточно прав для редактирования.'], 403);
         }
@@ -484,7 +484,7 @@ final class ProjectKanbanController extends AbstractController
         }
 
         try {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
         } catch (\Exception $e) {
             return $this->json(['success' => false, 'error' => 'Недостаточно прав для удаления доски.'], 403);
         }

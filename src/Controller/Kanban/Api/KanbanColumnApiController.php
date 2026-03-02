@@ -37,7 +37,7 @@ final class KanbanColumnApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::EDITOR);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANAN_EDITOR);
 
         $payload = json_decode($request->getContent(), true) ?? [];
         $title = trim($payload['title'] ?? '');
@@ -67,7 +67,7 @@ final class KanbanColumnApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::EDITOR);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANAN_EDITOR);
 
         $column = $this->columnRepo->find($id);
         if (!$column || $column->getBoard()->getId() !== $boardId) {
@@ -110,7 +110,7 @@ final class KanbanColumnApiController extends AbstractController
             return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::ADMIN);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
 
         $column = $this->columnRepo->find($id);
         if (!$column || $column->getBoard()->getId() !== $boardId) {

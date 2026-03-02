@@ -63,7 +63,7 @@ final class KanbanCommentApiController extends AbstractController
             return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::EDITOR);
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANAN_EDITOR);
 
         $payload = json_decode($request->getContent(), true) ?? [];
         $body = trim($payload['body'] ?? '');

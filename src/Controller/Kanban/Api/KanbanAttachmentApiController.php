@@ -38,7 +38,7 @@ final class KanbanAttachmentApiController extends AbstractController
             return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::EDITOR);
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANAN_EDITOR);
 
         $file = $request->files->get('file');
         if (!$file) {
@@ -96,7 +96,7 @@ final class KanbanAttachmentApiController extends AbstractController
             return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::EDITOR);
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANAN_EDITOR);
 
         $attachment = $this->attachmentRepo->find($id);
         if (!$attachment || $attachment->getCard()->getId() !== $cardId) {
