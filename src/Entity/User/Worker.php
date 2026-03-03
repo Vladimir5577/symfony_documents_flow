@@ -14,8 +14,9 @@ class Worker
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(nullable: false)]
-    private int $user_id;
+    #[ORM\OneToOne(targetEntity: User::class, inversedBy: 'worker')]
+    #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE', unique: true)]
+    private User $user;
 
     #[ORM\Column(length: 255)]
     private ?string $profession = null;
@@ -28,14 +29,14 @@ class Worker
         return $this->id;
     }
 
-    public function getUserId(): int
+    public function getUser(): User
     {
-        return $this->user_id;
+        return $this->user;
     }
 
-    public function setUserId(int $user_id): static
+    public function setUser(User $user): static
     {
-        $this->user_id = $user_id;
+        $this->user = $user;
 
         return $this;
     }

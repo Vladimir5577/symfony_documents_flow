@@ -64,7 +64,7 @@ class WorkerFixtures extends Fixture implements DependentFixtureInterface
 
         foreach ($selectedUsers as $index => $user) {
             $worker = new Worker();
-            $worker->setUserId($user->getId());
+            $worker->setUser($user);
             $worker->setProfession($professions[array_rand($professions)]);
 
             // Случайное описание (70% имеют описание)

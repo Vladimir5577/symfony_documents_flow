@@ -191,7 +191,7 @@ final class UserController extends AbstractController
         $profession = trim((string) ($formData['profession-column'] ?? ''));
         if ($profession !== '') {
             $worker = new Worker();
-            $worker->setUserId($user->getId());
+            $worker->setUser($user);
             $worker->setProfession($profession);
             $description = trim((string) ($formData['description-column'] ?? ''));
             if ($description !== '') {
@@ -321,7 +321,7 @@ final class UserController extends AbstractController
         }
 
         // Загружаем Worker для пользователя, если он существует
-        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+        $worker = $workerRepository->findOneBy(['user' => $user]);
 
         return $this->render('user/view_user.html.twig', [
             'active_tab' => 'view_user',
@@ -352,7 +352,7 @@ final class UserController extends AbstractController
             return new Response('Пользователь не найден', Response::HTTP_NOT_FOUND);
         }
 
-        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+        $worker = $workerRepository->findOneBy(['user' => $user]);
 
         return $this->render('user/partials/_modal_view_user_content.html.twig', [
             'user' => $user,
@@ -387,7 +387,7 @@ final class UserController extends AbstractController
         }
 
         // Получаем Worker для пользователя, если он существует
-        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+        $worker = $workerRepository->findOneBy(['user' => $user]);
 
         // Получаем дерево организаций
         $currentUserOrg = $currentUser instanceof User ? $currentUser->getOrganization() : null;
@@ -642,12 +642,12 @@ final class UserController extends AbstractController
 
         // Обновляем или создаем Worker
         $profession = trim((string) ($formData['profession-column'] ?? ''));
-        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+        $worker = $workerRepository->findOneBy(['user' => $user]);
 
         if ($profession !== '') {
             if (!$worker) {
                 $worker = new Worker();
-                $worker->setUserId($user->getId());
+                $worker->setUser($user);
             }
             $worker->setProfession($profession);
             $description = trim((string) ($formData['description-column'] ?? ''));

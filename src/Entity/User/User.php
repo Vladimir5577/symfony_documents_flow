@@ -73,6 +73,9 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\JoinColumn(name: 'boss_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?self $boss = null;
 
+    #[ORM\OneToOne(mappedBy: 'user', targetEntity: Worker::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    private ?Worker $worker = null;
+
     // 5) phone
     #[ORM\Column(length: 30, nullable: true)]
     #[Assert\Length(max: 30, maxMessage: 'Телефон не должен превышать {{ limit }} символов.')]
@@ -267,6 +270,21 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         }
 
         $this->boss = $boss;
+
+        return $this;
+    }
+
+    public function getWorker(): ?Worker
+    {
+        return $this->worker;
+    }
+
+    public function setWorker(?Worker $worker): static
+    {
+        if ($worker !== null) {
+            $worker->setUser($this);
+        }
+        $this->worker = $worker;
 
         return $this;
     }

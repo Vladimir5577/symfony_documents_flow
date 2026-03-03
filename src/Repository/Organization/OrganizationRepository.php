@@ -89,9 +89,9 @@ class OrganizationRepository extends ServiceEntityRepository
      * Загрузить организацию со всеми дочерними организациями (рекурсивно, до 5 уровней)
      *
      * @param int $organizationId ID организации
-     * @return Organization|null
+     * @return AbstractOrganization|null
      */
-    public function findWithChildren(int $organizationId): ?Organization
+    public function findWithChildren(int $organizationId): ?AbstractOrganization
     {
         return $this->createQueryBuilder('o')
             ->leftJoin('o.childOrganizations', 'co1')->addSelect('co1')
