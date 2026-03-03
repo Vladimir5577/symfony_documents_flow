@@ -11,24 +11,35 @@
     <link rel="stylesheet" href="/front_end/assets/extensions/dragula/dragula.min.css">
     <style>
         /* Kanban Board Styles */
+        .kanban-board-wrap {
+            overflow-x: auto;
+            padding: 0.75rem 0.75rem 1.25rem 0.75rem;
+        }
+
         .kanban-board {
             display: flex;
-            gap: 1.25rem;
-            overflow-x: auto;
-            padding-bottom: 1rem;
+            gap: 1.1rem;
             min-height: calc(100vh - 220px);
         }
 
         .kanban-column {
             flex: 0 0 320px;
             min-width: 320px;
-            background: var(--bs-secondary-bg, #f8f9fa);
-            border-radius: 0.5rem;
+            background: linear-gradient(-45deg, #f0f4ff, #f8f0ff, #f0faff, #fff0f8, #f0fff8);
+            background-size: 400% 400%;
+            animation: kanbanGradientShift 10s ease infinite;
+            border-radius: 1.25rem;
             display: flex;
             flex-direction: column;
             max-height: calc(100vh - 200px);
             border: 1px solid var(--bs-border-color, #dee2e6);
+            transform: translateY(-3px);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.08),
+                0 0 14px 3px rgba(0, 0, 0, 0.10),
+                0 0 30px 6px rgba(0, 0, 0, 0.06);
         }
+
 
         /* Column top-accent line */
         .kanban-column[data-header-color="bg-primary"] { border-top: 10px solid var(--bs-primary); }
@@ -38,9 +49,19 @@
         .kanban-column[data-header-color="bg-info"]    { border-top: 10px solid var(--bs-info); }
         .kanban-column[data-header-color="bg-dark"]    { border-top: 10px solid var(--bs-dark); }
 
+
         [data-bs-theme="dark"] .kanban-column {
-            background: var(--bs-tertiary-bg);
+            background: linear-gradient(-45deg, #0e1a2e, #1a0e2e, #0e2a1a, #2a0e1a, #0e1e2a);
+            background-size: 400% 400%;
+            animation: kanbanGradientShift 10s ease infinite;
+            transform: translateY(-4px);
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.07),
+                0 0 18px 5px rgba(0, 0, 0, 0.5),
+                0 0 40px 10px rgba(0, 0, 0, 0.32);
         }
+
+
 
         .kanban-column-header {
             position: relative;
@@ -116,23 +137,48 @@
         .kanban-column-body {
             flex: 1;
             overflow-y: auto;
-            padding: 0.75rem;
+            padding: 1rem 0.6rem 0.6rem;
             min-height: 120px;
         }
 
         .kanban-card {
             background: var(--bs-body-bg);
             border: 1px solid var(--bs-border-color, #dee2e6);
-            border-radius: 0.375rem;
+            border-radius: 1.25rem;
             padding: 1rem;
-            margin-bottom: 0.75rem;
             cursor: grab;
-            transition: box-shadow 0.05s, transform 0.1s, background 0.05s;
+            margin-bottom: 0.9rem;
+            transition: box-shadow 0.25s ease, transform 0.25s ease;
             position: relative;
+            transform: translateY(-1px);
+            box-shadow:
+                0 1px 2px rgba(0, 0, 0, 0.07),
+                0 3px 8px rgba(0, 0, 0, 0.07),
+                0 6px 16px rgba(0, 0, 0, 0.04);
         }
 
         .kanban-card:hover {
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transform: translateY(-4px);
+            box-shadow:
+                0 2px 4px rgba(0, 0, 0, 0.08),
+                0 8px 20px rgba(0, 0, 0, 0.13),
+                0 18px 36px rgba(0, 0, 0, 0.06);
+        }
+
+        [data-bs-theme="dark"] .kanban-card {
+            transform: translateY(-4px);
+            box-shadow:
+                0 3px 6px rgba(0, 0, 0, 0.55),
+                0 8px 20px rgba(0, 0, 0, 0.5),
+                0 18px 40px rgba(0, 0, 0, 0.35);
+        }
+
+        [data-bs-theme="dark"] .kanban-card:hover {
+            transform: translateY(-8px);
+            box-shadow:
+                0 4px 8px rgba(0, 0, 0, 0.6),
+                0 14px 32px rgba(0, 0, 0, 0.55),
+                0 28px 56px rgba(0, 0, 0, 0.4);
         }
 
         .kanban-card:active {
@@ -143,9 +189,9 @@
             margin-bottom: 0;
         }
 
-        .kanban-card--open {
-            box-shadow: 0 0 0 5px var(--bs-primary), 0 4px 12px rgba(0, 0, 0, 0.12);
-            background: color-mix(in srgb, var(--bs-primary) 13%, var(--bs-body-bg));
+        .kanban-card.kanban-card--open {
+            box-shadow: 0 0 0 5px var(--bs-primary), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+            background: color-mix(in srgb, var(--bs-primary) 13%, var(--bs-body-bg)) !important;
         }
 
         .gu-transit .kanban-card {
@@ -529,7 +575,7 @@
 
         /* Board tabs (switch between project boards) */
         .board-tabs-wrap {
-            border-bottom: 8px solid var(--bs-border-color, #dee2e6);
+            border-bottom: 4px solid var(--bs-secondary);
         }
         .board-tabs {
             display: flex;
@@ -554,7 +600,8 @@
             color: var(--bs-secondary-color);
             border-radius: 0.375rem 0.375rem 0 0;
             margin-bottom: -1px;
-            border: 1px solid transparent;
+            border: 1px solid var(--bs-border-color);
+            border-bottom-color: transparent;
             transition: color 0.15s, background-color 0.15s, border-color 0.15s;
         }
         .board-tabs .board-tab-link:hover {
@@ -564,9 +611,9 @@
         .board-tabs .board-tab-link.active {
             color: var(--bs-body-color);
             background-color: var(--bs-body-bg);
-            border: 7px solid var(--bs-secondary);
+            border: 4px solid var(--bs-secondary);
             border-bottom: none;
-            margin-bottom: -8px;
+            margin-bottom: -4px;
             font-weight: 600;
             padding: 0.5rem 0.75rem 0.5rem 1rem;
         }
@@ -1000,6 +1047,29 @@
             display: none;
         }
 
+        /* Animated gradient background */
+        @keyframes kanbanGradientShift {
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        body {
+            background: linear-gradient(-45deg, #b8d4f0, #c8b0e8, #a8d8f0, #e0b0d0, #a8e0c8) !important;
+            background-size: 400% 400% !important;
+            animation: kanbanGradientShift 12s ease infinite !important;
+        }
+
+        [data-bs-theme="dark"] body {
+            background: linear-gradient(-45deg, #080f20, #150828, #08200f, #200808, #08181e) !important;
+            background-size: 400% 400% !important;
+            animation: kanbanGradientShift 12s ease infinite !important;
+        }
+
+        section.page-content {
+            background: transparent !important;
+        }
+
         /* Toast styles */
         .kanban-toast-container {
             position: fixed;
@@ -1019,12 +1089,12 @@
         .attachment-item:last-child { border-bottom: none; }
 
         /* Card left-accent border colours */
-        .kanban-card[data-border-color="primary"] { border-left: 10px solid var(--bs-primary); }
-        .kanban-card[data-border-color="success"] { border-left: 10px solid var(--bs-success); }
-        .kanban-card[data-border-color="warning"] { border-left: 10px solid var(--bs-warning); }
-        .kanban-card[data-border-color="danger"]  { border-left: 10px solid var(--bs-danger); }
-        .kanban-card[data-border-color="info"]    { border-left: 10px solid var(--bs-info); }
-        .kanban-card[data-border-color="dark"]    { border-left: 10px solid var(--bs-dark); }
+        .kanban-card[data-border-color="primary"] { border-left: 4px solid var(--bs-primary); }
+        .kanban-card[data-border-color="success"] { border-left: 4px solid var(--bs-success); }
+        .kanban-card[data-border-color="warning"] { border-left: 4px solid var(--bs-warning); }
+        .kanban-card[data-border-color="danger"]  { border-left: 4px solid var(--bs-danger); }
+        .kanban-card[data-border-color="info"]    { border-left: 4px solid var(--bs-info); }
+        .kanban-card[data-border-color="dark"]    { border-left: 4px solid var(--bs-dark); }
 
         /* Colour swatches */
         .card-color-swatch {
@@ -1184,13 +1254,14 @@
     {% endif %}
 
     <section class="page-content">
+        <div class="kanban-board-wrap">
         <div class="kanban-board" id="kanban-board">
             {% for column in board.columns %}
             <div class="kanban-column" data-column-id="{{ column.id }}" data-header-color="{{ column.headerColor.value }}">
                 <div class="kanban-column-header">
                     <span>
                         <span class="column-title">{{ column.title }}</span>
-                        <span class="badge bg-secondary ms-2 column-count">{{ column.cards|filter(c => not c.archived)|length }}</span>
+                        <span class="column-count" style="display:none;">{{ column.cards|filter(c => not c.archived)|length }}</span>
                     </span>
                     <div class="d-flex align-items-center gap-3">
                         {% if memberRole.value != 'VIEWER' %}
@@ -1333,6 +1404,7 @@
                 </button>
             </div>
             {% endif %}
+        </div>
         </div>
     </section>
 
@@ -1529,6 +1601,176 @@
 
     {# Toast container #}
     <div class="kanban-toast-container" id="toast-container"></div>
+
+    {# Gradient Color Picker #}
+    <div id="gp-btn" style="position:fixed;bottom:5.5rem;right:1.5rem;z-index:9998;">
+        <button id="gp-toggle" title="Настройка цветов" style="width:2.8rem;height:2.8rem;padding:0;border-radius:50%;border:none;background:var(--bs-body-bg);box-shadow:0 4px 16px rgba(0,0,0,0.18);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;transition:transform 0.2s;">
+            🎨
+        </button>
+    </div>
+
+    <div id="gp-panel" style="display:none;position:fixed;bottom:8rem;right:1rem;z-index:9997;background:var(--bs-body-bg);border:1px solid var(--bs-border-color);border-radius:0.75rem;padding:0.75rem;box-shadow:0 8px 40px rgba(0,0,0,0.18);width:185px;">
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:0.6rem;">Цвета</div>
+
+        <div style="font-size:0.65rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--bs-secondary-color);margin-bottom:0.35rem;">Пресеты</div>
+        <div id="gp-presets" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.3rem;margin-bottom:0.75rem;"></div>
+
+        <div style="font-size:0.65rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--bs-secondary-color);margin-bottom:0.25rem;">Фон</div>
+        <div style="display:flex;gap:0.25rem;align-items:center;margin-bottom:0.5rem;">
+            <input type="color" id="gp-main-bg" style="width:100%;height:1.6rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);cursor:pointer;padding:0.05rem;">
+            <button id="gp-main-bg-clear" title="Сбросить" style="padding:0.15rem 0.35rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);background:transparent;color:var(--bs-body-color);font-size:0.7rem;cursor:pointer;flex-shrink:0;">✕</button>
+        </div>
+
+        <div style="font-size:0.65rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--bs-secondary-color);margin-bottom:0.25rem;">Столбцы</div>
+        <div style="display:flex;gap:0.25rem;align-items:center;margin-bottom:0.5rem;">
+            <input type="color" id="gp-col-bg" style="width:100%;height:1.6rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);cursor:pointer;padding:0.05rem;">
+            <button id="gp-col-bg-clear" title="Сбросить" style="padding:0.15rem 0.35rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);background:transparent;color:var(--bs-body-color);font-size:0.7rem;cursor:pointer;flex-shrink:0;">✕</button>
+        </div>
+
+        <div style="font-size:0.65rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--bs-secondary-color);margin-bottom:0.25rem;">Карточки</div>
+        <div style="display:flex;gap:0.25rem;align-items:center;">
+            <input type="color" id="gp-card-bg" style="width:100%;height:1.6rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);cursor:pointer;padding:0.05rem;">
+            <button id="gp-card-bg-clear" title="Сбросить" style="padding:0.15rem 0.35rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);background:transparent;color:var(--bs-body-color);font-size:0.7rem;cursor:pointer;flex-shrink:0;">✕</button>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        var mainBgStyleEl = document.createElement('style');
+        document.head.appendChild(mainBgStyleEl);
+        var colBgStyleEl  = document.createElement('style');
+        document.head.appendChild(colBgStyleEl);
+        var cardBgStyleEl = document.createElement('style');
+        document.head.appendChild(cardBgStyleEl);
+
+        function getTheme() {
+            return document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+        }
+        function lsKey(name) { return 'kanban_' + name + '_' + getTheme(); }
+
+        function applyMainBg(color) {
+            mainBgStyleEl.textContent = color
+                ? 'html,body,#app,#main{background:' + color + '!important;background-color:' + color + '!important;animation:none!important;background-size:unset!important;}'
+                : '';
+            color ? localStorage.setItem(lsKey('mainBg'), color) : localStorage.removeItem(lsKey('mainBg'));
+        }
+        function applyColBg(color) {
+            colBgStyleEl.textContent = color
+                ? '.kanban-column{background:' + color + '!important;animation:none!important;}'
+                : '';
+            color ? localStorage.setItem(lsKey('colBg'), color) : localStorage.removeItem(lsKey('colBg'));
+        }
+        function applyCardBg(color) {
+            cardBgStyleEl.textContent = color
+                ? '.kanban-card{background:' + color + '!important;}'
+                : '';
+            color ? localStorage.setItem(lsKey('cardBg'), color) : localStorage.removeItem(lsKey('cardBg'));
+        }
+
+        function restoreForTheme() {
+            var m = localStorage.getItem(lsKey('mainBg')) || '';
+            var c = localStorage.getItem(lsKey('colBg'))  || '';
+            var k = localStorage.getItem(lsKey('cardBg')) || '';
+            applyMainBg(m); applyColBg(c); applyCardBg(k);
+            return { mainBg: m, colBg: c, cardBg: k };
+        }
+
+        restoreForTheme();
+
+        var PRESETS = {
+            light: [
+                { name: 'Рассвет', bg: '#ddd5c8', col: '#f5f0e8', card: '#ffffff' },
+                { name: 'Сирень',  bg: '#dbd3f0', col: '#ede8fa', card: '#ffffff' },
+                { name: 'Мята',    bg: '#cce8dd', col: '#e8f7f2', card: '#ffffff' },
+                { name: 'Небо',    bg: '#c8dff0', col: '#e4f1fb', card: '#ffffff' },
+                { name: 'Персик',  bg: '#f2bfa8', col: '#fde5d5', card: '#ffffff' },
+                { name: 'Лайм',    bg: '#c8e890', col: '#e8f7c0', card: '#ffffff' },
+            ],
+            dark: [
+                { name: 'Полночь', bg: '#090d15', col: '#222c49', card: '#0a1124' },
+                { name: 'Изумруд', bg: '#081b14', col: '#163c29', card: '#0b2217' },
+                { name: 'Аметист', bg: '#120d1f', col: '#1e1535', card: '#261c42' },
+                { name: 'Уголь',   bg: '#1f1f1f', col: '#383838', card: '#141414' },
+                { name: 'Вишня',   bg: '#230614', col: '#45122b', card: '#220714' },
+                { name: 'Космос',  bg: '#05081e', col: '#151956', card: '#0a0c29' },
+            ],
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var panel        = document.getElementById('gp-panel');
+            var toggle       = document.getElementById('gp-toggle');
+            var mainBgInput  = document.getElementById('gp-main-bg');
+            var colBgInput   = document.getElementById('gp-col-bg');
+            var cardBgInput  = document.getElementById('gp-card-bg');
+            var presetsContainer = document.getElementById('gp-presets');
+
+            function isDark() { return getTheme() === 'dark'; }
+
+            function syncInputs() {
+                var s = restoreForTheme();
+                if (s.mainBg) mainBgInput.value = s.mainBg;
+                if (s.colBg)  colBgInput.value  = s.colBg;
+                if (s.cardBg) cardBgInput.value = s.cardBg;
+            }
+            syncInputs();
+
+            function buildPreset(p) {
+                var dark = isDark();
+                var btn = document.createElement('button');
+                btn.style.cssText = 'border:none;border-radius:0.4rem;cursor:pointer;padding:0;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.18);transition:transform 0.15s,box-shadow 0.2s;text-align:left;width:100%;';
+                btn.innerHTML =
+                    '<div style="background:' + p.bg + ';padding:0.3rem 0.3rem 0.2rem;">' +
+                        '<div style="background:' + p.col + ';border-radius:0.2rem;padding:0.2rem 0.25rem;">' +
+                            '<div style="background:' + p.card + ';border-radius:0.15rem;height:0.3rem;margin-bottom:0.12rem;"></div>' +
+                            '<div style="background:' + p.card + ';border-radius:0.15rem;height:0.3rem;opacity:0.6;"></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="background:' + p.col + ';padding:0.15rem 0.25rem;font-size:0.6rem;font-weight:600;color:' + (dark ? '#eee' : '#333') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + p.name + '</div>';
+                btn.addEventListener('mouseenter', function() { btn.style.transform = 'translateY(-2px)'; btn.style.boxShadow = '0 6px 16px rgba(0,0,0,0.28)'; });
+                btn.addEventListener('mouseleave', function() { btn.style.transform = ''; btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.18)'; });
+                btn.addEventListener('click', function() {
+                    applyMainBg(p.bg); applyColBg(p.col); applyCardBg(p.card);
+                    mainBgInput.value = p.bg; colBgInput.value = p.col; cardBgInput.value = p.card;
+                });
+                return btn;
+            }
+
+            function renderPresets() {
+                presetsContainer.innerHTML = '';
+                (isDark() ? PRESETS.dark : PRESETS.light).forEach(function(p) {
+                    presetsContainer.appendChild(buildPreset(p));
+                });
+            }
+            renderPresets();
+
+            // На смену темы — восстановить цвета новой темы и обновить пресеты/инпуты
+            new MutationObserver(function() {
+                syncInputs();
+                renderPresets();
+            }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+
+            mainBgInput.addEventListener('input',  function() { applyMainBg(this.value); });
+            colBgInput.addEventListener('input',   function() { applyColBg(this.value); });
+            cardBgInput.addEventListener('input',  function() { applyCardBg(this.value); });
+
+            document.getElementById('gp-main-bg-clear').addEventListener('click',  function() { applyMainBg(''); });
+            document.getElementById('gp-col-bg-clear').addEventListener('click',   function() { applyColBg(''); });
+            document.getElementById('gp-card-bg-clear').addEventListener('click',  function() { applyCardBg(''); });
+
+            toggle.addEventListener('click', function() {
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                toggle.style.transform = panel.style.display === 'none' ? '' : 'rotate(20deg)';
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#gp-panel') && !e.target.closest('#gp-btn')) {
+                    panel.style.display = 'none';
+                    toggle.style.transform = '';
+                }
+            });
+        });
+    })();
+    </script>
 
     <script>
         (function() {
@@ -1742,6 +1984,11 @@
                     e.stopImmediatePropagation();
                     var cardId = menuBtn.getAttribute('data-card-id');
                     var dropdown = document.querySelector('.kanban-card-dropdown[data-card-id="' + cardId + '"]');
+
+                    // Move to <body> to fix position:fixed inside a CSS-transformed ancestor (.kanban-card has transform)
+                    if (dropdown && dropdown.parentNode !== document.body) {
+                        document.body.appendChild(dropdown);
+                    }
 
                     // Close other dropdowns
                     document.querySelectorAll('.kanban-card-dropdown').forEach(function(dd) {
@@ -1970,8 +2217,9 @@
                         })
                         .then(function(response) {
                             if (response.ok || response.status === 204) {
-                                // Remove card from DOM
+                                // Remove card and its dropdown from DOM
                                 card.remove();
+                                if (dropdown && dropdown.parentNode) dropdown.remove();
                                 // Update column counter
                                 var column = card.closest('.kanban-column');
                                 if (column) {
