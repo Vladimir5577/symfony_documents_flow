@@ -6,8 +6,8 @@ use App\Repository\Kanban\KanbanChecklistItemRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: KanbanChecklistItemRepository::class)]
-#[ORM\Table(name: 'kanban_checklist_item')]
-class KanbanChecklistItem
+#[ORM\Table(name: 'kanban_card_subtask')]
+class KanbanCardSubtas
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
