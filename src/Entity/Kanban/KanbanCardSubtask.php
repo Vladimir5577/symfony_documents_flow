@@ -2,12 +2,14 @@
 
 namespace App\Entity\Kanban;
 
+use App\Entity\User\User;
+use App\Enum\Kanban\KanbanSubtaskStatus;
 use App\Repository\Kanban\KanbanChecklistItemRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: KanbanChecklistItemRepository::class)]
 #[ORM\Table(name: 'kanban_card_subtask')]
-class KanbanCardSubtas
+class KanbanCardSubtask
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -17,15 +19,19 @@ class KanbanCardSubtas
     #[ORM\Column(length: 500)]
     private string $title;
 
-    #[ORM\Column(name: 'is_completed', options: ['default' => false])]
-    private bool $isCompleted = false;
+    #[ORM\Column(name: 'status', type: 'string', enumType: KanbanSubtaskStatus::class, options: ['default' => KanbanSubtaskStatus::TO_DO])]
+    private KanbanSubtaskStatus $status = KanbanSubtaskStatus::TO_DO;
 
     #[ORM\Column(type: 'float')]
     private float $position = 0.0;
 
-    #[ORM\ManyToOne(targetEntity: KanbanCard::class, inversedBy: 'checklistItems')]
+    #[ORM\ManyToOne(targetEntity: KanbanCard::class, inversedBy: 'subtasks')]
     #[ORM\JoinColumn(name: 'card_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private KanbanCard $card;
+
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $user = null;
 
     public function getId(): ?int
     {
@@ -43,14 +49,25 @@ class KanbanCardSubtas
         return $this;
     }
 
+    public function getStatus(): KanbanSubtaskStatus
+    {
+        return $this->status;
+    }
+
+    public function setStatus(KanbanSubtaskStatus $status): static
+    {
+        $this->status = $status;
+        return $this;
+    }
+
     public function isCompleted(): bool
     {
-        return $this->isCompleted;
+        return $this->status === KanbanSubtaskStatus::DONE;
     }
 
     public function setIsCompleted(bool $isCompleted): static
     {
-        $this->isCompleted = $isCompleted;
+        $this->status = $isCompleted ? KanbanSubtaskStatus::DONE : KanbanSubtaskStatus::TO_DO;
         return $this;
     }
 
@@ -73,6 +90,17 @@ class KanbanCardSubtas
     public function setCard(KanbanCard $card): static
     {
         $this->card = $card;
+        return $this;
+    }
+
+    public function getUser(): ?User
+    {
+        return $this->user;
+    }
+
+    public function setUser(?User $user): static
+    {
+        $this->user = $user;
         return $this;
     }
 }

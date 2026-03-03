@@ -8,8 +8,8 @@ use App\Entity\Kanban\KanbanColumn;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
-use App\Enum\KanbanBoardMemberRole;
-use App\Enum\KanbanColumnColor;
+use App\Enum\Kanban\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanColumnRepository;
@@ -183,7 +183,7 @@ class KanbanService
     /**
      * Создать колонку (позиция = max + 1).
      */
-    public function createColumn(KanbanBoard $board, string $title, ?\App\Enum\KanbanColumnColor $color = null): KanbanColumn
+    public function createColumn(KanbanBoard $board, string $title, ?\App\Enum\Kanban\KanbanColumnColor $color = null): KanbanColumn
     {
         $maxPos = $this->columnRepo->getMaxPosition($board);
 

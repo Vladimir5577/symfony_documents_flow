@@ -3,18 +3,18 @@
 namespace App\Repository\Kanban;
 
 use App\Entity\Kanban\KanbanCard;
-use App\Entity\Kanban\KanbanChecklistItem;
+use App\Entity\Kanban\KanbanCardSubtask;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
- * @extends ServiceEntityRepository<KanbanChecklistItem>
+ * @extends ServiceEntityRepository<KanbanCardSubtask>
  */
 class KanbanChecklistItemRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
     {
-        parent::__construct($registry, KanbanChecklistItem::class);
+        parent::__construct($registry, KanbanCardSubtask::class);
     }
 
     public function getMaxPosition(KanbanCard $card): float

@@ -6,7 +6,7 @@ use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
-use App\Enum\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
@@ -101,8 +101,18 @@ final class KanbanBoardApiController extends AbstractController
                         'color' => $lbl->getColor()->value,
                     ];
                 }
-                $checklistTotal = $card->getChecklistItems()->count();
-                $checklistDone = $card->getChecklistItems()->filter(fn($ci) => $ci->isCompleted())->count();
+                $checklistTotal = $card->getSubtasks()->count();
+                $checklistDone = $card->getSubtasks()->filter(fn($ci) => $ci->isCompleted())->count();
+
+                $assignees = [];
+                foreach ($card->getAssignees() as $u) {
+                    $assignees[] = [
+                        'id' => $u->getId(),
+                        'name' => trim($u->getFirstname() . ' ' . $u->getLastname()) ?: (string) $u->getId(),
+                        'firstname' => $u->getFirstname(),
+                        'lastname' => $u->getLastname(),
+                    ];
+                }
 
                 $cards[] = [
                     'id' => $card->getId(),
@@ -112,8 +122,9 @@ final class KanbanBoardApiController extends AbstractController
                     'priority' => $card->getPriority()?->value,
                     'priorityLabel' => $card->getPriority()?->getLabel(),
                     'priorityColor' => $card->getPriority()?->getColor(),
-                    'dueAt' => $card->getDueAt()?->format('c'),
+                    'dueDate' => $card->getDueDate()?->format('c'),
                     'labels' => $labels,
+                    'assignees' => $assignees,
                     'checklistTotal' => $checklistTotal,
                     'checklistDone' => $checklistDone,
                     'commentsCount' => $card->getComments()->count(),

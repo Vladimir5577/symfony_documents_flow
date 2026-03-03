@@ -3,8 +3,8 @@
 namespace App\Controller\Kanban\Api;
 
 use App\Entity\User\User;
-use App\Enum\KanbanBoardMemberRole;
-use App\Enum\KanbanColumnColor;
+use App\Enum\Kanban\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\KanbanColumnRepository;
 use App\Service\Kanban\KanbanService;

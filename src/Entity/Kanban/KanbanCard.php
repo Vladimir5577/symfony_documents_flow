@@ -3,7 +3,7 @@
 namespace App\Entity\Kanban;
 
 use App\Entity\User\User;
-use App\Enum\KanbanCardPriority;
+use App\Enum\Kanban\KanbanCardPriority;
 use App\Repository\Kanban\KanbanCardRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -29,10 +29,10 @@ class KanbanCard
     #[ORM\Column(type: 'float')]
     private float $position = 0.0;
 
-    #[ORM\Column(name: 'due_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $dueAt = null;
+    #[ORM\Column(name: 'due_date', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $dueDate = null;
 
-    #[ORM\Column(type: 'smallint', enumType: KanbanCardPriority::class, nullable: true)]
+    #[ORM\Column(type: 'string', length: 20, enumType: KanbanCardPriority::class, nullable: true)]
     private ?KanbanCardPriority $priority = null;
 
     #[ORM\Column(name: 'is_archived', options: ['default' => false])]
@@ -42,10 +42,10 @@ class KanbanCard
     #[ORM\JoinColumn(name: 'column_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private KanbanColumn $column;
 
-    /** @var Collection<int, KanbanChecklistItem> */
-    #[ORM\OneToMany(mappedBy: 'card', targetEntity: KanbanChecklistItem::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    /** @var Collection<int, KanbanCardSubtask> */
+    #[ORM\OneToMany(mappedBy: 'card', targetEntity: KanbanCardSubtask::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['position' => 'ASC'])]
-    private Collection $checklistItems;
+    private Collection $subtasks;
 
     /** @var Collection<int, KanbanCardComment> */
     #[ORM\OneToMany(mappedBy: 'card', targetEntity: KanbanCardComment::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
@@ -81,7 +81,7 @@ class KanbanCard
 
     public function __construct()
     {
-        $this->checklistItems = new ArrayCollection();
+        $this->subtasks = new ArrayCollection();
         $this->comments = new ArrayCollection();
         $this->attachments = new ArrayCollection();
         $this->labels = new ArrayCollection();
@@ -126,14 +126,14 @@ class KanbanCard
         return $this;
     }
 
-    public function getDueAt(): ?\DateTimeImmutable
+    public function getDueDate(): ?\DateTimeImmutable
     {
-        return $this->dueAt;
+        return $this->dueDate;
     }
 
-    public function setDueAt(?\DateTimeImmutable $dueAt): static
+    public function setDueDate(?\DateTimeImmutable $dueDate): static
     {
-        $this->dueAt = $dueAt;
+        $this->dueDate = $dueDate;
         return $this;
     }
 
@@ -170,16 +170,16 @@ class KanbanCard
         return $this;
     }
 
-    /** @return Collection<int, KanbanChecklistItem> */
-    public function getChecklistItems(): Collection
+    /** @return Collection<int, KanbanCardSubtask> */
+    public function getSubtasks(): Collection
     {
-        return $this->checklistItems;
+        return $this->subtasks;
     }
 
-    public function addChecklistItem(KanbanChecklistItem $item): static
+    public function addSubtask(KanbanCardSubtask $item): static
     {
-        if (!$this->checklistItems->contains($item)) {
-            $this->checklistItems->add($item);
+        if (!$this->subtasks->contains($item)) {
+            $this->subtasks->add($item);
             $item->setCard($this);
         }
         return $this;

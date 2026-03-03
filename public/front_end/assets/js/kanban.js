@@ -118,7 +118,7 @@ var KanbanApp = (function () {
                     currentCardData.priorityLabel = data.priorityLabel;
                     currentCardData.priorityColor = data.priorityColor;
                 }
-                if (data.dueAt !== undefined) currentCardData.dueAt = data.dueAt;
+                if (data.dueDate !== undefined) currentCardData.dueDate = data.dueDate;
                 if (data.borderColor !== undefined) currentCardData.borderColor = data.borderColor;
                 if (data.updatedAt) currentCardData.updatedAt = data.updatedAt;
             }
@@ -209,19 +209,37 @@ var KanbanApp = (function () {
                 html += '<span class="badge ' + escapeHtml(lbl.color) + '">' + escapeHtml(lbl.name) + '</span>';
             });
         }
-        if (data.dueAt) {
-            var d = new Date(data.dueAt);
+        if (data.dueDate) {
+            var d = new Date(data.dueDate);
             var day = String(d.getDate()).padStart(2, "0");
             var month = String(d.getMonth() + 1).padStart(2, "0");
             html += '<span class="text-muted"><i class="bi bi-calendar3"></i> ' + day + "." + month + "</span>";
         }
-        if (data.checklist && data.checklist.length) {
-            var total = data.checklist.length;
-            var done = data.checklist.filter(function (ci) { return ci.isCompleted; }).length;
+        if (data.subtasks && data.subtasks.length) {
+            var total = data.subtasks.length;
+            var done = data.subtasks.filter(function (ci) { return ci.isCompleted; }).length;
             html += '<span class="text-muted"><i class="bi bi-check2-square"></i> ' + done + "/" + total + "</span>";
         }
         if (data.comments && data.comments.length) {
             html += '<span class="text-muted"><i class="bi bi-chat-dots"></i> ' + data.comments.length + "</span>";
+        }
+        if (data.assignees && data.assignees.length) {
+            html += '<span class="kanban-card-assignees">';
+            var show = data.assignees.slice(0, 3);
+            show.forEach(function (a) {
+                var displayName = [a.lastname, a.firstname].filter(Boolean).join(" ") || a.name || "—";
+                var initials = (a.firstname && a.lastname)
+                    ? (a.firstname.charAt(0) + a.lastname.charAt(0)).toUpperCase()
+                    : ((a.name || "").trim().split(/\s+/).map(function (p) { return p.charAt(0); }).join("").slice(0, 2).toUpperCase() || "?");
+                html += '<span class="kanban-card-assignee-item">';
+                html += '<span class="kanban-card-assignee-avatar" title="' + escapeHtml(displayName) + '">' + escapeHtml(initials) + "</span>";
+                html += '<span class="kanban-card-assignee-name">' + escapeHtml(displayName) + "</span>";
+                html += "</span>";
+            });
+            if (data.assignees.length > 3) {
+                html += '<span class="kanban-card-assignee-more">+' + (data.assignees.length - 3) + "</span>";
+            }
+            html += "</span>";
         }
         html += "</div>";
         return html;
@@ -505,6 +523,7 @@ var KanbanApp = (function () {
             if (e.target.closest(".task-sidebar-panel")) return;
             if (e.target.closest(".kanban-card")) return;
             if (e.target.closest(".kanban-add-btn")) return;
+            if (e.target.closest(".modal") || e.target.closest(".modal-backdrop")) return;
             closeSidebar();
         });
 
@@ -551,7 +570,7 @@ var KanbanApp = (function () {
         initTitle();
         initDescription();
         initPriority();
-        initChecklist();
+        initSubtasks();
         initCardSubtasksWidgets();
         initAttachments();
         initDueAt();
@@ -610,7 +629,7 @@ var KanbanApp = (function () {
 
             // Due date
             var dueInput = document.getElementById("task-due-at");
-            if (dueInput) dueInput.value = data.dueAt ? data.dueAt.substring(0, 16) : "";
+            if (dueInput) dueInput.value = data.dueDate ? data.dueDate.substring(0, 16) : "";
 
             // Timestamps
             var createdEl = document.getElementById("task-created-at");
@@ -629,8 +648,8 @@ var KanbanApp = (function () {
             renderComments(data.comments || []);
             startCommentPolling(cardId);
 
-            // Checklist (подзадачи): синхронизация сайдбар + блок на карточке
-            refreshChecklistViews(currentCardId, data.checklist || []);
+            // Подзадачи: синхронизация сайдбар + блок на карточке
+            refreshSubtaskViews(currentCardId, data.subtasks || []);
 
             // Attachments
             renderAttachments(data.attachments || []);
@@ -864,7 +883,7 @@ var KanbanApp = (function () {
                     });
                 })
                 .catch(function () { /* silent */ });
-        }, 5000);
+        }, 30000);
     }
 
     function stopCommentPolling() {
@@ -911,11 +930,11 @@ var KanbanApp = (function () {
         var select = document.getElementById("task-priority-select");
         if (!select || !config.canEdit) return;
 
-        select.addEventListener("change", function () {
-            autoSaveField("priority", function () {
-                return select.value ? parseInt(select.value) : null;
+select.addEventListener("change", function () {
+                autoSaveField("priority", function () {
+                    return select.value || null;
+                });
             });
-        });
     }
 
     // ── Due Date auto-save ──
@@ -925,19 +944,20 @@ var KanbanApp = (function () {
         if (!input || !config.canEdit) return;
 
         input.addEventListener("change", function () {
-            autoSaveField("dueAt", function () {
+            autoSaveField("dueDate", function () {
                 return input.value ? new Date(input.value).toISOString() : null;
             });
         });
     }
 
-    // ── Checklist (подзадачи): один источник — currentCardData.checklist / API; синхронизация карточка + сайдбар ──
+    // ── Подзадачи (subtasks): один источник — currentCardData.subtasks / API; синхронизация карточка + сайдбар ──
 
     function renderCardSubtasks(cardId, items) {
         var block = document.querySelector('.card-subtasks[data-card-id="' + cardId + '"]');
         if (!block) return;
         var counterEl = block.querySelector(".card-subtasks-counter");
         var itemsEl = block.querySelector(".card-subtasks-items");
+        var progressWrap = block.querySelector(".card-subtasks-progress");
         var barEl = block.querySelector(".card-subtasks-progress-fill");
         if (!itemsEl) return;
 
@@ -945,6 +965,7 @@ var KanbanApp = (function () {
         var done = items.filter(function (c) { return c.isCompleted; }).length;
         var total = items.length;
         if (counterEl) counterEl.textContent = total ? "(" + done + "/" + total + ")" : "(0/0)";
+        if (progressWrap) progressWrap.style.display = total > 0 ? "" : "none";
         if (barEl) {
             var percent = total ? (done / total) * 100 : 0;
             barEl.style.width = percent + "%";
@@ -954,7 +975,7 @@ var KanbanApp = (function () {
         items.forEach(function (item) {
             var row = document.createElement("div");
             row.className = "form-check card-subtasks-item" + (item.isCompleted ? " card-subtasks-item-completed" : "");
-            row.setAttribute("data-checklist-id", item.id);
+            row.setAttribute("data-subtask-id", item.id);
             row.innerHTML =
                 '<input class="form-check-input card-subtasks-checkbox" type="checkbox"' + (item.isCompleted ? " checked" : "") + ">" +
                 '<label class="form-check-label ms-1 card-subtasks-text">' + escapeHtml(item.title) + "</label>";
@@ -962,11 +983,11 @@ var KanbanApp = (function () {
         });
     }
 
-    function refreshChecklistViews(cardId, items) {
+    function refreshSubtaskViews(cardId, items) {
         items = items || [];
         if (String(cardId) === String(currentCardId)) {
-            if (currentCardData) currentCardData.checklist = items;
-            renderChecklist(items);
+            if (currentCardData) currentCardData.subtasks = items;
+            renderSubtasks(items);
         }
         renderCardSubtasks(cardId, items);
         if (currentCardData && currentCardData.id === parseInt(cardId, 10)) {
@@ -974,8 +995,8 @@ var KanbanApp = (function () {
         }
     }
 
-    function renderChecklist(items) {
-        var container = document.getElementById("checklist-items");
+    function renderSubtasks(items) {
+        var container = document.getElementById("subtask-items");
         if (!container) return;
         container.innerHTML = "";
 
@@ -987,11 +1008,11 @@ var KanbanApp = (function () {
         items.forEach(function (item) {
             var row = document.createElement("div");
             row.className = "form-check d-flex align-items-center gap-2 mb-2";
-            row.setAttribute("data-checklist-id", item.id);
+            row.setAttribute("data-subtask-id", item.id);
             row.innerHTML =
                 '<input class="form-check-input" type="checkbox"' + (item.isCompleted ? " checked" : "") + ">" +
                 '<label class="form-check-label flex-grow-1' + (item.isCompleted ? " text-decoration-line-through text-muted" : "") + '">' + escapeHtml(item.title) + "</label>" +
-                (config.canEdit ? '<button type="button" class="btn btn-sm btn-link text-danger p-0 checklist-delete-btn"><i class="bi bi-x-lg"></i></button>' : "");
+                (config.canEdit ? '<button type="button" class="btn btn-sm btn-link text-danger p-0 subtask-delete-btn"><i class="bi bi-x-lg"></i></button>' : "");
             container.appendChild(row);
 
             var checkbox = row.querySelector("input[type=checkbox]");
@@ -1006,11 +1027,11 @@ var KanbanApp = (function () {
                         method: "PATCH",
                         body: JSON.stringify({ isCompleted: checkbox.checked })
                     }).then(function () {
-                        if (currentCardData && currentCardData.checklist) {
-                            var ci = currentCardData.checklist.find(function (c) { return c.id === item.id; });
+                        if (currentCardData && currentCardData.subtasks) {
+                            var ci = currentCardData.subtasks.find(function (c) { return c.id === item.id; });
                             if (ci) ci.isCompleted = checkbox.checked;
                         }
-                        refreshChecklistViews(currentCardId, currentCardData ? currentCardData.checklist : []);
+                        refreshSubtaskViews(currentCardId, currentCardData ? currentCardData.subtasks : []);
                     }).catch(function (err) {
                         checkbox.checked = !checkbox.checked;
                         if (label) {
@@ -1022,35 +1043,35 @@ var KanbanApp = (function () {
                 });
             }
 
-            var delBtn = row.querySelector(".checklist-delete-btn");
+            var delBtn = row.querySelector(".subtask-delete-btn");
             if (delBtn) {
                 delBtn.addEventListener("click", function () {
                     apiFetch("/api/kanban/cards/" + currentCardId + "/checklist/" + item.id, {
                         method: "DELETE"
                     }).then(function () {
-                        var next = (currentCardData && currentCardData.checklist) ? currentCardData.checklist.filter(function (c) { return c.id !== item.id; }) : [];
-                        if (currentCardData) currentCardData.checklist = next;
-                        refreshChecklistViews(currentCardId, next);
+                        var next = (currentCardData && currentCardData.subtasks) ? currentCardData.subtasks.filter(function (c) { return c.id !== item.id; }) : [];
+                        if (currentCardData) currentCardData.subtasks = next;
+                        refreshSubtaskViews(currentCardId, next);
                     }).catch(function (err) { showToast(err.message); });
                 });
             }
         });
     }
 
-    function initChecklist() {
-        var addBtn = document.getElementById("add-checklist-btn");
+    function initSubtasks() {
+        var addBtn = document.getElementById("add-subtask-btn");
         if (!addBtn) return;
 
         addBtn.addEventListener("click", function () {
-            var container = document.getElementById("checklist-items");
+            var container = document.getElementById("subtask-items");
             if (!container || !currentCardId) return;
 
-            var existing = container.querySelector(".checklist-new-input");
+            var existing = container.querySelector(".subtask-new-input");
             if (existing) { existing.focus(); return; }
 
             var wrap = document.createElement("div");
             wrap.className = "mb-2";
-            wrap.innerHTML = '<input type="text" class="form-control form-control-sm checklist-new-input" placeholder="Название подзадачи...">';
+            wrap.innerHTML = '<input type="text" class="form-control form-control-sm subtask-new-input" placeholder="Название подзадачи...">';
             container.insertBefore(wrap, container.firstChild);
 
             var input = wrap.querySelector("input");
@@ -1066,10 +1087,10 @@ var KanbanApp = (function () {
                     body: JSON.stringify({ title: title })
                 }).then(function (newItem) {
                     if (currentCardData) {
-                        currentCardData.checklist = currentCardData.checklist || [];
-                        currentCardData.checklist.push(newItem);
+                        currentCardData.subtasks = currentCardData.subtasks || [];
+                        currentCardData.subtasks.push(newItem);
                     }
-                    refreshChecklistViews(currentCardId, currentCardData ? currentCardData.checklist : []);
+                    refreshSubtaskViews(currentCardId, currentCardData ? currentCardData.subtasks : []);
                 }).catch(function (err) { showToast(err.message); });
             }
 
@@ -1081,14 +1102,14 @@ var KanbanApp = (function () {
         });
     }
 
-    function refreshChecklistProgress() {
+    function refreshSubtaskProgress() {
         if (!currentCardId || !currentCardData) return;
-        refreshChecklistViews(currentCardId, currentCardData.checklist || []);
+        refreshSubtaskViews(currentCardId, currentCardData.subtasks || []);
     }
 
-    function fetchCardChecklist(cardId) {
+    function fetchCardSubtasks(cardId) {
         return apiFetch("/api/kanban/cards/" + cardId).then(function (data) {
-            return data.checklist || [];
+            return data.subtasks || [];
         });
     }
 
@@ -1148,10 +1169,10 @@ var KanbanApp = (function () {
                         method: "POST",
                         body: JSON.stringify({ title: title })
                     }).then(function () {
-                        return fetchCardChecklist(cardId);
+                        return fetchCardSubtasks(cardId);
                     }).then(function (list) {
-                        refreshChecklistViews(cardId, list);
-                        if (String(cardId) === String(currentCardId) && currentCardData) currentCardData.checklist = list;
+                        refreshSubtaskViews(cardId, list);
+                        if (String(cardId) === String(currentCardId) && currentCardData) currentCardData.subtasks = list;
                     }).catch(function (err) { showToast(err.message); });
                 }
 
@@ -1176,17 +1197,17 @@ var KanbanApp = (function () {
                 itemsEl.addEventListener("change", function (ev) {
                     var checkbox = ev.target;
                     if (!checkbox || !checkbox.classList.contains("card-subtasks-checkbox")) return;
-                    var row = checkbox.closest("[data-checklist-id]");
+                    var row = checkbox.closest("[data-subtask-id]");
                     if (!row) return;
-                    var itemId = row.getAttribute("data-checklist-id");
+                    var itemId = row.getAttribute("data-subtask-id");
                     apiFetch("/api/kanban/cards/" + cardId + "/checklist/" + itemId, {
                         method: "PATCH",
                         body: JSON.stringify({ isCompleted: checkbox.checked })
                     }).then(function () {
-                        return fetchCardChecklist(cardId);
+                        return fetchCardSubtasks(cardId);
                     }).then(function (list) {
-                        refreshChecklistViews(cardId, list);
-                        if (String(cardId) === String(currentCardId) && currentCardData) currentCardData.checklist = list;
+                        refreshSubtaskViews(cardId, list);
+                        if (String(cardId) === String(currentCardId) && currentCardData) currentCardData.subtasks = list;
                     }).catch(function (err) {
                         checkbox.checked = !checkbox.checked;
                         showToast(err.message);
@@ -1328,6 +1349,7 @@ var KanbanApp = (function () {
             currentAssigneeIds = (assignees || []).map(function (a) { return a.id; });
             if (currentCardData) currentCardData.assignees = assignees;
             renderAssignees(assignees || []);
+            updateCardOnBoard(currentCardData);
             setSaveStatus("saved");
         };
         window.__kanbanShowToast = showToast;
@@ -1384,6 +1406,7 @@ var KanbanApp = (function () {
             currentAssigneeIds = assignees.map(function (a) { return a.id; });
             if (currentCardData) currentCardData.assignees = assignees;
             renderAssignees(assignees);
+            updateCardOnBoard(currentCardData);
             var dropdown = document.getElementById("assignee-dropdown");
             if (dropdown) dropdown.style.display = "none";
         }).catch(function (err) {

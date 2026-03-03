@@ -3,7 +3,7 @@
 namespace App\Controller\Kanban\Api;
 
 use App\Entity\User\User;
-use App\Enum\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanAttachmentRepository;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Service\Kanban\KanbanAttachmentService;

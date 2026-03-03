@@ -4,8 +4,8 @@ namespace App\Controller\Kanban\Api;
 
 use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
-use App\Enum\KanbanBoardMemberRole;
-use App\Enum\KanbanCardPriority;
+use App\Enum\Kanban\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanCardPriority;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanColumnRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
@@ -75,11 +75,12 @@ final class KanbanCardApiController extends AbstractController
 
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_VIEWER);
 
-        $checklist = [];
-        foreach ($card->getChecklistItems() as $ci) {
-            $checklist[] = [
+        $subtasks = [];
+        foreach ($card->getSubtasks() as $ci) {
+            $subtasks[] = [
                 'id' => $ci->getId(),
                 'title' => $ci->getTitle(),
+                'status' => $ci->getStatus()->value,
                 'isCompleted' => $ci->isCompleted(),
                 'position' => $ci->getPosition(),
             ];
@@ -117,7 +118,12 @@ final class KanbanCardApiController extends AbstractController
 
         $assignees = [];
         foreach ($card->getAssignees() as $u) {
-            $assignees[] = ['id' => $u->getId(), 'name' => $u->getFirstname() . ' ' . $u->getLastname()];
+            $assignees[] = [
+                'id' => $u->getId(),
+                'name' => trim($u->getFirstname() . ' ' . $u->getLastname()) ?: (string) $u->getId(),
+                'firstname' => $u->getFirstname(),
+                'lastname' => $u->getLastname(),
+            ];
         }
 
         return $this->json([
@@ -128,12 +134,12 @@ final class KanbanCardApiController extends AbstractController
             'priority' => $card->getPriority()?->value,
             'priorityLabel' => $card->getPriority()?->getLabel(),
             'priorityColor' => $card->getPriority()?->getColor(),
-            'dueAt' => $card->getDueAt()?->format('c'),
+            'dueDate' => $card->getDueDate()?->format('c'),
             'isArchived' => $card->isArchived(),
             'columnId' => $card->getColumn()->getId(),
             'columnTitle' => $card->getColumn()->getTitle(),
             'boardId' => $card->getColumn()->getBoard()->getId(),
-            'checklist' => $checklist,
+            'subtasks' => $subtasks,
             'comments' => $comments,
             'attachments' => $attachments,
             'labels' => $labels,
@@ -166,10 +172,10 @@ final class KanbanCardApiController extends AbstractController
             $card->setDescription($payload['description']);
         }
         if (array_key_exists('priority', $payload)) {
-            $card->setPriority($payload['priority'] !== null ? KanbanCardPriority::tryFrom((int) $payload['priority']) : null);
+            $card->setPriority($payload['priority'] !== null && $payload['priority'] !== '' ? KanbanCardPriority::tryFrom((string) $payload['priority']) : null);
         }
-        if (array_key_exists('dueAt', $payload)) {
-            $card->setDueAt($payload['dueAt'] ? new \DateTimeImmutable($payload['dueAt']) : null);
+        if (array_key_exists('dueDate', $payload)) {
+            $card->setDueDate($payload['dueDate'] ? new \DateTimeImmutable($payload['dueDate']) : null);
         }
         $allowedColors = ['primary', 'success', 'warning', 'danger', 'info', 'dark'];
         if (array_key_exists('borderColor', $payload)) {
@@ -188,7 +194,7 @@ final class KanbanCardApiController extends AbstractController
             'priority' => $card->getPriority()?->value,
             'priorityLabel' => $card->getPriority()?->getLabel(),
             'priorityColor' => $card->getPriority()?->getColor(),
-            'dueAt' => $card->getDueAt()?->format('c'),
+            'dueDate' => $card->getDueDate()?->format('c'),
             'borderColor' => $card->getBorderColor(),
             'updatedAt' => $card->getUpdatedAt()?->format('c'),
         ]);
@@ -222,7 +228,12 @@ final class KanbanCardApiController extends AbstractController
 
         $assignees = [];
         foreach ($card->getAssignees() as $u) {
-            $assignees[] = ['id' => $u->getId(), 'name' => $u->getFirstname() . ' ' . $u->getLastname()];
+            $assignees[] = [
+                'id' => $u->getId(),
+                'name' => trim($u->getFirstname() . ' ' . $u->getLastname()) ?: (string) $u->getId(),
+                'firstname' => $u->getFirstname(),
+                'lastname' => $u->getLastname(),
+            ];
         }
 
         return $this->json(['assignees' => $assignees]);
@@ -278,7 +289,12 @@ final class KanbanCardApiController extends AbstractController
 
         $assignees = [];
         foreach ($card->getAssignees() as $u) {
-            $assignees[] = ['id' => $u->getId(), 'name' => $u->getFirstname() . ' ' . $u->getLastname()];
+            $assignees[] = [
+                'id' => $u->getId(),
+                'name' => trim($u->getFirstname() . ' ' . $u->getLastname()) ?: (string) $u->getId(),
+                'firstname' => $u->getFirstname(),
+                'lastname' => $u->getLastname(),
+            ];
         }
 
         return $this->json(['assignees' => $assignees]);

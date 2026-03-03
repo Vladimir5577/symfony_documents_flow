@@ -37,7 +37,7 @@ class KanbanCardRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('c')
             ->leftJoin('c.column', 'col')->addSelect('col')
             ->leftJoin('col.board', 'b')->addSelect('b')
-            ->leftJoin('c.checklistItems', 'ci')->addSelect('ci')
+            ->leftJoin('c.subtasks', 'ci')->addSelect('ci')
             ->leftJoin('c.comments', 'com')->addSelect('com')
             ->leftJoin('com.author', 'a')->addSelect('a')
             ->leftJoin('c.attachments', 'att')->addSelect('att')

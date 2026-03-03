@@ -165,16 +165,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 return r.json();
             })
             .then(function (data) {
-                var modalEl = document.getElementById('assignNewUserOrgModal');
-                if (modalEl) {
-                    var modal = bootstrap.Modal.getInstance(modalEl);
-                    if (modal) modal.hide();
-                }
                 if (typeof window.__kanbanRefreshAssignees === 'function') {
                     window.__kanbanRefreshAssignees(data.assignees || []);
                 }
                 if (typeof window.__kanbanShowToast === 'function') {
                     window.__kanbanShowToast('Пользователь добавлен в проект и назначен на задачу.', 'success');
+                }
+                var modalEl = document.getElementById('assignNewUserOrgModal');
+                if (modalEl) {
+                    var modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
                 }
             })
             .catch(function (err) {

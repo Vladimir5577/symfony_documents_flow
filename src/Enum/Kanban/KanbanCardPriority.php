@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Enum;
+namespace App\Enum\Kanban;
 
-enum KanbanCardPriority: int
+enum KanbanCardPriority: string
 {
-    case LOW = 1;
-    case MEDIUM = 2;
-    case HIGH = 3;
+    case LOW = 'low';
+    case MEDIUM = 'medium';
+    case HIGH = 'high';
 
     public function getLabel(): string
     {

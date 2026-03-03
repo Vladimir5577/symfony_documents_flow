@@ -3,7 +3,7 @@
 namespace App\Entity\Kanban\Project;
 
 use App\Entity\User\User;
-use App\Enum\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use Doctrine\ORM\Mapping as ORM;
 

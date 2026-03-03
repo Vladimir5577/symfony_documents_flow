@@ -305,6 +305,45 @@
             font-size: 0.8rem;
         }
 
+        .kanban-card-assignees {
+            display: inline-flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.35rem 0.5rem;
+            margin-left: auto;
+        }
+        .kanban-card-assignee-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .kanban-card-assignee-avatar {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--bs-primary);
+            color: #fff;
+            font-size: 0.6rem;
+            font-weight: 600;
+            line-height: 1;
+        }
+        .kanban-card-assignee-name {
+            font-size: 0.7rem;
+            color: var(--bs-body-color);
+            white-space: nowrap;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .kanban-card-assignee-more {
+            font-size: 0.65rem;
+            color: var(--bs-secondary-color);
+        }
+
         .kanban-add-card {
             padding: 0.5rem;
             color: var(--bs-secondary-color);
@@ -490,7 +529,7 @@
 
         /* Board tabs (switch between project boards) */
         .board-tabs-wrap {
-            border-bottom: 3px solid var(--bs-border-color, #dee2e6);
+            border-bottom: 8px solid var(--bs-border-color, #dee2e6);
         }
         .board-tabs {
             display: flex;
@@ -523,11 +562,11 @@
             background-color: var(--bs-secondary-bg, rgba(0,0,0,.04));
         }
         .board-tabs .board-tab-link.active {
-            color: var(--bs-primary);
+            color: var(--bs-body-color);
             background-color: var(--bs-body-bg);
-            border: 7px solid var(--bs-primary);
+            border: 7px solid var(--bs-secondary);
             border-bottom: none;
-            margin-bottom: -4px;
+            margin-bottom: -8px;
             font-weight: 600;
             padding: 0.5rem 0.75rem 0.5rem 1rem;
         }
@@ -924,9 +963,9 @@
 
         .card-subtasks-progress-track {
             position: relative;
-            height: 4px;
+            height: 8px;
             border-radius: 999px;
-            background: var(--bs-border-color, #dee2e6);
+            background: #adb5bd;
             overflow: hidden;
         }
 
@@ -1217,21 +1256,34 @@
                             {% for label in card.labels %}
                             <span class="badge {{ label.color.value }}">{{ label.name }}</span>
                             {% endfor %}
-                            {% if card.dueAt %}
-                            <span class="text-muted"><i class="bi bi-calendar3"></i> {{ card.dueAt|date('d.m') }}</span>
+                            {% if card.dueDate %}
+                            <span class="text-muted"><i class="bi bi-calendar3"></i> {{ card.dueDate|date('d.m') }}</span>
                             {% endif %}
-                            {% if card.checklistItems|length > 0 %}
+                            {% if card.subtasks|length > 0 %}
                             <span class="text-muted">
                                 <i class="bi bi-check2-square"></i>
-                                {{ card.checklistItems|filter(ci => ci.completed)|length }}/{{ card.checklistItems|length }}
+                                {{ card.subtasks|filter(ci => ci.completed)|length }}/{{ card.subtasks|length }}
                             </span>
                             {% endif %}
                             {% if card.comments|length > 0 %}
                             <span class="text-muted"><i class="bi bi-chat-dots"></i> {{ card.comments|length }}</span>
                             {% endif %}
+                            {% if card.assignees|length > 0 %}
+                            <span class="kanban-card-assignees">
+                                {% for assignee in card.assignees|slice(0, 3) %}
+                                <span class="kanban-card-assignee-item">
+                                    <span class="kanban-card-assignee-avatar" title="{{ assignee.lastname }} {{ assignee.firstname }}">{{ ((assignee.firstname|default(''))|slice(0, 1) ~ (assignee.lastname|default(''))|slice(0, 1))|upper }}</span>
+                                    <span class="kanban-card-assignee-name">{{ assignee.lastname }} {{ assignee.firstname }}</span>
+                                </span>
+                                {% endfor %}
+                                {% if card.assignees|length > 3 %}
+                                <span class="kanban-card-assignee-more">+{{ card.assignees|length - 3 }}</span>
+                                {% endif %}
+                            </span>
+                            {% endif %}
                         </div>
-                        {% set _subtasksDone = card.checklistItems|filter(ci => ci.completed)|length %}
-                        {% set _subtasksTotal = card.checklistItems|length %}
+                        {% set _subtasksDone = card.subtasks|filter(ci => ci.completed)|length %}
+                        {% set _subtasksTotal = card.subtasks|length %}
                         {% set _subtasksPercent = _subtasksTotal > 0 ? (_subtasksDone / _subtasksTotal * 100) : 0 %}
                         <div class="card-subtasks card-subtasks-collapsed" data-card-id="{{ card.id }}" data-subtasks-host>
                             <div class="card-subtasks-header">
@@ -1248,7 +1300,7 @@
                                 </button>
                                 {% endif %}
                             </div>
-                            <div class="card-subtasks-progress">
+                            <div class="card-subtasks-progress"{% if card.subtasks|length == 0 %} style="display: none;"{% endif %}>
                                 <div class="card-subtasks-progress-track">
                                     <div class="card-subtasks-progress-fill" style="width: {{ _subtasksPercent }}%;"></div>
                                 </div>
@@ -1260,8 +1312,8 @@
                                     </div>
                                 </div>
                                 <div class="card-subtasks-items">
-                                    {% for ci in card.checklistItems %}
-                                    <div class="form-check card-subtasks-item {{ ci.completed ? 'card-subtasks-item-completed' : '' }}" data-checklist-id="{{ ci.id }}">
+                                    {% for ci in card.subtasks %}
+                                    <div class="form-check card-subtasks-item {{ ci.completed ? 'card-subtasks-item-completed' : '' }}" data-subtask-id="{{ ci.id }}">
                                         <input class="form-check-input card-subtasks-checkbox" type="checkbox" {{ ci.completed ? 'checked' : '' }}>
                                         <label class="form-check-label ms-1 card-subtasks-text">{{ ci.title }}</label>
                                     </div>
@@ -1354,13 +1406,13 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h6 class="mb-0">Подзадачи</h6>
                             {% if memberRole.value != 'VIEWER' %}
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="add-checklist-btn">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="add-subtask-btn">
                                 <i class="bi bi-plus-lg"></i>
                                 <span class="d-none d-sm-inline">Добавить подзадачу</span>
                             </button>
                             {% endif %}
                         </div>
-                        <div class="task-subtasks-list" id="checklist-items"></div>
+                        <div class="task-subtasks-list" id="subtask-items"></div>
                     </div>
                 </div>
 
@@ -1386,9 +1438,9 @@
                             {% if memberRole.value != 'VIEWER' %}
                             <select class="form-select form-select-sm" id="task-priority-select">
                                 <option value="">Не задан</option>
-                                <option value="1">Низкий</option>
-                                <option value="2">Средний</option>
-                                <option value="3">Высокий</option>
+                                <option value="low">Низкий</option>
+                                <option value="medium">Средний</option>
+                                <option value="high">Высокий</option>
                             </select>
                             {% else %}
                             <span id="task-info-priority" class="task-info-value">—</span>

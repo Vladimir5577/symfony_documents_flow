@@ -4,14 +4,14 @@ namespace App\DataFixtures;
 
 use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\KanbanCard;
-use App\Entity\Kanban\KanbanChecklistItem;
+use App\Entity\Kanban\KanbanCardSubtask;
 use App\Entity\Kanban\KanbanColumn;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
-use App\Enum\KanbanBoardMemberRole;
-use App\Enum\KanbanCardPriority;
-use App\Enum\KanbanColumnColor;
+use App\Enum\Kanban\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanCardPriority;
+use App\Enum\Kanban\KanbanColumnColor;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Persistence\ObjectManager;
@@ -102,14 +102,14 @@ class KanbanFixtures extends Fixture implements FixtureGroupInterface
         $manager->persist($card3);
 
         // --- Чеклист для card1 ---
-        $ci1 = new KanbanChecklistItem();
+        $ci1 = new KanbanCardSubtask();
         $ci1->setTitle('Согласовать с юристом');
         $ci1->setIsCompleted(true);
         $ci1->setPosition(1.0);
         $ci1->setCard($card1);
         $manager->persist($ci1);
 
-        $ci2 = new KanbanChecklistItem();
+        $ci2 = new KanbanCardSubtask();
         $ci2->setTitle('Получить подпись директора');
         $ci2->setIsCompleted(false);
         $ci2->setPosition(2.0);

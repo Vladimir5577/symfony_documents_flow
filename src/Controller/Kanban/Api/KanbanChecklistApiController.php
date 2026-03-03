@@ -2,9 +2,10 @@
 
 namespace App\Controller\Kanban\Api;
 
-use App\Entity\Kanban\KanbanChecklistItem;
+use App\Entity\Kanban\KanbanCardSubtask;
 use App\Entity\User\User;
-use App\Enum\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanSubtaskStatus;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanChecklistItemRepository;
 use App\Service\Kanban\KanbanService;
@@ -47,7 +48,7 @@ final class KanbanChecklistApiController extends AbstractController
 
         $maxPos = $this->checklistRepo->getMaxPosition($card);
 
-        $item = new KanbanChecklistItem();
+        $item = new KanbanCardSubtask();
         $item->setTitle($title);
         $item->setPosition($maxPos + 1.0);
         $item->setCard($card);
@@ -58,6 +59,7 @@ final class KanbanChecklistApiController extends AbstractController
         return $this->json([
             'id' => $item->getId(),
             'title' => $item->getTitle(),
+            'status' => $item->getStatus()->value,
             'isCompleted' => $item->isCompleted(),
             'position' => $item->getPosition(),
         ], Response::HTTP_CREATED);
@@ -86,6 +88,12 @@ final class KanbanChecklistApiController extends AbstractController
         if (isset($payload['title']) && trim($payload['title']) !== '') {
             $item->setTitle(trim($payload['title']));
         }
+        if (array_key_exists('status', $payload) && is_string($payload['status'])) {
+            $status = KanbanSubtaskStatus::tryFrom($payload['status']);
+            if ($status !== null) {
+                $item->setStatus($status);
+            }
+        }
         if (array_key_exists('isCompleted', $payload)) {
             $item->setIsCompleted((bool) $payload['isCompleted']);
         }
@@ -95,6 +103,7 @@ final class KanbanChecklistApiController extends AbstractController
         return $this->json([
             'id' => $item->getId(),
             'title' => $item->getTitle(),
+            'status' => $item->getStatus()->value,
             'isCompleted' => $item->isCompleted(),
             'position' => $item->getPosition(),
         ]);

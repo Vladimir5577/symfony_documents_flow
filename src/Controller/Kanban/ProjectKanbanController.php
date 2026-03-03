@@ -4,7 +4,7 @@ namespace App\Controller\Kanban;
 
 use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
-use App\Enum\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;

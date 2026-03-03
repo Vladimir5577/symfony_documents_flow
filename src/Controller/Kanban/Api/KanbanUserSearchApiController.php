@@ -2,11 +2,11 @@
 
 namespace App\Controller\Kanban\Api;
 
+use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanService;
-use App\Enum\KanbanBoardMemberRole;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;

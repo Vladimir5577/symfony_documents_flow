@@ -2,7 +2,7 @@
 
 namespace App\Entity\Kanban;
 
-use App\Enum\KanbanColumnColor;
+use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanColumnRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
