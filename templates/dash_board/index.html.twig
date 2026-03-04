@@ -13,7 +13,7 @@
 {% block main %}
     <h1>Вы залогинились успешно!</h1>
     <p>Здравствуйте, <strong>{{ user_display_name }}</strong>!</p>
-    <p>Организация: <strong>{{ organization.shortName }}</strong></p>
+    <p>Организация: <strong>{{ organization.name }}</strong></p>
     {% if organization.description %}
         <p>{{ organization.description }}</p>
     {% endif %}

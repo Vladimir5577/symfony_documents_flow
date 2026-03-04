@@ -20,7 +20,7 @@ class KanbanFixtures extends Fixture implements FixtureGroupInterface
 {
     public static function getGroups(): array
     {
-        return ['base'];
+        return ['admin'];
     }
 
     public function load(ObjectManager $manager): void

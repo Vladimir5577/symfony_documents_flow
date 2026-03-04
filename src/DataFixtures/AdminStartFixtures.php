@@ -8,32 +8,24 @@ use App\Entity\User\User;
 use App\Enum\UserRole;
 use App\Repository\Organization\OrganizationRepository;
 use Doctrine\Bundle\FixturesBundle\Fixture;
+use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Persistence\ObjectManager;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
-class AdminStartFixtures extends Fixture
+class AdminStartFixtures extends Fixture implements FixtureGroupInterface
 {
     public function __construct(
         private readonly UserPasswordHasherInterface $passwordHasher
     ) {
     }
 
+    public static function getGroups(): array
+    {
+        return ['admin'];
+    }
+
     public function load(ObjectManager $manager): void
     {
-        // Создаем админскую организацию
-        $adminOrganization = new Organization();
-        $adminOrganization->setShortName('Admin');
-        $adminOrganization->setFullName(OrganizationRepository::ADMIN_ORGANIZATION_NAME);
-        $adminOrganization->setDescription('Организация для системных администраторов');
-        $adminOrganization->setLegalAddress('г. Ростов-на-Дону, ул. Административная, д. 1');
-        $adminOrganization->setActualAddress('г. Ростов-на-Дону, ул. Административная, д. 1');
-        $adminOrganization->setPhone('+7 (863) 000-00-01');
-        $adminOrganization->setEmail('admin@system.local');
-        $manager->persist($adminOrganization);
-
-        // Сохраняем ссылку на организацию
-        $this->addReference('admin_organization', $adminOrganization);
-
         // Создаем все роли из enum
         $adminRole = null;
         foreach (UserRole::cases() as $userRole) {
@@ -54,7 +46,8 @@ class AdminStartFixtures extends Fixture
         $admin->setLastname('Админ');
         $admin->setFirstname('Системный');
         $admin->setEmail('admin@admin.com');
-        $admin->setOrganization($adminOrganization);
+        // Админ без привязки к конкретной организации
+        $admin->setOrganization(null);
         $admin->setPassword($this->passwordHasher->hashPassword($admin, '1234'));
         $admin->addRoleEntity($adminRole);
         $manager->persist($admin);

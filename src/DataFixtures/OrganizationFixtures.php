@@ -32,7 +32,7 @@ class OrganizationFixtures extends Fixture
         echo "  [OrganizationFixtures] Загрузка организаций...\n";
         $organizationsData = [
             [
-                'short_name' => 'ООО "ДонСтройМаш"',
+                'name' => 'ООО "ДонСтройМаш"',
                 'full_name' => 'Донецкая машиностроительная компания',
                 'description' => 'Основная строительная организация',
                 'legal_address' => 'г. Ростов-на-Дону, ул. Строительная, д. 1',
@@ -50,7 +50,7 @@ class OrganizationFixtures extends Fixture
                 'tax_type' => TaxType::USN_INCOME,
             ],
             [
-                'short_name' => 'ООО "СтройКомплекс"',
+                'name' => 'ООО "СтройКомплекс"',
                 'full_name' => 'Комплексное строительное предприятие',
                 'description' => 'Комплексное строительное предприятие',
                 'legal_address' => 'г. Ростов-на-Дону, пр. Ленина, д. 50',
@@ -73,7 +73,7 @@ class OrganizationFixtures extends Fixture
         $organizations = [];
         foreach ($organizationsData as $index => $data) {
             $org = new Organization();
-            $org->setShortName($data['short_name']);
+            $org->setName($data['name']);
             $org->setFullName($data['full_name']);
             $org->setDescription($data['description']);
             $org->setLegalAddress($data['legal_address'] ?? null);
@@ -93,11 +93,11 @@ class OrganizationFixtures extends Fixture
         $filialRefIndex = 0;
         $deptRefIndex = 0;
         foreach ($organizations as $orgIndex => $org) {
-            $orgShortName = $organizationsData[$orgIndex]['short_name'];
+            $orgName = $organizationsData[$orgIndex]['name'];
             for ($f = 0; $f < self::FILIALS_PER_ORGANIZATION; $f++) {
                 $suffix = $filialSuffixes[$f];
                 $filial = new Filial();
-                $filial->setShortName($orgShortName . ' — Филиал «' . $suffix . '»');
+                $filial->setName($orgName . ' — Филиал «' . $suffix . '»');
                 $filial->setFullName($organizationsData[$orgIndex]['full_name'] . ' — Филиал «' . $suffix . '»');
                 $filial->setDescription('Филиал организации');
                 $filialAddr = 'г. Ростов-на-Дону, ул. Филиальная, д. ' . ($orgIndex * 10 + $f + 1);
@@ -115,7 +115,7 @@ class OrganizationFixtures extends Fixture
                 for ($d = 0; $d < $deptCount; $d++) {
                     $name = self::DEPARTMENT_NAMES[$d % count(self::DEPARTMENT_NAMES)];
                     $department = new Department();
-                    $department->setShortName($name);
+                    $department->setName($name);
                     $department->setFullName($name);
                     $department->setParent($filial);
                     $filial->addChildOrganization($department);
@@ -124,7 +124,7 @@ class OrganizationFixtures extends Fixture
                 }
             }
             $manager->flush();
-            echo "  [OrganizationFixtures] Филиалы и департаменты сохранены: " . $organizationsData[$orgIndex]['short_name'] . "\n";
+            echo "  [OrganizationFixtures] Филиалы и департаменты сохранены: " . $organizationsData[$orgIndex]['name'] . "\n";
         }
         echo "  [OrganizationFixtures] Готово.\n";
     }

@@ -28,23 +28,16 @@ abstract class AbstractOrganization
     private ?int $id = null;
 
     #[ORM\Column(name: 'short_name', length: 255)]
-    #[Assert\NotBlank(message: 'Короткое название обязательно для заполнения.')]
+    #[Assert\NotBlank(message: 'Название обязательно для заполнения.')]
     #[Assert\Length(
         min: 2,
         max: 255,
-        minMessage: 'Короткое название должно содержать минимум {{ limit }} символа.',
-        maxMessage: 'Короткое название не должно превышать {{ limit }} символов.'
+        minMessage: 'Название должно содержать минимум {{ limit }} символа.',
+        maxMessage: 'Название не должно превышать {{ limit }} символов.'
     )]
-    private ?string $shortName = null;
+    private ?string $name = null;
 
-    #[ORM\Column(name: 'full_name', length: 255)]
-    #[Assert\NotBlank(message: 'Полное название обязательно для заполнения.')]
-    #[Assert\Length(
-        min: 2,
-        max: 255,
-        minMessage: 'Полное название должно содержать минимум {{ limit }} символа.',
-        maxMessage: 'Полное название не должно превышать {{ limit }} символов.'
-    )]
+    #[ORM\Column(name: 'full_name', length: 255, nullable: true)]
     private ?string $fullName = null;
 
     #[ORM\ManyToOne(targetEntity: self::class, inversedBy: 'childOrganizations')]
@@ -109,14 +102,14 @@ abstract class AbstractOrganization
         return $this->id;
     }
 
-    public function getShortName(): ?string
+    public function getName(): ?string
     {
-        return $this->shortName;
+        return $this->name;
     }
 
-    public function setShortName(string $shortName): static
+    public function setName(string $name): static
     {
-        $this->shortName = $shortName;
+        $this->name = $name;
 
         return $this;
     }
@@ -126,7 +119,7 @@ abstract class AbstractOrganization
         return $this->fullName;
     }
 
-    public function setFullName(string $fullName): static
+    public function setFullName(?string $fullName): static
     {
         $this->fullName = $fullName;
 

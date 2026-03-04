@@ -4,7 +4,7 @@ namespace App\Controller\User;
 
 use App\Entity\User\User;
 use App\Entity\User\Worker;
-use App\Enum\UserEmployeeStatus;
+use App\Enum\WorkerStatus;
 use App\Enum\UserRole;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\RoleRepository;
@@ -239,7 +239,7 @@ final class UserController extends AbstractController
 
         $pagination = $userRepository->findPaginated($page, $limit, $search, $organizationId, $status);
 
-        $statusChoices = UserEmployeeStatus::getChoices();
+        $statusChoices = WorkerStatus::getChoices();
 
         return $this->render('user/all_users.html.twig', [
             'active_tab' => 'all_users',
@@ -283,7 +283,7 @@ final class UserController extends AbstractController
                 'patronymic' => $user->getPatronymic() ?? '-',
                 'login' => $user->getLogin(),
                 'phone' => $user->getPhone() ?? '-',
-                'userEmployeeStatusLabel' => $user->getUserEmployeeStatus()->getLabel(),
+                'userEmployeeStatusLabel' => $user->getWorker()?->getWorkerStatus()->getLabel() ?? '—',
                 'viewUrl' => $this->generateUrl('app_view_user', ['id' => $user->getId(), 'page' => $page]),
             ];
         }
@@ -424,7 +424,7 @@ final class UserController extends AbstractController
             'organizations' => $organizationsWithChildren,
             'roles' => $roles,
             'selected_role_id' => $selectedRoleId,
-            'user_employee_status_choices' => UserEmployeeStatus::getChoices(),
+            'user_employee_status_choices' => WorkerStatus::getChoices(),
         ]);
     }
 
@@ -495,9 +495,10 @@ final class UserController extends AbstractController
 
         $employeeStatusValue = (string) ($formData['user_employee_status'] ?? '');
         if ($employeeStatusValue !== '') {
-            $status = UserEmployeeStatus::tryFrom($employeeStatusValue);
-            if ($status !== null && $user->getUserEmployeeStatus() !== $status) {
-                $user->setUserEmployeeStatus($status);
+            $status = WorkerStatus::tryFrom($employeeStatusValue);
+            $worker = $user->getWorker();
+            if ($status !== null && $worker !== null && $worker->getWorkerStatus() !== $status) {
+                $worker->setWorkerStatus($status);
             }
         }
 

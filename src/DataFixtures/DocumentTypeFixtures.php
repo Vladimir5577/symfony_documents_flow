@@ -4,10 +4,16 @@ namespace App\DataFixtures;
 
 use App\Entity\Document\DocumentType;
 use Doctrine\Bundle\FixturesBundle\Fixture;
+use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Persistence\ObjectManager;
 
-class DocumentTypeFixtures extends Fixture
+class DocumentTypeFixtures extends Fixture implements FixtureGroupInterface
 {
+    public static function getGroups(): array
+    {
+        return ['admin'];
+    }
+
     public function load(ObjectManager $manager): void
     {
         $documentTypes = [

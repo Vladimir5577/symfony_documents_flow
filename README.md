@@ -113,3 +113,9 @@ dpkg -i wkhtmltox_0.12.6-1.buster_amd64.deb
 
     To check ip computer in network
 $ hostname -I
+
+
+// ======================================
+
+Console commands
+$ php bin/console app:import-workers-from-excel

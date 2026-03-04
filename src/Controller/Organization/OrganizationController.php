@@ -79,7 +79,7 @@ final class OrganizationController extends AbstractController
         $lines = [
             'РЕКВИЗИТЫ',
             str_repeat('—', 40),
-            'Краткое наименование: ' . ($organization->getShortName() ?? ''),
+            'Краткое наименование: ' . ($organization->getName() ?? ''),
             'Полное наименование: ' . ($organization->getFullName() ?? ''),
             '',
             'Юридический адрес: ' . ($organization->getLegalAddress() ?? ''),
@@ -167,7 +167,7 @@ final class OrganizationController extends AbstractController
         if ($search !== '') {
             $term = mb_strtolower($search);
             $match = false
-                || ($userOrganization->getShortName() && mb_strpos(mb_strtolower($userOrganization->getShortName()), $term) !== false)
+                || ($userOrganization->getName() && mb_strpos(mb_strtolower($userOrganization->getName()), $term) !== false)
                 || ($userOrganization->getFullName() && mb_strpos(mb_strtolower($userOrganization->getFullName()), $term) !== false)
                 || ($userOrganization->getLegalAddress() && mb_strpos(mb_strtolower($userOrganization->getLegalAddress()), $term) !== false)
                 || ($userOrganization->getActualAddress() && mb_strpos(mb_strtolower($userOrganization->getActualAddress()), $term) !== false)
@@ -222,7 +222,7 @@ final class OrganizationController extends AbstractController
                 } else {
                     $term = mb_strtolower($search);
                     $match = false
-                        || ($userOrganization->getShortName() && mb_strpos(mb_strtolower($userOrganization->getShortName()), $term) !== false)
+                        || ($userOrganization->getName() && mb_strpos(mb_strtolower($userOrganization->getName()), $term) !== false)
                         || ($userOrganization->getFullName() && mb_strpos(mb_strtolower($userOrganization->getFullName()), $term) !== false)
                         || ($userOrganization->getLegalAddress() && mb_strpos(mb_strtolower($userOrganization->getLegalAddress()), $term) !== false)
                 || ($userOrganization->getActualAddress() && mb_strpos(mb_strtolower($userOrganization->getActualAddress()), $term) !== false)
@@ -245,7 +245,7 @@ final class OrganizationController extends AbstractController
         foreach ($organizations as $org) {
             $organizationsData[] = [
                 'id' => $org->getId(),
-                'shortName' => $org->getShortName(),
+                'name' => $org->getName(),
                 'fullName' => $org->getFullName(),
                 'legalAddress' => $org->getLegalAddress() ?? '-',
                 'actualAddress' => $org->getActualAddress() ?? '-',
@@ -301,7 +301,7 @@ final class OrganizationController extends AbstractController
                 return $this->redirectToRoute('edit_organization', ['id' => $id]);
             }
 
-            $organization->setShortName(trim((string) ($formData['short_name'] ?? '')));
+            $organization->setName(trim((string) ($formData['name'] ?? '')));
             $organization->setFullName(trim((string) ($formData['full_name'] ?? '')));
             $organization->setDescription(trim((string) ($formData['description'] ?? '')) ?: null);
             $organization->setLegalAddress(trim((string) ($formData['legal_address'] ?? '')) ?: null);
@@ -436,7 +436,7 @@ final class OrganizationController extends AbstractController
             OrganizationType::ORGANIZATION => new Organization(),
         };
 
-        $organization->setShortName(trim((string) ($formData['short_name'] ?? '')));
+        $organization->setName(trim((string) ($formData['name'] ?? '')));
         $organization->setFullName(trim((string) ($formData['full_name'] ?? '')));
         $organization->setDescription(trim((string) ($formData['description'] ?? '')) ?: null);
         $organization->setLegalAddress(trim((string) ($formData['legal_address'] ?? '')) ?: null);
