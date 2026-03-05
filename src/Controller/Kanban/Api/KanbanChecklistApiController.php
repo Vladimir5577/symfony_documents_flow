@@ -3,11 +3,14 @@
 namespace App\Controller\Kanban\Api;
 
 use App\Entity\Kanban\KanbanCardSubtask;
+use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Enum\Kanban\KanbanSubtaskStatus;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanChecklistItemRepository;
+use App\Repository\Kanban\Project\KanbanProjectUserRepository;
+use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -24,6 +27,8 @@ final class KanbanChecklistApiController extends AbstractController
         private readonly KanbanChecklistItemRepository $checklistRepo,
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $em,
+        private readonly UserRepository $userRepo,
+        private readonly KanbanProjectUserRepository $projectUserRepo,
     ) {
     }
 
@@ -62,6 +67,8 @@ final class KanbanChecklistApiController extends AbstractController
             'status' => $item->getStatus()->value,
             'isCompleted' => $item->isCompleted(),
             'position' => $item->getPosition(),
+            'userId' => null,
+            'userName' => null,
         ], Response::HTTP_CREATED);
     }
 
@@ -97,6 +104,25 @@ final class KanbanChecklistApiController extends AbstractController
         if (array_key_exists('isCompleted', $payload)) {
             $item->setIsCompleted((bool) $payload['isCompleted']);
         }
+        if (array_key_exists('user_id', $payload)) {
+            if ($payload['user_id'] === null) {
+                $item->setUser(null);
+            } else {
+                $assignee = $this->userRepo->find((int) $payload['user_id']);
+                if ($assignee) {
+                    // Auto-add to project if not already a member (same as assign-new-member on cards)
+                    $project = $card->getColumn()->getBoard()->getProject();
+                    if ($project && !$this->projectUserRepo->findByProjectAndUser($project, $assignee)) {
+                        $projectUser = new KanbanProjectUser();
+                        $projectUser->setKanbanProject($project);
+                        $projectUser->setUser($assignee);
+                        $projectUser->setRole(KanbanBoardMemberRole::KANBAN_VIEWER);
+                        $this->em->persist($projectUser);
+                    }
+                    $item->setUser($assignee);
+                }
+            }
+        }
 
         $this->em->flush();
 
@@ -106,6 +132,8 @@ final class KanbanChecklistApiController extends AbstractController
             'status' => $item->getStatus()->value,
             'isCompleted' => $item->isCompleted(),
             'position' => $item->getPosition(),
+            'userId' => $item->getUser()?->getId(),
+            'userName' => $item->getUser() ? trim($item->getUser()->getLastname() . ' ' . $item->getUser()->getFirstname()) : null,
         ]);
     }
 

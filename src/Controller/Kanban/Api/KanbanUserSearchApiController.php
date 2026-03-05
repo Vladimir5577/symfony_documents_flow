@@ -50,7 +50,7 @@ final class KanbanUserSearchApiController extends AbstractController
 
         $data = [];
         foreach ($users as $u) {
-            $data[] = ['id' => $u->getId(), 'name' => $u->getFirstname() . ' ' . $u->getLastname()];
+            $data[] = ['id' => $u->getId(), 'name' => $u->getLastname() . ' ' . $u->getFirstname()];
         }
 
         return $this->json($data);

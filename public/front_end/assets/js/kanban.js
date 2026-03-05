@@ -11,6 +11,7 @@ var KanbanApp = (function () {
     var knownCommentIds = new Set();
     var currentAssigneeIds = [];
     var saveStatusTimer = null;
+    var currentSubtaskIdForAssign = null;
 
     // ── Helpers ──
 
@@ -571,6 +572,7 @@ var KanbanApp = (function () {
         initDescription();
         initPriority();
         initSubtasks();
+        initSubtaskAssigneeArea();
         initCardSubtasksWidgets();
         initAttachments();
         initDueAt();
@@ -1009,11 +1011,45 @@ select.addEventListener("change", function () {
             var row = document.createElement("div");
             row.className = "form-check d-flex align-items-center gap-2 mb-2";
             row.setAttribute("data-subtask-id", item.id);
+
+            var assigneeHtml = "";
+            if (config.canEdit) {
+                if (item.userName) {
+                    assigneeHtml =
+                        '<span class="badge bg-secondary me-1 subtask-assignee-chip" data-subtask-id="' + item.id + '" style="cursor:pointer;font-size:0.78rem;">' +
+                        escapeHtml(item.userName) + ' <span style="opacity:0.7">&times;</span>' +
+                        '</span>';
+                } else {
+                    assigneeHtml =
+                        '<button type="button" class="btn btn-sm btn-outline-secondary subtask-assignee-add-btn" data-subtask-id="' + item.id + '" style="padding:0.1rem 0.4rem;font-size:0.8rem;white-space:nowrap;">' +
+                        'Назначить' +
+                        '</button>';
+                }
+            } else if (item.userName) {
+                assigneeHtml = '<span class="text-muted small" style="white-space:nowrap;flex-shrink:0;">' + escapeHtml(item.userName) + '</span>';
+            }
+
             row.innerHTML =
                 '<input class="form-check-input" type="checkbox"' + (item.isCompleted ? " checked" : "") + ">" +
                 '<label class="form-check-label flex-grow-1' + (item.isCompleted ? " text-decoration-line-through text-muted" : "") + '">' + escapeHtml(item.title) + "</label>" +
+                assigneeHtml +
                 (config.canEdit ? '<button type="button" class="btn btn-sm btn-link text-danger p-0 subtask-delete-btn"><i class="bi bi-x-lg"></i></button>' : "");
             container.appendChild(row);
+
+            var chipEl = row.querySelector(".subtask-assignee-chip");
+            var addBtn = row.querySelector(".subtask-assignee-add-btn");
+            if (chipEl) {
+                chipEl.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    assignSubtaskUser(item.id, null);
+                });
+            }
+            if (addBtn) {
+                addBtn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    showSubtaskAssigneeDropdown(addBtn, item.id);
+                });
+            }
 
             var checkbox = row.querySelector("input[type=checkbox]");
             if (checkbox && config.canEdit) {
@@ -1056,6 +1092,142 @@ select.addEventListener("change", function () {
                 });
             }
         });
+    }
+
+    // ── Subtask assignee dropdown (mirrors card assignee in Info tab) ──
+
+    function initSubtaskAssigneeArea() {
+        // Build one floating dropdown mirroring #assignee-dropdown structure
+        var dd = document.createElement("div");
+        dd.id = "subtask-assignee-dropdown";
+        dd.className = "dropdown-menu p-2";
+        dd.style.cssText = "display:none;position:fixed;z-index:1200;min-width:220px;";
+        dd.innerHTML =
+            '<div class="d-flex gap-1 mb-2 align-items-center">' +
+                '<input type="text" id="subtask-assignee-search" class="form-control form-control-sm flex-grow-1" placeholder="Поиск...">' +
+                '<button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0" id="subtask-assignee-add-new-btn" title="Добавить пользователя в проект и назначить">' +
+                    '<i class="bi bi-person-plus"></i>' +
+                '</button>' +
+            '</div>' +
+            '<div id="subtask-assignee-results" style="max-height:160px;overflow-y:auto;"></div>';
+        document.body.appendChild(dd);
+
+        var searchInput = document.getElementById("subtask-assignee-search");
+        if (searchInput) {
+            searchInput.addEventListener("input", makeDebounce(function () {
+                searchSubtaskAssigneeUsers(searchInput.value);
+            }, 300));
+        }
+
+        var addNewBtn = document.getElementById("subtask-assignee-add-new-btn");
+        if (addNewBtn) {
+            addNewBtn.addEventListener("click", function (e) {
+                e.stopPropagation();
+                var subtaskId = currentSubtaskIdForAssign;
+                if (!subtaskId) return;
+                closeSubtaskAssigneeDropdown();
+                var modalEl = document.getElementById("assignNewUserOrgModal");
+                if (!modalEl) return;
+                window.__kanbanOrgModalConfirm = function (user) {
+                    // user added to project via org modal — now assign them to this subtask
+                    assignSubtaskUser(subtaskId, user.id);
+                };
+                window.__kanbanShowToast = showToast;
+                var modal = window.bootstrap && bootstrap.Modal.getOrCreateInstance(modalEl);
+                if (modal) modal.show();
+            });
+        }
+
+        document.addEventListener("click", function (e) {
+            if (currentSubtaskIdForAssign !== null &&
+                !e.target.closest("#subtask-assignee-dropdown") &&
+                !e.target.closest(".subtask-assignee-add-btn")) {
+                closeSubtaskAssigneeDropdown();
+            }
+        });
+    }
+
+    function showSubtaskAssigneeDropdown(anchorEl, subtaskId) {
+        var dd = document.getElementById("subtask-assignee-dropdown");
+        if (!dd) return;
+
+        currentSubtaskIdForAssign = subtaskId;
+
+        var rect = anchorEl.getBoundingClientRect();
+        var ddW = 230;
+        var left = rect.left;
+        if (left + ddW > window.innerWidth - 8) left = window.innerWidth - ddW - 8;
+        dd.style.top  = (rect.bottom + 4) + "px";
+        dd.style.left = left + "px";
+        dd.style.width = ddW + "px";
+        dd.style.display = "block";
+
+        var searchInput = document.getElementById("subtask-assignee-search");
+        if (searchInput) { searchInput.value = ""; searchInput.focus(); }
+        searchSubtaskAssigneeUsers("");
+    }
+
+    function closeSubtaskAssigneeDropdown() {
+        var dd = document.getElementById("subtask-assignee-dropdown");
+        if (dd) dd.style.display = "none";
+        currentSubtaskIdForAssign = null;
+    }
+
+    function searchSubtaskAssigneeUsers(query) {
+        var results = document.getElementById("subtask-assignee-results");
+        if (!results || currentSubtaskIdForAssign === null) return;
+
+        var subtaskId = currentSubtaskIdForAssign;
+
+        // Find the current assignee id for this subtask from currentCardData
+        var currentUserId = null;
+        if (currentCardData && currentCardData.subtasks) {
+            var ci = currentCardData.subtasks.find(function (c) { return c.id === subtaskId; });
+            if (ci) currentUserId = ci.userId;
+        }
+
+        var url = "/api/kanban/users/search?query=" + encodeURIComponent(query || "");
+        if (config.projectId) url += "&project_id=" + config.projectId;
+
+        apiFetch(url).then(function (users) {
+            results.innerHTML = "";
+            if (!(users || []).length) {
+                results.innerHTML = '<div class="text-muted small px-2 py-1">Не найдено</div>';
+                return;
+            }
+            (users || []).forEach(function (u) {
+                var item = document.createElement("div");
+                item.className = "dropdown-item d-flex align-items-center justify-content-between";
+                item.style.cursor = "pointer";
+                var isSelected = String(u.id) === String(currentUserId);
+                item.innerHTML =
+                    "<span>" + escapeHtml(u.name) + "</span>" +
+                    (isSelected ? '<i class="bi bi-check2 text-primary"></i>' : "");
+                item.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    assignSubtaskUser(subtaskId, u.id);
+                    closeSubtaskAssigneeDropdown();
+                });
+                results.appendChild(item);
+            });
+        }).catch(function () {});
+    }
+
+    function assignSubtaskUser(subtaskId, userId) {
+        if (!currentCardId) return;
+        apiFetch("/api/kanban/cards/" + currentCardId + "/checklist/" + subtaskId, {
+            method: "PATCH",
+            body: JSON.stringify({ user_id: userId !== undefined ? userId : null })
+        }).then(function (data) {
+            if (currentCardData && currentCardData.subtasks) {
+                var ci = currentCardData.subtasks.find(function (c) { return c.id === subtaskId; });
+                if (ci) {
+                    ci.userId = data.userId;
+                    ci.userName = data.userName;
+                }
+            }
+            renderSubtasks(currentCardData ? currentCardData.subtasks : []);
+        }).catch(function (err) { showToast(err.message); });
     }
 
     function initSubtasks() {

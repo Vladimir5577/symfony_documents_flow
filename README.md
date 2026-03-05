@@ -39,6 +39,7 @@ $ php bin/console doctrine:migrations:migrate
 8. Optionally load fixtures
 ```bash
 $ php bin/console doctrine:fixtures:load --group=base
+$ php bin/console doctrine:fixtures:load --group=admin
 ```
 
 9. Permissions and folders (inside php_container)

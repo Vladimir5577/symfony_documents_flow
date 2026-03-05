@@ -4,6 +4,10 @@
     <table class="table table-borderless mb-0">
         <tbody>
             <tr>
+                <th class="text-muted">Был(а) онлайн:</th>
+                <td>{% set _lastSeenTs = user.lastSeenAt ? user.lastSeenAt|date('U') : 0 %}{% set _diff = "now"|date('U') - _lastSeenTs %}{% if user.lastSeenAt and _diff < 300 %}<span class="text-success">Онлайн</span>{% else %}{{ user.lastSeenAt ? user.lastSeenAt|date('d.m.Y H:i') : '—' }}{% endif %}</td>
+            </tr>
+            <tr>
                 <th class="text-muted">Фамилия:</th>
                 <td>{{ user.lastname ?? '-' }}</td>
             </tr>

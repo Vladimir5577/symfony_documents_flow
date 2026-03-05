@@ -152,6 +152,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
     confirmBtn.addEventListener('click', function () {
         if (!selectedUser) return;
+
+        // Custom handler hook (used e.g. for subtask assignment)
+        if (typeof window.__kanbanOrgModalConfirm === 'function') {
+            var handler = window.__kanbanOrgModalConfirm;
+            window.__kanbanOrgModalConfirm = null;
+            handler({ id: selectedUser.id, name: selectedUser.name });
+            var modalElHook = document.getElementById('assignNewUserOrgModal');
+            if (modalElHook && window.bootstrap) {
+                var modalHook = bootstrap.Modal.getInstance(modalElHook);
+                if (modalHook) modalHook.hide();
+            }
+            return;
+        }
+
         var cardId = window.__currentCardIdForAssignNewUser;
         if (!cardId) return;
         confirmBtn.disabled = true;

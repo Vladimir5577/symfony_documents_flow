@@ -83,6 +83,8 @@ final class KanbanCardApiController extends AbstractController
                 'status' => $ci->getStatus()->value,
                 'isCompleted' => $ci->isCompleted(),
                 'position' => $ci->getPosition(),
+                'userId' => $ci->getUser()?->getId(),
+                'userName' => $ci->getUser() ? trim($ci->getUser()->getLastname() . ' ' . $ci->getUser()->getFirstname()) : null,
             ];
         }
 
@@ -91,7 +93,7 @@ final class KanbanCardApiController extends AbstractController
             $comments[] = [
                 'id' => $com->getId(),
                 'body' => $com->getBody(),
-                'authorName' => $com->getAuthor()->getFirstname() . ' ' . $com->getAuthor()->getLastname(),
+                'authorName' => $com->getAuthor()->getLastname() . ' ' . $com->getAuthor()->getFirstname(),
                 'createdAt' => $com->getCreatedAt()?->format('c'),
             ];
         }
@@ -120,7 +122,7 @@ final class KanbanCardApiController extends AbstractController
         foreach ($card->getAssignees() as $u) {
             $assignees[] = [
                 'id' => $u->getId(),
-                'name' => trim($u->getFirstname() . ' ' . $u->getLastname()) ?: (string) $u->getId(),
+                'name' => trim($u->getLastname() . ' ' . $u->getFirstname()) ?: (string) $u->getId(),
                 'firstname' => $u->getFirstname(),
                 'lastname' => $u->getLastname(),
             ];
@@ -230,7 +232,7 @@ final class KanbanCardApiController extends AbstractController
         foreach ($card->getAssignees() as $u) {
             $assignees[] = [
                 'id' => $u->getId(),
-                'name' => trim($u->getFirstname() . ' ' . $u->getLastname()) ?: (string) $u->getId(),
+                'name' => trim($u->getLastname() . ' ' . $u->getFirstname()) ?: (string) $u->getId(),
                 'firstname' => $u->getFirstname(),
                 'lastname' => $u->getLastname(),
             ];
@@ -291,7 +293,7 @@ final class KanbanCardApiController extends AbstractController
         foreach ($card->getAssignees() as $u) {
             $assignees[] = [
                 'id' => $u->getId(),
-                'name' => trim($u->getFirstname() . ' ' . $u->getLastname()) ?: (string) $u->getId(),
+                'name' => trim($u->getLastname() . ' ' . $u->getFirstname()) ?: (string) $u->getId(),
                 'firstname' => $u->getFirstname(),
                 'lastname' => $u->getLastname(),
             ];

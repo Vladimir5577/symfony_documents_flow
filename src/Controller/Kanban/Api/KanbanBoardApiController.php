@@ -108,7 +108,7 @@ final class KanbanBoardApiController extends AbstractController
                 foreach ($card->getAssignees() as $u) {
                     $assignees[] = [
                         'id' => $u->getId(),
-                        'name' => trim($u->getFirstname() . ' ' . $u->getLastname()) ?: (string) $u->getId(),
+                        'name' => trim($u->getLastname() . ' ' . $u->getFirstname()) ?: (string) $u->getId(),
                         'firstname' => $u->getFirstname(),
                         'lastname' => $u->getLastname(),
                     ];

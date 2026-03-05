@@ -44,7 +44,7 @@ final class KanbanCommentApiController extends AbstractController
         $data = array_map(fn(KanbanCardComment $c) => [
             'id' => $c->getId(),
             'body' => $c->getBody(),
-            'authorName' => $c->getAuthor()->getFirstname() . ' ' . $c->getAuthor()->getLastname(),
+            'authorName' => $c->getAuthor()->getLastname() . ' ' . $c->getAuthor()->getFirstname(),
             'authorId' => $c->getAuthor()->getId(),
             'createdAt' => $c->getCreatedAt()?->format('c'),
         ], $comments);
@@ -82,7 +82,7 @@ final class KanbanCommentApiController extends AbstractController
         return $this->json([
             'id' => $comment->getId(),
             'body' => $comment->getBody(),
-            'authorName' => $user->getFirstname() . ' ' . $user->getLastname(),
+            'authorName' => $user->getLastname() . ' ' . $user->getFirstname(),
             'authorId' => $user->getId(),
             'createdAt' => $comment->getCreatedAt()?->format('c'),
         ], Response::HTTP_CREATED);
