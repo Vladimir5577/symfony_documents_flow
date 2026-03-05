@@ -69,7 +69,7 @@ create database don_stroy_mash;
 
 // ============================
 
-Mugration
+Migration
 $ php bin/console make:migration
 $ php bin/console doctrine:migrations:migrate
 

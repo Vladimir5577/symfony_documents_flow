@@ -1,0 +1,115 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Уведомления{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <h1>Уведомления</h1>
+
+    <section class="section">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <p class="text-muted mb-0">Всего: {{ total }}</p>
+                <button id="page-mark-all-read" class="btn btn-sm btn-outline-primary">Прочитать все</button>
+            </div>
+            <div class="card-body">
+                {% if notifications|length > 0 %}
+                    <div class="list-group list-group-flush">
+                        {% for notification in notifications %}
+                            <a href="{{ notification.link ?? '#' }}"
+                               class="list-group-item list-group-item-action d-flex align-items-start gap-3 py-3 {{ notification.read ? 'opacity-50' : '' }}"
+                               data-notification-id="{{ notification.id }}">
+                                {% if not notification.read %}
+                                    <span class="bg-primary rounded-circle mt-1" style="width: 10px; height: 10px; flex-shrink: 0;"></span>
+                                {% else %}
+                                    <span class="mt-1" style="width: 10px; height: 10px; flex-shrink: 0;"></span>
+                                {% endif %}
+                                <div style="min-width: 0; flex: 1;">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="badge bg-light text-dark" style="font-size: 0.75rem;">{{ notification.type.label }}</span>
+                                        <small class="text-muted">{{ notification.createdAt|date('d.m.Y H:i') }}</small>
+                                    </div>
+                                    <div style="font-weight: 500;">{{ notification.title }}</div>
+                                    {% if notification.message %}
+                                        <small class="text-muted">{{ notification.message }}</small>
+                                    {% endif %}
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+
+                    {% if totalPages > 1 %}
+                        <div class="card-body">
+                            <nav aria-label="Навигация по страницам">
+                                <ul class="pagination justify-content-center mb-0">
+                                    <li class="page-item {% if currentPage == 1 %}disabled{% endif %}">
+                                        <a class="page-link" href="{% if currentPage > 1 %}{{ path('app_notifications', {page: currentPage - 1}) }}{% else %}#{% endif %}">
+                                            <span aria-hidden="true">&laquo;</span>
+                                        </a>
+                                    </li>
+
+                                    {% set start_page = max(1, currentPage - 2) %}
+                                    {% set end_page = min(totalPages, currentPage + 2) %}
+
+                                    {% if start_page > 1 %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="{{ path('app_notifications', {page: 1}) }}">1</a>
+                                        </li>
+                                        {% if start_page > 2 %}
+                                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                                        {% endif %}
+                                    {% endif %}
+
+                                    {% for page in start_page..end_page %}
+                                        <li class="page-item {% if page == currentPage %}active{% endif %}">
+                                            <a class="page-link" href="{{ path('app_notifications', {page: page}) }}">{{ page }}</a>
+                                        </li>
+                                    {% endfor %}
+
+                                    {% if end_page < totalPages %}
+                                        {% if end_page < totalPages - 1 %}
+                                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                                        {% endif %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="{{ path('app_notifications', {page: totalPages}) }}">{{ totalPages }}</a>
+                                        </li>
+                                    {% endif %}
+
+                                    <li class="page-item {% if currentPage == totalPages %}disabled{% endif %}">
+                                        <a class="page-link" href="{% if currentPage < totalPages %}{{ path('app_notifications', {page: currentPage + 1}) }}{% else %}#{% endif %}">
+                                            <span aria-hidden="true">&raquo;</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                            <div class="text-center mt-2">
+                                <small class="text-muted">
+                                    Страница {{ currentPage }} из {{ totalPages }}
+                                </small>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <p class="text-muted mb-0">Нет уведомлений.</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <script>
+        document.getElementById('page-mark-all-read').addEventListener('click', function () {
+            fetch('/api/notifications/read-all', { method: 'POST' })
+                .then(function () { window.location.reload(); });
+        });
+
+        document.querySelectorAll('[data-notification-id]').forEach(function (el) {
+            el.addEventListener('click', function () {
+                var id = el.getAttribute('data-notification-id');
+                fetch('/api/notifications/' + id + '/read', { method: 'POST' });
+            });
+        });
+    </script>
+{% endblock %}

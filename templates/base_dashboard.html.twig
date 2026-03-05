@@ -96,7 +96,29 @@
                     <i class="bi bi-justify fs-3"></i>
                 </a>
                 {% if app.user %}
-                    <div class="dropdown ms-auto">
+                    <div class="d-flex align-items-center ms-auto gap-2">
+                        {# Notification bell #}
+                        <div class="dropdown">
+                            <a class="btn btn-link position-relative p-2" href="#" role="button" id="notificationDropdown" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside" style="border: none; box-shadow: none; color: inherit;">
+                                <i class="bi bi-bell" style="font-size: 1.25rem;"></i>
+                                <span id="notification-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.65rem; display: none;"></span>
+                            </a>
+                            <div class="dropdown-menu dropdown-menu-end shadow-sm p-0" aria-labelledby="notificationDropdown" style="min-width: 340px; max-width: 400px;">
+                                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                                    <h6 class="mb-0" style="font-size: 0.9rem; font-weight: 600;">Уведомления</h6>
+                                    <button id="mark-all-read-btn" class="btn btn-link btn-sm text-decoration-none p-0" style="font-size: 0.8rem;">Прочитать все</button>
+                                </div>
+                                <div id="notification-list" style="max-height: 350px; overflow-y: auto;">
+                                    <div class="text-center text-muted py-4" style="font-size: 0.85rem;">Нет уведомлений</div>
+                                </div>
+                                <div class="border-top text-center py-2">
+                                    <a href="{{ path('app_notifications') }}" class="text-decoration-none" style="font-size: 0.85rem;">Все уведомления</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        {# User dropdown #}
+                        <div class="dropdown">
                         <a class="btn btn-link text-decoration-none dropdown-toggle d-flex align-items-center gap-2 px-3 py-2" href="#" role="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="border: none; box-shadow: none; color: inherit;">
                             <i class="bi bi-person-circle" style="font-size: 1.25rem;"></i>
                             <span class="d-none d-md-inline" style="font-size: 0.9rem; font-weight: 500;">
@@ -135,6 +157,7 @@
                                 </a>
                             </li>
                         </ul>
+                        </div>
                     </div>
                 {% endif %}
             </div>
@@ -180,6 +203,10 @@
         })
     }, false);
 </script>
+
+{% if app.user %}
+    <script src="/front_end/assets/static/js/notifications.js"></script>
+{% endif %}
 
 </body>
 
