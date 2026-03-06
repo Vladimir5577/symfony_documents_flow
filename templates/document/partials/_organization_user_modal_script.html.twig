@@ -113,11 +113,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     cb.value = u.id;
                     cb.checked = isSelected;
                     cb.dataset.id = u.id;
-                    cb.dataset.name = u.name;
+                    cb.dataset.name = u.name; // ФИО
+                    cb.dataset.label = u.profession
+                        ? (u.name + ' — ' + u.profession)
+                        : u.name;
                     var label = document.createElement('label');
                     label.className = 'form-check-label';
                     label.setAttribute('for', 'org-user-' + u.id);
-                    label.textContent = u.name;
+                    label.textContent = cb.dataset.label;
                     cb.id = 'org-user-' + u.id;
                     li.appendChild(cb);
                     li.appendChild(label);
@@ -125,7 +128,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     cb.addEventListener('change', function () {
                         if (this.checked) {
                             if (!modalSelectedUsers.some(function (s) { return String(s.id) === String(this.dataset.id); }.bind(this))) {
-                                modalSelectedUsers.push({ id: this.dataset.id, name: this.dataset.name });
+                                modalSelectedUsers.push({
+                                    id: this.dataset.id,
+                                    name: this.dataset.name,
+                                    label: this.dataset.label || this.dataset.name
+                                });
                             }
                         } else {
                             modalSelectedUsers = modalSelectedUsers.filter(function (s) { return String(s.id) !== String(this.dataset.id); }.bind(this));
@@ -154,7 +161,7 @@ document.addEventListener('DOMContentLoaded', function () {
             modalSelectedUsers.forEach(function (u) {
                 var li = document.createElement('li');
                 li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-1';
-                li.textContent = u.name;
+                li.textContent = u.label || u.name;
                 var rm = document.createElement('button');
                 rm.type = 'button';
                 rm.className = 'btn btn-sm btn-outline-danger';

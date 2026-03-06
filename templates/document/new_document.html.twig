@@ -1,40 +1,417 @@
 {% extends 'base_dashboard.html.twig' %}
 
-{% block title %}Создание нового документа!{% endblock %}
-
-
+{% block title %}Создание нового документа{% endblock %}
 
 {% block sidebar_list %}
     {% include 'sidebar/sidebar_list.html.twig' %}
 {% endblock %}
 
-
-
 {% block main %}
-    <h1>Выберите тип документа!</h1>
+    <style>
+        /* ===== Page header ===== */
+        .nd-breadcrumb {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 0.15rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.75rem;
+            color: #8a98ac;
+        }
+        .nd-breadcrumb li + li::before {
+            content: '/';
+            margin-right: 0.4rem;
+            color: #b0bec5;
+        }
+        .nd-breadcrumb a { color: #435ebe; text-decoration: none; }
+        .nd-breadcrumb a:hover { text-decoration: underline; }
 
-    <section class="section">
-        <div class="row">
-            {% for docType in document_types|default([]) %}
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <a href="{{ path('app_create_document', {'type_id': docType.id}) }}" class="btn btn-outline-primary">
-                        <div class="card h-100">
-                            <div class="card-header">
-                                <h4 class="card-title mb-0">{{ docType.name }}</h4>
+        .nd-page-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #25396f;
+            margin: 0;
+        }
+        .nd-page-subtitle {
+            font-size: 0.72rem;
+            color: #8a98ac;
+            margin: 0.1rem 0 0;
+        }
+
+        /* ===== Columns layout — max 3 ===== */
+        .nd-columns {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1.25rem;
+        }
+
+        /* ===== Column ===== */
+        .nd-col {
+            background: #ffffff;
+            border: 1px solid rgba(0,0,0,0.06);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        }
+        .nd-col-header {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.6rem 0.85rem;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+        }
+        .nd-col-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .nd-col-title {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #8a98ac;
+            margin: 0;
+            line-height: 1.2;
+        }
+        .nd-col-count {
+            font-size: 0.62rem;
+            color: #a0aec0;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+        .nd-col-body {
+            padding: 0.2rem 0;
+        }
+
+        /* ===== Row item ===== */
+        .nd-item {
+            display: block;
+            text-decoration: none !important;
+            padding: 0.5rem 0.85rem;
+            position: relative;
+            transition: background 0.2s;
+        }
+        .nd-item + .nd-item {
+            border-top: 1px solid rgba(0,0,0,0.03);
+        }
+        .nd-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--nd-accent);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .nd-item:hover {
+            background: var(--nd-accent-soft);
+        }
+        .nd-item:hover::before { opacity: 1; }
+        .nd-item:focus-visible {
+            outline: 2px solid var(--nd-accent);
+            outline-offset: -2px;
+        }
+        .nd-item:active { opacity: 0.85; }
+
+        .nd-item-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .nd-item-icon {
+            width: 26px;
+            height: 26px;
+            border-radius: 5px;
+            background: var(--nd-accent-soft);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        .nd-item:hover .nd-item-icon { background: var(--nd-accent); }
+        .nd-item-icon i {
+            font-size: 0.75rem;
+            color: var(--nd-accent);
+            transition: color 0.2s;
+        }
+        .nd-item:hover .nd-item-icon i { color: #fff; }
+
+        .nd-item-name {
+            flex: 1;
+            min-width: 0;
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: #25396f;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            transition: color 0.2s;
+        }
+        .nd-item:hover .nd-item-name { color: var(--nd-accent); }
+
+        .nd-item-arrow {
+            font-size: 0.65rem;
+            color: #b0bec5;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            flex-shrink: 0;
+        }
+        .nd-item:hover .nd-item-arrow {
+            opacity: 1;
+            transform: translateX(2px);
+        }
+
+        /* ===== Expand detail on hover ===== */
+        .nd-item-detail {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.25s ease, padding 0.3s ease;
+            opacity: 0;
+            padding: 0 0 0 2.15rem;
+        }
+        .nd-item:hover .nd-item-detail {
+            max-height: 60px;
+            opacity: 1;
+            padding: 0.3rem 0 0 2.15rem;
+        }
+        .nd-item-desc {
+            font-size: 0.72rem;
+            color: #8a98ac;
+            line-height: 1.4;
+            margin: 0;
+        }
+        .nd-item-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.68rem;
+            font-weight: 500;
+            color: var(--nd-accent);
+            margin-top: 0.2rem;
+        }
+        .nd-item-cta i { font-size: 0.6rem; }
+
+        /* ===== Category accent colors ===== */
+        .nd-cat-org       { --nd-accent: #435ebe; --nd-accent-soft: rgba(67,94,190,0.06); }
+        .nd-cat-contract  { --nd-accent: #e08a4a; --nd-accent-soft: rgba(224,138,74,0.06); }
+        .nd-cat-internal  { --nd-accent: #7c5cbf; --nd-accent-soft: rgba(124,92,191,0.06); }
+        .nd-cat-reference { --nd-accent: #6b7d99; --nd-accent-soft: rgba(107,125,153,0.06); }
+        .nd-cat-regulation{ --nd-accent: #3a9d8f; --nd-accent-soft: rgba(58,157,143,0.06); }
+
+        .nd-cat-org .nd-col-dot       { background: #435ebe; }
+        .nd-cat-contract .nd-col-dot  { background: #e08a4a; }
+        .nd-cat-internal .nd-col-dot  { background: #7c5cbf; }
+        .nd-cat-reference .nd-col-dot { background: #6b7d99; }
+        .nd-cat-regulation .nd-col-dot{ background: #3a9d8f; }
+
+        /* ===== Empty ===== */
+        .nd-empty {
+            text-align: center;
+            color: #8a98ac;
+            padding: 3rem 1rem;
+            font-size: 0.85rem;
+        }
+        .nd-empty i { font-size: 1.75rem; display: block; margin-bottom: 0.5rem; opacity: 0.4; }
+
+        /* ===== DARK THEME ===== */
+        [data-bs-theme="dark"] .nd-breadcrumb { color: #6b6b80; }
+        [data-bs-theme="dark"] .nd-breadcrumb li + li::before { color: #4a4a5e; }
+        [data-bs-theme="dark"] .nd-breadcrumb a { color: #7b96e4; }
+        [data-bs-theme="dark"] .nd-page-title { color: #d8d8ec; }
+        [data-bs-theme="dark"] .nd-page-subtitle { color: #6b6b80; }
+
+        [data-bs-theme="dark"] .nd-col {
+            background: #1e1e2d;
+            border-color: rgba(255,255,255,0.04);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+        }
+        [data-bs-theme="dark"] .nd-col-header {
+            border-bottom-color: rgba(255,255,255,0.04);
+        }
+        [data-bs-theme="dark"] .nd-col-title { color: #6b6b80; }
+        [data-bs-theme="dark"] .nd-col-count { color: #4a4a5e; }
+
+        [data-bs-theme="dark"] .nd-item + .nd-item {
+            border-top-color: rgba(255,255,255,0.03);
+        }
+        [data-bs-theme="dark"] .nd-item:hover {
+            background: var(--nd-accent-soft);
+        }
+        [data-bs-theme="dark"] .nd-item-name { color: #c2c2d9; }
+        [data-bs-theme="dark"] .nd-item:hover .nd-item-name { color: var(--nd-accent); }
+        [data-bs-theme="dark"] .nd-item-arrow { color: #4a4a5e; }
+        [data-bs-theme="dark"] .nd-item-desc { color: #6b6b80; }
+
+        [data-bs-theme="dark"] .nd-cat-org       { --nd-accent-soft: rgba(67,94,190,0.07); }
+        [data-bs-theme="dark"] .nd-cat-contract   { --nd-accent-soft: rgba(224,138,74,0.07); }
+        [data-bs-theme="dark"] .nd-cat-internal   { --nd-accent-soft: rgba(124,92,191,0.07); }
+        [data-bs-theme="dark"] .nd-cat-reference  { --nd-accent-soft: rgba(107,125,153,0.07); }
+        [data-bs-theme="dark"] .nd-cat-regulation { --nd-accent-soft: rgba(58,157,143,0.07); }
+
+        [data-bs-theme="dark"] .nd-empty { color: #4a4a5e; }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 767.98px) {
+            .nd-columns { grid-template-columns: 1fr; }
+        }
+        @media (min-width: 768px) and (max-width: 1099.98px) {
+            .nd-columns { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+
+    {# ===== Descriptions map ===== #}
+    {% set desc_map = {
+        'Акт': 'Подтверждение факта, события или выполненных работ',
+        'Договор': 'Соглашение между сторонами с правами и обязанностями',
+        'Докладная записка': 'Сообщение руководству с выводами и предложениями',
+        'Заявление': 'Официальное обращение сотрудника или организации',
+        'Инструкция': 'Правила и порядок выполнения действий',
+        'Отчёт': 'Сведения о результатах работы или деятельности',
+        'Письмо': 'Официальная переписка с организациями и контрагентами',
+        'План': 'Последовательность мероприятий и сроков',
+        'Положение': 'Регламент работы, прав и обязанностей',
+        'Приказ': 'Распорядительный документ руководителя',
+        'Протокол': 'Фиксация хода обсуждения и принятых решений',
+        'Распоряжение': 'Оперативное управленческое указание',
+        'Решение': 'Документ о принятом управленческом решении',
+        'Служебная записка': 'Внутреннее сообщение между подразделениями',
+        'Справка': 'Подтверждение или описание факта и сведений'
+    } %}
+
+    {# ===== Category mapping ===== #}
+    {% set categories = {
+        'org': {
+            'title': 'Распорядительные',
+            'names': ['Приказ', 'Распоряжение', 'Решение', 'Протокол'],
+            'css': 'nd-cat-org'
+        },
+        'contract': {
+            'title': 'Договорные',
+            'names': ['Договор', 'Письмо'],
+            'css': 'nd-cat-contract'
+        },
+        'internal': {
+            'title': 'Внутренние',
+            'names': ['Служебная записка', 'Докладная записка', 'Отчёт'],
+            'css': 'nd-cat-internal'
+        },
+        'reference': {
+            'title': 'Справочные',
+            'names': ['Акт', 'Справка', 'Заявление'],
+            'css': 'nd-cat-reference'
+        },
+        'regulation': {
+            'title': 'Регламенты',
+            'names': ['Инструкция', 'Положение', 'План'],
+            'css': 'nd-cat-regulation'
+        }
+    } %}
+
+    {# ===== Reverse map ===== #}
+    {% set cat_of = {} %}
+    {% for key, cat in categories %}
+        {% for n in cat.names %}
+            {% set cat_of = cat_of|merge({ (n): key }) %}
+        {% endfor %}
+    {% endfor %}
+
+    {# ===== Page header ===== #}
+    <ul class="nd-breadcrumb">
+        <li><a href="{{ path('app_incoming_documents') }}">Документооборот</a></li>
+        <li>Новый документ</li>
+    </ul>
+    <h1 class="nd-page-title">Новый документ</h1>
+    <p class="nd-page-subtitle">Выберите тип для создания</p>
+
+    {% if document_types|default([])|length > 0 %}
+        <div class="nd-columns">
+            {% for key, cat in categories %}
+                {% set cat_docs = [] %}
+                {% for docType in document_types|default([]) %}
+                    {% if docType.name in cat.names %}
+                        {% set cat_docs = cat_docs|merge([docType]) %}
+                    {% endif %}
+                {% endfor %}
+
+                {% if cat_docs|length > 0 %}
+                    <div class="{{ cat.css }}">
+                        <div class="nd-col">
+                            <div class="nd-col-header">
+                                <span class="nd-col-dot"></span>
+                                <h2 class="nd-col-title">{{ cat.title }}</h2>
+                                <span class="nd-col-count">{{ cat_docs|length }}</span>
                             </div>
-                            <div class="card-body">
-                                {% if docType.description %}
-                                    <p class="card-text text-muted small mb-0">{{ docType.description }}</p>
-                                {% endif %}
+                            <div class="nd-col-body">
+                                {% for docType in cat_docs %}
+                                    <a href="{{ path('app_create_document', {'type_id': docType.id}) }}"
+                                       class="nd-item">
+                                        <div class="nd-item-row">
+                                            <span class="nd-item-icon">
+                                                <i class="bi bi-file-earmark-text"></i>
+                                            </span>
+                                            <span class="nd-item-name">{{ docType.name }}</span>
+                                            <i class="bi bi-chevron-right nd-item-arrow"></i>
+                                        </div>
+                                        <div class="nd-item-detail">
+                                            <p class="nd-item-desc">{{ desc_map[docType.name]|default(docType.description|default('')) }}</p>
+                                            <span class="nd-item-cta">Создать <i class="bi bi-arrow-right"></i></span>
+                                        </div>
+                                    </a>
+                                {% endfor %}
                             </div>
                         </div>
-                    </a>
-                </div>
-            {% else %}
-                <div class="col-12">
-                    <p class="text-muted">Типы документов не найдены.</p>
-                </div>
+                    </div>
+                {% endif %}
             {% endfor %}
+
+            {# Uncategorized #}
+            {% set uncategorized = [] %}
+            {% for docType in document_types|default([]) %}
+                {% if docType.name not in cat_of|keys %}
+                    {% set uncategorized = uncategorized|merge([docType]) %}
+                {% endif %}
+            {% endfor %}
+            {% if uncategorized|length > 0 %}
+                <div class="nd-cat-reference">
+                    <div class="nd-col">
+                        <div class="nd-col-header">
+                            <span class="nd-col-dot"></span>
+                            <h2 class="nd-col-title">Прочие</h2>
+                            <span class="nd-col-count">{{ uncategorized|length }}</span>
+                        </div>
+                        <div class="nd-col-body">
+                            {% for docType in uncategorized %}
+                                <a href="{{ path('app_create_document', {'type_id': docType.id}) }}"
+                                   class="nd-item">
+                                    <div class="nd-item-row">
+                                        <span class="nd-item-icon">
+                                            <i class="bi bi-file-earmark-text"></i>
+                                        </span>
+                                        <span class="nd-item-name">{{ docType.name }}</span>
+                                        <i class="bi bi-chevron-right nd-item-arrow"></i>
+                                    </div>
+                                    <div class="nd-item-detail">
+                                        <p class="nd-item-desc">{{ desc_map[docType.name]|default(docType.description|default('')) }}</p>
+                                        <span class="nd-item-cta">Создать <i class="bi bi-arrow-right"></i></span>
+                                    </div>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
         </div>
-    </section>
+    {% else %}
+        <div class="nd-empty">
+            <i class="bi bi-folder2-open"></i>
+            Типы документов не найдены
+        </div>
+    {% endif %}
 {% endblock %}

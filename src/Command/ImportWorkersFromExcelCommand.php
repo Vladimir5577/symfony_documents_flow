@@ -96,6 +96,8 @@ class ImportWorkersFromExcelCommand extends Command
                 $birthDay = $userData[5];
                 $workerStatus = $userData[6];
 
+                echo '------------- ' . $userName . PHP_EOL;
+
                 $user = new User();
                 $fioParts = preg_split('/\s+/u', trim((string) ($userName ?? '')), 3, PREG_SPLIT_NO_EMPTY);
                 $lastName = $fioParts[0] ?? '';

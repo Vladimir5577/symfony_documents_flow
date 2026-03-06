@@ -226,7 +226,8 @@
                                         <thead>
                                             <tr>
                                                 <th>ФИО</th>
-                                                <th>Статус</th>
+                                                <th>Профессия</th>
+                                                <th class="table-users-status-col">Статус</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -235,7 +236,14 @@
                                                     <td class="text-bold-500">
                                                         {{ user.lastname ?? '-' }} {{ user.firstname ?? '-' }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
                                                     </td>
-                                                    <td><span class="badge bg-secondary">{{ user.worker ? user.worker.workerStatus.getLabel() : '—' }}</span></td>
+                                                    <td>
+                                                        {{ user.worker ? user.worker.profession : '—' }}
+                                                    </td>
+                                                    <td class="table-users-status-col">
+                                                        <span class="badge bg-secondary badge-status-compact">
+                                                            {{ user.worker ? user.worker.workerStatus.getLabel() : '—' }}
+                                                        </span>
+                                                    </td>
                                                 </tr>
                                             {% endfor %}
                                         </tbody>
@@ -301,6 +309,19 @@
         [data-bs-theme="dark"] .org-tree-link:hover { color: #6ea8fe !important; }
         [data-bs-theme="dark"] .org-tree-badge { background: rgba(255,255,255,0.15); color: #fff; }
         [data-bs-theme="dark"] .org-tree-border { border-color: rgba(255,255,255,0.15) !important; }
+
+        .badge-status-compact {
+            display: inline-block;
+            max-width: 140px;
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.2;
+        }
+        .table-users-status-col {
+            width: 140px;
+            max-width: 140px;
+        }
     </style>
     <script>
         document.querySelectorAll('tr[data-user-id]').forEach(function (row) {

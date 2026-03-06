@@ -30,6 +30,299 @@
         body, body * {
             font-family: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans Cyrillic", "Liberation Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
         }
+
+        /* ===== Collapsible sidebar ===== */
+        #sidebar {
+            transition: width 0.25s ease;
+        }
+        #sidebar .sidebar-wrapper {
+            transition: width 0.25s ease;
+        }
+
+        #sidebar.sidebar-collapsed {
+            width: 62px !important;
+            min-width: 62px !important;
+        }
+        #sidebar.sidebar-collapsed .sidebar-wrapper {
+            width: 62px !important;
+            left: 0 !important;
+        }
+        #sidebar.sidebar-collapsed ~ #main {
+            margin-left: 62px !important;
+        }
+        #sidebar.sidebar-collapsed .sidebar-header .logo,
+        #sidebar.sidebar-collapsed .sidebar-header .theme-toggle {
+            display: none;
+        }
+        #sidebar.sidebar-collapsed .sidebar-header {
+            padding: 0.75rem 0;
+        }
+        #sidebar.sidebar-collapsed .sidebar-group-label {
+            font-size: 0;
+            padding: 0.4rem 0;
+            height: 1px;
+            overflow: hidden;
+            margin: 0.25rem 0.75rem;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        #sidebar.sidebar-collapsed .sidebar-item .sidebar-link {
+            justify-content: center;
+            padding: 0.6rem 0;
+            border-left: none;
+            gap: 0;
+        }
+        #sidebar.sidebar-collapsed .sidebar-item .sidebar-link span {
+            display: none;
+        }
+        #sidebar.sidebar-collapsed .sidebar-item .sidebar-link i {
+            font-size: 1.15rem;
+            width: auto;
+            margin: 0;
+        }
+        #sidebar.sidebar-collapsed .sidebar-item.active .sidebar-link {
+            border-left: none;
+            background: rgba(67, 94, 190, 0.1);
+            border-radius: 8px;
+            margin: 0 10px;
+            padding: 0.5rem 0;
+        }
+
+        /* Sidebar wrapper — flex column to push toggle to bottom */
+        #sidebar .sidebar-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        #sidebar .sidebar-menu {
+            flex: 1;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            position: relative;
+        }
+        /* Override perfect-scrollbar on sidebar-wrapper */
+        #sidebar .sidebar-wrapper {
+            overflow: visible !important;
+        }
+        #sidebar .sidebar-wrapper.ps {
+            overflow: visible !important;
+        }
+        #sidebar .sidebar-wrapper > .ps__rail-x,
+        #sidebar .sidebar-wrapper > .ps__rail-y {
+            display: none !important;
+        }
+        #sidebar .sidebar-menu::-webkit-scrollbar {
+            width: 4px;
+        }
+        #sidebar .sidebar-menu::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #sidebar .sidebar-menu::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.08);
+            border-radius: 4px;
+        }
+        #sidebar .sidebar-menu::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        /* Toggle button — bottom of sidebar */
+        .sidebar-collapse-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            width: 100%;
+            padding: 0.85rem 1.25rem;
+            margin: 0;
+            border: none;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            border-radius: 0;
+            background: transparent;
+            color: #6b6b80;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 500;
+            transition: background 0.2s, color 0.2s;
+            flex-shrink: 0;
+        }
+        .sidebar-collapse-toggle:hover {
+            background: rgba(255,255,255,0.03);
+            color: #8a8aa0;
+        }
+        .sidebar-collapse-toggle i {
+            font-size: 0.9rem;
+            transition: transform 0.35s cubic-bezier(.4,0,.2,1);
+        }
+        .sidebar-collapse-toggle .sct-label {
+            white-space: nowrap;
+            overflow: hidden;
+            transition: opacity 0.2s ease, max-width 0.25s ease;
+            opacity: 1;
+            max-width: 100px;
+        }
+
+        /* Collapsed state */
+        #sidebar.sidebar-collapsed .sidebar-collapse-toggle {
+            justify-content: center;
+            padding: 0.85rem 0;
+            gap: 0;
+        }
+        #sidebar.sidebar-collapsed .sidebar-collapse-toggle i {
+            transform: rotate(180deg);
+        }
+        #sidebar.sidebar-collapsed .sidebar-collapse-toggle .sct-label {
+            max-width: 0;
+            opacity: 0;
+        }
+
+        /* Hide theme toggle when collapsed */
+        #sidebar.sidebar-collapsed .theme-toggle {
+            display: none !important;
+        }
+
+        /* Light theme overrides */
+        :root .sidebar-collapse-toggle {
+            border-top-color: rgba(0,0,0,0.06);
+            color: #8a98ac;
+        }
+        :root .sidebar-collapse-toggle:hover {
+            background: rgba(67,94,190,0.04);
+            color: #435ebe;
+        }
+
+        [data-bs-theme="dark"] .sidebar-collapse-toggle {
+            border-top-color: rgba(255,255,255,0.04);
+            color: #6b6b80;
+        }
+        [data-bs-theme="dark"] .sidebar-collapse-toggle:hover {
+            background: rgba(255,255,255,0.03);
+            color: #8a8aa0;
+        }
+
+        @media screen and (max-width: 1199px) {
+            .sidebar-collapse-toggle { display: none; }
+        }
+
+        /* ===== Toast notifications ===== */
+        .toast-stack {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: min(360px, calc(100vw - 24px));
+            z-index: 9999;
+            pointer-events: none;
+        }
+        .toast-notify {
+            --toast-accent: #4caf82;
+            position: relative;
+            display: grid;
+            grid-template-columns: 40px 1fr auto;
+            gap: 12px;
+            align-items: start;
+            padding: 14px 14px 14px 12px;
+            border-radius: 20px;
+            background: rgba(21, 26, 49, 0.94);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            overflow: hidden;
+            pointer-events: auto;
+            opacity: 0;
+            transform: translateY(10px) scale(0.98);
+            animation: toast-in 220ms ease forwards;
+        }
+        .toast-notify.is-closing {
+            animation: toast-out 180ms ease forwards;
+        }
+        .toast-notify::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 4px;
+            background: var(--toast-accent);
+            box-shadow: 0 0 6px 1px var(--toast-accent), 0 0 14px 2px var(--toast-accent);
+        }
+        .toast-notify[data-type="success"] { --toast-accent: #2ecc71; }
+        .toast-notify[data-type="warning"] { --toast-accent: #ff9f43; }
+        .toast-notify[data-type="error"]   { --toast-accent: #ff5d73; }
+        .toast-notify[data-type="info"]    { --toast-accent: #4caf82; }
+
+        .toast-notify__icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            background: color-mix(in srgb, var(--toast-accent) 16%, transparent);
+            color: var(--toast-accent);
+            flex-shrink: 0;
+        }
+        .toast-notify__icon svg {
+            width: 20px;
+            height: 20px;
+        }
+        .toast-notify__content { min-width: 0; }
+        .toast-notify__title {
+            margin: 0;
+            font-size: 0.875rem;
+            line-height: 1.2;
+            font-weight: 600;
+            color: #eef2ff;
+        }
+        .toast-notify__text {
+            margin: 4px 0 0;
+            font-size: 0.8rem;
+            line-height: 1.45;
+            color: #a8b0d3;
+        }
+        .toast-notify__close {
+            appearance: none;
+            border: 0;
+            background: transparent;
+            color: #9ca7d8;
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            transition: background 0.2s, color 0.2s;
+        }
+        .toast-notify__close:hover {
+            background: rgba(255,255,255,0.06);
+            color: #ffffff;
+        }
+        .toast-notify__progress {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 4px;
+            background: rgba(255,255,255,0.06);
+        }
+        .toast-notify__progress-bar {
+            height: 100%;
+            width: 100%;
+            background: var(--toast-accent);
+            box-shadow: 0 0 6px 1px var(--toast-accent), 0 0 12px 2px var(--toast-accent);
+            transform-origin: left center;
+            animation: toast-progress linear forwards;
+        }
+
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateY(10px) scale(0.98); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes toast-out {
+            from { opacity: 1; transform: translateY(0) scale(1); }
+            to   { opacity: 0; transform: translateY(6px) scale(0.98); }
+        }
+        @keyframes toast-progress {
+            from { transform: scaleX(1); }
+            to   { transform: scaleX(0); }
+        }
     </style>
 </head>
 
@@ -83,6 +376,10 @@
                 {% block sidebar_list %}{% endblock %}
 
             </div>
+            <button class="sidebar-collapse-toggle" id="sidebar-collapse-btn">
+                <i class="bi bi-chevron-double-left"></i>
+                <span class="sct-label">Hide</span>
+            </button>
         </div>
     </div>
 
@@ -185,9 +482,45 @@
 
 
 </div>
+<script>
+(function() {
+    var sidebar = document.getElementById('sidebar');
+    var btn = document.getElementById('sidebar-collapse-btn');
+    if (!sidebar || !btn) return;
+    var label = btn.querySelector('.sct-label');
+    function updateLabel() {
+        if (!label) return;
+        label.textContent = sidebar.classList.contains('sidebar-collapsed') ? '' : 'Hide';
+    }
+    if (localStorage.getItem('sidebar-collapsed') === 'true') {
+        sidebar.classList.add('sidebar-collapsed');
+    }
+    updateLabel();
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        sidebar.classList.toggle('sidebar-collapsed');
+        localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('sidebar-collapsed'));
+        updateLabel();
+    });
+})();
+</script>
 <script src="/front_end/assets/static/js/components/dark.js"></script>
 <script src="/front_end/assets/extensions/perfect-scrollbar/perfect-scrollbar.min.js"></script>
-
+<script>
+    // Intercept PerfectScrollbar — skip sidebar-wrapper
+    (function() {
+        var Real = window.PerfectScrollbar;
+        window.PerfectScrollbar = function(el, opts) {
+            if (el && el.classList.contains('sidebar-wrapper')) {
+                this.destroy = function() {};
+                this.update = function() {};
+                return;
+            }
+            return new Real(el, opts);
+        };
+        window.PerfectScrollbar.prototype = Real.prototype;
+    })();
+</script>
 
 <script src="/front_end/assets/compiled/js/app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
@@ -205,6 +538,7 @@
 </script>
 
 {% if app.user %}
+    <div class="toast-stack" id="toastStack"></div>
     <script src="/front_end/assets/static/js/notifications.js"></script>
 {% endif %}
 

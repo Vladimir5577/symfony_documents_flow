@@ -101,14 +101,16 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
                 data.forEach(function (u) {
+                    var label = u.profession ? (u.name + ' — ' + u.profession) : u.name;
                     var item = document.createElement('div');
                     item.className = 'assign-new-user-item';
                     item.dataset.id = u.id;
                     item.dataset.name = u.name;
-                    item.textContent = u.name;
+                    item.dataset.label = label;
+                    item.textContent = label;
                     if (selectedUser && String(selectedUser.id) === String(u.id)) item.classList.add('selected');
                     item.addEventListener('click', function () {
-                        selectedUser = { id: u.id, name: u.name };
+                        selectedUser = { id: u.id, name: u.name, label: label };
                         usersList.querySelectorAll('.assign-new-user-item').forEach(function (el) { el.classList.remove('selected'); });
                         item.classList.add('selected');
                         renderSelectedOne();
@@ -134,7 +136,7 @@ document.addEventListener('DOMContentLoaded', function () {
             selectedOne.classList.remove('d-none');
             selectedOne.innerHTML = '';
             var span = document.createElement('span');
-            span.textContent = selectedUser.name;
+            span.textContent = selectedUser.label || selectedUser.name;
             selectedOne.appendChild(span);
             var rm = document.createElement('button');
             rm.type = 'button';

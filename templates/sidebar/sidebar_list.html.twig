@@ -1,103 +1,134 @@
+<style>
+    .sidebar-menu .menu {
+        padding: 0;
+    }
+    .sidebar-group-label {
+        display: block;
+        padding: 0.65rem 1.25rem 0.25rem;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #8a98ac;
+        margin-top: 0.15rem;
+        white-space: nowrap;
+        overflow: hidden;
+        transition: font-size 0.25s, padding 0.25s;
+    }
+    .sidebar-group-label:first-child {
+        margin-top: 0;
+    }
+    [data-bs-theme="dark"] .sidebar-group-label {
+        color: #555568;
+    }
+
+    .sidebar-item .sidebar-link {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.55rem 1.25rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #607080;
+        border-radius: 0;
+        transition: color 0.2s, background 0.2s;
+        text-decoration: none;
+        border-left: 3px solid transparent;
+    }
+    .sidebar-item .sidebar-link i {
+        font-size: 1.05rem;
+        width: 1.25rem;
+        text-align: center;
+        flex-shrink: 0;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+    .sidebar-item .sidebar-link:hover {
+        color: #435ebe;
+        background: rgba(67, 94, 190, 0.04);
+    }
+    .sidebar-item .sidebar-link:hover i {
+        opacity: 1;
+    }
+
+    .sidebar-item.active .sidebar-link {
+        color: #435ebe;
+        background: rgba(67, 94, 190, 0.07);
+        border-left-color: #435ebe;
+        font-weight: 600;
+    }
+    .sidebar-item.active .sidebar-link i {
+        opacity: 1;
+        color: #435ebe;
+    }
+
+    [data-bs-theme="dark"] .sidebar-item .sidebar-link {
+        color: #8a8aa0;
+    }
+    [data-bs-theme="dark"] .sidebar-item .sidebar-link:hover {
+        color: #7b96e4;
+        background: rgba(67, 94, 190, 0.06);
+    }
+    [data-bs-theme="dark"] .sidebar-item.active .sidebar-link {
+        color: #7b96e4;
+        background: rgba(67, 94, 190, 0.1);
+        border-left-color: #7b96e4;
+    }
+    [data-bs-theme="dark"] .sidebar-item.active .sidebar-link i {
+        color: #7b96e4;
+    }
+</style>
+
 <ul class="menu">
 
-    <li
-        class="sidebar-item  {% if active_tab == 'new_document' %}active{% endif %}">
-        <a href="{{ path('app_new_document') }}" class='sidebar-link'>
-            <i class="bi bi-file-earmark-plus-fill fs-5"></i>
+    <li class="sidebar-group-label">Документы</li>
+
+    <li class="sidebar-item {% if active_tab == 'new_document' %}active{% endif %}">
+        <a href="{{ path('app_new_document') }}" class="sidebar-link">
+            <i class="bi bi-file-earmark-plus"></i>
             <span>Новый документ</span>
         </a>
     </li>
 
-{#    <li#}
-{#        class="#}
-{#            sidebar-item#}
-{#            has-sub#}
-{#            {% if active_tab == 'incoming_documents' %}active{% endif %}#}
-{#            {% if active_tab == 'outgoing_documents' %}active{% endif %}#}
-{#            {% if active_tab == 'view_document' %}active{% endif %}#}
-{#    ">#}
-{#        <a href="#" class='sidebar-link'>#}
-{#            <i class="bi bi-file-earmark-text-fill"></i>#}
-{#            <span>Документы</span>#}
-{#        </a>#}
-
-{#        <ul class="submenu active">#}
-
-{#            <li class="submenu-item {% if active_tab == 'incoming_documents' %}active{% endif %} ">#}
-{#                <a href="{{ path('app_incoming_documents') }}" class="submenu-link">Входящие</a>#}
-{#            </li>#}
-
-{#            <li class="submenu-item  {% if active_tab == 'outgoing_documents' %}active{% endif %} ">#}
-{#                <a href="{{ path('app_outgoing_documents') }}" class="submenu-link">Исходящие</a>#}
-{#            </li>#}
-
-{#        </ul>#}
-{#    </li>#}
-
-    <li
-        class="
-            sidebar-item
-            {% if active_tab == 'incoming_documents' %}active{% endif %}
-    ">
-        <a href="{{ path('app_incoming_documents') }}" class='sidebar-link'>
-            <i class="bi bi-file-earmark-arrow-down fs-5"></i>
+    <li class="sidebar-item {% if active_tab == 'incoming_documents' %}active{% endif %}">
+        <a href="{{ path('app_incoming_documents') }}" class="sidebar-link">
+            <i class="bi bi-file-earmark-arrow-down"></i>
             <span>Входящие документы</span>
         </a>
     </li>
 
-    <li
-        class="
-            sidebar-item
-            {% if active_tab == 'outgoing_documents' %}active{% endif %}
-    ">
-        <a href="{{ path('app_outgoing_documents') }}" class='sidebar-link'>
-            <i class="bi bi-file-earmark-arrow-up fs-5"></i>
+    <li class="sidebar-item {% if active_tab == 'outgoing_documents' %}active{% endif %}">
+        <a href="{{ path('app_outgoing_documents') }}" class="sidebar-link">
+            <i class="bi bi-file-earmark-arrow-up"></i>
             <span>Исходящие документы</span>
         </a>
     </li>
 
     {% if is_granted('ROLE_MANAGER') %}
-    <li
-        class="
-            sidebar-item
-            {% if active_tab == 'register' %}active{% endif %}
-            {% if active_tab == 'all_users' %}active{% endif %}
-            {% if active_tab == 'view_user' %}active{% endif %}
-            {% if active_tab == 'edit_user' %}active{% endif %}
-    ">
-        <a href="{{ path('app_all_users') }}" class='sidebar-link'>
-            <i class="bi bi-people-fill fs-5"></i>
-            <span>Пользователи</span>
-        </a>
-    </li>
+        <li class="sidebar-group-label">Справочники</li>
+
+        <li class="sidebar-item {% if active_tab in ['register', 'all_users', 'view_user', 'edit_user'] %}active{% endif %}">
+            <a href="{{ path('app_all_users') }}" class="sidebar-link">
+                <i class="bi bi-people"></i>
+                <span>Пользователи</span>
+            </a>
+        </li>
+
+        <li class="sidebar-item {% if active_tab in ['create_organization', 'all_organizations', 'view_organization'] %}active{% endif %}">
+            <a href="{{ path('app_all_organizations') }}" class="sidebar-link">
+                <i class="bi bi-building"></i>
+                <span>Организации</span>
+            </a>
+        </li>
     {% endif %}
 
-    {% if is_granted('ROLE_MANAGER') %}
-    <li
-        class="
-            sidebar-item
-            {% if active_tab == 'create_organization' %}active{% endif %}
-            {% if active_tab == 'all_organizations' %}active{% endif %}
-            {% if active_tab == 'view_organization' %}active{% endif %}
-    ">
-        <a href="{{ path('app_all_organizations') }}" class='sidebar-link'>
-            <i class="bi bi-building fs-5"></i>
-            <span>Организации</span>
-        </a>
-    </li>
-    {% endif %}
+    <li class="sidebar-group-label">Инструменты</li>
 
-
-    <li
-        class="
-            sidebar-item
-            {% if active_tab == 'kanban_boards' %}active{% endif %}
-    ">
-        <a href="{{ path('app_kanban_personal_projects') }}" class='sidebar-link'>
-            <i class="bi bi-kanban-fill fs-5"></i>
+    <li class="sidebar-item {% if active_tab == 'kanban_boards' %}active{% endif %}">
+        <a href="{{ path('app_kanban_personal_projects') }}" class="sidebar-link">
+            <i class="bi bi-kanban"></i>
             <span>Проект менеджер</span>
         </a>
     </li>
-
 
 </ul>
