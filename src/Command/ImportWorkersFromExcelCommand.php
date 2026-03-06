@@ -85,8 +85,19 @@ class ImportWorkersFromExcelCommand extends Command
             }
 
             if (is_numeric($value)) {
+
+                $userData = array_filter($row, fn($v) => $v !== null);
+                $userData = array_values($userData);
+
+                $userName = $userData[1];
+                $profession = $userData[2];
+                $workerSchedual = $userData[3];
+                $hiredAt = $userData[4];
+                $birthDay = $userData[5];
+                $workerStatus = $userData[6];
+
                 $user = new User();
-                $fioParts = preg_split('/\s+/u', trim((string) ($row[1] ?? '')), 3, PREG_SPLIT_NO_EMPTY);
+                $fioParts = preg_split('/\s+/u', trim((string) ($userName ?? '')), 3, PREG_SPLIT_NO_EMPTY);
                 $lastName = $fioParts[0] ?? '';
                 $firstName = $fioParts[1] ?? '';
                 $patronymic = $fioParts[2] ?? '';
@@ -106,34 +117,13 @@ class ImportWorkersFromExcelCommand extends Command
                 $user->setBirthDay($birthDay);
 
                 $worker = new Worker();
-                $worker->setProfession((string) ($row[9] ?? ''));
+                $worker->setProfession((string) ($profession ?? ''));
                 $hiredAtStr = trim((string) ($row[23] ?? ''), " \t\n\r\0\x0B'");
-                $hiredAt = $hiredAtStr !== ''
+                $hiredAt = $hiredAt !== ''
                     ? \DateTimeImmutable::createFromFormat('d.m.Y', $hiredAtStr) ?: null
                     : null;
                 $worker->setHiredAt($hiredAt);
-                $workerStatus = $row[35];
-                if ($workerStatus == null) {
-                    $workerStatus = $row[34];
-                }
-                if ($workerStatus == null) {
-                    $workerStatus = $row[38];
-                }
-                if ($workerStatus == null) {
-                    $workerStatus = $row[31];
-                }
-                if ($workerStatus == null) {
-                    $workerStatus = $row[36];
-                }
-                if ($workerStatus == null) {
-                    $workerStatus = $row[47];
-                }
-                if ($workerStatus == null) {
-                    $workerStatus = $row[32];
-                }
-                if ($workerStatus == null) {
-                    $a = 4;
-                }
+
                 switch ($workerStatus) {
                     case 'Работа':
                         $workerStatus = WorkerStatus::AT_WORK;
@@ -178,12 +168,8 @@ class ImportWorkersFromExcelCommand extends Command
                         $workerStatus = WorkerStatus::EDUCATIONAL_PAID_LEAVE;
                         break;
                 }
-                if (gettype($workerStatus) === 'string') {
-                    $a = 4;
-                }
+
                 $worker->setWorkerStatus($workerStatus);
-
-
 
                 $user->setWorker($worker);
 

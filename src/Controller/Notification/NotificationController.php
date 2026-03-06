@@ -33,6 +33,7 @@ final class NotificationController extends AbstractController
             'currentPage' => $page,
             'totalPages' => (int) ceil($total / $perPage),
             'total' => $total,
+            'active_tab' => 'notifications',
         ]);
     }
 
