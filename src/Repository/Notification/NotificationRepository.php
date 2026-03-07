@@ -34,10 +34,14 @@ class NotificationRepository extends ServiceEntityRepository
     /**
      * @return Notification[]
      */
+    /**
+     * @return Notification[] Only unread notifications for the bell dropdown
+     */
     public function findLatestForUser(User $user, int $limit = 15): array
     {
         return $this->createQueryBuilder('n')
             ->andWhere('n.user = :user')
+            ->andWhere('n.readAt IS NULL')
             ->setParameter('user', $user)
             ->orderBy('n.createdAt', 'DESC')
             ->setMaxResults($limit)

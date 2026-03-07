@@ -48,6 +48,12 @@ $ mkdir -p /var/www/.cache/dconf
 $ chown -R www-data:www-data /var/www/.cache
 ```
 
+10. Permissions to uploads
+```bash
+$ chown -R www-data:www-data /uploads
+$ chmod -R 775 /uploads
+```
+
 ## Xdebug
 
 1. Добавить конфигурацию для xdebug -> php web page

@@ -47,9 +47,11 @@
                     </div>
                 </div>
             </div>
+            {% if isProjectAdmin %}
             <div class="card-footer text-end">
                 <a href="{{ path('app_kanban_edit_project', {id: project.id}) }}" class="btn btn-warning"><i class="bi bi-pencil-square me-1"></i>Редактировать проект</a>
             </div>
+            {% endif %}
         </div>
     </section>
 
@@ -93,9 +95,11 @@
                     {% endif %}
                 </div>
             </div>
+            {% if isProjectAdmin %}
             <div class="card-footer text-end">
                 <a href="{{ path('app_kanban_edit_project_members', {id: project.id}) }}" class="btn btn-warning"><i class="bi bi-people me-1"></i>Редактирование участников</a>
             </div>
+            {% endif %}
         </div>
     </section>
 
@@ -107,9 +111,9 @@
             </div>
             <div class="card-content">
                 <div class="card-body">
-                    {% if project.boards|length > 0 %}
+                    {% if projectBoards|length > 0 %}
                         <div class="list-group">
-                            {% for board in project.boards %}
+                            {% for board in projectBoards %}
                                 <a href="{{ path('app_kanban_board', {id: board.id}) }}" class="list-group-item list-group-item-action d-flex align-items-center">
                                     <i class="bi bi-kanban me-2 text-primary fs-5"></i>
                                     <div class="flex-grow-1">
@@ -121,7 +125,11 @@
                             {% endfor %}
                         </div>
                     {% else %}
+                        {% if isProjectAdmin %}
                         <p class="text-muted mb-0">Нет досок в проекте.</p>
+                        {% else %}
+                        <p class="text-muted mb-0">У вас пока нет назначенных задач. Доски появятся, когда вам их назначат.</p>
+                        {% endif %}
                     {% endif %}
                 </div>
             </div>

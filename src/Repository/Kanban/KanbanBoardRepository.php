@@ -74,6 +74,58 @@ class KanbanBoardRepository extends ServiceEntityRepository
     }
 
     /**
+     * Все доски, на которых у пользователя есть назначенные карточки.
+     * Упорядочено по project.id, board.id для группировки по проекту.
+     *
+     * @return KanbanBoard[]
+     */
+    public function findAllByUserWithAssignedCards(User $user): array
+    {
+        return $this->createQueryBuilder('b')
+            ->innerJoin('b.project', 'p')->addSelect('p')
+            ->innerJoin('b.columns', 'col')
+            ->innerJoin('col.cards', 'card')
+            ->innerJoin('card.assignees', 'assignee')
+            ->where('assignee = :user')
+            ->setParameter('user', $user)
+            ->orderBy('p.id', 'ASC')
+            ->addOrderBy('b.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Первая доска каждого из проектов (по id).
+     *
+     * @param int[] $projectIds
+     * @return array<int, KanbanBoard> projectId => first board
+     */
+    public function findFirstBoardByProjectIds(array $projectIds): array
+    {
+        if ($projectIds === []) {
+            return [];
+        }
+
+        $boards = $this->createQueryBuilder('b')
+            ->innerJoin('b.project', 'p')->addSelect('p')
+            ->where('p.id IN (:ids)')
+            ->setParameter('ids', $projectIds)
+            ->orderBy('p.id', 'ASC')
+            ->addOrderBy('b.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        $result = [];
+        foreach ($boards as $board) {
+            $pid = $board->getProject()?->getId();
+            if ($pid !== null && !isset($result[$pid])) {
+                $result[$pid] = $board;
+            }
+        }
+        return $result;
+    }
+
+    /**
      * Есть ли у пользователя назначенные карточки на данной доске.
      */
     public function userHasAssignedCardsOnBoard(KanbanBoard $board, User $user): bool

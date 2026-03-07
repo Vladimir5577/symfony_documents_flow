@@ -11,6 +11,7 @@ use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanService;
+use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -25,6 +26,7 @@ final class ProjectKanbanController extends AbstractController
         private readonly KanbanProjectRepository $projectRepo,
         private readonly KanbanProjectUserRepository $projectUserRepo,
         private readonly KanbanService $kanbanService,
+        private readonly NotificationService $notificationService,
     ) {
     }
 
@@ -33,11 +35,43 @@ final class ProjectKanbanController extends AbstractController
     {
         /** @var User $user */
         $user = $this->getUser();
-        $projects = $this->projectRepo->findByMember($user);
+        $projects = $this->projectRepo->findByMemberWithAccessibleBoards($user);
+        $projectIds = array_map(static fn ($p) => $p->getId(), $projects);
+
+        $firstBoardsByProject = $this->boardRepo->findFirstBoardByProjectIds($projectIds);
+        $boardsWithAssignedCards = $this->boardRepo->findAllByUserWithAssignedCards($user);
+        $projectIdToFirstBoardWithCards = [];
+        foreach ($boardsWithAssignedCards as $board) {
+            $pid = $board->getProject()?->getId();
+            if ($pid !== null && !isset($projectIdToFirstBoardWithCards[$pid])) {
+                $projectIdToFirstBoardWithCards[$pid] = $board;
+            }
+        }
+
+        $projectEntryUrls = [];
+        $projectAdminIds = [];
+        foreach ($projects as $project) {
+            $pid = $project->getId();
+            $firstBoard = $firstBoardsByProject[$pid] ?? null;
+            $memberRole = $firstBoard ? $this->kanbanService->getMemberRole($firstBoard, $user) : KanbanBoardMemberRole::KANBAN_ADMIN;
+
+            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
+                $projectAdminIds[$pid] = true;
+                $entryBoard = $firstBoard ?? $projectIdToFirstBoardWithCards[$pid] ?? null;
+            } else {
+                $entryBoard = $projectIdToFirstBoardWithCards[$pid] ?? null;
+            }
+
+            $projectEntryUrls[$pid] = $entryBoard
+                ? $this->generateUrl('app_kanban_board', ['id' => $entryBoard->getId()])
+                : $this->generateUrl('app_kanban_project', ['id' => $pid]);
+        }
 
         return $this->render('kanban/personal_projects.html.twig', [
             'active_tab' => 'kanban_boards',
             'projects' => $projects,
+            'projectEntryUrls' => $projectEntryUrls,
+            'projectAdminIds' => $projectAdminIds,
         ]);
     }
 
@@ -174,19 +208,29 @@ final class ProjectKanbanController extends AbstractController
             throw $this->createNotFoundException('Проект не найден.');
         }
 
-        $board = $project->getBoards()->first();
-        if ($board) {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+        $firstBoard = $project->getBoards()->first() ?: null;
+        if ($firstBoard) {
+            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+            $memberRole = $this->kanbanService->getMemberRole($firstBoard, $user);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
+        } else {
+            $memberRole = KanbanBoardMemberRole::KANBAN_ADMIN;
         }
+
+        $isProjectAdmin = $memberRole === KanbanBoardMemberRole::KANBAN_ADMIN;
+        $projectBoards = $isProjectAdmin
+            ? $this->boardRepo->findByProject($project)
+            : $this->boardRepo->findByProjectAndUserWithAssignedCards($project, $user);
 
         $projectUsers = $this->projectUserRepo->findByProject($project);
 
         return $this->render('kanban/view_project.html.twig', [
             'active_tab' => 'kanban_project',
             'project' => $project,
+            'projectBoards' => $projectBoards,
             'projectUsers' => $projectUsers,
+            'isProjectAdmin' => $isProjectAdmin,
         ]);
     }
 
@@ -203,7 +247,7 @@ final class ProjectKanbanController extends AbstractController
 
         $board = $project->getBoards()->first();
         if ($board) {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
@@ -255,7 +299,7 @@ final class ProjectKanbanController extends AbstractController
 
         $board = $project->getBoards()->first();
         if ($board) {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
@@ -327,6 +371,9 @@ final class ProjectKanbanController extends AbstractController
         }
         $entityManager->flush();
 
+        $currentUser = $this->getUser();
+        $newMemberUserIds = array_diff($userIds, $currentMemberIds);
+
         foreach ($userIds as $userId) {
             $memberUser = $userRepository->find($userId);
             if (!$memberUser) {
@@ -339,6 +386,14 @@ final class ProjectKanbanController extends AbstractController
             $entityManager->persist($pu);
         }
         $entityManager->flush();
+
+        $projectLink = $this->generateUrl('app_kanban_project', ['id' => $project->getId()]);
+        foreach ($newMemberUserIds as $newUserId) {
+            $newMember = $userRepository->find($newUserId);
+            if ($newMember instanceof User && $newMember->getId() !== $currentUser?->getId()) {
+                $this->notificationService->notifyNewKanbanProjectUser($newMember, $project->getName() ?? 'Проект', $projectLink);
+            }
+        }
 
         $this->addFlash('success', 'Участники проекта обновлены.');
         return $this->redirectToRoute('app_kanban_project', ['id' => $project->getId()]);
@@ -439,6 +494,15 @@ final class ProjectKanbanController extends AbstractController
 
         $board = $this->kanbanService->createProject($name, $description, $user, $userIds, $boardsConfig);
         $project = $board->getProject();
+
+        $projectLink = $this->generateUrl('app_kanban_project', ['id' => $project->getId()]);
+        $creatorId = $user->getId();
+        foreach ($userIds as $userId) {
+            $memberUser = $userRepository->find((int) $userId);
+            if ($memberUser instanceof User && $memberUser->getId() !== $creatorId) {
+                $this->notificationService->notifyNewKanbanProjectUser($memberUser, $name, $projectLink);
+            }
+        }
 
         $this->addFlash('success', 'Проект «' . $name . '» создан.');
 

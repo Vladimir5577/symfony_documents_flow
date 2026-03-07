@@ -12,6 +12,7 @@ use App\Repository\Kanban\KanbanChecklistItemRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanService;
+use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -29,6 +30,7 @@ final class KanbanChecklistApiController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly UserRepository $userRepo,
         private readonly KanbanProjectUserRepository $projectUserRepo,
+        private readonly NotificationService $notificationService,
     ) {
     }
 
@@ -104,15 +106,18 @@ final class KanbanChecklistApiController extends AbstractController
         if (array_key_exists('isCompleted', $payload)) {
             $item->setIsCompleted((bool) $payload['isCompleted']);
         }
+        $assigneeAddedToProject = false;
+        $assignedUser = null;
         if (array_key_exists('user_id', $payload)) {
             if ($payload['user_id'] === null) {
                 $item->setUser(null);
             } else {
                 $assignee = $this->userRepo->find((int) $payload['user_id']);
                 if ($assignee) {
-                    // Auto-add to project if not already a member (same as assign-new-member on cards)
-                    $project = $card->getColumn()->getBoard()->getProject();
-                    if ($project && !$this->projectUserRepo->findByProjectAndUser($project, $assignee)) {
+                    $board = $card->getColumn()->getBoard();
+                    $project = $board->getProject();
+                    $assigneeAddedToProject = $project && !$this->projectUserRepo->findByProjectAndUser($project, $assignee);
+                    if ($assigneeAddedToProject) {
                         $projectUser = new KanbanProjectUser();
                         $projectUser->setKanbanProject($project);
                         $projectUser->setUser($assignee);
@@ -120,11 +125,24 @@ final class KanbanChecklistApiController extends AbstractController
                         $this->em->persist($projectUser);
                     }
                     $item->setUser($assignee);
+                    $assignedUser = $assignee;
                 }
             }
         }
 
         $this->em->flush();
+
+        if ($assignedUser !== null && $assignedUser->getId() !== $user->getId()) {
+            $board = $card->getColumn()->getBoard();
+            $project = $board->getProject();
+            $projectLink = $this->generateUrl('app_kanban_project', ['id' => $project->getId()]);
+            $boardLink = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]);
+            if ($assigneeAddedToProject) {
+                $this->notificationService->notifyNewKanbanProjectUser($assignedUser, $project->getName() ?? 'Проект', $projectLink);
+            }
+            $subtaskTitle = $item->getTitle() . ' (задача: ' . $card->getTitle() . ')';
+            $this->notificationService->notifyKanbanTaskAssigned($assignedUser, $subtaskTitle, $boardLink, true);
+        }
 
         return $this->json([
             'id' => $item->getId(),

@@ -5,6 +5,7 @@ namespace App\Repository\Kanban\Project;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
+use App\Enum\Kanban\KanbanBoardMemberRole;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -75,6 +76,29 @@ class KanbanProjectUserRepository extends ServiceEntityRepository
         }
 
         return array_slice(array_values($users), 0, $limit);
+    }
+
+    /**
+     * Возвращает пользователей с правами админа: владелец проекта и участники с ролью KANBAN_ADMIN.
+     *
+     * @return User[]
+     */
+    public function findAdminUsersByProject(KanbanProject $project): array
+    {
+        $users = [];
+        $owner = $project->getOwner();
+        if ($owner) {
+            $users[$owner->getId()] = $owner;
+        }
+        foreach ($this->findByProject($project) as $pu) {
+            if ($pu->getRole() === KanbanBoardMemberRole::KANBAN_ADMIN) {
+                $u = $pu->getUser();
+                if ($u) {
+                    $users[$u->getId()] = $u;
+                }
+            }
+        }
+        return array_values($users);
     }
 
     //    /**

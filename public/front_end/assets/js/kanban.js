@@ -1709,6 +1709,12 @@ select.addEventListener("change", function () {
         initColumnCreation();
         initColumnColors();
         initCardSidebar();
+
+        var params = new URLSearchParams(window.location.search);
+        var cardId = params.get("card");
+        if (cardId) {
+            setTimeout(function () { openSidebar(cardId); }, 100);
+        }
     }
 
     return { init: init };

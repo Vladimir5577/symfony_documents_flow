@@ -1,7 +1,8 @@
 (function () {
     'use strict';
 
-    var POLL_INTERVAL = 5 * 60 * 1000;
+    // var POLL_INTERVAL = 10 * 1000;  // 10 seconds
+    var POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
     var STORAGE_KEY = 'notifications_last_check';
 
     var badge = document.getElementById('notification-badge');

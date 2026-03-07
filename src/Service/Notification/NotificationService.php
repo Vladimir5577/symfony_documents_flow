@@ -56,34 +56,95 @@ class NotificationService
         $this->em->flush();
     }
 
-    public function notifyTaskAssigned(User $recipient, string $taskTitle, string $link): void
+    /**
+     * @param User[] $recipients
+     */
+    public function notifyNewIncomingDocumentToRecipients(array $recipients, string $documentTitle, string $link): void
     {
+        foreach ($recipients as $recipient) {
+            $this->create(
+                $recipient,
+                NotificationType::NEW_INCOMING_DOCUMENT,
+                'Новый входящий документ: ' . $documentTitle,
+                link: $link,
+            );
+        }
+        $this->em->flush();
+    }
+
+    public function notifyKanbanTaskAssigned(User $recipient, string $title, string $link, bool $isSubtask = false): void
+    {
+        $message = $isSubtask
+            ? 'Вам назначена подзадача: ' . $title
+            : 'Вам назначена задача: ' . $title;
         $this->create(
             $recipient,
-            NotificationType::TASK_ASSIGNED,
-            'Вам назначена задача: ' . $taskTitle,
+            NotificationType::KANBAN_TASK_ASSIGNED_TO_USER,
+            $message,
             link: $link,
         );
         $this->em->flush();
     }
 
-    public function notifyTaskMoved(User $recipient, string $taskTitle, string $columnName, string $link): void
+    public function notifyNewKanbanProjectUser(User $recipient, string $projectName, string $link): void
     {
+        $this->create(
+            $recipient,
+            NotificationType::USER_ADDED_TO_KANBAN_PROJECT,
+            'Вас добавили в проект «' . $projectName . '»',
+            link: $link,
+        );
+        $this->em->flush();
+    }
+
+    public function notifyTaskMoved(
+        User $recipient,
+        string $taskTitle,
+        string $authorName,
+        string $fromColumnTitle,
+        string $toColumnTitle,
+        string $link,
+    ): void {
+        $title = trim($authorName) . ' переместил задачу ' . $taskTitle . ' из колонки «' . $fromColumnTitle . '» в колонку «' . $toColumnTitle . '»';
         $this->create(
             $recipient,
             NotificationType::TASK_MOVED,
-            'Задача перемещена: ' . $taskTitle . ' → ' . $columnName,
+            $title,
             link: $link,
         );
         $this->em->flush();
     }
 
-    public function notifyTaskCommentAdded(User $recipient, string $taskTitle, string $link): void
+    /**
+     * @param User[] $recipients
+     */
+    public function notifyTaskMovedToRecipients(
+        array $recipients,
+        string $taskTitle,
+        string $authorName,
+        string $fromColumnTitle,
+        string $toColumnTitle,
+        string $link,
+    ): void {
+        $title = trim($authorName) . ' переместил задачу ' . $taskTitle . ' из колонки «' . $fromColumnTitle . '» в колонку «' . $toColumnTitle . '»';
+        foreach ($recipients as $recipient) {
+            $this->create(
+                $recipient,
+                NotificationType::TASK_MOVED,
+                $title,
+                link: $link,
+            );
+        }
+        $this->em->flush();
+    }
+
+    public function notifyTaskCommentAdded(User $recipient, string $authorName, string $taskTitle, string $link): void
     {
+        $title = trim($authorName) . ' оставил комментарий к задаче ' . $taskTitle;
         $this->create(
             $recipient,
             NotificationType::TASK_COMMENT_ADDED,
-            'Новый комментарий в задаче: ' . $taskTitle,
+            $title,
             link: $link,
         );
         $this->em->flush();

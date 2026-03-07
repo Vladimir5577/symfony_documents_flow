@@ -34,6 +34,31 @@ class KanbanProjectRepository extends ServiceEntityRepository
             ->getResult();
     }
 
+    /**
+     * Проекты, которые пользователь должен видеть в списке:
+     * - владелец проекта;
+     * - участник с хотя бы одной назначенной задачей на любой доске.
+     * Участники без назначенных задач не видят проект.
+     *
+     * @return KanbanProject[]
+     */
+    public function findByMemberWithAccessibleBoards(User $user): array
+    {
+        return $this->createQueryBuilder('p')
+            ->select('DISTINCT p')
+            ->leftJoin('App\Entity\Kanban\Project\KanbanProjectUser', 'pu', 'WITH', 'pu.kanbanProject = p AND pu.user = :user')
+            ->leftJoin('p.boards', 'b')
+            ->leftJoin('b.columns', 'col')
+            ->leftJoin('col.cards', 'card')
+            ->leftJoin('card.assignees', 'a')
+            ->where('p.owner = :user')
+            ->orWhere('pu.id IS NOT NULL AND a = :user')
+            ->setParameter('user', $user)
+            ->orderBy('p.updatedAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
     //    /**
     //     * @return KanbanProject[] Returns an array of KanbanProject objects
     //     */

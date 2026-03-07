@@ -7,7 +7,9 @@ use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanCardCommentRepository;
 use App\Repository\Kanban\KanbanCardRepository;
+use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Service\Kanban\KanbanService;
+use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -23,6 +25,8 @@ final class KanbanCommentApiController extends AbstractController
         private readonly KanbanCardCommentRepository $commentRepo,
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $em,
+        private readonly NotificationService $notificationService,
+        private readonly KanbanProjectUserRepository $projectUserRepo,
     ) {
     }
 
@@ -79,6 +83,8 @@ final class KanbanCommentApiController extends AbstractController
         $this->em->persist($comment);
         $this->em->flush();
 
+        $this->sendCommentNotifications($card, $user);
+
         return $this->json([
             'id' => $comment->getId(),
             'body' => $comment->getBody(),
@@ -86,5 +92,39 @@ final class KanbanCommentApiController extends AbstractController
             'authorId' => $user->getId(),
             'createdAt' => $comment->getCreatedAt()?->format('c'),
         ], Response::HTTP_CREATED);
+    }
+
+    private function sendCommentNotifications(\App\Entity\Kanban\KanbanCard $card, User $commentAuthor): void
+    {
+        $board = $card->getColumn()->getBoard();
+        $project = $board->getProject();
+        if (!$project) {
+            return;
+        }
+
+        $recipients = [];
+
+        foreach ($this->projectUserRepo->findAdminUsersByProject($project) as $u) {
+            $recipients[$u->getId()] = $u;
+        }
+        foreach ($card->getAssignees() as $u) {
+            $recipients[$u->getId()] = $u;
+        }
+        foreach ($card->getSubtasks() as $subtask) {
+            $subtaskUser = $subtask->getUser();
+            if ($subtaskUser) {
+                $recipients[$subtaskUser->getId()] = $subtaskUser;
+            }
+        }
+
+        unset($recipients[$commentAuthor->getId()]);
+
+        $authorName = trim($commentAuthor->getLastname() . ' ' . $commentAuthor->getFirstname()) ?: $commentAuthor->getLogin();
+        $taskTitle = $card->getTitle();
+        $link = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]) . '?card=' . $card->getId();
+
+        foreach ($recipients as $recipient) {
+            $this->notificationService->notifyTaskCommentAdded($recipient, $authorName, $taskTitle, $link);
+        }
     }
 }

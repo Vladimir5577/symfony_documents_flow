@@ -11,6 +11,7 @@ use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Service\Kanban\KanbanService;
+use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -27,6 +28,7 @@ final class KanbanBoardApiController extends AbstractController
         private readonly KanbanProjectUserRepository $projectUserRepo,
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $em,
+        private readonly NotificationService $notificationService,
     ) {
     }
 
@@ -233,6 +235,11 @@ final class KanbanBoardApiController extends AbstractController
 
         $this->em->persist($projectUser);
         $this->em->flush();
+
+        if ($targetUser->getId() !== $user->getId()) {
+            $projectLink = $this->generateUrl('app_kanban_project', ['id' => $project->getId()]);
+            $this->notificationService->notifyNewKanbanProjectUser($targetUser, $project->getName() ?? 'Проект', $projectLink);
+        }
 
         return $this->json([
             'id' => $projectUser->getId(),

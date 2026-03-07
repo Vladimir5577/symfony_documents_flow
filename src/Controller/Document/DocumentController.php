@@ -16,6 +16,7 @@ use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Repository\Organization\OrganizationRepository;
+use App\Service\Notification\NotificationService;
 use App\Repository\User\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -51,6 +52,7 @@ final class DocumentController extends AbstractController
         UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
         ValidatorInterface     $validator,
+        NotificationService    $notificationService,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -298,6 +300,20 @@ final class DocumentController extends AbstractController
             throw $e;
         }
 
+        if ($wantsPublish) {
+            $recipients = [];
+            foreach ($document->getUserRecipients() as $recipient) {
+                $user = $recipient->getUser();
+                if ($user !== null) {
+                    $recipients[] = $user;
+                }
+            }
+            if ($recipients !== []) {
+                $link = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]);
+                $notificationService->notifyNewIncomingDocumentToRecipients($recipients, $document->getName(), $link);
+            }
+        }
+
         $this->addFlash('success', 'Документ успешно создан.');
 
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
@@ -504,6 +520,7 @@ final class DocumentController extends AbstractController
         UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
         ValidatorInterface     $validator,
+        NotificationService    $notificationService,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -632,6 +649,7 @@ final class DocumentController extends AbstractController
         }
 
         // Обновление полей документа
+        $wasAlreadyPublished = $document->isPublished();
         $document->setName($name);
         $document->setDescription(trim((string)($formData['description'] ?? '')));
         $document->setOrganizationCreator($organization);
@@ -695,6 +713,20 @@ final class DocumentController extends AbstractController
 
         $entityManager->flush();
 
+        if (!$wasAlreadyPublished && $wantsPublish) {
+            $recipients = [];
+            foreach ($document->getUserRecipients() as $recipient) {
+                $user = $recipient->getUser();
+                if ($user !== null) {
+                    $recipients[] = $user;
+                }
+            }
+            if ($recipients !== []) {
+                $link = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]);
+                $notificationService->notifyNewIncomingDocumentToRecipients($recipients, $document->getName(), $link);
+            }
+        }
+
         $this->addFlash('success', 'Документ успешно обновлён.');
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $document->getId()]);
     }
@@ -705,6 +737,7 @@ final class DocumentController extends AbstractController
         Request                $request,
         DocumentRepository     $documentRepository,
         EntityManagerInterface $entityManager,
+        NotificationService    $notificationService,
     ): Response {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
@@ -739,8 +772,25 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
         }
 
+        if ($document->isPublished()) {
+            $this->addFlash('info', 'Документ уже опубликован.');
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
+        }
+
         $document->setIsPublished(true);
         $entityManager->flush();
+
+        $recipients = [];
+        foreach ($document->getUserRecipients() as $recipient) {
+            $user = $recipient->getUser();
+            if ($user !== null) {
+                $recipients[] = $user;
+            }
+        }
+        if ($recipients !== []) {
+            $link = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]);
+            $notificationService->notifyNewIncomingDocumentToRecipients($recipients, $document->getName(), $link);
+        }
 
         $this->addFlash('success', 'Документ успешно опубликован.');
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);

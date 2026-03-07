@@ -11,6 +11,7 @@ use App\Repository\Kanban\KanbanColumnRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanService;
+use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -28,6 +29,7 @@ final class KanbanCardApiController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $em,
         private readonly UserRepository $userRepo,
+        private readonly NotificationService $notificationService,
     ) {
     }
 
@@ -218,15 +220,28 @@ final class KanbanCardApiController extends AbstractController
         $payload = json_decode($request->getContent(), true) ?? [];
         $userIds = array_slice(array_map('intval', array_filter($payload['user_ids'] ?? [], 'is_numeric')), 0, 1);
 
+        $previousAssigneeIds = array_map(static fn (User $u) => $u->getId(), $card->getAssignees()->toArray());
         foreach ($card->getAssignees() as $existing) {
             $card->removeAssignee($existing);
         }
 
+        $newAssignees = [];
         foreach ($this->userRepo->findByIds($userIds) as $assignee) {
             $card->addAssignee($assignee);
+            if (!in_array($assignee->getId(), $previousAssigneeIds, true)) {
+                $newAssignees[] = $assignee;
+            }
         }
 
         $this->em->flush();
+
+        $board = $card->getColumn()->getBoard();
+        $boardLink = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]);
+        foreach ($newAssignees as $assignee) {
+            if ($assignee->getId() !== $user->getId()) {
+                $this->notificationService->notifyKanbanTaskAssigned($assignee, $card->getTitle(), $boardLink, false);
+            }
+        }
 
         $assignees = [];
         foreach ($card->getAssignees() as $u) {
@@ -275,7 +290,8 @@ final class KanbanCardApiController extends AbstractController
             return $this->json(['error' => 'Пользователь не найден.'], Response::HTTP_NOT_FOUND);
         }
 
-        if (!$this->projectUserRepo->findByProjectAndUser($project, $targetUser)) {
+        $addedToProject = !$this->projectUserRepo->findByProjectAndUser($project, $targetUser);
+        if ($addedToProject) {
             $projectUser = new KanbanProjectUser();
             $projectUser->setKanbanProject($project);
             $projectUser->setUser($targetUser);
@@ -283,11 +299,23 @@ final class KanbanCardApiController extends AbstractController
             $this->em->persist($projectUser);
         }
 
-        if (!$card->getAssignees()->contains($targetUser)) {
+        $addedAsAssignee = !$card->getAssignees()->contains($targetUser);
+        if ($addedAsAssignee) {
             $card->addAssignee($targetUser);
         }
 
         $this->em->flush();
+
+        if ($targetUser->getId() !== $user->getId()) {
+            $projectLink = $this->generateUrl('app_kanban_project', ['id' => $project->getId()]);
+            $boardLink = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]);
+            if ($addedToProject) {
+                $this->notificationService->notifyNewKanbanProjectUser($targetUser, $project->getName() ?? 'Проект', $projectLink);
+            }
+            if ($addedAsAssignee) {
+                $this->notificationService->notifyKanbanTaskAssigned($targetUser, $card->getTitle(), $boardLink, false);
+            }
+        }
 
         $assignees = [];
         foreach ($card->getAssignees() as $u) {
@@ -332,7 +360,44 @@ final class KanbanCardApiController extends AbstractController
             ? new \DateTimeImmutable($payload['prev_updated_at'])
             : null;
 
+        $oldColumn = $card->getColumn();
+        $columnChanged = $oldColumn->getId() !== (int) $columnId;
+        $oldColumnTitle = $oldColumn->getTitle();
+        $taskTitle = $card->getTitle();
+
         $this->kanbanService->moveCard($card, $targetColumn, (float) $position, $prevUpdatedAt);
+
+        if ($columnChanged) {
+            $board = $targetColumn->getBoard();
+            $project = $board->getProject();
+            $recipientsById = [];
+            foreach ($this->projectUserRepo->findAdminUsersByProject($project) as $u) {
+                $recipientsById[$u->getId()] = $u;
+            }
+            foreach ($card->getAssignees() as $u) {
+                $recipientsById[$u->getId()] = $u;
+            }
+            foreach ($card->getSubtasks() as $subtask) {
+                $subtaskUser = $subtask->getUser();
+                if ($subtaskUser !== null) {
+                    $recipientsById[$subtaskUser->getId()] = $subtaskUser;
+                }
+            }
+            unset($recipientsById[$user->getId()]);
+
+            if ($recipientsById !== []) {
+                $authorName = trim($user->getLastname() . ' ' . $user->getFirstname()) ?: $user->getLogin() ?? (string) $user->getId();
+                $boardLink = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]);
+                $this->notificationService->notifyTaskMovedToRecipients(
+                    array_values($recipientsById),
+                    $taskTitle,
+                    $authorName,
+                    $oldColumnTitle,
+                    $targetColumn->getTitle(),
+                    $boardLink,
+                );
+            }
+        }
 
         return $this->json([
             'id' => $card->getId(),
