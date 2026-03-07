@@ -1,0 +1,224 @@
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var orgDataContainer = document.getElementById('org-tree-data-assign-new');
+    if (!orgDataContainer) return;
+
+    var nodes = Array.from(orgDataContainer.querySelectorAll('.org-node')).map(function (el) {
+        return {
+            id: el.getAttribute('data-org-id'),
+            parentId: el.getAttribute('data-parent-id') || null,
+            name: el.getAttribute('data-name')
+        };
+    });
+
+    var treeEl = document.getElementById('assign-new-org-tree');
+    var usersPlaceholder = document.getElementById('assign-new-org-users-placeholder');
+    var usersList = document.getElementById('assign-new-org-users-list');
+    var selectedPlaceholder = document.getElementById('assign-new-selected-placeholder');
+    var selectedOne = document.getElementById('assign-new-selected-one');
+    var confirmBtn = document.getElementById('assign-new-confirm-btn');
+    var usersUrlTemplate = orgDataContainer.getAttribute('data-users-url-template') || '';
+
+    var selectedOrgId = null;
+    var selectedUser = null;
+
+    function getChildren(parentId) {
+        return nodes.filter(function (n) { return n.parentId === parentId; });
+    }
+    function hasChildren(id) {
+        return nodes.some(function (n) { return n.parentId === id; });
+    }
+
+    function buildTree(parentId, level) {
+        var children = getChildren(parentId);
+        if (children.length === 0) return null;
+        var container = document.createElement('div');
+        if (level > 0) container.className = 'org-tree-children';
+        children.forEach(function (node) {
+            var row = document.createElement('div');
+            row.className = 'org-tree-item';
+            row.style.paddingLeft = (level * 20 + 4) + 'px';
+            row.dataset.orgId = node.id;
+            var hasKids = hasChildren(node.id);
+            var toggle = document.createElement('span');
+            toggle.className = 'org-tree-toggle';
+            if (hasKids) toggle.textContent = '\u25B6';
+            row.appendChild(toggle);
+            var icon = document.createElement('i');
+            icon.className = 'org-tree-icon bi ' + (hasKids ? 'bi-diagram-3' : 'bi-building');
+            row.appendChild(icon);
+            var nameSpan = document.createElement('span');
+            nameSpan.textContent = node.name;
+            row.appendChild(nameSpan);
+            container.appendChild(row);
+            var childContainer = null;
+            if (hasKids) {
+                childContainer = buildTree(node.id, level + 1);
+                if (childContainer) container.appendChild(childContainer);
+            }
+            row.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var prev = treeEl.querySelector('.org-tree-item.selected');
+                if (prev) prev.classList.remove('selected');
+                row.classList.add('selected');
+                selectedOrgId = node.id;
+                if (hasKids && childContainer) {
+                    var isOpen = childContainer.classList.contains('open');
+                    childContainer.classList.toggle('open', !isOpen);
+                    toggle.classList.toggle('open', !isOpen);
+                }
+                loadOrgUsers(node.id);
+            });
+        });
+        return container;
+    }
+
+    function renderTree() {
+        if (!treeEl) return;
+        treeEl.innerHTML = '';
+        var tree = buildTree(null, 0);
+        if (tree) treeEl.appendChild(tree);
+        else treeEl.innerHTML = '<div class="text-muted small">Нет организаций</div>';
+    }
+
+    function loadOrgUsers(orgId) {
+        usersPlaceholder.classList.remove('d-none');
+        usersPlaceholder.textContent = 'Загрузка...';
+        usersList.classList.add('d-none');
+        usersList.innerHTML = '';
+        if (!usersUrlTemplate) {
+            usersPlaceholder.textContent = 'Выберите организацию';
+            return;
+        }
+        var url = usersUrlTemplate.replace('__ORG__', orgId);
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                usersPlaceholder.classList.add('d-none');
+                usersList.classList.remove('d-none');
+                if (!data || data.length === 0) {
+                    usersList.innerHTML = '<div class="text-muted small">В организации нет пользователей</div>';
+                    return;
+                }
+                data.forEach(function (u) {
+                    var label = u.profession ? (u.name + ' — ' + u.profession) : u.name;
+                    var item = document.createElement('div');
+                    item.className = 'assign-new-user-item';
+                    item.dataset.id = u.id;
+                    item.dataset.name = u.name;
+                    item.dataset.label = label;
+                    item.textContent = label;
+                    if (selectedUser && String(selectedUser.id) === String(u.id)) item.classList.add('selected');
+                    item.addEventListener('click', function () {
+                        selectedUser = { id: u.id, name: u.name, label: label };
+                        usersList.querySelectorAll('.assign-new-user-item').forEach(function (el) { el.classList.remove('selected'); });
+                        item.classList.add('selected');
+                        renderSelectedOne();
+                        confirmBtn.disabled = false;
+                    });
+                    usersList.appendChild(item);
+                });
+            })
+            .catch(function () {
+                usersPlaceholder.classList.remove('d-none');
+                usersPlaceholder.textContent = 'Ошибка загрузки';
+                usersList.classList.add('d-none');
+            });
+    }
+
+    function renderSelectedOne() {
+        if (!selectedUser) {
+            selectedPlaceholder.classList.remove('d-none');
+            selectedOne.classList.add('d-none');
+            selectedOne.innerHTML = '';
+        } else {
+            selectedPlaceholder.classList.add('d-none');
+            selectedOne.classList.remove('d-none');
+            selectedOne.innerHTML = '';
+            var span = document.createElement('span');
+            span.textContent = selectedUser.label || selectedUser.name;
+            selectedOne.appendChild(span);
+            var rm = document.createElement('button');
+            rm.type = 'button';
+            rm.className = 'btn btn-sm btn-outline-danger';
+            rm.textContent = '\u00D7';
+            rm.addEventListener('click', function () {
+                selectedUser = null;
+                renderSelectedOne();
+                confirmBtn.disabled = true;
+                if (usersList) usersList.querySelectorAll('.assign-new-user-item.selected').forEach(function (el) { el.classList.remove('selected'); });
+            });
+            selectedOne.appendChild(rm);
+        }
+    }
+
+    confirmBtn.addEventListener('click', function () {
+        if (!selectedUser) return;
+
+        // Custom handler hook (used e.g. for subtask assignment)
+        if (typeof window.__kanbanOrgModalConfirm === 'function') {
+            var handler = window.__kanbanOrgModalConfirm;
+            window.__kanbanOrgModalConfirm = null;
+            handler({ id: selectedUser.id, name: selectedUser.name });
+            var modalElHook = document.getElementById('assignNewUserOrgModal');
+            if (modalElHook && window.bootstrap) {
+                var modalHook = bootstrap.Modal.getInstance(modalElHook);
+                if (modalHook) modalHook.hide();
+            }
+            return;
+        }
+
+        var cardId = window.__currentCardIdForAssignNewUser;
+        if (!cardId) return;
+        confirmBtn.disabled = true;
+        fetch('/api/kanban/cards/' + cardId + '/assign-new-member', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ user_id: parseInt(selectedUser.id, 10) })
+        })
+            .then(function (r) {
+                if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || 'Ошибка'); });
+                return r.json();
+            })
+            .then(function (data) {
+                if (typeof window.__kanbanRefreshAssignees === 'function') {
+                    window.__kanbanRefreshAssignees(data.assignees || []);
+                }
+                if (typeof window.__kanbanShowToast === 'function') {
+                    window.__kanbanShowToast('Пользователь добавлен в проект и назначен на задачу.', 'success');
+                }
+                var modalEl = document.getElementById('assignNewUserOrgModal');
+                if (modalEl) {
+                    var modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                }
+            })
+            .catch(function (err) {
+                if (typeof window.__kanbanShowToast === 'function') {
+                    window.__kanbanShowToast(err.message || 'Ошибка');
+                }
+            })
+            .finally(function () {
+                confirmBtn.disabled = !selectedUser;
+            });
+    });
+
+    var modalEl = document.getElementById('assignNewUserOrgModal');
+    if (modalEl) {
+        modalEl.addEventListener('show.bs.modal', function () {
+            selectedUser = null;
+            selectedOrgId = null;
+            renderSelectedOne();
+            confirmBtn.disabled = true;
+            usersPlaceholder.classList.remove('d-none');
+            usersPlaceholder.textContent = 'Выберите организацию';
+            usersList.classList.add('d-none');
+            usersList.innerHTML = '';
+        });
+    }
+
+    renderTree();
+    renderSelectedOne();
+    confirmBtn.disabled = true;
+});
+</script>

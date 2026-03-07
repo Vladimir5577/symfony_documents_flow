@@ -1,6 +1,6 @@
 {% extends 'base_dashboard.html.twig' %}
 
-{% block title %}Просмотр организации: {{ organization.shortName }}{% endblock %}
+{% block title %}Просмотр организации: {{ organization.name }}{% endblock %}
 
 {# Рекурсивный макрос для отображения дерева организаций в виде аккордеона. from_org — организация, с которой переходят (текущая страница). #}
 {% macro renderOrganizationTree(organization, level, from_org) %}
@@ -21,7 +21,7 @@
             <a href="{{ path('view_organization', {'id': organization.id, 'from': from_org.id}) }}"
                class="flex-grow-1 text-decoration-none org-tree-link fw-medium"
                style="font-size: 15px;">
-                {{ organization.shortName }}
+                {{ organization.name }}
             </a>
             {% if organization.childOrganizations|length > 0 %}
                 <span class="badge org-tree-badge">{{ organization.childOrganizations|length }}</span>
@@ -57,8 +57,8 @@
                 </a>
             {% endif %}
             {% if back_organization %}
-                <a href="{{ path('view_organization', {id: back_organization.id}) }}" class="btn btn-secondary rounded-pill" title="Вернуться к {{ back_organization.shortName }}">
-                    <i class="bi bi-arrow-left"></i> Назад к «{{ back_organization.shortName }}»
+                <a href="{{ path('view_organization', {id: back_organization.id}) }}" class="btn btn-secondary rounded-pill" title="Вернуться к {{ back_organization.name }}">
+                    <i class="bi bi-arrow-left"></i> Назад
                 </a>
             {% else %}
                 <a href="{{ path('app_all_organizations') }}" class="btn btn-secondary rounded-pill">
@@ -96,8 +96,8 @@
                                 <div class="col-md-6">
                                     <table class="table table-borderless">
                                         <tr>
-                                            <th width="180">Короткое название:</th>
-                                            <td><strong>{{ organization.shortName }}</strong></td>
+                                            <th width="180">Название:</th>
+                                            <td><strong>{{ organization.name }}</strong></td>
                                         </tr>
                                         <tr>
                                             <th>Полное название:</th>
@@ -111,7 +111,7 @@
                                         <tr>
                                             <th>Родительская организация:</th>
                                             <td>
-                                                <a href="{{ path('view_organization', {id: organization.parent.id}) }}">{{ organization.parent.shortName }}</a>
+                                                <a href="{{ path('view_organization', {id: organization.parent.id}) }}">{{ organization.parent.name }}</a>
                                             </td>
                                         </tr>
                                         {% endif %}
@@ -185,7 +185,23 @@
                         <div class="card-content">
                             <div class="card-body">
                                 <div style="font-size: 15px; line-height: 2; padding: 10px 0;">
+                                    {# Сначала организации с дочерними, затем подразделения (листья) #}
+                                    {% set orgsWithChildren = [] %}
+                                    {% set departments = [] %}
+
                                     {% for childOrg in organization.childOrganizations %}
+                                        {% if childOrg.childOrganizations|length > 0 %}
+                                            {% set orgsWithChildren = orgsWithChildren|merge([childOrg]) %}
+                                        {% else %}
+                                            {% set departments = departments|merge([childOrg]) %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% for childOrg in orgsWithChildren %}
+                                        {{ self.renderOrganizationTree(childOrg, 0, organization) }}
+                                    {% endfor %}
+
+                                    {% for childOrg in departments %}
                                         {{ self.renderOrganizationTree(childOrg, 0, organization) }}
                                     {% endfor %}
                                 </div>
@@ -210,7 +226,8 @@
                                         <thead>
                                             <tr>
                                                 <th>ФИО</th>
-                                                <th>Статус</th>
+                                                <th>Профессия</th>
+                                                <th class="table-users-status-col">Статус</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -219,7 +236,14 @@
                                                     <td class="text-bold-500">
                                                         {{ user.lastname ?? '-' }} {{ user.firstname ?? '-' }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
                                                     </td>
-                                                    <td><span class="badge bg-secondary">{{ user.userEmployeeStatus.getLabel() }}</span></td>
+                                                    <td>
+                                                        {{ user.worker ? user.worker.profession : '—' }}
+                                                    </td>
+                                                    <td class="table-users-status-col">
+                                                        <span class="badge bg-secondary badge-status-compact">
+                                                            {{ user.worker ? user.worker.workerStatus.getLabel() : '—' }}
+                                                        </span>
+                                                    </td>
                                                 </tr>
                                             {% endfor %}
                                         </tbody>
@@ -285,6 +309,19 @@
         [data-bs-theme="dark"] .org-tree-link:hover { color: #6ea8fe !important; }
         [data-bs-theme="dark"] .org-tree-badge { background: rgba(255,255,255,0.15); color: #fff; }
         [data-bs-theme="dark"] .org-tree-border { border-color: rgba(255,255,255,0.15) !important; }
+
+        .badge-status-compact {
+            display: inline-block;
+            max-width: 140px;
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.2;
+        }
+        .table-users-status-col {
+            width: 140px;
+            max-width: 140px;
+        }
     </style>
     <script>
         document.querySelectorAll('tr[data-user-id]').forEach(function (row) {

@@ -1,0 +1,211 @@
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var orgDataContainer = document.getElementById('org-tree-data');
+    if (!orgDataContainer) return;
+
+    var usersSelect = document.getElementById('project_member_users');
+    var choicesInstance = window.__projectFlowOrgUserModalChoices || null;
+
+    var nodes = Array.from(orgDataContainer.querySelectorAll('.org-node')).map(function (el) {
+        return {
+            id: el.getAttribute('data-org-id'),
+            parentId: el.getAttribute('data-parent-id') || null,
+            name: el.getAttribute('data-name')
+        };
+    });
+
+    var treeEl = document.getElementById('org-tree');
+    var orgUsersPlaceholder = document.getElementById('org-users-placeholder');
+    var orgUsersList = document.getElementById('org-users-list');
+    var modalSelectedPlaceholder = document.getElementById('modal-selected-placeholder');
+    var modalSelectedList = document.getElementById('modal-selected-list');
+    var addSelectedBtn = document.getElementById('add-selected-users-btn');
+    var usersUrlTemplate = orgDataContainer.getAttribute('data-users-url-template') || '';
+
+    var selectedOrgId = null;
+    var modalSelectedUsers = [];
+
+    function getChildren(parentId) {
+        return nodes.filter(function (n) { return n.parentId === parentId; });
+    }
+    function hasChildren(id) {
+        return nodes.some(function (n) { return n.parentId === id; });
+    }
+
+    function buildTree(parentId, level) {
+        var children = getChildren(parentId);
+        if (children.length === 0) return null;
+        var container = document.createElement('div');
+        if (level > 0) container.className = 'org-tree-children';
+        children.forEach(function (node) {
+            var row = document.createElement('div');
+            row.className = 'org-tree-item';
+            row.style.paddingLeft = (level * 20 + 4) + 'px';
+            row.dataset.orgId = node.id;
+            var hasKids = hasChildren(node.id);
+            var toggle = document.createElement('span');
+            toggle.className = 'org-tree-toggle';
+            if (hasKids) toggle.textContent = '▶';
+            row.appendChild(toggle);
+            var icon = document.createElement('i');
+            icon.className = 'org-tree-icon bi ' + (hasKids ? 'bi-diagram-3' : 'bi-building');
+            row.appendChild(icon);
+            var nameSpan = document.createElement('span');
+            nameSpan.textContent = node.name;
+            row.appendChild(nameSpan);
+            container.appendChild(row);
+            var childContainer = null;
+            if (hasKids) {
+                childContainer = buildTree(node.id, level + 1);
+                if (childContainer) container.appendChild(childContainer);
+            }
+            row.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var prev = treeEl.querySelector('.org-tree-item.selected');
+                if (prev) prev.classList.remove('selected');
+                row.classList.add('selected');
+                selectedOrgId = node.id;
+                if (hasKids && childContainer) {
+                    var isOpen = childContainer.classList.contains('open');
+                    childContainer.classList.toggle('open', !isOpen);
+                    toggle.classList.toggle('open', !isOpen);
+                }
+                loadOrgUsers(node.id);
+            });
+        });
+        return container;
+    }
+
+    function renderTree() {
+        if (!treeEl) return;
+        treeEl.innerHTML = '';
+        var tree = buildTree(null, 0);
+        if (tree) treeEl.appendChild(tree);
+        else treeEl.innerHTML = '<div class="text-muted small">Нет организаций</div>';
+    }
+
+    function loadOrgUsers(orgId) {
+        orgUsersPlaceholder.classList.remove('d-none');
+        orgUsersPlaceholder.textContent = 'Загрузка...';
+        orgUsersList.classList.add('d-none');
+        orgUsersList.innerHTML = '';
+        if (!usersUrlTemplate) {
+            orgUsersPlaceholder.textContent = 'Выберите организацию';
+            return;
+        }
+        var url = usersUrlTemplate.replace('__ORG__', orgId);
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                orgUsersPlaceholder.classList.add('d-none');
+                orgUsersList.classList.remove('d-none');
+                if (!data || data.length === 0) {
+                    orgUsersList.innerHTML = '<div class="text-muted small">В организации нет пользователей</div>';
+                    return;
+                }
+                data.forEach(function (u) {
+                    var li = document.createElement('div');
+                    li.className = 'form-check';
+                    var isSelected = modalSelectedUsers.some(function (s) { return String(s.id) === String(u.id); });
+                    var cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'form-check-input org-user-cb';
+                    cb.value = u.id;
+                    cb.checked = isSelected;
+                    cb.dataset.id = u.id;
+                    cb.dataset.name = u.name;
+                    var label = document.createElement('label');
+                    label.className = 'form-check-label';
+                    label.setAttribute('for', 'org-user-' + u.id);
+                    label.textContent = u.name;
+                    cb.id = 'org-user-' + u.id;
+                    li.appendChild(cb);
+                    li.appendChild(label);
+                    orgUsersList.appendChild(li);
+                    cb.addEventListener('change', function () {
+                        if (this.checked) {
+                            if (!modalSelectedUsers.some(function (s) { return String(s.id) === String(this.dataset.id); }.bind(this))) {
+                                modalSelectedUsers.push({ id: this.dataset.id, name: this.dataset.name });
+                            }
+                        } else {
+                            modalSelectedUsers = modalSelectedUsers.filter(function (s) { return String(s.id) !== String(this.dataset.id); }.bind(this));
+                        }
+                        renderModalSelected();
+                        addSelectedBtn.disabled = modalSelectedUsers.length === 0;
+                    });
+                });
+            })
+            .catch(function () {
+                orgUsersPlaceholder.classList.remove('d-none');
+                orgUsersPlaceholder.textContent = 'Ошибка загрузки';
+                orgUsersList.classList.add('d-none');
+            });
+    }
+
+    function renderModalSelected() {
+        if (modalSelectedUsers.length === 0) {
+            modalSelectedPlaceholder.classList.remove('d-none');
+            modalSelectedList.classList.add('d-none');
+            modalSelectedList.innerHTML = '';
+        } else {
+            modalSelectedPlaceholder.classList.add('d-none');
+            modalSelectedList.classList.remove('d-none');
+            modalSelectedList.innerHTML = '';
+            modalSelectedUsers.forEach(function (u) {
+                var li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-1';
+                li.textContent = u.name;
+                var rm = document.createElement('button');
+                rm.type = 'button';
+                rm.className = 'btn btn-sm btn-outline-danger';
+                rm.textContent = '×';
+                rm.addEventListener('click', function () {
+                    modalSelectedUsers = modalSelectedUsers.filter(function (s) { return String(s.id) !== String(u.id); });
+                    renderModalSelected();
+                    var cb = orgUsersList.querySelector('.org-user-cb[data-id="' + u.id + '"]');
+                    if (cb) cb.checked = false;
+                    addSelectedBtn.disabled = modalSelectedUsers.length === 0;
+                });
+                li.appendChild(rm);
+                modalSelectedList.appendChild(li);
+            });
+        }
+    }
+
+    addSelectedBtn.addEventListener('click', function () {
+        if (modalSelectedUsers.length === 0) return;
+        if (choicesInstance) {
+            modalSelectedUsers.forEach(function (u) {
+                var exists = choicesInstance.getValue(true).indexOf(String(u.id)) !== -1;
+                if (!exists) {
+                    choicesInstance.setChoices([{ value: String(u.id), label: u.name, selected: true }], 'value', 'label', false);
+                }
+            });
+        } else if (usersSelect) {
+            modalSelectedUsers.forEach(function (u) {
+                var opt = usersSelect.querySelector('option[value="' + u.id + '"]');
+                if (!opt) {
+                    opt = document.createElement('option');
+                    opt.value = u.id;
+                    opt.textContent = u.name;
+                    opt.selected = true;
+                    usersSelect.appendChild(opt);
+                }
+            });
+        }
+        modalSelectedUsers = [];
+        renderModalSelected();
+        addSelectedBtn.disabled = true;
+        orgUsersList.querySelectorAll('.org-user-cb').forEach(function (cb) { cb.checked = false; });
+        var modalEl = document.getElementById('organizationUserModal');
+        if (modalEl) {
+            var modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+        }
+    });
+
+    renderTree();
+    renderModalSelected();
+    addSelectedBtn.disabled = true;
+});
+</script>

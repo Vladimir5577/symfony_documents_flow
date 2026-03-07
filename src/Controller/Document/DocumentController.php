@@ -324,16 +324,22 @@ final class DocumentController extends AbstractController
         $users = $organization instanceof Department
             ? $userRepository->findByOrganization($organization)
             : $userRepository->findWorkWithDocumentsByOrganization($organization);
+
         $data = [];
         foreach ($users as $user) {
+            $fullName = trim(sprintf(
+                '%s %s %s',
+                (string) $user->getLastname(),
+                (string) $user->getFirstname(),
+                (string) ($user->getPatronymic() ?? '')
+            ));
+
+            $profession = $user->getWorker()?->getProfession();
+
             $data[] = [
                 'id' => $user->getId(),
-                'name' => trim(sprintf(
-                    '%s %s %s',
-                    (string)$user->getLastname(),
-                    (string)$user->getFirstname(),
-                    (string)($user->getPatronymic() ?? '')
-                )),
+                'name' => $fullName,
+                'profession' => $profession,
             ];
         }
 

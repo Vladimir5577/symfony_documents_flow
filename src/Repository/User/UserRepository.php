@@ -4,7 +4,7 @@ namespace App\Repository\User;
 
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
-use App\Enum\UserEmployeeStatus;
+use App\Enum\WorkerStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Security\Core\Exception\UnsupportedUserException;
@@ -85,10 +85,10 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             $countQb->andWhere('u.organization = :orgId')->setParameter('orgId', $organizationId);
         }
 
-        $statusEnum = $status !== null && $status !== '' ? UserEmployeeStatus::tryFrom($status) : null;
+        $statusEnum = $status !== null && $status !== '' ? WorkerStatus::tryFrom($status) : null;
         if ($statusEnum !== null) {
-            $qb->andWhere('u.userEmployeeStatus = :status')->setParameter('status', $statusEnum);
-            $countQb->andWhere('u.userEmployeeStatus = :status')->setParameter('status', $statusEnum);
+            $qb->leftJoin('u.worker', 'w')->andWhere('w.workerStatus = :status')->setParameter('status', $statusEnum);
+            $countQb->leftJoin('u.worker', 'w')->andWhere('w.workerStatus = :status')->setParameter('status', $statusEnum);
         }
 
         $total = (int) $countQb->getQuery()->getSingleScalarResult();

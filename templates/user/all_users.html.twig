@@ -37,7 +37,7 @@
                 <div class="col">
                     <label class="form-label mb-1 small text-muted">Организация</label>
                     <div class="input-group">
-                        <input type="text" id="org-display-filter" class="form-control" readonly placeholder="Все организации" value="{{ selected_organization ? selected_organization.shortName : '' }}" aria-label="Выбрать организацию"
+                        <input type="text" id="org-display-filter" class="form-control" readonly placeholder="Все организации" value="{{ selected_organization ? selected_organization.name : '' }}" aria-label="Выбрать организацию"
                             {% if organizations is defined and organizations|length > 0 %}style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModalFilter"{% else %}style="cursor:default"{% endif %}>
                         <button type="button" class="btn btn-outline-secondary" title="Сбросить организацию" id="filter-org-clear" {% if not selected_organization_id %}style="display:none"{% endif %}>
                             <i class="bi bi-x-lg"></i>
@@ -75,7 +75,8 @@
                                     <th>Имя</th>
                                     <th>Отчество</th>
                                     <th>Телефон</th>
-                                    <th>Статус</th>
+                                    <th>Профессия</th>
+                                    <th class="table-users-status-col">Статус</th>
                                 </tr>
                                 </thead>
                                 <tbody>
@@ -87,12 +88,17 @@
                                             <td>{{ user.firstname ?? '-' }}</td>
                                             <td>{{ user.patronymic ?? '-' }}</td>
                                             <td>{{ user.phone ?? '-' }}</td>
-                                            <td><span class="badge bg-secondary">{{ user.userEmployeeStatus.getLabel() }}</span></td>
+                                            <td>{{ user.worker ? user.worker.profession : '—' }}</td>
+                                            <td class="table-users-status-col">
+                                                <span class="badge bg-secondary badge-status-compact">
+                                                    {{ user.worker ? user.worker.workerStatus.getLabel() : '—' }}
+                                                </span>
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="6" class="text-center">Пользователи не найдены</td>
+                                        <td colspan="7" class="text-center">Пользователи не найдены</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>
@@ -231,5 +237,19 @@
             });
         });
     </script>
-    <style>#table-hover-row tr[data-user-id] { cursor: pointer; }</style>
+    <style>
+        #table-hover-row tr[data-user-id] { cursor: pointer; }
+        .badge-status-compact {
+            display: inline-block;
+            max-width: 140px;
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.2;
+        }
+        .table-users-status-col {
+            width: 140px;
+            max-width: 140px;
+        }
+    </style>
 {% endblock %}

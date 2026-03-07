@@ -7,7 +7,7 @@ use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 
 #[ORM\Entity]
 #[UniqueEntity(
-    fields: ['shortName', 'fullName'],
+    fields: ['name'],
     message: 'Организация с таким полным названием уже существует.',
     repositoryMethod: 'findOneByFullName',
     ignoreNull: false

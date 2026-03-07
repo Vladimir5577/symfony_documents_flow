@@ -43,6 +43,10 @@
                                     <table class="table table-borderless">
                                         <tbody>
                                             <tr>
+                                                <th class="text-muted" style="width: 30%;">Был(а) онлайн:</th>
+                                                <td>{% set _lastSeenTs = user.lastSeenAt ? user.lastSeenAt|date('U') : 0 %}{% set _diff = "now"|date('U') - _lastSeenTs %}{% if user.lastSeenAt and _diff < 300 %}<span class="text-success">Онлайн</span>{% else %}{{ user.lastSeenAt ? user.lastSeenAt|date('d.m.Y H:i') : '—' }}{% endif %}</td>
+                                            </tr>
+                                            <tr>
                                                 <th class="text-muted" style="width: 30%;">ID:</th>
                                                 <td><strong>{{ user.id }}</strong></td>
                                             </tr>
@@ -68,11 +72,11 @@
                                             </tr>
                                             <tr>
                                                 <th class="text-muted">Статус:</th>
-                                                <td><span class="badge bg-secondary">{{ user.userEmployeeStatus.getLabel() }}</span></td>
+                                                <td><span class="badge bg-secondary badge-status-compact">{{ user.worker ? user.worker.workerStatus.getLabel() : '—' }}</span></td>
                                             </tr>
                                             <tr>
                                                 <th class="text-muted">Организация:</th>
-                                                <td>{{ user.organization.shortName ?? '-' }}</td>
+                                                <td>{{ user.organization.name ?? '-' }}</td>
                                             </tr>
                                             <tr>
                                                 <th class="text-muted">Дата создания:</th>
@@ -155,4 +159,19 @@
 
     {% include 'user/partials/_script_alert_delete_user.html.twig' %}
 
-{% endblock %}
+    <style>
+        .badge-status-compact {
+            display: inline-block;
+            max-width: 140px;
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.2;
+        }
+        .table-users-status-col {
+            width: 140px;
+            max-width: 140px;
+        }
+    </style>
+
+    {% endblock %}

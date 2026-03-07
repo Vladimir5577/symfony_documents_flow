@@ -3,7 +3,6 @@
 namespace App\Entity\User;
 
 use App\Entity\Organization\AbstractOrganization;
-use App\Enum\UserEmployeeStatus;
 use App\Repository\User\UserRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -34,9 +33,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
 
     // organization (может быть Organization, Filial или Department)
     #[ORM\ManyToOne(targetEntity: AbstractOrganization::class)]
-    #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
-    #[Assert\NotNull(message: 'Организация обязательна для заполнения.')]
-    private AbstractOrganization $organization;
+    #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
+    private ?AbstractOrganization $organization = null;
 
 
     // 1) lastname
@@ -72,6 +70,9 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\ManyToOne(targetEntity: self::class)]
     #[ORM\JoinColumn(name: 'boss_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?self $boss = null;
+
+    #[ORM\OneToOne(mappedBy: 'user', targetEntity: Worker::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    private ?Worker $worker = null;
 
     // 5) phone
     #[ORM\Column(length: 30, nullable: true)]
@@ -114,9 +115,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[Assert\NotBlank(message: 'Пароль обязателен для заполнения.')]
     private ?string $password = null;
 
-    #[ORM\Column(name: 'employee_status', length: 50, enumType: UserEmployeeStatus::class, options: ['default' => 'AT_WORK'])]
-    private UserEmployeeStatus $userEmployeeStatus = UserEmployeeStatus::AT_WORK;
-
     // work_with_documents
     #[ORM\Column(options: ['default' => false])]
     private bool $workWithDocuments = false;
@@ -139,6 +137,9 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     // 12) deleted_at (soft delete)
     #[ORM\Column(name: 'deleted_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $deletedAt = null;
+
+    #[ORM\Column(name: 'last_seen_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $lastSeenAt = null;
 
     // 13) updated_by (self-reference)
     #[ORM\ManyToOne(targetEntity: self::class)]
@@ -206,18 +207,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    public function getUserEmployeeStatus(): UserEmployeeStatus
-    {
-        return $this->userEmployeeStatus;
-    }
-
-    public function setUserEmployeeStatus(UserEmployeeStatus $userEmployeeStatus): static
-    {
-        $this->userEmployeeStatus = $userEmployeeStatus;
-
-        return $this;
-    }
-
     public function getLastname(): ?string
     {
         return $this->lastname;
@@ -267,6 +256,21 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         }
 
         $this->boss = $boss;
+
+        return $this;
+    }
+
+    public function getWorker(): ?Worker
+    {
+        return $this->worker;
+    }
+
+    public function setWorker(?Worker $worker): static
+    {
+        if ($worker !== null) {
+            $worker->setUser($this);
+        }
+        $this->worker = $worker;
 
         return $this;
     }
@@ -366,12 +370,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    public function getOrganization(): AbstractOrganization
+    public function getOrganization(): ?AbstractOrganization
     {
         return $this->organization;
     }
 
-    public function setOrganization(AbstractOrganization $organization): static
+    public function setOrganization(?AbstractOrganization $organization): static
     {
         $this->organization = $organization;
 
@@ -423,6 +427,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setDeletedAt(?\DateTimeImmutable $deletedAt): static
     {
         $this->deletedAt = $deletedAt;
+
+        return $this;
+    }
+
+    public function getLastSeenAt(): ?\DateTimeImmutable
+    {
+        return $this->lastSeenAt;
+    }
+
+    public function setLastSeenAt(?\DateTimeImmutable $lastSeenAt): static
+    {
+        $this->lastSeenAt = $lastSeenAt;
 
         return $this;
     }

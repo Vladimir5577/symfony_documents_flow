@@ -1,0 +1,242 @@
+<?php
+
+namespace App\Controller\Kanban\Api;
+
+use App\Entity\Kanban\KanbanBoard;
+use App\Entity\Kanban\Project\KanbanProject;
+use App\Entity\Kanban\Project\KanbanProjectUser;
+use App\Entity\User\User;
+use App\Enum\Kanban\KanbanBoardMemberRole;
+use App\Repository\Kanban\KanbanBoardRepository;
+use App\Repository\Kanban\Project\KanbanProjectRepository;
+use App\Repository\Kanban\Project\KanbanProjectUserRepository;
+use App\Service\Kanban\KanbanService;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
+
+#[Route('/api/kanban/boards')]
+final class KanbanBoardApiController extends AbstractController
+{
+    public function __construct(
+        private readonly KanbanBoardRepository $boardRepo,
+        private readonly KanbanProjectRepository $projectRepo,
+        private readonly KanbanProjectUserRepository $projectUserRepo,
+        private readonly KanbanService $kanbanService,
+        private readonly EntityManagerInterface $em,
+    ) {
+    }
+
+    #[Route('', name: 'api_kanban_boards_list', methods: ['GET'])]
+    public function list(): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+        $boards = $this->boardRepo->findByMember($user);
+
+        $data = array_map(fn(KanbanBoard $b) => [
+            'id' => $b->getId(),
+            'title' => $b->getTitle(),
+            'createdAt' => $b->getCreatedAt()?->format('c'),
+            'updatedAt' => $b->getUpdatedAt()?->format('c'),
+        ], $boards);
+
+        return $this->json($data);
+    }
+
+    #[Route('', name: 'api_kanban_boards_create', methods: ['POST'])]
+    public function create(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $payload = json_decode($request->getContent(), true) ?? [];
+        $projectId = $payload['project_id'] ?? null;
+        $title = trim($payload['title'] ?? '');
+        if (!$projectId || $title === '') {
+            return $this->json(['error' => 'project_id и title обязательны.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $project = $this->projectRepo->find($projectId);
+        if (!$project instanceof KanbanProject) {
+            return $this->json(['error' => 'Проект не найден.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $board = $this->kanbanService->createBoard($project, $title, $user);
+
+        return $this->json([
+            'id' => $board->getId(),
+            'title' => $board->getTitle(),
+        ], Response::HTTP_CREATED);
+    }
+
+    #[Route('/{id}', name: 'api_kanban_boards_show', methods: ['GET'])]
+    public function show(int $id): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $board = $this->boardRepo->findOneWithRelations($id);
+        if (!$board) {
+            return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+
+        $columns = [];
+        foreach ($board->getColumns() as $col) {
+            $cards = [];
+            foreach ($col->getCards() as $card) {
+                if ($card->isArchived()) {
+                    continue;
+                }
+                $labels = [];
+                foreach ($card->getLabels() as $lbl) {
+                    $labels[] = [
+                        'id' => $lbl->getId(),
+                        'name' => $lbl->getName(),
+                        'color' => $lbl->getColor()->value,
+                    ];
+                }
+                $checklistTotal = $card->getSubtasks()->count();
+                $checklistDone = $card->getSubtasks()->filter(fn($ci) => $ci->isCompleted())->count();
+
+                $assignees = [];
+                foreach ($card->getAssignees() as $u) {
+                    $assignees[] = [
+                        'id' => $u->getId(),
+                        'name' => trim($u->getLastname() . ' ' . $u->getFirstname()) ?: (string) $u->getId(),
+                        'firstname' => $u->getFirstname(),
+                        'lastname' => $u->getLastname(),
+                    ];
+                }
+
+                $cards[] = [
+                    'id' => $card->getId(),
+                    'title' => $card->getTitle(),
+                    'description' => $card->getDescription(),
+                    'position' => $card->getPosition(),
+                    'priority' => $card->getPriority()?->value,
+                    'priorityLabel' => $card->getPriority()?->getLabel(),
+                    'priorityColor' => $card->getPriority()?->getColor(),
+                    'dueDate' => $card->getDueDate()?->format('c'),
+                    'labels' => $labels,
+                    'assignees' => $assignees,
+                    'checklistTotal' => $checklistTotal,
+                    'checklistDone' => $checklistDone,
+                    'commentsCount' => $card->getComments()->count(),
+                    'createdAt' => $card->getCreatedAt()?->format('c'),
+                    'updatedAt' => $card->getUpdatedAt()?->format('c'),
+                ];
+            }
+            $columns[] = [
+                'id' => $col->getId(),
+                'title' => $col->getTitle(),
+                'headerColor' => $col->getHeaderColor()->value,
+                'position' => $col->getPosition(),
+                'cards' => $cards,
+            ];
+        }
+
+        return $this->json([
+            'id' => $board->getId(),
+            'title' => $board->getTitle(),
+            'columns' => $columns,
+        ]);
+    }
+
+    #[Route('/{id}', name: 'api_kanban_boards_update', methods: ['PATCH'])]
+    public function update(int $id, Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $board = $this->boardRepo->find($id);
+        if (!$board) {
+            return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
+
+        $payload = json_decode($request->getContent(), true) ?? [];
+        if (isset($payload['title']) && trim($payload['title']) !== '') {
+            $board->setTitle(trim($payload['title']));
+        }
+
+        $this->em->flush();
+
+        return $this->json(['id' => $board->getId(), 'title' => $board->getTitle()]);
+    }
+
+    #[Route('/{id}', name: 'api_kanban_boards_delete', methods: ['DELETE'])]
+    public function delete(int $id): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $board = $this->boardRepo->find($id);
+        if (!$board) {
+            return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
+
+        $this->em->remove($board);
+        $this->em->flush();
+
+        return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    #[Route('/{id}/members', name: 'api_kanban_boards_add_member', methods: ['POST'])]
+    public function addMember(int $id, Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $board = $this->boardRepo->find($id);
+        if (!$board) {
+            return $this->json(['error' => 'Доска не найдена.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
+
+        $project = $board->getProject();
+        if (!$project) {
+            return $this->json(['error' => 'Проект не найден.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $payload = json_decode($request->getContent(), true) ?? [];
+        $userId = $payload['user_id'] ?? null;
+        $role = KanbanBoardMemberRole::tryFrom($payload['role'] ?? '');
+
+        if (!$userId || !$role) {
+            return $this->json(['error' => 'user_id и role обязательны.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $targetUser = $this->em->getRepository(User::class)->find($userId);
+        if (!$targetUser instanceof User) {
+            return $this->json(['error' => 'Пользователь не найден.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $existing = $this->projectUserRepo->findByProjectAndUser($project, $targetUser);
+        if ($existing) {
+            return $this->json(['error' => 'Пользователь уже добавлен в проект.'], Response::HTTP_CONFLICT);
+        }
+
+        $projectUser = new KanbanProjectUser();
+        $projectUser->setKanbanProject($project);
+        $projectUser->setUser($targetUser);
+        $projectUser->setRole($role);
+
+        $this->em->persist($projectUser);
+        $this->em->flush();
+
+        return $this->json([
+            'id' => $projectUser->getId(),
+            'role' => $projectUser->getRole()->value,
+        ], Response::HTTP_CREATED);
+    }
+}

@@ -45,14 +45,14 @@
                                 <div class="row">
                                     <div class="col-md-6 col-12">
                                         <div class="form-group">
-                                            <label for="short_name">Короткое название <span class="text-danger">*</span></label>
-                                            <input type="text" id="short_name" class="form-control" placeholder="Короткое название" name="short_name" value="{{ organization.shortName }}" required>
+                                            <label for="name">Название <span class="text-danger">*</span></label>
+                                            <input type="text" id="name" class="form-control" placeholder="Название" name="name" value="{{ organization.name }}" required>
                                         </div>
                                     </div>
                                     <div class="col-md-6 col-12">
                                         <div class="form-group">
                                             <label for="full_name">Полное название <span class="text-danger">*</span></label>
-                                            <input type="text" id="full_name" class="form-control" placeholder="Полное название" name="full_name" value="{{ organization.fullName }}" required>
+                                            <input type="text" id="full_name" class="form-control" placeholder="Полное название" name="full_name" value="{{ organization.fullName }}">
                                         </div>
                                     </div>
                                     {% if organizations is defined and organizations|length > 0 %}
@@ -61,7 +61,7 @@
                                             <label for="parent_id">Родительская организация</label>
                                             <input type="hidden" id="organization_id" name="parent_id" value="{{ organization.parent ? organization.parent.id : '' }}">
                                             <div class="input-group">
-                                                <input type="text" id="org-display" class="form-control" readonly placeholder="— Без родительской организации —" value="{{ organization.parent ? organization.parent.shortName : '' }}" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
+                                                <input type="text" id="org-display" class="form-control" readonly placeholder="— Без родительской организации —" value="{{ organization.parent ? organization.parent.name : '' }}" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
                                                 <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
                                                     <i class="bi bi-building"></i> Выбрать
                                                 </button>

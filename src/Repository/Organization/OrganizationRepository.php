@@ -12,8 +12,6 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class OrganizationRepository extends ServiceEntityRepository
 {
-    public const ADMIN_ORGANIZATION_NAME = 'Admin Organization';
-
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, AbstractOrganization::class);
@@ -50,7 +48,6 @@ class OrganizationRepository extends ServiceEntityRepository
 
     /**
      * Получить все родительские организации (где parent IS NULL)
-     * Исключает админскую организацию
      *
      * @return Organization[]
      */
@@ -58,8 +55,6 @@ class OrganizationRepository extends ServiceEntityRepository
     {
         return $this->createQueryBuilder('o')
             ->where('o.parent IS NULL')
-            ->andWhere('o.fullName != :adminName')
-            ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)
             ->orderBy('o.fullName', 'ASC')
             ->getQuery()
             ->getResult();
@@ -89,9 +84,9 @@ class OrganizationRepository extends ServiceEntityRepository
      * Загрузить организацию со всеми дочерними организациями (рекурсивно, до 5 уровней)
      *
      * @param int $organizationId ID организации
-     * @return Organization|null
+     * @return AbstractOrganization|null
      */
-    public function findWithChildren(int $organizationId): ?Organization
+    public function findWithChildren(int $organizationId): ?AbstractOrganization
     {
         return $this->createQueryBuilder('o')
             ->leftJoin('o.childOrganizations', 'co1')->addSelect('co1')
@@ -119,17 +114,13 @@ class OrganizationRepository extends ServiceEntityRepository
         $offset = ($page - 1) * $limit;
 
         $qb = $this->createQueryBuilder('o')
-            ->where('o.fullName != :adminName')
-            ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME)
             ->orderBy('o.id', 'ASC');
 
         $countQb = $this->createQueryBuilder('o')
-            ->select('COUNT(o.id)')
-            ->where('o.fullName != :adminName')
-            ->setParameter('adminName', self::ADMIN_ORGANIZATION_NAME);
+            ->select('COUNT(o.id)');
 
         if ($search !== '') {
-            $searchCondition = 'LOWER(o.shortName) LIKE LOWER(:search) OR LOWER(o.fullName) LIKE LOWER(:search) OR LOWER(o.legalAddress) LIKE LOWER(:search) OR LOWER(o.actualAddress) LIKE LOWER(:search) OR LOWER(o.phone) LIKE LOWER(:search) OR LOWER(o.email) LIKE LOWER(:search)';
+            $searchCondition = 'LOWER(o.name) LIKE LOWER(:search) OR LOWER(o.fullName) LIKE LOWER(:search) OR LOWER(o.legalAddress) LIKE LOWER(:search) OR LOWER(o.actualAddress) LIKE LOWER(:search) OR LOWER(o.phone) LIKE LOWER(:search) OR LOWER(o.email) LIKE LOWER(:search)';
             $qb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
             $countQb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
         } else {

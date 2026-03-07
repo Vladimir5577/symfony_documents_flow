@@ -1,44 +1,70 @@
 {% extends 'base_dashboard.html.twig' %}
 
-{% block title %}Канбан доска!{% endblock %}
-
-
+{% block title %}{{ board.title }}{% endblock %}
 
 {% block sidebar_list %}
     {% include 'sidebar/sidebar_list.html.twig' %}
 {% endblock %}
-
-
 
 {% block main %}
 
     <link rel="stylesheet" href="/front_end/assets/extensions/dragula/dragula.min.css">
     <style>
         /* Kanban Board Styles */
+        .kanban-board-wrap {
+            overflow-x: auto;
+            padding: 0.75rem 0.75rem 1.25rem 0.75rem;
+        }
+
         .kanban-board {
             display: flex;
-            gap: 1.25rem;
-            overflow-x: auto;
-            padding-bottom: 1rem;
+            gap: 1.1rem;
             min-height: calc(100vh - 220px);
         }
 
         .kanban-column {
             flex: 0 0 320px;
             min-width: 320px;
-            background: var(--bs-secondary-bg, #f8f9fa);
-            border-radius: 0.5rem;
+            background: linear-gradient(-45deg, #f0f4ff, #f8f0ff, #f0faff, #fff0f8, #f0fff8);
+            background-size: 400% 400%;
+            animation: kanbanGradientShift 10s ease infinite;
+            border-radius: 1.25rem;
             display: flex;
             flex-direction: column;
             max-height: calc(100vh - 200px);
             border: 1px solid var(--bs-border-color, #dee2e6);
+            transform: translateY(-3px);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.08),
+                0 0 14px 3px rgba(0, 0, 0, 0.10),
+                0 0 30px 6px rgba(0, 0, 0, 0.06);
         }
+
+
+        /* Column top-accent line */
+        .kanban-column[data-header-color="bg-primary"] { border-top: 10px solid var(--bs-primary); }
+        .kanban-column[data-header-color="bg-success"] { border-top: 10px solid var(--bs-success); }
+        .kanban-column[data-header-color="bg-warning"] { border-top: 10px solid var(--bs-warning); }
+        .kanban-column[data-header-color="bg-danger"]  { border-top: 10px solid var(--bs-danger); }
+        .kanban-column[data-header-color="bg-info"]    { border-top: 10px solid var(--bs-info); }
+        .kanban-column[data-header-color="bg-dark"]    { border-top: 10px solid var(--bs-dark); }
+
 
         [data-bs-theme="dark"] .kanban-column {
-            background: var(--bs-tertiary-bg);
+            background: linear-gradient(-45deg, #0e1a2e, #1a0e2e, #0e2a1a, #2a0e1a, #0e1e2a);
+            background-size: 400% 400%;
+            animation: kanbanGradientShift 10s ease infinite;
+            transform: translateY(-4px);
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.07),
+                0 0 18px 5px rgba(0, 0, 0, 0.5),
+                0 0 40px 10px rgba(0, 0, 0, 0.32);
         }
 
+
+
         .kanban-column-header {
+            position: relative;
             padding: 1rem 1.25rem;
             font-weight: 600;
             font-size: 1rem;
@@ -46,6 +72,45 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+        }
+
+        .column-color-btn {
+            padding: 0.2rem 0.35rem;
+            line-height: 1;
+            font-size: 1rem;
+            border-radius: 0.25rem;
+            border: 1px solid transparent;
+            transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .column-color-btn:hover {
+            background-color: var(--bs-secondary-bg);
+            color: var(--bs-body-color) !important;
+            border-color: var(--bs-border-color);
+        }
+        .column-color-popover {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            z-index: 200;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.375rem;
+            padding: 0.4rem 0.5rem;
+            display: flex;
+            gap: 0.4rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        .column-color-swatch {
+            width: 1.4rem;
+            height: 1.4rem;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .column-color-swatch:hover { transform: scale(1.15); }
+        .column-color-swatch.active {
+            box-shadow: 0 0 0 2px var(--bs-body-bg), 0 0 0 4px var(--bs-body-color);
         }
 
         .kanban-column-header .badge {
@@ -72,22 +137,48 @@
         .kanban-column-body {
             flex: 1;
             overflow-y: auto;
-            padding: 0.75rem;
+            padding: 1rem 0.6rem 0.6rem;
             min-height: 120px;
         }
 
         .kanban-card {
             background: var(--bs-body-bg);
             border: 1px solid var(--bs-border-color, #dee2e6);
-            border-radius: 0.375rem;
+            border-radius: 1.25rem;
             padding: 1rem;
-            margin-bottom: 0.75rem;
             cursor: grab;
-            transition: box-shadow 0.2s, transform 0.2s;
+            margin-bottom: 0.9rem;
+            transition: box-shadow 0.25s ease, transform 0.25s ease;
+            position: relative;
+            transform: translateY(-1px);
+            box-shadow:
+                0 1px 2px rgba(0, 0, 0, 0.07),
+                0 3px 8px rgba(0, 0, 0, 0.07),
+                0 6px 16px rgba(0, 0, 0, 0.04);
         }
 
         .kanban-card:hover {
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transform: translateY(-4px);
+            box-shadow:
+                0 2px 4px rgba(0, 0, 0, 0.08),
+                0 8px 20px rgba(0, 0, 0, 0.13),
+                0 18px 36px rgba(0, 0, 0, 0.06);
+        }
+
+        [data-bs-theme="dark"] .kanban-card {
+            transform: translateY(-4px);
+            box-shadow:
+                0 3px 6px rgba(0, 0, 0, 0.55),
+                0 8px 20px rgba(0, 0, 0, 0.5),
+                0 18px 40px rgba(0, 0, 0, 0.35);
+        }
+
+        [data-bs-theme="dark"] .kanban-card:hover {
+            transform: translateY(-8px);
+            box-shadow:
+                0 4px 8px rgba(0, 0, 0, 0.6),
+                0 14px 32px rgba(0, 0, 0, 0.55),
+                0 28px 56px rgba(0, 0, 0, 0.4);
         }
 
         .kanban-card:active {
@@ -98,14 +189,151 @@
             margin-bottom: 0;
         }
 
+        .kanban-card.kanban-card--open {
+            box-shadow: 0 0 0 5px var(--bs-primary), 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+            background: color-mix(in srgb, var(--bs-primary) 13%, var(--bs-body-bg)) !important;
+        }
+
         .gu-transit .kanban-card {
             opacity: 0.5;
         }
 
+        .kanban-card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+
         .kanban-card-title {
             font-weight: 600;
-            margin-bottom: 0.5rem;
             font-size: 0.95rem;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .kanban-card-menu-btn {
+            background: transparent;
+            border: none;
+            color: var(--bs-secondary-color);
+            padding: 0.2rem;
+            margin-top: -0.2rem;
+            margin-right: -0.2rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.25rem;
+            transition: background-color 0.15s, color 0.15s;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+            line-height: 1;
+            min-width: 1.5rem;
+            min-height: 1.5rem;
+        }
+
+        .kanban-card-menu-btn:hover {
+            background-color: var(--bs-secondary-bg);
+            color: var(--bs-body-color);
+        }
+
+        .kanban-card-menu-btn i {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .kanban-card-dropdown {
+            position: fixed;
+            z-index: 1100;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 200px;
+            padding: 0.25rem 0;
+        }
+
+        .kanban-card-dropdown-item {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            border: none;
+            background: transparent;
+            color: var(--bs-body-color);
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            transition: background-color 0.15s;
+        }
+
+        .kanban-card-dropdown-item:hover {
+            background-color: var(--bs-secondary-bg);
+        }
+
+        .kanban-card-dropdown-item.delete-card-btn {
+            color: var(--bs-danger);
+        }
+
+        .kanban-card-dropdown-item.delete-card-btn:hover {
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+
+        .kanban-card-color-section {
+            padding: 0.5rem 0.75rem;
+            border-top: 1px solid var(--bs-border-color);
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+
+        .kanban-card-color-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            color: var(--bs-secondary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .card-color-option {
+            padding: 0;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 0.35rem;
+            margin-bottom: 0.35rem;
+            transition: transform 0.1s;
+        }
+
+        .card-color-option:hover {
+            transform: scale(1.15);
+        }
+
+        .card-color-option .color-preview {
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            flex-shrink: 0;
+            border: 2px solid var(--bs-border-color);
+            transition: box-shadow 0.15s;
+        }
+
+        .card-color-option:hover .color-preview {
+            box-shadow: 0 0 0 2px var(--bs-body-bg), 0 0 0 4px var(--bs-primary);
+        }
+
+        .card-color-option .color-preview.swatch-none {
+            background: var(--bs-secondary-bg);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            color: var(--bs-secondary-color);
         }
 
         .kanban-card-description {
@@ -121,6 +349,45 @@
             gap: 0.5rem;
             flex-wrap: wrap;
             font-size: 0.8rem;
+        }
+
+        .kanban-card-assignees {
+            display: inline-flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.35rem 0.5rem;
+            margin-left: auto;
+        }
+        .kanban-card-assignee-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .kanban-card-assignee-avatar {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--bs-primary);
+            color: #fff;
+            font-size: 0.6rem;
+            font-weight: 600;
+            line-height: 1;
+        }
+        .kanban-card-assignee-name {
+            font-size: 0.7rem;
+            color: var(--bs-body-color);
+            white-space: nowrap;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .kanban-card-assignee-more {
+            font-size: 0.65rem;
+            color: var(--bs-secondary-color);
         }
 
         .kanban-add-card {
@@ -158,7 +425,7 @@
         .task-sidebar-backdrop {
             position: absolute;
             inset: 0;
-            pointer-events: none; /* allow clicks to pass through to board so another task can be selected */
+            pointer-events: none;
         }
 
         .task-sidebar-panel {
@@ -175,7 +442,7 @@
             flex-direction: column;
             transform: translateX(100%);
             transition: transform 0.25s ease;
-            pointer-events: auto; /* panel receives clicks; rest of overlay is pass-through */
+            pointer-events: auto;
         }
 
         .task-sidebar[aria-hidden="false"] .task-sidebar-panel {
@@ -202,11 +469,6 @@
             gap: 0.35rem;
         }
 
-        .task-sidebar-expand {
-            font-size: 1.1rem;
-            color: var(--bs-secondary-color) !important;
-        }
-
         .task-sidebar-title-row {
             display: flex;
             align-items: flex-start;
@@ -221,12 +483,6 @@
             min-width: 0;
         }
 
-        .task-sidebar-status {
-            font-size: 1.25rem;
-            flex-shrink: 0;
-            margin-top: 0.15rem;
-        }
-
         .task-sidebar-title-block > div {
             min-width: 0;
         }
@@ -239,35 +495,25 @@
             color: var(--bs-body-color);
         }
 
+        .task-sidebar-title-input {
+            font-size: 1.05rem !important;
+            font-weight: 700;
+            border: 1px solid transparent !important;
+            border-radius: 6px;
+            padding: 0.25rem 0.5rem !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+        .task-sidebar-title-input:focus {
+            border-color: var(--bs-primary) !important;
+            background: rgba(var(--bs-primary-rgb), 0.06) !important;
+            box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.2) !important;
+            outline: none !important;
+        }
+
         .task-sidebar-id {
             font-size: 0.875rem;
             font-weight: 500;
-        }
-
-        .task-sidebar-icons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.25rem;
-            flex-shrink: 0;
-        }
-
-        .task-sidebar-icon-btn {
-            width: 2rem;
-            height: 2rem;
-            padding: 0;
-            border: none;
-            background: transparent;
-            color: var(--bs-secondary-color);
-            border-radius: 0.375rem;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.1rem;
-        }
-
-        .task-sidebar-icon-btn:hover {
-            background: var(--bs-tertiary-bg);
-            color: var(--bs-body-color);
         }
 
         .task-sidebar-tabs {
@@ -325,6 +571,152 @@
             flex-direction: column;
             overflow: hidden;
             padding: 1rem 1.25rem;
+        }
+
+        /* Board tabs (switch between project boards) */
+        .board-tabs-wrap {
+            border-bottom: 2px solid var(--bs-secondary);
+        }
+        .board-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .board-tab-item {
+            position: relative;
+            display: flex;
+            align-items: stretch;
+        }
+        .board-tabs .board-tab-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--bs-secondary-color);
+            border-radius: 0.375rem 0.375rem 0 0;
+            border: 1px solid var(--bs-border-color);
+            border-bottom: none;
+            margin-bottom: -2px;
+            transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+        }
+        .board-tabs .board-tab-link:hover {
+            color: var(--bs-body-color);
+            background-color: var(--bs-secondary-bg, rgba(0,0,0,.04));
+        }
+        .board-tabs .board-tab-link.active {
+            color: var(--bs-body-color);
+            background-color: rgba(255, 255, 255, 0.22);
+            border: 2px solid var(--bs-secondary);
+            border-bottom: none;
+            font-weight: 600;
+            padding: 0.5rem 0.75rem 0.5rem 1rem;
+            position: relative;
+            z-index: 1;
+        }
+        .board-tabs .board-tab-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: -1px;
+            right: -1px;
+            height: 4px;
+            background: inherit;
+        }
+        [data-bs-theme="dark"] .board-tabs .board-tab-link.active {
+            background-color: rgba(255, 255, 255, 0.07);
+        }
+        .board-tab-link-inner {
+            display: inline-flex;
+            align-items: center;
+            color: inherit;
+            text-decoration: none;
+            flex: 1;
+        }
+        .board-tab-link-inner:hover {
+            color: inherit;
+        }
+        .board-tab-input {
+            border: none;
+            background: transparent;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--bs-primary);
+            padding: 0;
+            outline: none;
+            width: 100%;
+            min-width: 100px;
+        }
+        .board-tab-input:focus {
+            outline: 1px solid var(--bs-primary);
+            padding: 0.1rem 0.25rem;
+            border-radius: 0.25rem;
+        }
+        .board-tab-menu-btn {
+            background: transparent;
+            border: none;
+            color: var(--bs-primary);
+            padding: 0.25rem 0.4rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.25rem;
+            transition: background-color 0.15s;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .board-tab-menu-btn:hover {
+            background-color: rgba(var(--bs-primary-rgb), 0.1);
+        }
+        .board-tab-dropdown {
+            position: absolute;
+            top: calc(100% + 2px);
+            right: 0;
+            z-index: 1000;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 180px;
+            padding: 0.25rem 0;
+        }
+        .board-tab-dropdown-item {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            border: none;
+            background: transparent;
+            color: var(--bs-body-color);
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            transition: background-color 0.15s;
+        }
+        .board-tab-dropdown-item:hover {
+            background-color: var(--bs-secondary-bg, rgba(0,0,0,.04));
+        }
+        .board-tab-dropdown-item.delete-board-btn {
+            color: var(--bs-danger);
+        }
+        .board-tab-dropdown-item.delete-board-btn:hover {
+            background-color: rgba(220, 53, 69, 0.1);
+        }
+        .board-tab-add-btn {
+            flex-shrink: 0;
+            width: 2rem;
+            height: 2rem;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.5rem;
         }
 
         .task-chat-messages {
@@ -430,17 +822,6 @@
             font-size: 0.9rem;
         }
 
-        .task-info-edit-btn {
-            margin-left: 0.15rem;
-            font-size: 0.85rem;
-            line-height: 1;
-            opacity: 0.7;
-        }
-
-        .task-info-edit-btn:hover {
-            opacity: 1;
-        }
-
         .task-info-field {
             margin-bottom: 1rem;
         }
@@ -477,22 +858,6 @@
             font-size: 0.9rem;
         }
 
-        .task-info-field-with-unit {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .task-info-input-num {
-            width: 5rem;
-            max-width: 100%;
-        }
-
-        .task-info-unit {
-            font-size: 0.9rem;
-            color: var(--bs-secondary-color);
-        }
-
         .task-info-timestamps {
             margin-top: 1.25rem;
             padding-top: 1rem;
@@ -517,10 +882,6 @@
             display: flex;
             justify-content: flex-start;
             margin-bottom: 0.5rem;
-        }
-
-        .task-description-edit-btn {
-            font-size: 0.9rem;
         }
 
         .task-description-view {
@@ -564,8 +925,7 @@
         }
 
         .task-subtasks-list {
-            max-height: 60vh;
-            overflow-y: auto;
+            /* Показываем все подзадачи без внутреннего скролла */
         }
 
         .task-subtasks-empty {
@@ -584,7 +944,6 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            cursor: pointer;
         }
 
         .task-subtask-title {
@@ -598,16 +957,6 @@
             text-overflow: ellipsis;
         }
 
-        .task-subtask-status {
-            flex: 0 0 auto;
-            min-width: 120px;
-            max-width: 130px;
-            width: auto;
-            font-size: 0.8rem;
-            padding-top: 0.15rem;
-            padding-bottom: 0.15rem;
-        }
-
         .task-subtask-remove {
             border: none;
             background: transparent;
@@ -618,30 +967,6 @@
 
         .task-subtask-remove:hover {
             color: var(--bs-danger);
-        }
-
-        .task-subtask-toggle {
-            border: none;
-            background: transparent;
-            padding: 0;
-            margin-right: 0.25rem;
-            color: var(--bs-secondary-color);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .task-subtask-body {
-            margin-top: 0.5rem;
-        }
-
-        .task-subtask-card.task-subtask-collapsed .task-subtask-body {
-            display: none;
-        }
-
-        .task-subtask-card.task-subtask-completed .task-subtask-title {
-            text-decoration: line-through;
-            color: var(--bs-secondary-color);
         }
 
         .card-subtasks {
@@ -692,6 +1017,26 @@
             font-size: 0.75rem;
         }
 
+        .card-subtasks-progress {
+            margin-top: 0.25rem;
+        }
+
+        .card-subtasks-progress-track {
+            position: relative;
+            height: 8px;
+            border-radius: 999px;
+            background: #adb5bd;
+            overflow: hidden;
+        }
+
+        .card-subtasks-progress-fill {
+            height: 100%;
+            width: 0;
+            background: var(--bs-primary);
+            border-radius: 999px;
+            transition: width 0.2s ease-in-out;
+        }
+
         .card-subtasks-body {
             margin-top: 0.25rem;
         }
@@ -700,8 +1045,6 @@
             display: flex;
             flex-direction: column;
             gap: 0.1rem;
-            max-height: 7rem;
-            overflow-y: auto;
         }
 
         .card-subtasks-item .card-subtasks-text {
@@ -717,994 +1060,1201 @@
             display: none;
         }
 
+        /* Animated gradient background */
+        @keyframes kanbanGradientShift {
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        body {
+            background: linear-gradient(-45deg, #b8d4f0, #c8b0e8, #a8d8f0, #e0b0d0, #a8e0c8) !important;
+            background-size: 400% 400% !important;
+            animation: kanbanGradientShift 12s ease infinite !important;
+        }
+
+        [data-bs-theme="dark"] body {
+            background: linear-gradient(-45deg, #080f20, #150828, #08200f, #200808, #08181e) !important;
+            background-size: 400% 400% !important;
+            animation: kanbanGradientShift 12s ease infinite !important;
+        }
+
+        section.page-content {
+            background: transparent !important;
+        }
+
+        /* Toast styles */
+        .kanban-toast-container {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 9999;
+        }
+
+        /* Attachment list */
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+        }
+        .attachment-item:last-child { border-bottom: none; }
+
+        /* Card left-accent border colours */
+        .kanban-card[data-border-color="primary"] { border-left: 4px solid var(--bs-primary); }
+        .kanban-card[data-border-color="success"] { border-left: 4px solid var(--bs-success); }
+        .kanban-card[data-border-color="warning"] { border-left: 4px solid var(--bs-warning); }
+        .kanban-card[data-border-color="danger"]  { border-left: 4px solid var(--bs-danger); }
+        .kanban-card[data-border-color="info"]    { border-left: 4px solid var(--bs-info); }
+        .kanban-card[data-border-color="dark"]    { border-left: 4px solid var(--bs-dark); }
+
+        /* Colour swatches */
+        .card-color-swatch {
+            width: 1.75rem;
+            height: 1.75rem;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: box-shadow 0.15s;
+        }
+        .card-color-swatch.swatch-none {
+            background: var(--bs-secondary-bg);
+            border-color: var(--bs-border-color);
+            font-size: 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--bs-secondary-color);
+        }
+        .card-color-swatch.active {
+            box-shadow: 0 0 0 2px var(--bs-body-bg), 0 0 0 4px var(--bs-body-color);
+        }
+
+        /* Chat image preview */
+        .chat-img-preview {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 0.375rem;
+            display: block;
+            cursor: pointer;
+        }
+
+        /* Chat attach button */
+        .task-chat-attach {
+            width: 2.5rem;
+            height: 2.5rem;
+            padding: 0;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
     </style>
 
-{#    <div class="page-heading">#}
-        <div class="page-title">
-            <div class="row">
-                <div class="col-12">
-{#                    <h3>Kanban Board</h3>#}
-                    <p class="text-subtitle text-muted">Drag and drop tasks between columns to manage your workflow.</p>
-                </div>
-            </div>
-        </div>
-{#    </div>#}
-
-    <section class="page-content">
-        <div class="kanban-board">
-            <!-- To Do Column -->
-            <div class="kanban-column">
-                <div class="kanban-column-header">
-                    <span><i class="bi bi-circle me-2"></i>To Do</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Add task">
-                        <i class="bi bi-plus-lg"></i>
-                    </button>
-                </div>
-                <div class="kanban-column-body">
-                    <div class="kanban-card" data-task-id="TODO-1">
-                        <div class="kanban-card-title">Add SCSS and JS files</div>
-                        <div class="kanban-card-description">Add required stylesheet and script files for the new feature.</div>
-                        <div class="kanban-card-meta">
-                            <span class="badge bg-light-success text-success">frontend</span>
-                            <span class="text-muted"><i class="bi bi-calendar3"></i> Feb 18</span>
-                        </div>
-                    </div>
-                    <div class="kanban-card" data-task-id="TODO-2">
-                        <div class="kanban-card-title">Setup API endpoints</div>
-                        <div class="kanban-card-description">Create REST API endpoints for user authentication.</div>
-                        <div class="kanban-card-meta">
-                            <span class="badge bg-light-danger text-danger">backend</span>
-                            <span class="text-muted"><i class="bi bi-calendar3"></i> Feb 20</span>
-                        </div>
-                    </div>
-                    <div class="kanban-card" data-task-id="TODO-3">
-                        <div class="kanban-card-title">Write documentation</div>
-                        <div class="kanban-card-description">Document the new API and update README.</div>
-                        <div class="kanban-card-meta">
-                            <span class="badge bg-light-info text-info">docs</span>
-                            <span class="text-muted"><i class="bi bi-calendar3"></i> Feb 22</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- In Progress Column -->
-            <div class="kanban-column">
-                <div class="kanban-column-header">
-                    <span><i class="bi bi-arrow-repeat me-2"></i>In Progress</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Add task">
-                        <i class="bi bi-plus-lg"></i>
-                    </button>
-                </div>
-                <div class="kanban-column-body">
-                    <div class="kanban-card" data-task-id="IP-1">
-                        <div class="kanban-card-title">Implement Kanban board</div>
-                        <div class="kanban-card-description">Create drag-and-drop Kanban board with Mazer design.</div>
-                        <div class="kanban-card-meta">
-                            <span class="badge bg-light-primary text-primary">UI/UX</span>
-                            <span class="text-muted"><i class="bi bi-person"></i> You</span>
-                        </div>
-                    </div>
-                    <div class="kanban-card" data-task-id="IP-2">
-                        <div class="kanban-card-title">Database migrations</div>
-                        <div class="kanban-card-description">Add migrations for tasks and boards tables.</div>
-                        <div class="kanban-card-meta">
-                            <span class="badge bg-light-warning text-warning">database</span>
-                            <span class="text-muted"><i class="bi bi-calendar3"></i> Feb 19</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Review Column -->
-            <div class="kanban-column">
-                <div class="kanban-column-header">
-                    <span><i class="bi bi-eye me-2"></i>Review</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Add task">
-                        <i class="bi bi-plus-lg"></i>
-                    </button>
-                </div>
-                <div class="kanban-column-body">
-                    <div class="kanban-card" data-task-id="REV-1">
-                        <div class="kanban-card-title">User dashboard redesign</div>
-                        <div class="kanban-card-description">New layout and components for the main dashboard page.</div>
-                        <div class="kanban-card-meta">
-                            <span class="badge bg-light-info text-info">Design</span>
-                            <span class="text-muted"><i class="bi bi-person"></i> Designer</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Done Column -->
-            <div class="kanban-column">
-                <div class="kanban-column-header">
-                    <span><i class="bi bi-check-circle me-2"></i>Done</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Add task">
-                        <i class="bi bi-plus-lg"></i>
-                    </button>
-                </div>
-                <div class="kanban-column-body">
-                    <div class="kanban-card" data-task-id="DONE-1">
-                        <div class="kanban-card-title">Login page styling</div>
-                        <div class="kanban-card-description">Updated auth pages with Mazer theme.</div>
-                        <div class="kanban-card-meta">
-                            <span class="badge bg-light-success text-success">frontend</span>
-                            <span class="text-muted"><i class="bi bi-check2"></i> Completed</span>
-                        </div>
-                    </div>
-                    <div class="kanban-card" data-task-id="DONE-2">
-                        <div class="kanban-card-title">Setup project structure</div>
-                        <div class="kanban-card-description">Initial project setup with Mazer template.</div>
-                        <div class="kanban-card-meta">
-                            <span class="badge bg-light-secondary text-secondary">setup</span>
-                            <span class="text-muted"><i class="bi bi-check2"></i> Completed</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-
-    <!-- Task detail sidebar (YouGile style)
-    ######################################################### -->
-
-    <div id="task-sidebar" class="task-sidebar" aria-hidden="true">
-        <div class="task-sidebar-backdrop" aria-label="Close"></div>
-        <div class="task-sidebar-panel">
-            <div class="task-sidebar-header">
-                <div class="task-sidebar-nav">
-                    <button type="button" class="task-sidebar-back btn btn-link p-0 text-primary text-decoration-none" id="task-sidebar-close">
-                        <i class="bi bi-arrow-left"></i> Go to all chats
-                    </button>
-                    <button type="button" class="task-sidebar-expand btn btn-link p-0 text-body" title="Expand" aria-label="Expand">
-                        <i class="bi bi-fullscreen"></i>
-                    </button>
-                </div>
-                <div class="task-sidebar-title-row">
-                    <div class="task-sidebar-title-block">
-{#                        <span class="task-sidebar-status text-success" aria-hidden="true"><i class="bi bi-check-circle-fill"></i></span>#}
-                        <div>
-                            <h5 class="task-sidebar-title" id="task-sidebar-title">Task title</h5>
-                            <span class="task-sidebar-id text-primary" id="task-sidebar-id">EXA-25</span>
-                        </div>
-                    </div>
-{#                    <div class="task-sidebar-icons">#}
-{#                        <button type="button" class="task-sidebar-icon-btn" title="More options" aria-label="More options"><i class="bi bi-three-dots-vertical"></i></button>#}
-{#                        <button type="button" class="task-sidebar-icon-btn" title="Search" aria-label="Search"><i class="bi bi-search"></i></button>#}
-{#                        <button type="button" class="task-sidebar-icon-btn" title="Attachments" aria-label="Attachments"><i class="bi bi-paperclip"></i></button>#}
-{#                        <button type="button" class="task-sidebar-icon-btn" title="Watch" aria-label="Watch"><i class="bi bi-star"></i></button>#}
-{#                        <button type="button" class="task-sidebar-icon-btn" title="Notifications" aria-label="Notifications"><i class="bi bi-bell"></i></button>#}
-{#                    </div>#}
-                </div>
-            </div>
-            <nav class="task-sidebar-tabs" role="tablist">
-                <button type="button" class="task-sidebar-tab active" role="tab" aria-selected="true" data-tab="chat">Chat</button>
-                <button type="button" class="task-sidebar-tab" role="tab" aria-selected="false" data-tab="info">Info / Log</button>
-            <button type="button" class="task-sidebar-tab" role="tab" aria-selected="false" data-tab="description">Description</button>
-            <button type="button" class="task-sidebar-tab" role="tab" aria-selected="false" data-tab="subtasks">Subtasks</button>
-            </nav>
-            <div class="task-sidebar-content">
-                <div class="task-sidebar-tab-pane active" id="pane-chat" role="tabpanel">
-                    <div class="task-chat-messages">
-                        <div class="task-chat-msg task-chat-msg-placeholder" data-placeholder="true">
-                            <div class="task-chat-msg-bubble">
-                                <div class="task-chat-msg-text">No messages yet. Start the conversation.</div>
-                                <div class="task-chat-msg-meta"><span class="task-chat-msg-time">—</span> <i class="bi bi-check2 text-muted"></i></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="task-chat-input-wrap">
-                        <textarea class="task-chat-input form-control" id="task-chat-input" placeholder="Написать сообщение..." autocomplete="off" rows="4"></textarea>
-                        <button type="button" class="task-chat-send btn btn-primary" id="task-chat-send" title="Send" aria-label="Send"><i class="bi bi-send"></i></button>
-                    </div>
-                </div>
-                <div class="task-sidebar-tab-pane" id="pane-info" role="tabpanel" hidden>
-                    <div class="task-info-block">
-                        <div class="task-info-row task-info-row-inline">
-                            <span class="task-info-label">Исполнитель</span>
-                            <span class="task-info-value">admin</span>
-                            <button type="button" class="task-info-edit-btn btn btn-link p-0 text-secondary" title="Изменить" aria-label="Изменить"><i class="bi bi-pencil"></i></button>
-                        </div>
-                        <div class="task-info-row task-info-row-inline">
-                            <span class="task-info-label">Создатель</span>
-                            <span class="task-info-value">admin</span>
-                        </div>
-
-                        <div class="task-info-field">
-                            <label class="task-info-field-label">СРОК</label>
-                            <div class="task-info-input-wrap">
-                                <input type="text" class="form-control task-info-input" value="02/20/2026, 12:57 PM" readonly>
-                                <i class="bi bi-calendar3 task-info-input-icon"></i>
-                            </div>
-                        </div>
-                        <div class="task-info-field">
-                            <label class="task-info-field-label">ДАТА НАЧАЛА</label>
-                            <div class="task-info-input-wrap">
-                                <input type="text" class="form-control task-info-input" value="02/26/2026, 12:57 PM" readonly>
-                                <i class="bi bi-calendar3 task-info-input-icon"></i>
-                            </div>
-                        </div>
-
-                        <!-- ############################################
-                        <div class="task-info-field">
-                            <label class="task-info-field-label">ОЦЕНКА ВРЕМЕНИ</label>
-                            <div class="task-info-field-with-unit">
-                                <input type="number" class="form-control task-info-input task-info-input-num" value="0" min="0" step="1">
-                                <span class="task-info-unit">часов</span>
-                            </div>
-                        </div>
-                        <div class="task-info-field">
-                            <label class="task-info-field-label">ЗАТРАЧЕНО ВРЕМЕНИ</label>
-                            <div class="task-info-field-with-unit">
-                                <input type="number" class="form-control task-info-input task-info-input-num" value="0" min="0" step="1">
-                                <span class="task-info-unit">часов</span>
-                            </div>
-                        </div>
-                        ###################################################### -->
-
-                        <div class="task-info-timestamps">
-                            <div class="task-info-row task-info-row-inline">
-                                <span class="task-info-label">Создана</span>
-                                <span class="task-info-value">18.02.2026, 09:57</span>
-                            </div>
-                            <div class="task-info-row task-info-row-inline">
-                                <span class="task-info-label">Изменена</span>
-                                <span class="task-info-value">18.02.2026, 11:22</span>
-                            </div>
-                            <div class="task-info-row task-info-row-inline">
-                                <span class="task-info-label">Перемещена</span>
-                                <span class="task-info-value">18.02.2026, 09:57</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="task-sidebar-tab-pane" id="pane-description" role="tabpanel" hidden>
-                    <div class="task-description-pane">
-                        <div class="task-description-toolbar">
-                            <button type="button" class="btn btn-primary btn-sm task-description-edit-btn" id="task-desc-edit-btn">
-                                Редактировать описание
-                            </button>
-                        </div>
-                        <div class="task-description-view" id="task-description-view">
-                            <div class="task-description-body" id="task-sidebar-description"></div>
-                        </div>
-                        <div class="task-description-edit" id="task-description-edit" hidden>
-                            <textarea class="form-control task-description-textarea" id="task-description-textarea" placeholder="Введите описание задачи..."></textarea>
-                            <div class="task-description-edit-actions">
-                                <button type="button" class="btn btn-primary btn-sm" id="task-desc-save-btn">Сохранить</button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="task-desc-cancel-btn">Отмена</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="task-sidebar-tab-pane" id="pane-subtasks" role="tabpanel" hidden>
-                    <div class="task-subtasks-sidebar-host"></div>
+    <div class="page-title">
+        <div class="row">
+            <div class="col-12 d-flex align-items-center justify-content-between">
+                <div>
+                    <a href="{{ path('app_kanban_personal_projects') }}" class="btn btn-link p-0 text-decoration-none text-muted mb-1">
+                        <i class="bi bi-arrow-left"></i> Все проекты
+                    </a>
                 </div>
             </div>
         </div>
     </div>
 
+    {% set _project_boards = projectBoards|default(board.project is defined and board.project ? board.project.boards : []) %}
+    {% if _project_boards|length > 0 %}
+    <div class="board-tabs-wrap mb-3 d-flex align-items-center flex-wrap gap-2">
+        <ul class="board-tabs mb-0">
+            {% for b in _project_boards %}
+            <li class="board-tab-item" data-board-id="{{ b.id }}">
+                <div class="board-tab-link {{ b.id == board.id ? 'active' : '' }}">
+                    <a href="{{ path('app_kanban_board', {id: b.id}) }}" class="board-tab-link-inner">
+                        <span class="board-tab-title">{{ b.title }}</span>
+                        <input type="text" class="board-tab-input" value="{{ b.title }}" style="display:none;">
+                    </a>
+                    {% if memberRole.value != 'VIEWER' and b.id == board.id %}
+                    <button type="button" class="board-tab-menu-btn" data-board-id="{{ b.id }}" title="Меню доски">
+                        <i class="bi bi-three-dots-vertical"></i>
+                    </button>
+                    {% endif %}
+                </div>
+                {% if memberRole.value != 'VIEWER' and b.id == board.id %}
+                <div class="board-tab-dropdown" data-board-id="{{ b.id }}" style="display:none;">
+                    <button type="button" class="board-tab-dropdown-item rename-board-btn" data-board-id="{{ b.id }}">
+                        <i class="bi bi-pencil"></i> Переименовать
+                    </button>
+                    <button type="button" class="board-tab-dropdown-item delete-board-btn" data-board-id="{{ b.id }}">
+                        <i class="bi bi-trash"></i> Удалить
+                    </button>
+                </div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% if board.project is defined and board.project and memberRole.value != 'VIEWER' %}
+        <button type="button" class="btn btn-outline-primary btn-sm board-tab-add-btn" data-bs-toggle="modal" data-bs-target="#createBoardModal" title="Добавить доску">
+            <i class="bi bi-plus-lg"></i>
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
 
-    <script src="/front_end/assets/extensions/dragula/dragula.min.js"></script>
+    {% if board.project is defined and board.project and memberRole.value != 'VIEWER' %}
+    {# Модалка: новая доска в проекте #}
+    <div class="modal fade" id="createBoardModal" tabindex="-1" aria-labelledby="createBoardModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createBoardModalLabel">Новая доска</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <form action="{{ path('app_kanban_project_board_create', {id: board.project.id}) }}" method="post">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token('create_board_in_project') }}">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="new-board-title" class="form-label">Название доски <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="new-board-title" name="title" required maxlength="200" placeholder="Например: Главная доска" value="">
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label">Столбцы</label>
+                            <div id="create-board-columns" class="column-rows">
+                                <div class="input-group input-group-sm mb-2 column-row">
+                                    <input type="text" class="form-control" name="columns[]" value="Запланированные" maxlength="200" placeholder="Название столбца">
+                                    <button type="button" class="btn btn-outline-secondary create-board-remove-column" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
+                                </div>
+                                <div class="input-group input-group-sm mb-2 column-row">
+                                    <input type="text" class="form-control" name="columns[]" value="К выполнению" maxlength="200" placeholder="Название столбца">
+                                    <button type="button" class="btn btn-outline-secondary create-board-remove-column" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
+                                </div>
+                                <div class="input-group input-group-sm mb-2 column-row">
+                                    <input type="text" class="form-control" name="columns[]" value="В работе" maxlength="200" placeholder="Название столбца">
+                                    <button type="button" class="btn btn-outline-secondary create-board-remove-column" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
+                                </div>
+                                <div class="input-group input-group-sm mb-2 column-row">
+                                    <input type="text" class="form-control" name="columns[]" value="Сделаны" maxlength="200" placeholder="Название столбца">
+                                    <button type="button" class="btn btn-outline-secondary create-board-remove-column" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="create-board-add-column">Добавить столбец</button>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Создать доску</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {# Данные дерева организаций для модалки «Добавить пользователя» #}
+    <div id="org-tree-data-assign-new" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}" class="d-none">
+        {% if organizations is defined and organizations|length > 0 %}
+            {% for org in organizations %}
+                {% if org %}
+                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% include 'kanban/partials/_assign_new_user_org_modal.html.twig' %}
+    {% include 'kanban/partials/_assign_new_user_org_modal_script.html.twig' %}
+    {% endif %}
+
+    <section class="page-content">
+        <div class="kanban-board-wrap">
+        <div class="kanban-board" id="kanban-board">
+            {% for column in board.columns %}
+            <div class="kanban-column" data-column-id="{{ column.id }}" data-header-color="{{ column.headerColor.value }}">
+                <div class="kanban-column-header">
+                    <span>
+                        <span class="column-title">{{ column.title }}</span>
+                        <span class="column-count" style="display:none;">{{ column.cards|filter(c => not c.archived)|length }}</span>
+                    </span>
+                    <div class="d-flex align-items-center gap-3">
+                        {% if memberRole.value != 'VIEWER' %}
+                        <button type="button" class="btn btn-sm btn-link text-secondary column-color-btn p-0" title="Цвет столбца" data-column-id="{{ column.id }}">
+                            <i class="bi bi-palette"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Добавить карточку">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="kanban-column-body" data-column-id="{{ column.id }}">
+                    {% for card in column.cards|filter(c => not c.archived) %}
+                    <div class="kanban-card" data-card-id="{{ card.id }}" data-position="{{ card.position }}" data-updated-at="{{ card.updatedAt ? card.updatedAt|date('c') : '' }}" data-border-color="{{ card.borderColor ?? '' }}">
+                        <div class="kanban-card-header">
+                            <div class="kanban-card-title">{{ card.title }}</div>
+                            {% if memberRole.value != 'VIEWER' %}
+                            <button type="button" class="kanban-card-menu-btn" data-card-id="{{ card.id }}" title="Меню карточки">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <div class="kanban-card-dropdown" data-card-id="{{ card.id }}" style="display:none;">
+                                <button type="button" class="kanban-card-dropdown-item rename-card-btn" data-card-id="{{ card.id }}">
+                                    <i class="bi bi-pencil"></i> Переименовать
+                                </button>
+                                <div class="kanban-card-color-section">
+                                    <div class="kanban-card-color-label">Цвет карточки:</div>
+                                    <button type="button" class="card-color-option" data-color="" title="Без цвета">
+                                        <span class="color-preview swatch-none">✕</span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="primary" title="Синий">
+                                        <span class="color-preview bg-primary"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="success" title="Зелёный">
+                                        <span class="color-preview bg-success"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="warning" title="Жёлтый">
+                                        <span class="color-preview bg-warning"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="danger" title="Красный">
+                                        <span class="color-preview bg-danger"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="info" title="Голубой">
+                                        <span class="color-preview bg-info"></span>
+                                    </button>
+                                    <button type="button" class="card-color-option" data-color="dark" title="Тёмный">
+                                        <span class="color-preview bg-dark"></span>
+                                    </button>
+                                </div>
+                                <button type="button" class="kanban-card-dropdown-item delete-card-btn" data-card-id="{{ card.id }}">
+                                    <i class="bi bi-trash"></i> Удалить
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% if card.description %}
+                        <div class="kanban-card-description">{{ card.description|length > 80 ? card.description|slice(0, 80) ~ '...' : card.description }}</div>
+                        {% endif %}
+                        <div class="kanban-card-meta">
+                            {% if card.priority %}
+                            <span class="badge bg-light-{{ card.priority.color }} text-{{ card.priority.color }}">{{ card.priority.label }}</span>
+                            {% endif %}
+                            {% for label in card.labels %}
+                            <span class="badge {{ label.color.value }}">{{ label.name }}</span>
+                            {% endfor %}
+                            {% if card.dueDate %}
+                            <span class="text-muted"><i class="bi bi-calendar3"></i> {{ card.dueDate|date('d.m') }}</span>
+                            {% endif %}
+                            {% if card.subtasks|length > 0 %}
+                            <span class="text-muted">
+                                <i class="bi bi-check2-square"></i>
+                                {{ card.subtasks|filter(ci => ci.completed)|length }}/{{ card.subtasks|length }}
+                            </span>
+                            {% endif %}
+                            {% if card.comments|length > 0 %}
+                            <span class="text-muted"><i class="bi bi-chat-dots"></i> {{ card.comments|length }}</span>
+                            {% endif %}
+                            {% if card.assignees|length > 0 %}
+                            <span class="kanban-card-assignees">
+                                {% for assignee in card.assignees|slice(0, 3) %}
+                                <span class="kanban-card-assignee-item">
+                                    <span class="kanban-card-assignee-avatar" title="{{ assignee.lastname }} {{ assignee.firstname }}">{{ ((assignee.firstname|default(''))|slice(0, 1) ~ (assignee.lastname|default(''))|slice(0, 1))|upper }}</span>
+                                    <span class="kanban-card-assignee-name">{{ assignee.lastname }} {{ assignee.firstname }}</span>
+                                </span>
+                                {% endfor %}
+                                {% if card.assignees|length > 3 %}
+                                <span class="kanban-card-assignee-more">+{{ card.assignees|length - 3 }}</span>
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        {% set _subtasksDone = card.subtasks|filter(ci => ci.completed)|length %}
+                        {% set _subtasksTotal = card.subtasks|length %}
+                        {% set _subtasksPercent = _subtasksTotal > 0 ? (_subtasksDone / _subtasksTotal * 100) : 0 %}
+                        <div class="card-subtasks card-subtasks-collapsed" data-card-id="{{ card.id }}" data-subtasks-host>
+                            <div class="card-subtasks-header">
+                                <div class="card-subtasks-header-main">
+                                    <button type="button" class="card-subtasks-toggle" aria-label="Показать/скрыть подзадачи">
+                                        <i class="bi bi-chevron-right"></i>
+                                    </button>
+                                    <span class="card-subtasks-label">Подзадачи</span>
+                                    <span class="card-subtasks-counter text-muted">({{ _subtasksDone }}/{{ _subtasksTotal }})</span>
+                                </div>
+                                {% if memberRole.value != 'VIEWER' %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary card-subtasks-header-add" title="Добавить подзадачу" aria-label="Добавить подзадачу">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            <div class="card-subtasks-progress"{% if card.subtasks|length == 0 %} style="display: none;"{% endif %}>
+                                <div class="card-subtasks-progress-track">
+                                    <div class="card-subtasks-progress-fill" style="width: {{ _subtasksPercent }}%;"></div>
+                                </div>
+                            </div>
+                            <div class="card-subtasks-body">
+                                <div class="card-subtasks-input-wrap mt-1" style="display: none;">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control card-subtasks-input" placeholder="Новая подзадача...">
+                                    </div>
+                                </div>
+                                <div class="card-subtasks-items">
+                                    {% for ci in card.subtasks %}
+                                    <div class="form-check card-subtasks-item {{ ci.completed ? 'card-subtasks-item-completed' : '' }}" data-subtask-id="{{ ci.id }}">
+                                        <input class="form-check-input card-subtasks-checkbox" type="checkbox" {{ ci.completed ? 'checked' : '' }}>
+                                        <label class="form-check-label ms-1 card-subtasks-text">{{ ci.title }}</label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            {% if memberRole.value != 'VIEWER' %}
+            <div class="kanban-add-column-wrap d-flex align-items-start flex-shrink-0 pt-1">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="add-column-btn">
+                    <i class="bi bi-plus-lg me-1"></i>Колонка
+                </button>
+            </div>
+            {% endif %}
+        </div>
+        </div>
+    </section>
+
+    {# Task detail sidebar #}
+    <div id="task-sidebar" class="task-sidebar" aria-hidden="true">
+        <div class="task-sidebar-backdrop" aria-label="Close"></div>
+        <div class="task-sidebar-panel">
+            <div class="task-sidebar-header">
+                <div class="task-sidebar-nav">
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="task-sidebar-back btn btn-link p-0 text-primary text-decoration-none" id="task-sidebar-close">
+                            <i class="bi bi-arrow-left"></i> Назад
+                        </button>
+                        <span id="save-status" class="badge bg-secondary" style="display:none"></span>
+                    </div>
+                    {% if memberRole.value != 'VIEWER' %}
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="task-sidebar-delete" title="Удалить карточку">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="task-sidebar-title-row">
+                    <div class="task-sidebar-title-block" style="width:100%">
+                        <div style="width:100%">
+                            {% if memberRole.value != 'VIEWER' %}
+                            <input type="text" class="form-control form-control-sm fw-bold task-sidebar-title-input mb-1" id="task-sidebar-title-input" placeholder="Название задачи">
+                            {% else %}
+                            <h5 class="task-sidebar-title" id="task-sidebar-title-input" style="pointer-events:none"></h5>
+                            {% endif %}
+                            <span class="task-sidebar-id text-muted" id="task-sidebar-id"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <nav class="task-sidebar-tabs" role="tablist">
+                <button type="button" class="task-sidebar-tab active" role="tab" aria-selected="true" data-tab="chat">Чат</button>
+                <button type="button" class="task-sidebar-tab" role="tab" aria-selected="false" data-tab="description">Описание</button>
+                <button type="button" class="task-sidebar-tab" role="tab" aria-selected="false" data-tab="subtasks">Подзадачи</button>
+                <button type="button" class="task-sidebar-tab" role="tab" aria-selected="false" data-tab="info">Инфо</button>
+            </nav>
+            <div class="task-sidebar-content">
+                {# Chat Tab #}
+                <div class="task-sidebar-tab-pane active" id="pane-chat" role="tabpanel">
+                    <div class="task-chat-messages" id="chat-messages">
+                        <div class="task-chat-msg task-chat-msg-placeholder">
+                            <div class="task-chat-msg-bubble">
+                                <div class="task-chat-msg-text">Сообщений пока нет.</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% if memberRole.value != 'VIEWER' %}
+                    <div class="task-chat-input-wrap">
+                        <input type="file" id="task-chat-file-input" style="display:none" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx">
+                        <textarea class="task-chat-input form-control" id="task-chat-input" placeholder="Написать сообщение..." autocomplete="off" rows="4"></textarea>
+                        <button type="button" class="task-chat-attach btn btn-outline-secondary" id="task-chat-attach-btn" title="Прикрепить файл"><i class="bi bi-paperclip"></i></button>
+                        <button type="button" class="task-chat-send btn btn-primary" id="task-chat-send" title="Отправить"><i class="bi bi-send"></i></button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {# Description Tab #}
+                <div class="task-sidebar-tab-pane" id="pane-description" role="tabpanel" hidden>
+                    <div class="task-description-pane">
+                        <textarea class="form-control task-description-textarea" id="task-description-textarea" placeholder="Введите описание задачи..." {% if memberRole.value == 'VIEWER' %}readonly{% endif %}></textarea>
+                    </div>
+                </div>
+
+                {# Subtasks Tab #}
+                <div class="task-sidebar-tab-pane" id="pane-subtasks" role="tabpanel" hidden>
+                    <div class="task-subtasks-pane">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Подзадачи</h6>
+                            {% if memberRole.value != 'VIEWER' %}
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="add-subtask-btn">
+                                <i class="bi bi-plus-lg"></i>
+                                <span class="d-none d-sm-inline">Добавить подзадачу</span>
+                            </button>
+                            {% endif %}
+                        </div>
+                        <div class="task-subtasks-list" id="subtask-items"></div>
+                    </div>
+                </div>
+
+                {# Info Tab #}
+                <div class="task-sidebar-tab-pane" id="pane-info" role="tabpanel" hidden>
+                    <div class="task-info-block">
+                        {% if memberRole.value != 'VIEWER' %}
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">ЦВЕТ КАРТОЧКИ</label>
+                            <div class="d-flex gap-2 flex-wrap align-items-center" id="card-border-color-picker">
+                                <button type="button" class="card-color-swatch swatch-none" data-color="" title="Без цвета">✕</button>
+                                <button type="button" class="card-color-swatch bg-primary"  data-color="primary" title="Синий"></button>
+                                <button type="button" class="card-color-swatch bg-success"  data-color="success" title="Зелёный"></button>
+                                <button type="button" class="card-color-swatch bg-warning"  data-color="warning" title="Жёлтый"></button>
+                                <button type="button" class="card-color-swatch bg-danger"   data-color="danger"  title="Красный"></button>
+                                <button type="button" class="card-color-swatch bg-info"     data-color="info"    title="Голубой"></button>
+                                <button type="button" class="card-color-swatch bg-dark"     data-color="dark"    title="Тёмный"></button>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">ПРИОРИТЕТ</label>
+                            {% if memberRole.value != 'VIEWER' %}
+                            <select class="form-select form-select-sm" id="task-priority-select">
+                                <option value="">Не задан</option>
+                                <option value="low">Низкий</option>
+                                <option value="medium">Средний</option>
+                                <option value="high">Высокий</option>
+                            </select>
+                            {% else %}
+                            <span id="task-info-priority" class="task-info-value">—</span>
+                            {% endif %}
+                        </div>
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">СРОК</label>
+                            <div class="task-info-input-wrap">
+                                <input type="datetime-local" class="form-control task-info-input" id="task-due-at" {% if memberRole.value == 'VIEWER' %}disabled{% endif %}>
+                                <i class="bi bi-calendar3 task-info-input-icon"></i>
+                            </div>
+                        </div>
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">ИСПОЛНИТЕЛИ</label>
+                            <div id="assignees-block" class="d-flex align-items-center flex-wrap gap-1 position-relative">
+                                <div id="assignees-chips" class="d-flex flex-wrap gap-1"></div>
+                                {% if memberRole.value != 'VIEWER' %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="assignee-add-btn" title="Добавить исполнителя" style="padding:0.1rem 0.4rem;font-size:0.8rem;">
+                                    Назначить
+                                </button>
+                                <div id="assignee-dropdown" class="dropdown-menu p-2" style="display:none;min-width:220px;position:absolute;top:100%;left:0;z-index:200;">
+                                    <div class="d-flex gap-1 mb-2 align-items-center">
+                                        <input type="text" id="assignee-search" class="form-control form-control-sm flex-grow-1" placeholder="Поиск...">
+                                        {% if board.project is defined and board.project %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0" id="assignee-add-new-user-btn" title="Добавить пользователя в проект и назначить на задачу">
+                                            <i class="bi bi-person-plus"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                    <div id="assignee-results" style="max-height:160px;overflow-y:auto;"></div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">МЕТКИ</label>
+                            <div id="labels-block" class="d-flex align-items-center flex-wrap gap-1 position-relative">
+                                <div id="labels-chips" class="d-flex flex-wrap gap-1"></div>
+                                {% if memberRole.value != 'VIEWER' %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="labels-add-btn" title="Добавить метку" style="padding:0.1rem 0.4rem;font-size:0.8rem;">
+                                    <i class="bi bi-plus-lg"></i> Метка
+                                </button>
+                                <div id="label-dropdown" class="dropdown-menu p-2" style="display:none;min-width:220px;position:absolute;top:100%;left:0;z-index:200;">
+                                    <div id="label-list" style="max-height:140px;overflow-y:auto;"></div>
+                                    <hr class="my-2">
+                                    <div class="px-1">
+                                        <input type="text" id="new-label-name" placeholder="Название..." class="form-control form-control-sm mb-1">
+                                        <select id="new-label-color" class="form-select form-select-sm mb-1">
+                                            <option value="bg-primary">Синий</option>
+                                            <option value="bg-success">Зелёный</option>
+                                            <option value="bg-warning">Жёлтый</option>
+                                            <option value="bg-danger">Красный</option>
+                                            <option value="bg-info">Голубой</option>
+                                            <option value="bg-dark">Тёмный</option>
+                                        </select>
+                                        <button id="create-label-btn" class="btn btn-sm btn-primary w-100">Создать</button>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="task-info-field">
+                            <label class="task-info-field-label">ВЛОЖЕНИЯ</label>
+                            <div id="attachments-list"></div>
+                            {% if memberRole.value != 'VIEWER' %}
+                            <div class="mt-2">
+                                <input type="file" id="attachment-input" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx">
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="task-info-timestamps">
+                            <div class="task-info-row-inline">
+                                <span class="task-info-label">Создана:</span>
+                                <span class="task-info-value" id="task-created-at">—</span>
+                            </div>
+                            <div class="task-info-row-inline">
+                                <span class="task-info-label">Изменена:</span>
+                                <span class="task-info-value" id="task-updated-at">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Toast container #}
+    <div class="kanban-toast-container" id="toast-container"></div>
+
+    {# Gradient Color Picker #}
+    <div id="gp-btn" style="position:fixed;bottom:5.5rem;right:1.5rem;z-index:9998;">
+        <button id="gp-toggle" title="Настройка цветов" style="width:2.8rem;height:2.8rem;padding:0;border-radius:50%;border:none;background:var(--bs-body-bg);box-shadow:0 4px 16px rgba(0,0,0,0.18);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;transition:transform 0.2s;">
+            🎨
+        </button>
+    </div>
+
+    <div id="gp-panel" style="display:none;position:fixed;bottom:8rem;right:1rem;z-index:9997;background:var(--bs-body-bg);border:1px solid var(--bs-border-color);border-radius:0.75rem;padding:0.75rem;box-shadow:0 8px 40px rgba(0,0,0,0.18);width:185px;">
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:0.6rem;">Цвета</div>
+
+        <div style="font-size:0.65rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--bs-secondary-color);margin-bottom:0.35rem;">Пресеты</div>
+        <div id="gp-presets" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.3rem;margin-bottom:0.75rem;"></div>
+
+        <div style="font-size:0.65rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--bs-secondary-color);margin-bottom:0.25rem;">Фон</div>
+        <div style="display:flex;gap:0.25rem;align-items:center;margin-bottom:0.5rem;">
+            <input type="color" id="gp-main-bg" style="width:100%;height:1.6rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);cursor:pointer;padding:0.05rem;">
+            <button id="gp-main-bg-clear" title="Сбросить" style="padding:0.15rem 0.35rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);background:transparent;color:var(--bs-body-color);font-size:0.7rem;cursor:pointer;flex-shrink:0;">✕</button>
+        </div>
+
+        <div style="font-size:0.65rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--bs-secondary-color);margin-bottom:0.25rem;">Столбцы</div>
+        <div style="display:flex;gap:0.25rem;align-items:center;margin-bottom:0.5rem;">
+            <input type="color" id="gp-col-bg" style="width:100%;height:1.6rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);cursor:pointer;padding:0.05rem;">
+            <button id="gp-col-bg-clear" title="Сбросить" style="padding:0.15rem 0.35rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);background:transparent;color:var(--bs-body-color);font-size:0.7rem;cursor:pointer;flex-shrink:0;">✕</button>
+        </div>
+
+        <div style="font-size:0.65rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--bs-secondary-color);margin-bottom:0.25rem;">Карточки</div>
+        <div style="display:flex;gap:0.25rem;align-items:center;">
+            <input type="color" id="gp-card-bg" style="width:100%;height:1.6rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);cursor:pointer;padding:0.05rem;">
+            <button id="gp-card-bg-clear" title="Сбросить" style="padding:0.15rem 0.35rem;border-radius:0.25rem;border:1px solid var(--bs-border-color);background:transparent;color:var(--bs-body-color);font-size:0.7rem;cursor:pointer;flex-shrink:0;">✕</button>
+        </div>
+    </div>
 
     <script>
-        // Kanban Board - Drag and drop between columns using Dragula
-        (function () {
-            const kanbanColumns = document.querySelectorAll(".kanban-column-body");
-            const taskSidebar = document.getElementById("task-sidebar");
-            const taskSidebarTitle = document.getElementById("task-sidebar-title");
-            const taskSidebarId = document.getElementById("task-sidebar-id");
-            const taskSidebarDescription = document.getElementById("task-sidebar-description");
+    (function() {
+        var mainBgStyleEl = document.createElement('style');
+        document.head.appendChild(mainBgStyleEl);
+        var colBgStyleEl  = document.createElement('style');
+        document.head.appendChild(colBgStyleEl);
+        var cardBgStyleEl = document.createElement('style');
+        document.head.appendChild(cardBgStyleEl);
 
-            // Shared in-memory store for subtasks (per taskId)
-            var subtasksStore = {}; // { [taskId]: [ { id, title, done } ] }
-            var subtasksHosts = []; // all widgets (cards + sidebar)
+        function getTheme() {
+            return document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+        }
+        function lsKey(name) { return 'kanban_' + name + '_' + getTheme(); }
 
-            function getTaskSubtasks(taskId) {
-                if (!subtasksStore[taskId]) {
-                    subtasksStore[taskId] = [];
-                }
-                return subtasksStore[taskId];
+        function applyMainBg(color) {
+            mainBgStyleEl.textContent = color
+                ? 'html,body,#app,#main{background:' + color + '!important;background-color:' + color + '!important;animation:none!important;background-size:unset!important;}'
+                : '';
+            color ? localStorage.setItem(lsKey('mainBg'), color) : localStorage.removeItem(lsKey('mainBg'));
+        }
+        function applyColBg(color) {
+            colBgStyleEl.textContent = color
+                ? '.kanban-column{background:' + color + '!important;animation:none!important;}'
+                : '';
+            color ? localStorage.setItem(lsKey('colBg'), color) : localStorage.removeItem(lsKey('colBg'));
+        }
+        function applyCardBg(color) {
+            cardBgStyleEl.textContent = color
+                ? '.kanban-card{background:' + color + '!important;}'
+                : '';
+            color ? localStorage.setItem(lsKey('cardBg'), color) : localStorage.removeItem(lsKey('cardBg'));
+        }
+
+        function restoreForTheme() {
+            var m = localStorage.getItem(lsKey('mainBg')) || '';
+            var c = localStorage.getItem(lsKey('colBg'))  || '';
+            var k = localStorage.getItem(lsKey('cardBg')) || '';
+            applyMainBg(m); applyColBg(c); applyCardBg(k);
+            return { mainBg: m, colBg: c, cardBg: k };
+        }
+
+        restoreForTheme();
+
+        var PRESETS = {
+            light: [
+                { name: 'Рассвет', bg: '#ddd5c8', col: '#f5f0e8', card: '#ffffff' },
+                { name: 'Сирень',  bg: '#dbd3f0', col: '#ede8fa', card: '#ffffff' },
+                { name: 'Мята',    bg: '#cce8dd', col: '#e8f7f2', card: '#ffffff' },
+                { name: 'Небо',    bg: '#c8dff0', col: '#e4f1fb', card: '#ffffff' },
+                { name: 'Персик',  bg: '#f2bfa8', col: '#fde5d5', card: '#ffffff' },
+                { name: 'Лайм',    bg: '#c8e890', col: '#e8f7c0', card: '#ffffff' },
+            ],
+            dark: [
+                { name: 'Полночь', bg: '#090d15', col: '#222c49', card: '#0a1124' },
+                { name: 'Изумруд', bg: '#081b14', col: '#163c29', card: '#0b2217' },
+                { name: 'Аметист', bg: '#120d1f', col: '#1e1535', card: '#261c42' },
+                { name: 'Уголь',   bg: '#1f1f1f', col: '#383838', card: '#141414' },
+                { name: 'Вишня',   bg: '#230614', col: '#45122b', card: '#220714' },
+                { name: 'Космос',  bg: '#05081e', col: '#151956', card: '#0a0c29' },
+            ],
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var panel        = document.getElementById('gp-panel');
+            var toggle       = document.getElementById('gp-toggle');
+            var mainBgInput  = document.getElementById('gp-main-bg');
+            var colBgInput   = document.getElementById('gp-col-bg');
+            var cardBgInput  = document.getElementById('gp-card-bg');
+            var presetsContainer = document.getElementById('gp-presets');
+
+            function isDark() { return getTheme() === 'dark'; }
+
+            function syncInputs() {
+                var s = restoreForTheme();
+                if (s.mainBg) mainBgInput.value = s.mainBg;
+                if (s.colBg)  colBgInput.value  = s.colBg;
+                if (s.cardBg) cardBgInput.value = s.cardBg;
             }
+            syncInputs();
 
-            function refreshSubtasks(taskId) {
-                subtasksHosts.forEach(function (hostInfo) {
-                    try {
-                        if (hostInfo.getTaskId() === taskId) {
-                            hostInfo.render();
-                        }
-                    } catch (e) {
-                        // ignore
-                    }
-                });
-            }
-
-            if (kanbanColumns.length === 0) return;
-
-            const containers = Array.from(kanbanColumns);
-
-            dragula(containers, {
-                moves: function (el) {
-                    return el.classList.contains("kanban-card");
-                },
-            });
-
-            function scrollChatToBottom() {
-                var paneChat = document.getElementById("pane-chat");
-                var messagesEl = paneChat && paneChat.querySelector(".task-chat-messages");
-                if (messagesEl) {
-                    messagesEl.scrollTop = messagesEl.scrollHeight;
-                }
-            }
-
-            function formatChatTime(date) {
-                return date.toLocaleDateString(undefined, { day: "numeric", month: "short" }) + ", " + date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-            }
-
-            function appendChatMessage(text, sender, time) {
-                var paneChat = document.getElementById("pane-chat");
-                var messagesEl = paneChat && paneChat.querySelector(".task-chat-messages");
-                if (!messagesEl) return;
-                var placeholder = messagesEl.querySelector(".task-chat-msg-placeholder");
-                if (placeholder) placeholder.remove();
-                var timeStr = time ? formatChatTime(time) : "—";
-                var msg = document.createElement("div");
-                msg.className = "task-chat-msg";
-                msg.innerHTML =
-                    '<div class="task-chat-msg-bubble">' +
-                    '<div class="task-chat-msg-text">' + escapeHtml(text) + '</div>' +
-                    '<div class="task-chat-msg-meta"><span class="task-chat-msg-time">' + escapeHtml(sender) + " · " + timeStr + '</span> <i class="bi bi-check2 text-muted"></i></div>' +
-                    '</div>';
-                messagesEl.appendChild(msg);
-                scrollChatToBottom();
-            }
-
-            function sendChatMessage() {
-                var input = document.getElementById("task-chat-input");
-                if (!input) return;
-                var text = (input.value || "").trim();
-                if (!text) return;
-                input.value = "";
-                appendChatMessage(text, "You", new Date());
-            }
-
-            function enterDescriptionEdit() {
-                var descEl = document.getElementById("task-sidebar-description");
-                var viewWrap = document.getElementById("task-description-view");
-                var editWrap = document.getElementById("task-description-edit");
-                var textarea = document.getElementById("task-description-textarea");
-                if (!descEl || !viewWrap || !editWrap || !textarea) return;
-                textarea.value = (descEl.textContent || "").trim();
-                viewWrap.hidden = true;
-                editWrap.hidden = false;
-                textarea.focus();
-                textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-            }
-
-            function exitDescriptionEdit(save) {
-                var descEl = document.getElementById("task-sidebar-description");
-                var viewWrap = document.getElementById("task-description-view");
-                var editWrap = document.getElementById("task-description-edit");
-                var textarea = document.getElementById("task-description-textarea");
-                if (!descEl || !viewWrap || !editWrap || !textarea) return;
-                if (save) {
-                    descEl.textContent = textarea.value;
-                }
-                editWrap.hidden = true;
-                viewWrap.hidden = false;
-            }
-
-            // Open task sidebar when clicking a card (ignore drag)
-            function openTaskSidebar(card) {
-                if (!taskSidebar || !card) return;
-                var titleEl = card.querySelector(".kanban-card-title");
-                var descEl = card.querySelector(".kanban-card-description");
-                var taskId = card.getAttribute("data-task-id") || "TASK";
-                taskSidebarTitle.textContent = titleEl ? titleEl.textContent : "Task";
-                taskSidebarId.textContent = taskId;
-                taskSidebarDescription.textContent = descEl ? descEl.textContent : "";
-                taskSidebar.setAttribute("aria-hidden", "false");
-                refreshSubtasks(taskId);
-                setTimeout(scrollChatToBottom, 0);
-            }
-
-            function closeTaskSidebar() {
-                if (taskSidebar) taskSidebar.setAttribute("aria-hidden", "true");
-            }
-
-            var board = document.querySelector(".kanban-board");
-            if (board) {
-                board.addEventListener("click", function (e) {
-                    var card = e.target.closest(".kanban-card");
-                    if (!card || e.target.closest(".kanban-add-btn")) return;
-                    openTaskSidebar(card);
-                });
-            }
-
-            if (taskSidebar) {
-                var backBtn = document.getElementById("task-sidebar-close");
-                if (backBtn) backBtn.addEventListener("click", closeTaskSidebar);
-            }
-
-            // Close sidebar on Escape
-            document.addEventListener("keydown", function (e) {
-                if (e.key === "Escape" && taskSidebar && taskSidebar.getAttribute("aria-hidden") === "false") {
-                    closeTaskSidebar();
-                }
-            });
-
-            // Close sidebar on click outside (empty area; not on panel and not on a card)
-            document.addEventListener("click", function (e) {
-                if (!taskSidebar || taskSidebar.getAttribute("aria-hidden") !== "false") return;
-                if (e.target.closest(".task-sidebar-panel")) return;
-                if (e.target.closest(".kanban-card")) return;
-                closeTaskSidebar();
-            });
-
-            // Tab switching
-            document.querySelectorAll(".task-sidebar-tab").forEach(function (tab) {
-                tab.addEventListener("click", function () {
-                    var targetId = "pane-" + this.getAttribute("data-tab");
-                    document.querySelectorAll(".task-sidebar-tab").forEach(function (t) {
-                        t.classList.remove("active");
-                        t.setAttribute("aria-selected", "false");
-                    });
-                    document.querySelectorAll(".task-sidebar-tab-pane").forEach(function (pane) {
-                        pane.classList.remove("active");
-                        pane.hidden = true;
-                    });
-                    this.classList.add("active");
-                    this.setAttribute("aria-selected", "true");
-                    var pane = document.getElementById(targetId);
-                    if (pane) {
-                        pane.classList.add("active");
-                        pane.hidden = false;
-                        if (targetId === "pane-chat") scrollChatToBottom();
-                    }
-                });
-            });
-
-            // Chat: send message
-            var chatSendBtn = document.getElementById("task-chat-send");
-            var chatInput = document.getElementById("task-chat-input");
-            if (chatSendBtn) chatSendBtn.addEventListener("click", sendChatMessage);
-            if (chatInput) {
-                chatInput.addEventListener("keydown", function (e) {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        sendChatMessage();
-                    }
-                });
-            }
-
-            // Description: edit handlers
-            var descEditBtn = document.getElementById("task-desc-edit-btn");
-            var descSaveBtn = document.getElementById("task-desc-save-btn");
-            var descCancelBtn = document.getElementById("task-desc-cancel-btn");
-            if (descEditBtn) descEditBtn.addEventListener("click", function () { enterDescriptionEdit(); });
-            if (descSaveBtn) descSaveBtn.addEventListener("click", function () { exitDescriptionEdit(true); });
-            if (descCancelBtn) descCancelBtn.addEventListener("click", function () { exitDescriptionEdit(false); });
-
-            // Initialize shared subtasks checklist widget for cards
-            function initCardSubtasks(host, getTaskId) {
-                if (!host || host.__subtasksWidgetInitialized) return;
-                host.__subtasksWidgetInitialized = true;
-
-                var container = document.createElement("div");
-                container.className = "card-subtasks card-subtasks-collapsed";
-                container.innerHTML =
-                    '<div class="card-subtasks-header">' +
-                        '<div class="card-subtasks-header-main">' +
-                            '<button type="button" class="card-subtasks-toggle" aria-label="Показать/скрыть подзадачи">' +
-                                '<i class="bi bi-chevron-right"></i>' +
-                            '</button>' +
-                            '<span class="card-subtasks-label">Подзадачи</span>' +
-                            '<span class="card-subtasks-counter text-muted">(0/0)</span>' +
+            function buildPreset(p) {
+                var dark = isDark();
+                var btn = document.createElement('button');
+                btn.style.cssText = 'border:none;border-radius:0.4rem;cursor:pointer;padding:0;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.18);transition:transform 0.15s,box-shadow 0.2s;text-align:left;width:100%;';
+                btn.innerHTML =
+                    '<div style="background:' + p.bg + ';padding:0.3rem 0.3rem 0.2rem;">' +
+                        '<div style="background:' + p.col + ';border-radius:0.2rem;padding:0.2rem 0.25rem;">' +
+                            '<div style="background:' + p.card + ';border-radius:0.15rem;height:0.3rem;margin-bottom:0.12rem;"></div>' +
+                            '<div style="background:' + p.card + ';border-radius:0.15rem;height:0.3rem;opacity:0.6;"></div>' +
                         '</div>' +
-                        '<button type="button" class="btn btn-sm btn-outline-secondary card-subtasks-header-add" title="Добавить подзадачу" aria-label="Добавить подзадачу">' +
-                            '<i class="bi bi-plus-lg"></i>' +
-                        '</button>' +
                     '</div>' +
-                    '<div class="card-subtasks-body">' +
-                        '<div class="card-subtasks-input-wrap mt-1" style="display: none;">' +
-                            '<div class="input-group input-group-sm">' +
-                                '<input type="text" class="form-control card-subtasks-input" placeholder="Новая подзадача...">' +
-                            '</div>' +
-                        '</div>' +
-                        '<div class="card-subtasks-items"></div>' +
-                    '</div>';
-
-                host.appendChild(container);
-
-                var header = container.querySelector(".card-subtasks-header");
-                var toggleBtn = container.querySelector(".card-subtasks-toggle");
-                var headerAddBtn = container.querySelector(".card-subtasks-header-add");
-                var counterEl = container.querySelector(".card-subtasks-counter");
-                var itemsEl = container.querySelector(".card-subtasks-items");
-                var inputWrap = container.querySelector(".card-subtasks-input-wrap");
-                var input = container.querySelector(".card-subtasks-input");
-
-                function resolveTaskId() {
-                    if (typeof getTaskId === "function") {
-                        return getTaskId();
-                    }
-                    var idFromAttr = host.getAttribute("data-task-id");
-                    if (idFromAttr) return idFromAttr;
-                    if (host.matches && host.matches(".task-subtasks-sidebar-host") && taskSidebarId) {
-                        return taskSidebarId.textContent || "TASK";
-                    }
-                    return "TASK";
-                }
-
-                function updateCounter(taskId) {
-                    var items = getTaskSubtasks(taskId);
-                    var total = items.length;
-                    var done = items.filter(function (it) { return !!it.done; }).length;
-                    if (counterEl) {
-                        counterEl.textContent = total ? (done + "/" + total) : "(0/0)";
-                    }
-                }
-
-                function toggleCollapsed() {
-                    container.classList.toggle("card-subtasks-collapsed");
-                    var icon = toggleBtn && toggleBtn.querySelector("i");
-                    if (icon) {
-                        if (container.classList.contains("card-subtasks-collapsed")) {
-                            icon.classList.remove("bi-chevron-down");
-                            icon.classList.add("bi-chevron-right");
-                        } else {
-                            icon.classList.remove("bi-chevron-right");
-                            icon.classList.add("bi-chevron-down");
-                        }
-                    }
-                }
-
-                function render() {
-                    var taskId = resolveTaskId();
-                    var items = getTaskSubtasks(taskId);
-
-                    itemsEl.innerHTML = "";
-                    items.forEach(function (item) {
-                        var row = document.createElement("div");
-                        row.className = "form-check card-subtasks-item" + (item.done ? " card-subtasks-item-completed" : "");
-                        row.setAttribute("data-subtask-id", item.id);
-                        row.innerHTML =
-                            '<input class="form-check-input card-subtasks-checkbox" type="checkbox"' + (item.done ? " checked" : "") + ">" +
-                            '<label class="form-check-label ms-1 card-subtasks-text">' +
-                            escapeHtml(item.title) +
-                            "</label>";
-
-                        itemsEl.appendChild(row);
-
-                        var checkbox = row.querySelector(".card-subtasks-checkbox");
-                        if (checkbox) {
-                            checkbox.addEventListener("change", function (ev) {
-                                ev.stopPropagation();
-                                item.done = !!checkbox.checked;
-                                row.classList.toggle("card-subtasks-item-completed", item.done);
-                                updateCounter(taskId);
-                                refreshSubtasks(taskId);
-                            });
-                        }
-
-                        row.addEventListener("click", function (ev) {
-                            ev.stopPropagation();
-                        });
-                    });
-
-                    updateCounter(taskId);
-                }
-
-                if (header) {
-                    header.addEventListener("click", function (ev) {
-                        if (ev.target.closest(".card-subtasks-header-add") || ev.target.closest(".card-subtasks-input")) {
-                            return;
-                        }
-                        ev.stopPropagation();
-                        toggleCollapsed();
-                    });
-                }
-
-                function addSubtaskFromInput() {
-                    var title = (input.value || "").trim();
-                    if (!title) return;
-                    input.value = "";
-
-                    var taskId = resolveTaskId();
-                    var items = getTaskSubtasks(taskId);
-                    items.unshift({
-                        id: String(Date.now()) + Math.random().toString(36).slice(2, 8),
-                        title: title,
-                        done: false
-                    });
-
-                    inputWrap.style.display = "none";
-                    refreshSubtasks(taskId);
-                }
-
-                if (headerAddBtn && input && inputWrap) {
-                    headerAddBtn.addEventListener("click", function (ev) {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-
-                        if (container.classList.contains("card-subtasks-collapsed")) {
-                            toggleCollapsed();
-                        }
-
-                        inputWrap.style.display = "";
-                        input.focus();
-                    });
-                }
-
-                if (input && inputWrap) {
-                    input.addEventListener("keydown", function (ev) {
-                        if (ev.key === "Enter") {
-                            ev.preventDefault();
-                            ev.stopPropagation();
-                            addSubtaskFromInput();
-                        } else if (ev.key === "Escape") {
-                            ev.preventDefault();
-                            ev.stopPropagation();
-                            input.value = "";
-                            inputWrap.style.display = "none";
-                        }
-                    });
-
-                    input.addEventListener("click", function (ev) {
-                        ev.stopPropagation();
-                    });
-                }
-
-                var hostInfo = {
-                    host: host,
-                    render: render,
-                    getTaskId: resolveTaskId
-                };
-                subtasksHosts.push(hostInfo);
-
-                render();
+                    '<div style="background:' + p.col + ';padding:0.15rem 0.25rem;font-size:0.6rem;font-weight:600;color:' + (dark ? '#eee' : '#333') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + p.name + '</div>';
+                btn.addEventListener('mouseenter', function() { btn.style.transform = 'translateY(-2px)'; btn.style.boxShadow = '0 6px 16px rgba(0,0,0,0.28)'; });
+                btn.addEventListener('mouseleave', function() { btn.style.transform = ''; btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.18)'; });
+                btn.addEventListener('click', function() {
+                    applyMainBg(p.bg); applyColBg(p.col); applyCardBg(p.card);
+                    mainBgInput.value = p.bg; colBgInput.value = p.col; cardBgInput.value = p.card;
+                });
+                return btn;
             }
 
-            document.querySelectorAll(".kanban-card").forEach(function (card) {
-                initCardSubtasks(card, function () {
-                    return card.getAttribute("data-task-id") || "TASK";
+            function renderPresets() {
+                presetsContainer.innerHTML = '';
+                (isDark() ? PRESETS.dark : PRESETS.light).forEach(function(p) {
+                    presetsContainer.appendChild(buildPreset(p));
                 });
+            }
+            renderPresets();
+
+            // На смену темы — восстановить цвета новой темы и обновить пресеты/инпуты
+            new MutationObserver(function() {
+                syncInputs();
+                renderPresets();
+            }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+
+            mainBgInput.addEventListener('input',  function() { applyMainBg(this.value); });
+            colBgInput.addEventListener('input',   function() { applyColBg(this.value); });
+            cardBgInput.addEventListener('input',  function() { applyCardBg(this.value); });
+
+            document.getElementById('gp-main-bg-clear').addEventListener('click',  function() { applyMainBg(''); });
+            document.getElementById('gp-col-bg-clear').addEventListener('click',   function() { applyColBg(''); });
+            document.getElementById('gp-card-bg-clear').addEventListener('click',  function() { applyCardBg(''); });
+
+            toggle.addEventListener('click', function() {
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                toggle.style.transform = panel.style.display === 'none' ? '' : 'rotate(20deg)';
             });
 
-            // Initialize detailed subtasks accordion widget in sidebar (extended editor)
-            function initSidebarSubtasks(host) {
-                if (!host || host.__sidebarSubtasksInitialized) return;
-                host.__sidebarSubtasksInitialized = true;
-
-                var container = document.createElement("div");
-                container.className = "task-subtasks-pane";
-                container.innerHTML =
-                    '<div class="d-flex justify-content-between align-items-center mb-2">' +
-                        '<h6 class="mb-0">Подзадачи</h6>' +
-                        '<button type="button" class="btn btn-sm btn-outline-primary task-subtasks-add-btn">' +
-                            '<i class="bi bi-plus-lg"></i>' +
-                            '<span class="d-none d-sm-inline">Добавить подзадачу</span>' +
-                        '</button>' +
-                    '</div>' +
-                    '<div class="task-subtasks-list" id="task-subtasks-list">' +
-                        '<div class="task-subtasks-empty small">Подзадач пока нет.</div>' +
-                    '</div>';
-
-                host.appendChild(container);
-
-                var subtasksList = container.querySelector(".task-subtasks-list");
-                var addBtn = container.querySelector(".task-subtasks-add-btn");
-
-                function resolveTaskId() {
-                    return (taskSidebarId && taskSidebarId.textContent) || "TASK";
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#gp-panel') && !e.target.closest('#gp-btn')) {
+                    panel.style.display = 'none';
+                    toggle.style.transform = '';
                 }
-
-                function render() {
-                    var taskId = resolveTaskId();
-                    var items = getTaskSubtasks(taskId);
-
-                    subtasksList.innerHTML = "";
-
-                    if (!items.length) {
-                        var empty = document.createElement("div");
-                        empty.className = "task-subtasks-empty small";
-                        empty.textContent = "Подзадач пока нет.";
-                        subtasksList.appendChild(empty);
-                        return;
-                    }
-
-                    items.forEach(function (item) {
-                        var card = document.createElement("div");
-                        card.className = "task-subtask-card mb-2 task-subtask-collapsed";
-                        card.setAttribute("data-subtask-id", item.id);
-
-                        var status = item.status || (item.done ? "done" : "todo");
-                        var estimate = typeof item.estimate === "number" ? item.estimate : 0;
-                        var spent = typeof item.spent === "number" ? item.spent : 0;
-                        var assignee = item.assignee || "";
-
-                        card.innerHTML =
-                            '<div class="task-subtask-header">' +
-                                '<button type="button" class="task-subtask-toggle" aria-label="Развернуть/свернуть">' +
-                                    '<i class="bi bi-chevron-right"></i>' +
-                                '</button>' +
-                                '<div class="task-subtask-title">' + escapeHtml(item.title || "") + '</div>' +
-                                '<select class="form-select form-select-sm task-subtask-status" aria-label="Статус подзадачи">' +
-                                    '<option value="todo"' + (status === "todo" ? " selected" : "") + '>К выполнению</option>' +
-                                    '<option value="in_progress"' + (status === "in_progress" ? " selected" : "") + '>В работе</option>' +
-                                    '<option value="done"' + (status === "done" ? " selected" : "") + '>Выполнена</option>' +
-                                '</select>' +
-                                '<button type="button" class="task-subtask-remove" title="Удалить подзадачу" aria-label="Удалить подзадачу">' +
-                                    '<i class="bi bi-x-lg"></i>' +
-                                '</button>' +
-                            '</div>' +
-                            '<div class="task-subtask-body">' +
-                                '<div class="row g-2 small">' +
-                                    '<div class="col-6">' +
-                                        '<label class="form-label mb-1">Оценка</label>' +
-                                        '<div class="d-flex align-items-center gap-1">' +
-                                            '<input type="number" min="0" step="1" class="form-control form-control-sm task-subtask-estimate" value="' + estimate + '">' +
-                                            '<span class="text-muted">ч</span>' +
-                                        '</div>' +
-                                    '</div>' +
-                                    '<div class="col-6">' +
-                                        '<label class="form-label mb-1">Затрачено</label>' +
-                                        '<div class="d-flex align-items-center gap-1">' +
-                                            '<input type="number" min="0" step="1" class="form-control form-control-sm task-subtask-spent" value="' + spent + '">' +
-                                            '<span class="text-muted">ч</span>' +
-                                        '</div>' +
-                                    '</div>' +
-                                    '<div class="col-12">' +
-                                        '<label class="form-label mb-1">Исполнитель</label>' +
-                                        '<input type="text" class="form-control form-control-sm task-subtask-assignee" placeholder="Не назначен" value="' + escapeHtml(assignee) + '">' +
-                                    '</div>' +
-                                '</div>' +
-                            '</div>';
-
-                        subtasksList.appendChild(card);
-
-                        var headerEl = card.querySelector(".task-subtask-header");
-                        var statusSelect = card.querySelector(".task-subtask-status");
-                        var removeBtn = card.querySelector(".task-subtask-remove");
-                        var estimateInput = card.querySelector(".task-subtask-estimate");
-                        var spentInput = card.querySelector(".task-subtask-spent");
-                        var assigneeInput = card.querySelector(".task-subtask-assignee");
-
-                        if (headerEl) {
-                            headerEl.addEventListener("click", function (ev) {
-                                if (ev.target.closest(".task-subtask-status") || ev.target.closest(".task-subtask-remove")) {
-                                    return;
-                                }
-                                var isCollapsed = card.classList.toggle("task-subtask-collapsed");
-                                var icon = card.querySelector(".task-subtask-toggle i");
-                                if (icon) {
-                                    if (isCollapsed) {
-                                        icon.classList.remove("bi-chevron-down");
-                                        icon.classList.add("bi-chevron-right");
-                                    } else {
-                                        icon.classList.remove("bi-chevron-right");
-                                        icon.classList.add("bi-chevron-down");
-                                    }
-                                }
-                            });
-                        }
-
-                        if (statusSelect) {
-                            statusSelect.addEventListener("change", function () {
-                                var taskIdLocal = resolveTaskId();
-                                var itemsLocal = getTaskSubtasks(taskIdLocal);
-                                var target = itemsLocal.find(function (it) { return it.id === item.id; });
-                                if (target) {
-                                    target.status = statusSelect.value;
-                                    target.done = statusSelect.value === "done";
-                                }
-                                refreshSubtasks(taskIdLocal);
-                            });
-                        }
-
-                        if (removeBtn) {
-                            removeBtn.addEventListener("click", function (ev) {
-                                ev.preventDefault();
-                                ev.stopPropagation();
-                                if (!window.confirm("Удалить подзадачу?")) return;
-                                var taskIdLocal = resolveTaskId();
-                                var itemsLocal = getTaskSubtasks(taskIdLocal);
-                                var idx = itemsLocal.findIndex(function (it) { return it.id === item.id; });
-                                if (idx !== -1) {
-                                    itemsLocal.splice(idx, 1);
-                                }
-                                refreshSubtasks(taskIdLocal);
-                            });
-                        }
-
-                        if (estimateInput) {
-                            estimateInput.addEventListener("change", function () {
-                                var taskIdLocal = resolveTaskId();
-                                var itemsLocal = getTaskSubtasks(taskIdLocal);
-                                var target = itemsLocal.find(function (it) { return it.id === item.id; });
-                                if (target) {
-                                    target.estimate = Number(estimateInput.value) || 0;
-                                }
-                            });
-                        }
-
-                        if (spentInput) {
-                            spentInput.addEventListener("change", function () {
-                                var taskIdLocal = resolveTaskId();
-                                var itemsLocal = getTaskSubtasks(taskIdLocal);
-                                var target = itemsLocal.find(function (it) { return it.id === item.id; });
-                                if (target) {
-                                    target.spent = Number(spentInput.value) || 0;
-                                }
-                            });
-                        }
-
-                        if (assigneeInput) {
-                            assigneeInput.addEventListener("change", function () {
-                                var taskIdLocal = resolveTaskId();
-                                var itemsLocal = getTaskSubtasks(taskIdLocal);
-                                var target = itemsLocal.find(function (it) { return it.id === item.id; });
-                                if (target) {
-                                    target.assignee = assigneeInput.value || "";
-                                }
-                            });
-                        }
-                    });
-                }
-
-                if (addBtn) {
-                    addBtn.addEventListener("click", function (e) {
-                        e.preventDefault();
-
-                        var existingInput = container.querySelector(".task-subtasks-new-input");
-                        if (existingInput) {
-                            existingInput.focus();
-                            return;
-                        }
-
-                        var inputWrap = document.createElement("div");
-                        inputWrap.className = "mb-2";
-                        inputWrap.innerHTML =
-                            '<input type="text" class="form-control form-control-sm task-subtasks-new-input" placeholder="Название подзадачи...">';
-                        subtasksList.insertBefore(inputWrap, subtasksList.firstChild);
-
-                        var inputEl = inputWrap.querySelector("input");
-                        inputEl.focus();
-
-                        var committed = false;
-
-                        function commitSubtask() {
-                            if (committed) return;
-                            committed = true;
-
-                            var title = (inputEl.value || "").trim();
-                            inputWrap.remove();
-                            if (!title) return;
-
-                            var taskIdLocal = resolveTaskId();
-                            var itemsLocal = getTaskSubtasks(taskIdLocal);
-                            itemsLocal.unshift({
-                                id: String(Date.now()) + Math.random().toString(36).slice(2, 8),
-                                title: title,
-                                status: "todo",
-                                done: false,
-                                estimate: 0,
-                                spent: 0,
-                                assignee: ""
-                            });
-                            refreshSubtasks(taskIdLocal);
-                        }
-
-                        function cancelSubtask() {
-                            if (committed) return;
-                            committed = true;
-                            inputWrap.remove();
-                        }
-
-                        inputEl.addEventListener("keydown", function (ev) {
-                            if (ev.key === "Enter") {
-                                ev.preventDefault();
-                                commitSubtask();
-                            } else if (ev.key === "Escape") {
-                                ev.preventDefault();
-                                cancelSubtask();
-                            }
-                        });
-
-                        inputEl.addEventListener("blur", function () {
-                            setTimeout(function () {
-                                commitSubtask();
-                            }, 150);
-                        });
-                    });
-                }
-
-                var hostInfo = {
-                    host: host,
-                    render: render,
-                    getTaskId: resolveTaskId
-                };
-                subtasksHosts.push(hostInfo);
-
-                render();
-            }
-
-            var sidebarSubtasksHost = document.querySelector("#pane-subtasks .task-subtasks-sidebar-host");
-            if (sidebarSubtasksHost) {
-                initSidebarSubtasks(sidebarSubtasksHost);
-            }
-
-            // Add task button handlers
-            document.querySelectorAll(".kanban-add-btn").forEach(function (btn) {
-                btn.addEventListener("click", function (e) {
-                    e.stopPropagation();
-                    var columnBody = this.closest(".kanban-column").querySelector(".kanban-column-body");
-                    var existingInput = columnBody.querySelector(".kanban-new-task-input");
-                    if (existingInput) return;
-
-                    var inputWrap = document.createElement("div");
-                    inputWrap.className = "kanban-new-task-wrap";
-                    inputWrap.innerHTML =
-                        '<input type="text" class="form-control form-control-sm kanban-new-task-input" placeholder="Task name...">';
-                    columnBody.insertBefore(inputWrap, columnBody.firstChild);
-
-                    var input = inputWrap.querySelector("input");
-                    input.focus();
-
-                    var committed = false;
-                    function commitTask() {
-                        if (committed) return;
-                        committed = true;
-                        var title = input.value.trim();
-                        inputWrap.remove();
-                        document.removeEventListener("click", clickOutsideHandler);
-                        if (!title) return;
-
-                        var newCard = document.createElement("div");
-                        newCard.className = "kanban-card";
-                        newCard.setAttribute("data-task-id", "TASK");
-                        newCard.innerHTML =
-                            '<div class="kanban-card-title">' +
-                            escapeHtml(title) +
-                            "</div>" +
-                            '<div class="kanban-card-description"></div>' +
-                            '<div class="kanban-card-meta"></div>';
-                        columnBody.insertBefore(newCard, columnBody.firstChild);
-                        initCardSubtasks(newCard);
-                    }
-
-                    function clickOutsideHandler(ev) {
-                        if (!inputWrap.contains(ev.target) && !btn.contains(ev.target)) {
-                            commitTask();
-                        }
-                    }
-
-                    input.addEventListener("keydown", function (e) {
-                        if (e.key === "Enter") {
-                            e.preventDefault();
-                            commitTask();
-                        }
-                    });
-
-                    input.addEventListener("blur", function () {
-                        setTimeout(function () {
-                            commitTask();
-                        }, 150);
-                    });
-
-                    document.addEventListener("click", clickOutsideHandler, true);
-                });
             });
-
-            function escapeHtml(text) {
-                var div = document.createElement("div");
-                div.textContent = text;
-                return div.innerHTML;
-            }
-        })();
-
+        });
+    })();
     </script>
 
+    <script>
+        (function() {
+            document.addEventListener('DOMContentLoaded', function() {
+                var container = document.getElementById('create-board-columns');
+                var addBtn = document.getElementById('create-board-add-column');
+                if (!container || !addBtn) return;
+                addBtn.addEventListener('click', function() {
+                    var row = document.createElement('div');
+                    row.className = 'input-group input-group-sm mb-2 column-row';
+                    row.innerHTML = '<input type="text" class="form-control" name="columns[]" value="" maxlength="200" placeholder="Название столбца">' +
+                        '<button type="button" class="btn btn-outline-secondary create-board-remove-column" title="Удалить столбец"><i class="bi bi-dash-lg"></i></button>';
+                    container.appendChild(row);
+                    row.querySelector('.create-board-remove-column').addEventListener('click', function() {
+                        if (container.querySelectorAll('.column-row').length > 1) row.remove();
+                    });
+                });
+                container.addEventListener('click', function(e) {
+                    var btn = e.target.closest('.create-board-remove-column');
+                    if (btn) {
+                        var row = btn.closest('.column-row');
+                        if (row && container.querySelectorAll('.column-row').length > 1) row.remove();
+                    }
+                });
+            });
+        })();
+    </script>
+    <script src="/front_end/assets/extensions/dragula/dragula.min.js"></script>
+    <script src="/front_end/assets/js/kanban.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            KanbanApp.init({
+                boardId: '{{ board.id }}',
+                projectId: {{ board.project ? board.project.id : 'null' }},
+                canEdit: {{ memberRole.value != 'VIEWER' ? 'true' : 'false' }},
+                currentUserId: {{ currentUser.id }},
+                currentUserName: '{{ currentUser.lastname }} {{ currentUser.firstname }}'
+            });
+
+            // Board tabs menu functionality
+            var currentOpenDropdown = null;
+
+            // Toggle dropdown menu
+            document.querySelectorAll('.board-tab-menu-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var boardId = this.getAttribute('data-board-id');
+                    var dropdown = document.querySelector('.board-tab-dropdown[data-board-id="' + boardId + '"]');
+
+                    // Close other dropdowns
+                    document.querySelectorAll('.board-tab-dropdown').forEach(function(dd) {
+                        if (dd !== dropdown) dd.style.display = 'none';
+                    });
+
+                    // Toggle current dropdown
+                    if (dropdown.style.display === 'none' || !dropdown.style.display) {
+                        dropdown.style.display = 'block';
+                        currentOpenDropdown = dropdown;
+                    } else {
+                        dropdown.style.display = 'none';
+                        currentOpenDropdown = null;
+                    }
+                });
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (currentOpenDropdown && !e.target.closest('.board-tab-dropdown') && !e.target.closest('.board-tab-menu-btn')) {
+                    currentOpenDropdown.style.display = 'none';
+                    currentOpenDropdown = null;
+                }
+            });
+
+            // Rename board
+            document.querySelectorAll('.rename-board-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var boardId = this.getAttribute('data-board-id');
+                    var tabItem = document.querySelector('.board-tab-item[data-board-id="' + boardId + '"]');
+                    var tabLinkInner = tabItem.querySelector('.board-tab-link-inner');
+                    var titleSpan = tabItem.querySelector('.board-tab-title');
+                    var input = tabItem.querySelector('.board-tab-input');
+                    var dropdown = document.querySelector('.board-tab-dropdown[data-board-id="' + boardId + '"]');
+
+                    // Close dropdown
+                    dropdown.style.display = 'none';
+                    currentOpenDropdown = null;
+
+                    // Show input, hide title
+                    titleSpan.style.display = 'none';
+                    input.style.display = 'inline-block';
+                    input.focus();
+                    input.select();
+
+                    // Prevent link navigation
+                    tabLinkInner.style.pointerEvents = 'none';
+
+                    // Save on blur or Enter
+                    var saveRename = function() {
+                        var newTitle = input.value.trim();
+                        if (newTitle && newTitle !== titleSpan.textContent.trim()) {
+                            // Send rename request
+                            fetch('/kanban/board/' + boardId + '/rename', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: JSON.stringify({ title: newTitle })
+                            })
+                            .then(function(response) {
+                                if (response.ok) {
+                                    return response.json();
+                                }
+                                throw new Error('Ошибка переименования');
+                            })
+                            .then(function(data) {
+                                if (data.success) {
+                                    titleSpan.textContent = newTitle;
+                                } else {
+                                    input.value = titleSpan.textContent;
+                                    alert('Ошибка: ' + (data.error || 'Не удалось переименовать доску'));
+                                }
+                            })
+                            .catch(function(error) {
+                                console.error('Error:', error);
+                                input.value = titleSpan.textContent;
+                                alert('Ошибка: ' + error.message);
+                            });
+                        } else {
+                            input.value = titleSpan.textContent;
+                        }
+
+                        titleSpan.style.display = 'inline';
+                        input.style.display = 'none';
+                        tabLinkInner.style.pointerEvents = 'auto';
+                    };
+
+                    input.addEventListener('blur', saveRename, { once: true });
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            input.blur();
+                        } else if (e.key === 'Escape') {
+                            input.value = titleSpan.textContent;
+                            titleSpan.style.display = 'inline';
+                            input.style.display = 'none';
+                            tabLinkInner.style.pointerEvents = 'auto';
+                        }
+                    });
+                });
+            });
+
+            // Delete board
+            document.querySelectorAll('.delete-board-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var boardId = this.getAttribute('data-board-id');
+                    var dropdown = document.querySelector('.board-tab-dropdown[data-board-id="' + boardId + '"]');
+
+                    // Close dropdown
+                    dropdown.style.display = 'none';
+                    currentOpenDropdown = null;
+
+                    // Confirm deletion
+                    if (confirm('Вы уверены, что хотите удалить эту доску? Это действие нельзя отменить.')) {
+                        // Send delete request
+                        fetch('/kanban/board/' + boardId + '/delete', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        })
+                        .then(function(response) {
+                            if (response.ok) {
+                                return response.json();
+                            }
+                            throw new Error('Ошибка удаления');
+                        })
+                        .then(function(data) {
+                            if (data.success) {
+                                // Redirect to project boards list or another board
+                                if (data.redirectUrl) {
+                                    window.location.href = data.redirectUrl;
+                                } else {
+                                    window.location.href = '/kanban/personal-projects';
+                                }
+                            } else {
+                                alert('Ошибка: ' + (data.error || 'Не удалось удалить доску'));
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('Error:', error);
+                            alert('Ошибка: ' + error.message);
+                        });
+                    }
+                });
+            });
+
+            // Card menu functionality
+            var currentOpenCardDropdown = null;
+
+            // Toggle card dropdown menu
+            document.addEventListener('click', function(e) {
+                var menuBtn = e.target.closest('.kanban-card-menu-btn');
+                if (menuBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    var cardId = menuBtn.getAttribute('data-card-id');
+                    var dropdown = document.querySelector('.kanban-card-dropdown[data-card-id="' + cardId + '"]');
+
+                    // Move to <body> to fix position:fixed inside a CSS-transformed ancestor (.kanban-card has transform)
+                    if (dropdown && dropdown.parentNode !== document.body) {
+                        document.body.appendChild(dropdown);
+                    }
+
+                    // Close other dropdowns
+                    document.querySelectorAll('.kanban-card-dropdown').forEach(function(dd) {
+                        if (dd !== dropdown) dd.style.display = 'none';
+                    });
+
+                    // Toggle current dropdown
+                    if (dropdown.style.display === 'none' || !dropdown.style.display) {
+                        // Position dropdown relative to button
+                        var rect = menuBtn.getBoundingClientRect();
+                        var dropdownWidth = 200; // min-width from CSS
+                        var dropdownHeight = dropdown.offsetHeight || 200;
+
+                        // Calculate position
+                        var top = rect.bottom + 4; // 4px gap
+                        var left = rect.right - dropdownWidth;
+
+                        // Adjust if dropdown goes off screen
+                        var viewportWidth = window.innerWidth;
+                        var viewportHeight = window.innerHeight;
+
+                        // Check right edge
+                        if (left < 10) {
+                            left = rect.left;
+                        }
+                        if (left + dropdownWidth > viewportWidth - 10) {
+                            left = viewportWidth - dropdownWidth - 10;
+                        }
+
+                        // Check bottom edge - open upwards if needed
+                        if (top + dropdownHeight > viewportHeight - 10) {
+                            top = rect.top - dropdownHeight - 4;
+                            // If still off screen, position at bottom with scroll
+                            if (top < 10) {
+                                top = Math.max(10, viewportHeight - dropdownHeight - 10);
+                            }
+                        }
+
+                        dropdown.style.top = top + 'px';
+                        dropdown.style.left = left + 'px';
+                        dropdown.style.display = 'block';
+                        menuBtn.classList.add('active');
+                        currentOpenCardDropdown = dropdown;
+                    } else {
+                        dropdown.style.display = 'none';
+                        menuBtn.classList.remove('active');
+                        currentOpenCardDropdown = null;
+                    }
+                    return false;
+                }
+            });
+
+            // Prevent clicks inside dropdown from bubbling to card
+            document.addEventListener('click', function(e) {
+                var dropdown = e.target.closest('.kanban-card-dropdown');
+                if (dropdown) {
+                    e.stopPropagation();
+                }
+            });
+
+            // Close card dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (currentOpenCardDropdown && !e.target.closest('.kanban-card-dropdown') && !e.target.closest('.kanban-card-menu-btn')) {
+                    currentOpenCardDropdown.style.display = 'none';
+                    currentOpenCardDropdown = null;
+                    document.querySelectorAll('.kanban-card-menu-btn.active').forEach(function(btn) {
+                        btn.classList.remove('active');
+                    });
+                }
+            });
+
+            // Change card color
+            document.addEventListener('click', function(e) {
+                var colorOption = e.target.closest('.card-color-option');
+                if (colorOption) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    var color = colorOption.getAttribute('data-color');
+                    var dropdown = colorOption.closest('.kanban-card-dropdown');
+                    var cardId = dropdown.getAttribute('data-card-id');
+                    var card = document.querySelector('.kanban-card[data-card-id="' + cardId + '"]');
+
+                    // Send color change request
+                    fetch('/api/kanban/cards/' + cardId, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ borderColor: color || null })
+                    })
+                    .then(function(response) {
+                        if (response.ok) {
+                            return response.json();
+                        }
+                        return response.json().then(function(data) {
+                            throw new Error(data.error || 'Ошибка изменения цвета');
+                        });
+                    })
+                    .then(function(data) {
+                        // Update card color
+                        card.removeAttribute('data-border-color');
+                        if (data.borderColor) {
+                            card.setAttribute('data-border-color', data.borderColor);
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('Error:', error);
+                        alert('Ошибка: ' + error.message);
+                    });
+
+                    // Close menu
+                    dropdown.style.display = 'none';
+                    currentOpenCardDropdown = null;
+                    document.querySelectorAll('.kanban-card-menu-btn.active').forEach(function(btn) {
+                        btn.classList.remove('active');
+                    });
+                }
+            });
+
+            // Rename card
+            document.addEventListener('click', function(e) {
+                var renameBtn = e.target.closest('.rename-card-btn');
+                if (renameBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    var cardId = renameBtn.getAttribute('data-card-id');
+                    var card = document.querySelector('.kanban-card[data-card-id="' + cardId + '"]');
+                    var titleDiv = card.querySelector('.kanban-card-title');
+                    var dropdown = document.querySelector('.kanban-card-dropdown[data-card-id="' + cardId + '"]');
+                    var originalTitle = titleDiv.textContent.trim();
+
+                    // Close dropdown
+                    dropdown.style.display = 'none';
+                    currentOpenCardDropdown = null;
+                    document.querySelectorAll('.kanban-card-menu-btn.active').forEach(function(btn) {
+                        btn.classList.remove('active');
+                    });
+
+                    // Create input
+                    var input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'form-control form-control-sm';
+                    input.value = originalTitle;
+                    input.style.fontWeight = '600';
+                    input.style.fontSize = '0.95rem';
+
+                    titleDiv.style.display = 'none';
+                    titleDiv.parentNode.insertBefore(input, titleDiv);
+                    input.focus();
+                    input.select();
+
+                    var saveRename = function() {
+                        var newTitle = input.value.trim();
+                        if (newTitle && newTitle !== originalTitle) {
+                            // Send rename request
+                            fetch('/api/kanban/cards/' + cardId, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: JSON.stringify({ title: newTitle })
+                            })
+                            .then(function(response) {
+                                if (response.ok) {
+                                    return response.json();
+                                }
+                                return response.json().then(function(data) {
+                                    throw new Error(data.error || 'Ошибка переименования');
+                                });
+                            })
+                            .then(function(data) {
+                                // Update title with the response data
+                                titleDiv.textContent = data.title;
+                            })
+                            .catch(function(error) {
+                                console.error('Error:', error);
+                                alert('Ошибка: ' + error.message);
+                            });
+                        }
+
+                        input.remove();
+                        titleDiv.style.display = 'block';
+                    };
+
+                    input.addEventListener('blur', saveRename);
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            input.blur();
+                        } else if (e.key === 'Escape') {
+                            input.remove();
+                            titleDiv.style.display = 'block';
+                        }
+                    });
+                }
+            });
+
+            // Delete card
+            document.addEventListener('click', function(e) {
+                var deleteBtn = e.target.closest('.delete-card-btn');
+                if (deleteBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    var cardId = deleteBtn.getAttribute('data-card-id');
+                    var card = document.querySelector('.kanban-card[data-card-id="' + cardId + '"]');
+                    var dropdown = document.querySelector('.kanban-card-dropdown[data-card-id="' + cardId + '"]');
+
+                    // Close dropdown
+                    dropdown.style.display = 'none';
+                    currentOpenCardDropdown = null;
+
+                    // Confirm deletion
+                    if (confirm('Вы уверены, что хотите удалить эту карточку?')) {
+                        // Send delete request
+                        fetch('/api/kanban/cards/' + cardId, {
+                            method: 'DELETE',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        })
+                        .then(function(response) {
+                            if (response.ok || response.status === 204) {
+                                // Remove card and its dropdown from DOM
+                                card.remove();
+                                if (dropdown && dropdown.parentNode) dropdown.remove();
+                                // Update column counter
+                                var column = card.closest('.kanban-column');
+                                if (column) {
+                                    var counter = column.querySelector('.column-count');
+                                    if (counter) {
+                                        var count = parseInt(counter.textContent) - 1;
+                                        counter.textContent = count;
+                                    }
+                                }
+                            } else {
+                                return response.json().then(function(data) {
+                                    throw new Error(data.error || 'Не удалось удалить карточку');
+                                });
+                            }
+                        })
+                        .catch(function(error) {
+                            console.error('Error:', error);
+                            alert('Ошибка: ' + error.message);
+                        });
+                    }
+                }
+            });
+        });
+    </script>
 {% endblock %}

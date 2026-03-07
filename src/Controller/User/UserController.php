@@ -4,7 +4,7 @@ namespace App\Controller\User;
 
 use App\Entity\User\User;
 use App\Entity\User\Worker;
-use App\Enum\UserEmployeeStatus;
+use App\Enum\WorkerStatus;
 use App\Enum\UserRole;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\RoleRepository;
@@ -191,7 +191,7 @@ final class UserController extends AbstractController
         $profession = trim((string) ($formData['profession-column'] ?? ''));
         if ($profession !== '') {
             $worker = new Worker();
-            $worker->setUserId($user->getId());
+            $worker->setUser($user);
             $worker->setProfession($profession);
             $description = trim((string) ($formData['description-column'] ?? ''));
             if ($description !== '') {
@@ -239,7 +239,7 @@ final class UserController extends AbstractController
 
         $pagination = $userRepository->findPaginated($page, $limit, $search, $organizationId, $status);
 
-        $statusChoices = UserEmployeeStatus::getChoices();
+        $statusChoices = WorkerStatus::getChoices();
 
         return $this->render('user/all_users.html.twig', [
             'active_tab' => 'all_users',
@@ -283,7 +283,7 @@ final class UserController extends AbstractController
                 'patronymic' => $user->getPatronymic() ?? '-',
                 'login' => $user->getLogin(),
                 'phone' => $user->getPhone() ?? '-',
-                'userEmployeeStatusLabel' => $user->getUserEmployeeStatus()->getLabel(),
+                'userEmployeeStatusLabel' => $user->getWorker()?->getWorkerStatus()->getLabel() ?? '—',
                 'viewUrl' => $this->generateUrl('app_view_user', ['id' => $user->getId(), 'page' => $page]),
             ];
         }
@@ -321,7 +321,7 @@ final class UserController extends AbstractController
         }
 
         // Загружаем Worker для пользователя, если он существует
-        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+        $worker = $workerRepository->findOneBy(['user' => $user]);
 
         return $this->render('user/view_user.html.twig', [
             'active_tab' => 'view_user',
@@ -352,7 +352,7 @@ final class UserController extends AbstractController
             return new Response('Пользователь не найден', Response::HTTP_NOT_FOUND);
         }
 
-        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+        $worker = $workerRepository->findOneBy(['user' => $user]);
 
         return $this->render('user/partials/_modal_view_user_content.html.twig', [
             'user' => $user,
@@ -387,7 +387,7 @@ final class UserController extends AbstractController
         }
 
         // Получаем Worker для пользователя, если он существует
-        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+        $worker = $workerRepository->findOneBy(['user' => $user]);
 
         // Получаем дерево организаций
         $currentUserOrg = $currentUser instanceof User ? $currentUser->getOrganization() : null;
@@ -424,7 +424,7 @@ final class UserController extends AbstractController
             'organizations' => $organizationsWithChildren,
             'roles' => $roles,
             'selected_role_id' => $selectedRoleId,
-            'user_employee_status_choices' => UserEmployeeStatus::getChoices(),
+            'user_employee_status_choices' => WorkerStatus::getChoices(),
         ]);
     }
 
@@ -495,9 +495,10 @@ final class UserController extends AbstractController
 
         $employeeStatusValue = (string) ($formData['user_employee_status'] ?? '');
         if ($employeeStatusValue !== '') {
-            $status = UserEmployeeStatus::tryFrom($employeeStatusValue);
-            if ($status !== null && $user->getUserEmployeeStatus() !== $status) {
-                $user->setUserEmployeeStatus($status);
+            $status = WorkerStatus::tryFrom($employeeStatusValue);
+            $worker = $user->getWorker();
+            if ($status !== null && $worker !== null && $worker->getWorkerStatus() !== $status) {
+                $worker->setWorkerStatus($status);
             }
         }
 
@@ -642,12 +643,12 @@ final class UserController extends AbstractController
 
         // Обновляем или создаем Worker
         $profession = trim((string) ($formData['profession-column'] ?? ''));
-        $worker = $workerRepository->findOneBy(['user_id' => $user->getId()]);
+        $worker = $workerRepository->findOneBy(['user' => $user]);
 
         if ($profession !== '') {
             if (!$worker) {
                 $worker = new Worker();
-                $worker->setUserId($user->getId());
+                $worker->setUser($user);
             }
             $worker->setProfession($profession);
             $description = trim((string) ($formData['description-column'] ?? ''));

@@ -70,7 +70,7 @@
                         data.organizations.forEach(function (o) {
                             rows += '<tr>';
                             rows += '<td class="text-bold-500">' + escapeHtml(String(o.id)) + '</td>';
-                            rows += '<td>' + escapeHtml(o.shortName || '') + '</td>';
+                            rows += '<td>' + escapeHtml(o.name || '') + '</td>';
                             rows += '<td>' + escapeHtml(o.legalAddress || '-') + '</td>';
                             rows += '<td>' + escapeHtml(o.phone) + '</td>';
                             rows += '<td>' + escapeHtml(o.email) + '</td>';
