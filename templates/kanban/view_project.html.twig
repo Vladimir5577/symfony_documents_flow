@@ -7,6 +7,19 @@
 {% endblock %}
 
 {% block main %}
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="mb-0">{{ project.name }}</h1>
         <a href="{{ path('app_kanban_personal_projects') }}" class="btn btn-secondary">
@@ -69,7 +82,9 @@
                                 <thead>
                                     <tr>
                                         <th>Пользователь</th>
+                                        <th>Профессия</th>
                                         <th>Роль</th>
+                                        {% if isProjectAdmin %}<th class="text-end" style="width:100px;">Действия</th>{% endif %}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -82,9 +97,33 @@
                                                     —
                                                 {% endif %}
                                             </td>
+                                            <td>{{ pu.user and pu.user.worker ? (pu.user.worker.profession ?? '—') : '—' }}</td>
                                             <td>
+                                                {% if isProjectAdmin and pu.user and (not project.owner or pu.user.id != project.owner.id) %}
+                                                <form method="post" action="{{ path('app_kanban_change_project_member_role', {id: project.id}) }}" class="d-inline js-change-role-form">
+                                                    <input type="hidden" name="_csrf_token" value="{{ csrf_token('change_member_role_' ~ project.id) }}">
+                                                    <input type="hidden" name="user_id" value="{{ pu.user.id }}">
+                                                    <select name="role" class="form-select form-select-sm" style="width:auto;display:inline-block;min-width:160px;" onchange="this.form.submit()">
+                                                        {% for value, label in kanban_roles|default({}) %}
+                                                            <option value="{{ value }}" {{ pu.role and pu.role.value == value ? 'selected' : '' }}>{{ label }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </form>
+                                                {% else %}
                                                 <span class="badge bg-secondary">{{ pu.role ? pu.role.getLabel : '—' }}</span>
+                                                {% endif %}
                                             </td>
+                                            {% if isProjectAdmin %}
+                                            <td class="text-end">
+                                                {% if pu.user and (not project.owner or pu.user.id != project.owner.id) and (not app.user or pu.user.id != app.user.id) %}
+                                                <form method="post" action="{{ path('app_kanban_remove_project_member', {id: project.id}) }}" class="d-inline js-remove-project-member-form">
+                                                    <input type="hidden" name="_csrf_token" value="{{ csrf_token('remove_project_member_' ~ project.id) }}">
+                                                    <input type="hidden" name="user_id" value="{{ pu.user.id }}">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Исключить из проекта"><i class="bi bi-person-x"></i></button>
+                                                </form>
+                                                {% endif %}
+                                            </td>
+                                            {% endif %}
                                         </tr>
                                     {% endfor %}
                                 </tbody>
@@ -135,4 +174,29 @@
             </div>
         </div>
     </section>
+
+    <script>
+    (function () {
+        document.querySelectorAll('.js-remove-project-member-form').forEach(function (form) {
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var f = e.target;
+                Swal.fire({
+                    title: "Исключить участника из проекта?",
+                    text: "Пользователь будет снят со всех задач и подзадач.",
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonColor: "#d33",
+                    cancelButtonColor: "#6c757d",
+                    confirmButtonText: "Исключить",
+                    cancelButtonText: "Отмена"
+                }).then(function (result) {
+                    if (result.isConfirmed) {
+                        f.submit();
+                    }
+                });
+            });
+        });
+    })();
+    </script>
 {% endblock %}

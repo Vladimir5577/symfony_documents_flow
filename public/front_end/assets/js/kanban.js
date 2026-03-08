@@ -313,9 +313,9 @@ var KanbanApp = (function () {
                 '<i class="bi bi-three-dots-vertical"></i>' +
                 '</button>' +
                 '<div class="kanban-card-dropdown" data-card-id="' + data.id + '" style="display:none;">' +
-                '<button type="button" class="kanban-card-dropdown-item rename-card-btn" data-card-id="' + data.id + '">' +
+                (config.isBoardAdmin ? '<button type="button" class="kanban-card-dropdown-item rename-card-btn" data-card-id="' + data.id + '">' +
                 '<i class="bi bi-pencil"></i> Переименовать' +
-                '</button>' +
+                '</button>' : '') +
                 '<div class="kanban-card-color-section">' +
                 '<div class="kanban-card-color-label">Цвет карточки:</div>' +
                 '<button type="button" class="card-color-option" data-color="" title="Без цвета">' +
@@ -340,9 +340,9 @@ var KanbanApp = (function () {
                 '<span class="color-preview bg-dark"></span>' +
                 '</button>' +
                 '</div>' +
-                '<button type="button" class="kanban-card-dropdown-item delete-card-btn" data-card-id="' + data.id + '">' +
+                (config.isBoardAdmin ? '<button type="button" class="kanban-card-dropdown-item delete-card-btn" data-card-id="' + data.id + '">' +
                 '<i class="bi bi-trash"></i> Удалить' +
-                '</button>' +
+                '</button>' : '') +
                 '</div>';
         }
 

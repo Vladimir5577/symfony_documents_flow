@@ -10,6 +10,7 @@ enum NotificationType: string
     case NEW_INCOMING_DOCUMENT = 'NEW_INCOMING_DOCUMENT';
     case KANBAN_TASK_ASSIGNED_TO_USER = 'KANBAN_TASK_ASSIGNED_TO_USER';
     case USER_ADDED_TO_KANBAN_PROJECT = 'USER_ADDED_TO_KANBAN_PROJECT';
+    case USER_REMOVED_FROM_KANBAN_PROJECT = 'USER_REMOVED_FROM_KANBAN_PROJECT';
     /** @deprecated Use KANBAN_TASK_ASSIGNED_TO_USER. Kept for existing DB records. */
     case TASK_ASSIGNED = 'TASK_ASSIGNED';
     case TASK_MOVED = 'TASK_MOVED';
@@ -23,6 +24,7 @@ enum NotificationType: string
             self::NEW_INCOMING_DOCUMENT => 'Новый входящий документ',
             self::KANBAN_TASK_ASSIGNED_TO_USER => 'Назначена задача',
             self::USER_ADDED_TO_KANBAN_PROJECT => 'Добавлен в проект',
+            self::USER_REMOVED_FROM_KANBAN_PROJECT => 'Исключён из проекта',
             self::TASK_ASSIGNED => 'Назначена задача',
             self::TASK_MOVED => 'Задача перемещена',
             self::TASK_COMMENT_ADDED => 'Новый комментарий в задаче',

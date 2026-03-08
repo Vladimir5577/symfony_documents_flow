@@ -1177,13 +1177,13 @@
                         <span class="board-tab-title">{{ b.title }}</span>
                         <input type="text" class="board-tab-input" value="{{ b.title }}" style="display:none;">
                     </a>
-                    {% if memberRole.value != 'VIEWER' and b.id == board.id %}
+                    {% if isBoardAdmin|default(false) and b.id == board.id %}
                     <button type="button" class="board-tab-menu-btn" data-board-id="{{ b.id }}" title="Меню доски">
                         <i class="bi bi-three-dots-vertical"></i>
                     </button>
                     {% endif %}
                 </div>
-                {% if memberRole.value != 'VIEWER' and b.id == board.id %}
+                {% if isBoardAdmin|default(false) and b.id == board.id %}
                 <div class="board-tab-dropdown" data-board-id="{{ b.id }}" style="display:none;">
                     <button type="button" class="board-tab-dropdown-item rename-board-btn" data-board-id="{{ b.id }}">
                         <i class="bi bi-pencil"></i> Переименовать
@@ -1196,7 +1196,7 @@
             </li>
             {% endfor %}
         </ul>
-        {% if board.project is defined and board.project and memberRole.value != 'VIEWER' %}
+        {% if board.project is defined and board.project and isBoardAdmin|default(false) %}
         <button type="button" class="btn btn-outline-primary btn-sm board-tab-add-btn" data-bs-toggle="modal" data-bs-target="#createBoardModal" title="Добавить доску">
             <i class="bi bi-plus-lg"></i>
         </button>
@@ -1204,7 +1204,7 @@
     </div>
     {% endif %}
 
-    {% if board.project is defined and board.project and memberRole.value != 'VIEWER' %}
+    {% if board.project is defined and board.project and isBoardAdmin|default(false) %}
     {# Модалка: новая доска в проекте #}
     <div class="modal fade" id="createBoardModal" tabindex="-1" aria-labelledby="createBoardModalLabel" aria-hidden="true">
         <div class="modal-dialog">
@@ -1251,7 +1251,9 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
+    {% if board.project is defined and board.project and memberRole.value != 'VIEWER' %}
     {# Данные дерева организаций для модалки «Добавить пользователя» #}
     <div id="org-tree-data-assign-new" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}" class="d-none">
         {% if organizations is defined and organizations|length > 0 %}
@@ -1277,10 +1279,12 @@
                         <span class="column-count" style="display:none;">{{ column.cards|filter(c => not c.archived)|length }}</span>
                     </span>
                     <div class="d-flex align-items-center gap-3">
-                        {% if memberRole.value != 'VIEWER' %}
+                        {% if isBoardAdmin|default(false) %}
                         <button type="button" class="btn btn-sm btn-link text-secondary column-color-btn p-0" title="Цвет столбца" data-column-id="{{ column.id }}">
                             <i class="bi bi-palette"></i>
                         </button>
+                        {% endif %}
+                        {% if memberRole.value != 'VIEWER' %}
                         <button type="button" class="btn btn-sm btn-outline-secondary kanban-add-btn" title="Добавить карточку">
                             <i class="bi bi-plus-lg"></i>
                         </button>
@@ -1297,9 +1301,11 @@
                                 <i class="bi bi-three-dots-vertical"></i>
                             </button>
                             <div class="kanban-card-dropdown" data-card-id="{{ card.id }}" style="display:none;">
+                                {% if isBoardAdmin|default(false) %}
                                 <button type="button" class="kanban-card-dropdown-item rename-card-btn" data-card-id="{{ card.id }}">
                                     <i class="bi bi-pencil"></i> Переименовать
                                 </button>
+                                {% endif %}
                                 <div class="kanban-card-color-section">
                                     <div class="kanban-card-color-label">Цвет карточки:</div>
                                     <button type="button" class="card-color-option" data-color="" title="Без цвета">
@@ -1324,9 +1330,11 @@
                                         <span class="color-preview bg-dark"></span>
                                     </button>
                                 </div>
+                                {% if isBoardAdmin|default(false) %}
                                 <button type="button" class="kanban-card-dropdown-item delete-card-btn" data-card-id="{{ card.id }}">
                                     <i class="bi bi-trash"></i> Удалить
                                 </button>
+                                {% endif %}
                             </div>
                             {% endif %}
                         </div>
@@ -1410,7 +1418,7 @@
                 </div>
             </div>
             {% endfor %}
-            {% if memberRole.value != 'VIEWER' %}
+            {% if isBoardAdmin|default(false) %}
             <div class="kanban-add-column-wrap d-flex align-items-start flex-shrink-0 pt-1">
                 <button type="button" class="btn btn-sm btn-outline-primary" id="add-column-btn">
                     <i class="bi bi-plus-lg me-1"></i>Колонка
@@ -1433,7 +1441,7 @@
                         </button>
                         <span id="save-status" class="badge bg-secondary" style="display:none"></span>
                     </div>
-                    {% if memberRole.value != 'VIEWER' %}
+                    {% if isBoardAdmin|default(false) %}
                     <button type="button" class="btn btn-sm btn-outline-danger" id="task-sidebar-delete" title="Удалить карточку">
                         <i class="bi bi-trash"></i>
                     </button>
@@ -1442,7 +1450,7 @@
                 <div class="task-sidebar-title-row">
                     <div class="task-sidebar-title-block" style="width:100%">
                         <div style="width:100%">
-                            {% if memberRole.value != 'VIEWER' %}
+                            {% if isBoardAdmin|default(false) %}
                             <input type="text" class="form-control form-control-sm fw-bold task-sidebar-title-input mb-1" id="task-sidebar-title-input" placeholder="Название задачи">
                             {% else %}
                             <h5 class="task-sidebar-title" id="task-sidebar-title-input" style="pointer-events:none"></h5>
@@ -1819,6 +1827,7 @@
                 boardId: '{{ board.id }}',
                 projectId: {{ board.project ? board.project.id : 'null' }},
                 canEdit: {{ memberRole.value != 'VIEWER' ? 'true' : 'false' }},
+                isBoardAdmin: {{ isBoardAdmin|default(false) ? 'true' : 'false' }},
                 currentUserId: {{ currentUser.id }},
                 currentUserName: '{{ currentUser.lastname }} {{ currentUser.firstname }}'
             });

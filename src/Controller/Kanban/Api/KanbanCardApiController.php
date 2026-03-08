@@ -165,12 +165,16 @@ final class KanbanCardApiController extends AbstractController
             return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+        $board = $card->getColumn()->getBoard();
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
 
         $payload = json_decode($request->getContent(), true) ?? [];
+        $memberRole = $this->kanbanService->getMemberRole($board, $user);
 
         if (isset($payload['title']) && trim($payload['title']) !== '') {
-            $card->setTitle(trim($payload['title']));
+            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
+                $card->setTitle(trim($payload['title']));
+            }
         }
         if (array_key_exists('description', $payload)) {
             $card->setDescription($payload['description']);
@@ -418,7 +422,7 @@ final class KanbanCardApiController extends AbstractController
             return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_ADMIN);
 
         $this->em->remove($card);
         $this->em->flush();
@@ -437,7 +441,7 @@ final class KanbanCardApiController extends AbstractController
             return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_ADMIN);
 
         $card->setIsArchived(!$card->isArchived());
         $this->em->flush();

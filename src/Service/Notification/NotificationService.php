@@ -97,6 +97,17 @@ class NotificationService
         $this->em->flush();
     }
 
+    public function notifyUserRemovedFromKanbanProject(User $recipient, string $projectName, string $link): void
+    {
+        $this->create(
+            $recipient,
+            NotificationType::USER_REMOVED_FROM_KANBAN_PROJECT,
+            'Вас исключили из проекта «' . $projectName . '»',
+            link: $link,
+        );
+        $this->em->flush();
+    }
+
     public function notifyTaskMoved(
         User $recipient,
         string $taskTitle,

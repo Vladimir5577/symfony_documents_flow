@@ -4,6 +4,8 @@
     // var POLL_INTERVAL = 10 * 1000;  // 10 seconds
     var POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
     var STORAGE_KEY = 'notifications_last_check';
+    var DISMISSED_KEY = 'notifications_dismissed_toast_ids';
+    var DISMISSED_LIMIT = 100;
 
     var badge = document.getElementById('notification-badge');
     var list = document.getElementById('notification-list');
@@ -26,8 +28,35 @@
         return div.innerHTML;
     }
 
+    // ===== Dismissed toasts (localStorage) =====
+    function getDismissedIds() {
+        try {
+            var raw = localStorage.getItem(DISMISSED_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function addDismissedId(id) {
+        var ids = getDismissedIds();
+        if (ids.indexOf(id) !== -1) return;
+        ids.push(id);
+        if (ids.length > DISMISSED_LIMIT) {
+            ids = ids.slice(-DISMISSED_LIMIT);
+        }
+        try {
+            localStorage.setItem(DISMISSED_KEY, JSON.stringify(ids));
+        } catch (e) {}
+    }
+
+    function isDismissed(id) {
+        return getDismissedIds().indexOf(id) !== -1;
+    }
+
     // ===== Toast notification =====
-    function showToast(title, text, type, duration) {
+    // notificationId - optional; if set, closing the toast saves id to localStorage and it won't show again
+    function showToast(title, text, type, duration, notificationId) {
         if (!toastStack) return;
         type = type || 'info';
         duration = duration || 5000;
@@ -35,6 +64,9 @@
         var toast = document.createElement('div');
         toast.className = 'toast-notify';
         toast.setAttribute('data-type', type);
+        if (notificationId != null) {
+            toast.setAttribute('data-notification-id', String(notificationId));
+        }
 
         toast.innerHTML =
             '<div class="toast-notify__icon">' + (toastIcons[type] || toastIcons.info) + '</div>' +
@@ -62,6 +94,8 @@
 
         closeBtn.addEventListener('click', function () {
             clearTimeout(timeout);
+            var nid = toast.getAttribute('data-notification-id');
+            if (nid) addDismissedId(nid);
             closeToast(toast);
         });
 
@@ -157,10 +191,12 @@
                 renderNotifications(data.notifications);
 
                 if (showNewToasts && data.notifications) {
-                    var unread = data.notifications.filter(function (n) { return !n.isRead; });
+                    var unread = data.notifications.filter(function (n) {
+                        return !n.isRead && !isDismissed(String(n.id));
+                    });
                     unread.slice(0, 10).forEach(function (n, i) {
                         setTimeout(function () {
-                            showToast(n.title, n.text || n.message || '', 'info');
+                            showToast(n.title, n.text || n.message || '', 'info', 5000, n.id);
                         }, i * 300);
                     });
                 }

@@ -6,6 +6,8 @@ use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanBoardRepository;
+use App\Repository\Kanban\KanbanCardRepository;
+use App\Repository\Kanban\KanbanChecklistItemRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\Organization\OrganizationRepository;
@@ -25,6 +27,8 @@ final class ProjectKanbanController extends AbstractController
         private readonly KanbanBoardRepository $boardRepo,
         private readonly KanbanProjectRepository $projectRepo,
         private readonly KanbanProjectUserRepository $projectUserRepo,
+        private readonly KanbanCardRepository $cardRepo,
+        private readonly KanbanChecklistItemRepository $checklistRepo,
         private readonly KanbanService $kanbanService,
         private readonly NotificationService $notificationService,
     ) {
@@ -142,6 +146,7 @@ final class ProjectKanbanController extends AbstractController
             'active_tab' => 'kanban_boards',
             'board' => $board,
             'memberRole' => $memberRole,
+            'isBoardAdmin' => $memberRole === KanbanBoardMemberRole::KANBAN_ADMIN,
             'currentUser' => $user,
             'projectBoards' => $projectBoards,
             'organizations' => $organizations,
@@ -161,7 +166,7 @@ final class ProjectKanbanController extends AbstractController
 
         $firstBoard = $project->getBoards()->first();
         if ($firstBoard) {
-            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
@@ -231,6 +236,7 @@ final class ProjectKanbanController extends AbstractController
             'projectBoards' => $projectBoards,
             'projectUsers' => $projectUsers,
             'isProjectAdmin' => $isProjectAdmin,
+            'kanban_roles' => KanbanBoardMemberRole::getChoices(),
         ]);
     }
 
@@ -327,11 +333,13 @@ final class ProjectKanbanController extends AbstractController
         $currentMemberIds = array_values(array_filter($currentMemberIds));
         $initialUsers = $userRepository->findByIds($currentMemberIds);
 
+        $kanbanRoles = KanbanBoardMemberRole::getChoices();
         $renderForm = function (array $formUserIds = [], array $users = []) use (
             $project,
             $organizationsWithChildren,
             $currentMemberIds,
             $userRepository,
+            $kanbanRoles,
         ): Response {
             $memberIds = $formUserIds !== [] ? $formUserIds : $currentMemberIds;
             if ($users === [] && $memberIds !== []) {
@@ -344,6 +352,7 @@ final class ProjectKanbanController extends AbstractController
                 'projectUsers' => $projectUsers,
                 'organizations' => $organizationsWithChildren,
                 'users' => $users,
+                'kanban_roles' => $kanbanRoles,
             ]);
         };
 
@@ -374,15 +383,27 @@ final class ProjectKanbanController extends AbstractController
         $currentUser = $this->getUser();
         $newMemberUserIds = array_diff($userIds, $currentMemberIds);
 
+        $memberRoles = $request->request->all('member_roles');
+        $memberRoles = is_array($memberRoles) ? $memberRoles : [];
+
         foreach ($userIds as $userId) {
             $memberUser = $userRepository->find($userId);
             if (!$memberUser) {
                 continue;
             }
+            $role = KanbanBoardMemberRole::KANBAN_EDITOR;
+            if ($memberUser->getId() === $ownerId) {
+                $role = KanbanBoardMemberRole::KANBAN_ADMIN;
+            } elseif (isset($memberRoles[$userId])) {
+                $requestedRole = KanbanBoardMemberRole::tryFrom((string) $memberRoles[$userId]);
+                if ($requestedRole !== null) {
+                    $role = $requestedRole;
+                }
+            }
             $pu = new KanbanProjectUser();
             $pu->setKanbanProject($project);
             $pu->setUser($memberUser);
-            $pu->setRole($memberUser->getId() === $ownerId ? KanbanBoardMemberRole::KANBAN_ADMIN : KanbanBoardMemberRole::KANBAN_EDITOR);
+            $pu->setRole($role);
             $entityManager->persist($pu);
         }
         $entityManager->flush();
@@ -397,6 +418,149 @@ final class ProjectKanbanController extends AbstractController
 
         $this->addFlash('success', 'Участники проекта обновлены.');
         return $this->redirectToRoute('app_kanban_project', ['id' => $project->getId()]);
+    }
+
+    #[Route('/kanban_project/{id}/remove_member', name: 'app_kanban_remove_project_member', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function removeProjectMember(
+        int $id,
+        Request $request,
+        UserRepository $userRepository,
+        EntityManagerInterface $entityManager,
+    ): Response {
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+
+        $project = $this->projectRepo->find($id);
+        if (!$project) {
+            throw $this->createNotFoundException('Проект не найден.');
+        }
+
+        $firstBoard = $project->getBoards()->first();
+        if ($firstBoard) {
+            $this->kanbanService->requireRole($firstBoard, $currentUser, KanbanBoardMemberRole::KANBAN_ADMIN);
+        } elseif ($project->getOwner() !== $currentUser && !$this->projectUserRepo->findByProjectAndUser($project, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к проекту.');
+        }
+
+        if (!$this->isCsrfTokenValid('remove_project_member_' . $id, $request->request->get('_csrf_token', ''))) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $memberUserId = (int) $request->request->get('user_id', 0);
+        if ($memberUserId <= 0) {
+            $this->addFlash('error', 'Не указан участник.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $memberUser = $userRepository->find($memberUserId);
+        if (!$memberUser) {
+            $this->addFlash('error', 'Участник не найден.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        if ($memberUserId === $currentUser->getId()) {
+            $this->addFlash('error', 'Нельзя удалить себя из проекта.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $owner = $project->getOwner();
+        if ($owner && $owner->getId() === $memberUserId) {
+            $this->addFlash('error', 'Нельзя удалить владельца проекта.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $projectUser = $this->projectUserRepo->findByProjectAndUser($project, $memberUser);
+        if (!$projectUser) {
+            $this->addFlash('error', 'Пользователь не является участником проекта.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        foreach ($this->cardRepo->findCardsInProjectWithAssignee($project, $memberUser) as $card) {
+            $card->removeAssignee($memberUser);
+        }
+
+        foreach ($this->checklistRepo->findSubtasksInProjectWithUser($project, $memberUser) as $subtask) {
+            $subtask->setUser(null);
+        }
+
+        $entityManager->remove($projectUser);
+        $entityManager->flush();
+
+        $projectLink = $this->generateUrl('app_kanban_project', ['id' => $project->getId()]);
+        $this->notificationService->notifyUserRemovedFromKanbanProject(
+            $memberUser,
+            $project->getName() ?? 'Проект',
+            $projectLink,
+        );
+
+        $this->addFlash('success', 'Участник исключён из проекта.');
+        return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+    }
+
+    #[Route('/kanban_project/{id}/change_member_role', name: 'app_kanban_change_project_member_role', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function changeProjectMemberRole(
+        int $id,
+        Request $request,
+        UserRepository $userRepository,
+        EntityManagerInterface $entityManager,
+    ): Response {
+        /** @var User $currentUser */
+        $currentUser = $this->getUser();
+
+        $project = $this->projectRepo->find($id);
+        if (!$project) {
+            throw $this->createNotFoundException('Проект не найден.');
+        }
+
+        $firstBoard = $project->getBoards()->first();
+        if ($firstBoard) {
+            $this->kanbanService->requireRole($firstBoard, $currentUser, KanbanBoardMemberRole::KANBAN_ADMIN);
+        } elseif ($project->getOwner() !== $currentUser && !$this->projectUserRepo->findByProjectAndUser($project, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к проекту.');
+        }
+
+        if (!$this->isCsrfTokenValid('change_member_role_' . $id, $request->request->get('_csrf_token', ''))) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $memberUserId = (int) $request->request->get('user_id', 0);
+        if ($memberUserId <= 0) {
+            $this->addFlash('error', 'Не указан участник.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $owner = $project->getOwner();
+        if ($owner && $owner->getId() === $memberUserId) {
+            $this->addFlash('error', 'Роль владельца нельзя изменить.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $memberUser = $userRepository->find($memberUserId);
+        if (!$memberUser) {
+            $this->addFlash('error', 'Участник не найден.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $projectUser = $this->projectUserRepo->findByProjectAndUser($project, $memberUser);
+        if (!$projectUser) {
+            $this->addFlash('error', 'Пользователь не является участником проекта.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $roleValue = trim((string) ($request->request->get('role', '')));
+        $newRole = $roleValue !== '' ? KanbanBoardMemberRole::tryFrom($roleValue) : null;
+        if ($newRole === null) {
+            $this->addFlash('error', 'Некорректная роль.');
+            return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
+        }
+
+        $projectUser->setRole($newRole);
+        $entityManager->flush();
+
+        $this->addFlash('success', 'Роль участника обновлена.');
+        return $this->redirectToRoute('app_kanban_project', ['id' => $id]);
     }
 
     #[Route('/kanban_create_project', name: 'app_kanban_create_project', methods: ['GET'])]
@@ -541,7 +705,7 @@ final class ProjectKanbanController extends AbstractController
         }
 
         try {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
         } catch (\Exception $e) {
             return $this->json(['success' => false, 'error' => 'Недостаточно прав для редактирования.'], 403);
         }

@@ -4,6 +4,8 @@ namespace App\Repository\Kanban;
 
 use App\Entity\Kanban\KanbanCard;
 use App\Entity\Kanban\KanbanColumn;
+use App\Entity\Kanban\Project\KanbanProject;
+use App\Entity\User\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -47,6 +49,25 @@ class KanbanCardRepository extends ServiceEntityRepository
             ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
+    }
+
+    /**
+     * Карточки проекта, где указан пользователь в assignees.
+     *
+     * @return KanbanCard[]
+     */
+    public function findCardsInProjectWithAssignee(KanbanProject $project, User $user): array
+    {
+        return $this->createQueryBuilder('c')
+            ->innerJoin('c.column', 'col')->addSelect('col')
+            ->innerJoin('col.board', 'b')
+            ->innerJoin('c.assignees', 'a')
+            ->where('b.project = :project')
+            ->andWhere('a = :user')
+            ->setParameter('project', $project)
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->getResult();
     }
 
     /**

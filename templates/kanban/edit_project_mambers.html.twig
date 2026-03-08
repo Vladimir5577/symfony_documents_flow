@@ -45,7 +45,7 @@
 
                                 <div class="row">
                                     <div class="col-12">
-                                        <div class="form-group">
+                                        <div class="form-group mb-3">
                                             <label for="project_member_users">Участники проекта</label>
                                             <div id="project_member_users_trigger" style="cursor: pointer;" title="Нажмите, чтобы выбрать по организациям">
                                                 <select id="project_member_users" class="form-control" name="user_ids[]" multiple>
@@ -66,6 +66,43 @@
                                                         data-bs-target="#organizationUserModal">
                                                     Выбрать по организациям
                                                 </button>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Роли участников</label>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-hover mb-0">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Участник</th>
+                                                            <th style="width:220px;">Роль</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="members-roles-tbody">
+                                                        {% set ownerId = project.owner ? project.owner.id : null %}
+                                                        {% for pu in projectUsers %}
+                                                            {% if pu.user %}
+                                                            <tr data-user-id="{{ pu.user.id }}">
+                                                                <td>{{ pu.user.lastname }} {{ pu.user.firstname }}{% if pu.user.patronymic %} {{ pu.user.patronymic }}{% endif %}</td>
+                                                                <td>
+                                                                    {% if pu.user.id == ownerId %}
+                                                                        <select name="member_roles[{{ pu.user.id }}]" class="form-select form-select-sm" disabled>
+                                                                            <option value="KANBAN_ADMIN" selected>{{ kanban_roles['KANBAN_ADMIN'] ?? 'Администратор канбан' }}</option>
+                                                                        </select>
+                                                                        <input type="hidden" name="member_roles[{{ pu.user.id }}]" value="KANBAN_ADMIN">
+                                                                    {% else %}
+                                                                        <select name="member_roles[{{ pu.user.id }}]" class="form-select form-select-sm">
+                                                                            {% for value, label in kanban_roles %}
+                                                                                <option value="{{ value }}" {{ pu.role and pu.role.value == value ? 'selected' : '' }}>{{ label }}</option>
+                                                                            {% endfor %}
+                                                                        </select>
+                                                                    {% endif %}
+                                                                </td>
+                                                            </tr>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         </div>
                                     </div>
@@ -94,11 +131,47 @@
 
     {% include 'document/partials/_organization_user_modal.html.twig' %}
 
+    <div id="members-roles-data" data-role-choices="{{ kanban_roles|json_encode }}" data-owner-id="{{ project.owner ? project.owner.id : '' }}"></div>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const usersSelect = document.getElementById('project_member_users');
             const usersTrigger = document.getElementById('project_member_users_trigger');
+            const tbody = document.getElementById('members-roles-tbody');
+            const dataEl = document.getElementById('members-roles-data');
+            const roleChoices = dataEl && dataEl.dataset.roleChoices ? JSON.parse(dataEl.dataset.roleChoices) : {};
+            const ownerId = dataEl && dataEl.dataset.ownerId ? String(dataEl.dataset.ownerId) : '';
             let choicesInstance = null;
+
+            function syncMembersTable() {
+                if (!tbody || !usersSelect) return;
+                const selected = Array.from(usersSelect.selectedOptions || usersSelect.querySelectorAll('option:checked'));
+                const currentIds = new Set(Array.from(tbody.querySelectorAll('tr[data-user-id]')).map(function (tr) { return tr.dataset.userId; }));
+                const selectedIds = new Set(selected.map(function (opt) { return String(opt.value); }));
+
+                selected.forEach(function (opt) {
+                    const id = String(opt.value);
+                    const name = (opt.textContent || opt.label || '').trim() || 'Пользователь #' + id;
+                    if (currentIds.has(id)) return;
+                    const tr = document.createElement('tr');
+                    tr.dataset.userId = id;
+                    let roleHtml;
+                    if (id === ownerId) {
+                        roleHtml = '<select class="form-select form-select-sm" disabled><option value="KANBAN_ADMIN">' + (roleChoices['KANBAN_ADMIN'] || 'Администратор канбан') + '</option></select><input type="hidden" name="member_roles[' + id + ']" value="KANBAN_ADMIN">';
+                    } else {
+                        roleHtml = '<select name="member_roles[' + id + ']" class="form-select form-select-sm">' +
+                            Object.keys(roleChoices).map(function (v) {
+                                return '<option value="' + v + '"' + (v === 'KANBAN_EDITOR' ? ' selected' : '') + '>' + (roleChoices[v] || v) + '</option>';
+                            }).join('') + '</select>';
+                    }
+                    tr.innerHTML = '<td>' + name + '</td><td>' + roleHtml + '</td>';
+                    tbody.appendChild(tr);
+                    currentIds.add(id);
+                });
+
+                Array.from(tbody.querySelectorAll('tr[data-user-id]')).forEach(function (tr) {
+                    if (!selectedIds.has(tr.dataset.userId)) tr.remove();
+                });
+            }
 
             if (usersSelect && window.Choices) {
                 choicesInstance = new Choices(usersSelect, {
@@ -107,6 +180,12 @@
                     itemSelectText: '',
                     noChoicesText: 'Нажмите на поле или «Выбрать по организациям»',
                 });
+                usersSelect.addEventListener('change', syncMembersTable);
+            }
+
+            var addBtn = document.getElementById('add-selected-users-btn');
+            if (addBtn) {
+                addBtn.addEventListener('click', function () { setTimeout(syncMembersTable, 50); });
             }
 
             if (usersTrigger) {
