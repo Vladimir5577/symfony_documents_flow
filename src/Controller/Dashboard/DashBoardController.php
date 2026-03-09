@@ -3,6 +3,9 @@
 namespace App\Controller\Dashboard;
 
 use App\Entity\User\User;
+use Grpc\ChannelCredentials;
+use Grpc\TestService\GreetServiceClient;
+use Grpc\TestService\NoParam;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -31,5 +34,26 @@ final class DashBoardController extends AbstractController
             'user_display_name' => $userDisplayName,
             'organization' => $organization,
         ]);
+    }
+
+
+    #[Route('/call_grpc', name: 'app_call_grpc')]
+    public function callGRPC(): Response
+    {
+        $client = new GreetServiceClient('host.docker.internal:8070', [
+            'credentials' => ChannelCredentials::createInsecure(),
+        ]);
+
+        $request = new NoParam();
+        [$reply, $status] = $client->SayHello($request)->wait();
+
+        if ($status->code !== \Grpc\STATUS_OK) {
+            return $this->json([
+                'error' => $status->details ?? 'gRPC call failed',
+                'code' => $status->code,
+            ], 502);
+        }
+
+        return $this->json(['message' => $reply->getMessage()]);
     }
 }

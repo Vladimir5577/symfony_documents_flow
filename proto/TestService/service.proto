@@ -1,0 +1,34 @@
+syntax="proto3";
+
+package TestService;
+
+option php_namespace = "Grpc\\TestService";
+option php_metadata_namespace = "Grpc\\GPBMetadata";
+
+service GreetService {
+    rpc SayHello(NoParam) returns (HelloResponse);
+
+    rpc SayHelloServerStreaming(NamesList) returns (stream HelloResponse);
+
+    rpc SayHelloClientStream(stream HelloRequest) returns (MessagesList);
+
+    rpc SayHelloBidirectionalStreaming(stream HelloRequest) returns (stream HelloResponse);
+}
+
+message NoParam{};
+
+message HelloRequest {
+    string name = 1;
+}
+
+message HelloResponse {
+    string message = 1;
+}
+
+message NamesList {
+    repeated string names = 1;
+}
+
+message MessagesList {
+    repeated string messages = 1;
+}

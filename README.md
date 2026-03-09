@@ -129,6 +129,43 @@ $ php bin/console app:import-workers-from-excel
 
 // ====================================
 
+    GRPC
+    ----
+Install protobuf:
+$ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+$ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+    Make sure GOPATH/bin is in your PATH (usually $HOME/go/bin):
+$ export PATH=$PATH:$(go env GOPATH)/bin
+
+    Check installation:
+$ protoc-gen-go --version
+$ protoc-gen-go-grpc --version
+
+    Install Protocol Buffers compiler (protoc)
+    This is needed for both Go and PHP stub generation.
+
+$ sudo apt install -y protobuf-compiler
+then check it
+$ protoc --version
+
+
+$ sudo apt install protobuf-compiler-grpc
+then check for php
+$ grpc_php_plugin --help
+
+    Generate
+
+$ protoc \
+--proto_path=proto \
+--php_out=proto_generated \
+--grpc_out=proto_generated \
+--plugin=protoc-gen-grpc=$(which grpc_php_plugin) \
+proto/TestService/service.proto
+
+
+// ====================================
+
     Grafana.
     --------
 Run docker:
