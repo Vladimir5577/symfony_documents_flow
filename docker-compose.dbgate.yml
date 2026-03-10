@@ -1,0 +1,26 @@
+services:
+
+  dbgate:
+    container_name: dbgate
+    image: dbgate/dbgate:5.5.6-alpine
+    restart: always
+    ports:
+      - 8087:3000
+    volumes:
+      - ./../postgres_data:/data/postgres
+    environment:
+      CONNECTIONS: con1,con2,con3,con4
+
+      LABEL_con2: Postgres
+      SERVER_con2: postgres
+      USER_con2: ${DB_USERNAME}
+      PASSWORD_con2: ${DB_PASSWORD}
+      PORT_con2: 5432
+      ENGINE_con2: postgres@dbgate-plugin-postgres
+    networks:
+      - project-net
+
+networks:
+  project-net:
+    external: true
+    name: project-net

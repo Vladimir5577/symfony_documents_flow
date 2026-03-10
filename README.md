@@ -3,7 +3,7 @@
 ### Install in docker:
 1. Copy .env.example to .env (optionally put you credentials inside).
 ```bash
-$ cp .env .env.local
+$ cp .env.example .env
 ````
 
 2. Build docker --- only for the first time
@@ -52,6 +52,11 @@ $ chown -R www-data:www-data /var/www/.cache
 ```bash
 $ chown -R www-data:www-data /uploads
 $ chmod -R 775 /uploads
+```
+
+11. If need run dbgate
+```bash
+$ docker compose -f docker-compose.dbgate.yml up -d
 ```
 
 ## Xdebug
@@ -105,16 +110,6 @@ Ubuntu/Debian:
 
 sudo apt-get update
 sudo apt-get install libreoffice -y
-
-// ==================================
-Convert html to pdf
-
-apt-get update
-apt-get install -y wget fontconfig libxrender1 xfonts-75dpi xfonts-base
-
-wget https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.buster_amd64.deb
-
-dpkg -i wkhtmltox_0.12.6-1.buster_amd64.deb
 
 // ====================================
 
