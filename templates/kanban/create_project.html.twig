@@ -118,7 +118,7 @@
         </div>
     </section>
 
-    <div id="org-tree-data" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}">
+    <div id="org-tree-data" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}" data-users-search-url="{{ path('app_document_users_search') }}">
         {% if organizations is defined and organizations|length > 0 %}
             {% for org in organizations %}
                 {% if org %}

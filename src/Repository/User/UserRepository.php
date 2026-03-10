@@ -69,7 +69,7 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         $offset = ($page - 1) * $limit;
 
         $qb = $this->createQueryBuilder('u')
-            ->orderBy('u.id', 'ASC');
+            ->orderBy('u.lastname', 'ASC');
 
         $countQb = $this->createQueryBuilder('u')
             ->select('COUNT(u.id)');

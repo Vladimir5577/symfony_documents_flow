@@ -187,6 +187,60 @@ var KanbanApp = (function () {
                 updateColumnCounts();
             });
         });
+
+        // ── Column drag & drop (admin only) ──
+        if (config.isBoardAdmin) {
+            var board = document.getElementById("kanban-board");
+            if (board) {
+                var columnDrake = dragula([board], {
+                    direction: "horizontal",
+                    moves: function (el, source, handle) {
+                        if (!el.classList.contains("kanban-column")) return false;
+                        var header = el.querySelector(".kanban-column-header");
+                        return header && header.contains(handle);
+                    },
+                    invalid: function (el) {
+                        return el.tagName === "BUTTON" || el.tagName === "INPUT" ||
+                               el.tagName === "I" || el.closest && (el.closest("button") || el.closest("input"));
+                    }
+                });
+
+                columnDrake.on("drop", function (el, target) {
+                    if (!target) return;
+                    var columnId = el.getAttribute("data-column-id");
+                    var cols = Array.from(target.querySelectorAll(".kanban-column"));
+                    var idx = cols.indexOf(el);
+                    var position;
+
+                    if (cols.length <= 1) {
+                        position = 1.0;
+                    } else if (idx === 0) {
+                        var nextPos = parseFloat(cols[1].getAttribute("data-position") || "1");
+                        position = nextPos / 2;
+                    } else if (idx === cols.length - 1) {
+                        var prevPos = parseFloat(cols[idx - 1].getAttribute("data-position") || "0");
+                        position = prevPos + 1.0;
+                    } else {
+                        var prevP = parseFloat(cols[idx - 1].getAttribute("data-position") || "0");
+                        var nextP = parseFloat(cols[idx + 1].getAttribute("data-position") || "0");
+                        position = (prevP + nextP) / 2;
+                    }
+
+                    el.setAttribute("data-position", position);
+
+                    apiFetch("/api/kanban/boards/" + config.boardId + "/columns/" + columnId, {
+                        method: "PATCH",
+                        body: JSON.stringify({ position: position })
+                    }).then(function (data) {
+                        if (data && data.position !== undefined) {
+                            el.setAttribute("data-position", data.position);
+                        }
+                    }).catch(function (err) {
+                        showToast(err.message);
+                    });
+                });
+            }
+        }
     }
 
     function updateColumnCounts() {
@@ -453,6 +507,60 @@ var KanbanApp = (function () {
         });
     }
 
+    // ── Column rename (admin only) ──
+
+    function initColumnRename() {
+        if (!config.isBoardAdmin) return;
+
+        document.addEventListener("dblclick", function (e) {
+            var titleSpan = e.target.closest(".column-title");
+            if (!titleSpan) return;
+
+            var header = titleSpan.closest(".kanban-column-header");
+            var colEl = titleSpan.closest(".kanban-column");
+            if (!header || !colEl) return;
+
+            var columnId = colEl.getAttribute("data-column-id");
+            var oldTitle = titleSpan.textContent.trim();
+
+            var input = document.createElement("input");
+            input.type = "text";
+            input.className = "column-title-input";
+            input.value = oldTitle;
+            titleSpan.style.display = "none";
+            titleSpan.parentNode.insertBefore(input, titleSpan.nextSibling);
+            input.focus();
+            input.select();
+
+            var committed = false;
+
+            function commit() {
+                if (committed) return;
+                committed = true;
+                var newTitle = (input.value || "").trim();
+                input.remove();
+                titleSpan.style.display = "";
+
+                if (!newTitle || newTitle === oldTitle) return;
+
+                titleSpan.textContent = newTitle;
+                apiFetch("/api/kanban/boards/" + config.boardId + "/columns/" + columnId, {
+                    method: "PATCH",
+                    body: JSON.stringify({ title: newTitle })
+                }).catch(function (err) {
+                    titleSpan.textContent = oldTitle;
+                    showToast(err.message);
+                });
+            }
+
+            input.addEventListener("blur", commit);
+            input.addEventListener("keydown", function (ev) {
+                if (ev.key === "Enter") { ev.preventDefault(); commit(); }
+                if (ev.key === "Escape") { input.value = oldTitle; commit(); }
+            });
+        });
+    }
+
     // ── Update card on board ──
 
     function updateCardOnBoard(data) {
@@ -580,6 +688,7 @@ var KanbanApp = (function () {
         initAssignNewUserModal();
         initLabels();
         initBorderColor();
+        initSidebarDropdownClose();
     }
 
     function openSidebar(cardId) {
@@ -1465,6 +1574,34 @@ select.addEventListener("change", function () {
         });
     }
 
+    // ── Close sidebar dropdowns ──
+
+    function closeSidebarDropdowns(except) {
+        var ids = ["assignee-dropdown", "label-dropdown"];
+        ids.forEach(function (id) {
+            if (id === except) return;
+            var el = document.getElementById(id);
+            if (el) el.style.display = "none";
+        });
+    }
+
+    function initSidebarDropdownClose() {
+        document.addEventListener("click", function (e) {
+            var adrop = document.getElementById("assignee-dropdown");
+            var ldrop = document.getElementById("label-dropdown");
+            if (adrop && adrop.style.display !== "none" &&
+                !e.target.closest("#assignee-dropdown") &&
+                !e.target.closest("#assignee-add-btn")) {
+                adrop.style.display = "none";
+            }
+            if (ldrop && ldrop.style.display !== "none" &&
+                !e.target.closest("#label-dropdown") &&
+                !e.target.closest("#labels-add-btn")) {
+                ldrop.style.display = "none";
+            }
+        });
+    }
+
     // ── Assignees ──
 
     function renderAssignees(list) {
@@ -1497,6 +1634,7 @@ select.addEventListener("change", function () {
 
         addBtn.addEventListener("click", function (e) {
             e.stopPropagation();
+            closeSidebarDropdowns("assignee-dropdown");
             var isVisible = dropdown.style.display !== "none";
             dropdown.style.display = isVisible ? "none" : "block";
             if (!isVisible) {
@@ -1540,11 +1678,17 @@ select.addEventListener("change", function () {
         var results = document.getElementById("assignee-results");
         if (!results) return;
 
+        results.innerHTML = '<div class="text-center text-muted py-2"><span class="spinner-border spinner-border-sm me-1"></span>Загрузка…</div>';
+
         var url = "/api/kanban/users/search?query=" + encodeURIComponent(query);
         if (config.projectId) url += "&project_id=" + config.projectId;
         apiFetch(url)
             .then(function (users) {
                 results.innerHTML = "";
+                if (!(users || []).length) {
+                    results.innerHTML = '<div class="text-muted text-center py-2">Не найдено</div>';
+                    return;
+                }
                 (users || []).forEach(function (u) {
                     var item = document.createElement("div");
                     item.className = "dropdown-item d-flex align-items-center justify-content-between";
@@ -1593,10 +1737,17 @@ select.addEventListener("change", function () {
         var chips = document.getElementById("labels-chips");
         if (!chips) return;
         chips.innerHTML = "";
+        var canRemove = config.canEdit;
         (list || []).forEach(function (lbl) {
             var chip = document.createElement("span");
             chip.className = "badge " + escapeHtml(lbl.color) + " me-1 mb-1";
-            chip.textContent = lbl.name;
+            if (canRemove) {
+                chip.style.cursor = "pointer";
+                chip.innerHTML = escapeHtml(lbl.name) + ' <span style="opacity:0.7">&times;</span>';
+                chip.addEventListener("click", function () { toggleLabel(lbl); });
+            } else {
+                chip.textContent = lbl.name;
+            }
             chips.appendChild(chip);
         });
     }
@@ -1609,13 +1760,15 @@ select.addEventListener("change", function () {
 
         addBtn.addEventListener("click", function (e) {
             e.stopPropagation();
+            closeSidebarDropdowns("label-dropdown");
             var isVisible = dropdown.style.display !== "none";
             dropdown.style.display = isVisible ? "none" : "block";
             if (!isVisible) loadBoardLabels();
         });
 
         if (createBtn) {
-            createBtn.addEventListener("click", function () {
+            createBtn.addEventListener("click", function (e) {
+                e.stopPropagation();
                 var nameInput = document.getElementById("new-label-name");
                 var colorSelect = document.getElementById("new-label-color");
                 var name = nameInput ? nameInput.value.trim() : "";
@@ -1627,6 +1780,7 @@ select.addEventListener("change", function () {
                     body: JSON.stringify({ name: name, color: color })
                 }).then(function () {
                     if (nameInput) nameInput.value = "";
+                    if (colorSelect) colorSelect.value = "bg-primary";
                     loadBoardLabels();
                 }).catch(function (err) { showToast(err.message); });
             });
@@ -1637,6 +1791,8 @@ select.addEventListener("change", function () {
         if (!currentCardData) return;
         var listEl = document.getElementById("label-list");
         if (!listEl) return;
+
+        listEl.innerHTML = '<div class="text-center text-muted py-2"><span class="spinner-border spinner-border-sm me-1"></span>Загрузка…</div>';
 
         apiFetch("/api/kanban/boards/" + currentCardData.boardId + "/labels")
             .then(function (allLabels) {
@@ -1708,6 +1864,7 @@ select.addEventListener("change", function () {
         initCardCreation();
         initColumnCreation();
         initColumnColors();
+        initColumnRename();
         initCardSidebar();
 
         var params = new URLSearchParams(window.location.search);
@@ -1717,5 +1874,5 @@ select.addEventListener("change", function () {
         }
     }
 
-    return { init: init };
+    return { init: init, apiFetch: apiFetch, showToast: showToast };
 })();

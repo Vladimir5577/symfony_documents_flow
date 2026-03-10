@@ -9,6 +9,16 @@
                 <p class="text-muted small mb-2">Выберите организацию — ниже появятся работники. Отметьте нужных; они попадут в список «Выбранные пользователи». Затем нажмите «Добавить выбранных пользователей».</p>
                 <div class="d-flex flex-column gap-3">
                     <div>
+                        <label class="form-label fw-semibold">Поиск пользователя</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="modal-user-search" class="form-control" placeholder="Поиск по фамилии..." autocomplete="off">
+                            <button type="button" id="modal-user-search-clear" class="btn btn-outline-secondary d-none">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div>
                         <label class="form-label fw-semibold">Организации</label>
                         <div id="org-tree" class="border rounded p-2" style="max-height: 220px; overflow-y: auto;"></div>
                     </div>

@@ -362,6 +362,42 @@ final class DocumentController extends AbstractController
         return new JsonResponse($data);
     }
 
+    #[Route('/document/users/search', name: 'app_document_users_search', methods: ['GET'])]
+    public function searchUsersForDocument(
+        Request        $request,
+        UserRepository $userRepository
+    ): JsonResponse
+    {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            return new JsonResponse(['error' => 'Unauthorized'], JsonResponse::HTTP_UNAUTHORIZED);
+        }
+
+        $query = trim((string) $request->query->get('query', ''));
+        if (mb_strlen($query) < 2) {
+            return new JsonResponse([]);
+        }
+
+        $result = $userRepository->findPaginated(1, 20, $query);
+        $data = [];
+        foreach ($result['users'] as $user) {
+            $fullName = trim(sprintf(
+                '%s %s %s',
+                (string) $user->getLastname(),
+                (string) $user->getFirstname(),
+                (string) ($user->getPatronymic() ?? '')
+            ));
+
+            $data[] = [
+                'id' => $user->getId(),
+                'name' => $fullName,
+                'profession' => $user->getWorker()?->getProfession(),
+            ];
+        }
+
+        return new JsonResponse($data);
+    }
+
     #[Route('/incoming_documents', name: 'app_incoming_documents')]
     public function getIncomingDocuments(Request $request, DocumentUserRecipientRepository $recipientRepository): Response
     {

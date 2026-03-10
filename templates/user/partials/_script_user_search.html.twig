@@ -79,11 +79,12 @@
                             rows += '<td>' + escapeHtml(u.firstname) + '</td>';
                             rows += '<td>' + escapeHtml(u.patronymic) + '</td>';
                             rows += '<td>' + escapeHtml(u.phone) + '</td>';
-                            rows += '<td><span class="badge bg-secondary">' + escapeHtml(u.userEmployeeStatusLabel || '') + '</span></td>';
+                            rows += '<td>' + escapeHtml(u.profession || '—') + '</td>';
+                            rows += '<td class="table-users-status-col"><span class="badge bg-secondary badge-status-compact">' + escapeHtml(u.userEmployeeStatusLabel || '—') + '</span></td>';
                             rows += '</tr>';
                         });
                     } else {
-                        rows = '<tr><td colspan="6" class="text-center">Пользователи не найдены</td></tr>';
+                        rows = '<tr><td colspan="7" class="text-center">Пользователи не найдены</td></tr>';
                     }
 
                     tableBody.innerHTML = rows;

@@ -276,6 +276,7 @@ final class UserController extends AbstractController
 
         $usersData = [];
         foreach ($pagination['users'] as $user) {
+            $worker = $user->getWorker();
             $usersData[] = [
                 'id' => $user->getId(),
                 'lastname' => $user->getLastname() ?? '-',
@@ -283,7 +284,8 @@ final class UserController extends AbstractController
                 'patronymic' => $user->getPatronymic() ?? '-',
                 'login' => $user->getLogin(),
                 'phone' => $user->getPhone() ?? '-',
-                'userEmployeeStatusLabel' => $user->getWorker()?->getWorkerStatus()->getLabel() ?? '—',
+                'profession' => $worker?->getProfession() ?? '—',
+                'userEmployeeStatusLabel' => $worker?->getWorkerStatus()->getLabel() ?? '—',
                 'viewUrl' => $this->generateUrl('app_view_user', ['id' => $user->getId(), 'page' => $page]),
             ];
         }
@@ -355,6 +357,32 @@ final class UserController extends AbstractController
         $worker = $workerRepository->findOneBy(['user' => $user]);
 
         return $this->render('user/partials/_modal_view_user_content.html.twig', [
+            'user' => $user,
+            'worker' => $worker,
+        ]);
+    }
+
+    #[Route('/user/{id}/view-modal-document', name: 'app_view_user_modal_document', methods: ['GET'], requirements: ['id' => '\d+'])]
+    public function viewUserModalForDocument(int $id, Request $request, UserRepository $userRepository, WorkerRepository $workerRepository): Response
+    {
+        if (!$request->isXmlHttpRequest()) {
+            return $this->redirectToRoute('app_view_user', ['id' => $id]);
+        }
+
+        $user = $userRepository->createQueryBuilder('u')
+            ->leftJoin('u.organization', 'org')->addSelect('org')
+            ->where('u.id = :id')
+            ->setParameter('id', $id)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        if (!$user) {
+            return new Response('Пользователь не найден', Response::HTTP_NOT_FOUND);
+        }
+
+        $worker = $workerRepository->findOneBy(['user' => $user]);
+
+        return $this->render('user/partials/_modal_view_user_content_document.html.twig', [
             'user' => $user,
             'worker' => $worker,
         ]);

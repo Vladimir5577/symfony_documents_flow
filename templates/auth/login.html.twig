@@ -14,6 +14,9 @@
     <link rel="stylesheet" href="./front_end/assets/compiled/css/app-dark.css">
     <link rel="stylesheet" href="./front_end/assets/compiled/css/auth.css">
 
+    {#  Google font  #}
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
 
     {% block javascripts %}
         {% block importmap %}{{ importmap('app') }}{% endblock %}
@@ -23,54 +26,428 @@
 <body data-turbo="false">
 <script src="./front_end/assets/static/js/initTheme.js"></script>
 
-{# Background Paths - fullscreen #}
+{# Background - fullscreen #}
 <div style="position: relative; min-height: 100vh; width: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #0a0a0a;">
-    {# SVG floating paths background #}
-    <div style="position: absolute; inset: 0; pointer-events: none;">
-        <svg id="paths-svg-1" style="width: 100%; height: 100%; color: #ffffff;" viewBox="0 0 696 316" fill="none"></svg>
-    </div>
-    <div style="position: absolute; inset: 0; pointer-events: none;">
-        <svg id="paths-svg-2" style="width: 100%; height: 100%; color: #ffffff;" viewBox="0 0 696 316" fill="none"></svg>
-    </div>
 
-    {# Login form centered on top #}
-    <div style="position: relative; z-index: 10; width: 100%; max-width: 420px; padding: 0 1rem;">
-        <div id="login-card" style="background: rgba(255,255,255,0.06); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 1.5rem; padding: 3rem; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);">
+    {# Scene background layer #}
+    <div style="position: absolute; inset: 0; pointer-events: none;">
 
-            <h1 style="font-size: 2.5rem; margin-bottom: 2rem; text-align: center; font-weight: 700; color: #fff;">Войти</h1>
+        {# Ground line #}
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.06);"></div>
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 70px; background: linear-gradient(to top, rgba(255,255,255,0.018), transparent);"></div>
+
+        {# === STATIC CONTAINERS scattered along the bottom === #}
+
+        {# Container small - 6% #}
+        <div style="position: absolute; bottom: 1px; left: 6%; opacity: 0.5;">
+            <svg width="52" height="68" viewBox="0 0 52 68" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="22" width="48" height="43" rx="3" fill="#1e1e1e" stroke="#2b2b2b" stroke-width="1.5"/>
+                <rect x="0" y="14" width="52" height="12" rx="3" fill="#272727" stroke="#333" stroke-width="1.5"/>
+                <rect x="17" y="16" width="18" height="4" rx="2" fill="#343434"/>
+                <line x1="5" y1="34" x2="47" y2="34" stroke="#282828" stroke-width="1.5"/>
+                <line x1="5" y1="46" x2="47" y2="46" stroke="#282828" stroke-width="1.5"/>
+                <line x1="5" y1="58" x2="47" y2="58" stroke="#282828" stroke-width="1.5"/>
+                <circle cx="13" cy="65" r="5" fill="#181818" stroke="#303030" stroke-width="1.5"/>
+                <circle cx="39" cy="65" r="5" fill="#181818" stroke="#303030" stroke-width="1.5"/>
+            </svg>
+        </div>
+
+        {# Container large dumpster - 14% #}
+        <div style="position: absolute; bottom: 1px; left: 14%; opacity: 0.45;">
+            <svg width="90" height="100" viewBox="0 0 90 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="30" width="84" height="60" rx="4" fill="#1c1c1c" stroke="#282828" stroke-width="2"/>
+                <rect x="2" y="17" width="40" height="17" rx="3" fill="#242424" stroke="#303030" stroke-width="1.5"/>
+                <rect x="46" y="11" width="43" height="17" rx="3" fill="#242424" stroke="#303030" stroke-width="1.5" transform="rotate(-18 67 20)"/>
+                <line x1="6" y1="48" x2="84" y2="48" stroke="#262626" stroke-width="2"/>
+                <line x1="6" y1="64" x2="84" y2="64" stroke="#262626" stroke-width="2"/>
+                <line x1="6" y1="79" x2="84" y2="79" stroke="#262626" stroke-width="2"/>
+                <circle cx="20" cy="96" r="7" fill="#181818" stroke="#2e2e2e" stroke-width="2"/>
+                <circle cx="70" cy="96" r="7" fill="#181818" stroke="#2e2e2e" stroke-width="2"/>
+            </svg>
+        </div>
+
+        {# Container medium - 28% #}
+        <div style="position: absolute; bottom: 1px; left: 28%; opacity: 0.4;">
+            <svg width="60" height="78" viewBox="0 0 60 78" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="24" width="56" height="50" rx="3" fill="#202020" stroke="#2c2c2c" stroke-width="1.5"/>
+                <rect x="0" y="15" width="60" height="13" rx="3" fill="#282828" stroke="#353535" stroke-width="1.5"/>
+                <rect x="20" y="17" width="20" height="4" rx="2" fill="#383838"/>
+                <line x1="5" y1="38" x2="55" y2="38" stroke="#2a2a2a" stroke-width="1.5"/>
+                <line x1="5" y1="52" x2="55" y2="52" stroke="#2a2a2a" stroke-width="1.5"/>
+                <line x1="5" y1="65" x2="55" y2="65" stroke="#2a2a2a" stroke-width="1.5"/>
+                <circle cx="15" cy="75" r="6" fill="#181818" stroke="#2e2e2e" stroke-width="1.5"/>
+                <circle cx="45" cy="75" r="6" fill="#181818" stroke="#2e2e2e" stroke-width="1.5"/>
+            </svg>
+        </div>
+
+        {# Container small - 42% #}
+        <div style="position: absolute; bottom: 1px; left: 42%; opacity: 0.38;">
+            <svg width="52" height="68" viewBox="0 0 52 68" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="22" width="48" height="43" rx="3" fill="#1e1e1e" stroke="#2b2b2b" stroke-width="1.5"/>
+                <rect x="0" y="14" width="52" height="12" rx="3" fill="#272727" stroke="#333" stroke-width="1.5"/>
+                <rect x="17" y="16" width="18" height="4" rx="2" fill="#343434"/>
+                <line x1="5" y1="34" x2="47" y2="34" stroke="#282828" stroke-width="1.5"/>
+                <line x1="5" y1="46" x2="47" y2="46" stroke="#282828" stroke-width="1.5"/>
+                <line x1="5" y1="58" x2="47" y2="58" stroke="#282828" stroke-width="1.5"/>
+                <circle cx="13" cy="65" r="5" fill="#181818" stroke="#303030" stroke-width="1.5"/>
+                <circle cx="39" cy="65" r="5" fill="#181818" stroke="#303030" stroke-width="1.5"/>
+            </svg>
+        </div>
+
+        {# Container large - 58% #}
+        <div style="position: absolute; bottom: 1px; left: 58%; opacity: 0.42;">
+            <svg width="90" height="100" viewBox="0 0 90 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="30" width="84" height="60" rx="4" fill="#1c1c1c" stroke="#282828" stroke-width="2"/>
+                <rect x="3" y="18" width="84" height="16" rx="3" fill="#232323" stroke="#2e2e2e" stroke-width="1.5"/>
+                <rect x="28" y="20" width="34" height="5" rx="2.5" fill="#323232"/>
+                <line x1="6" y1="48" x2="84" y2="48" stroke="#262626" stroke-width="2"/>
+                <line x1="6" y1="64" x2="84" y2="64" stroke="#262626" stroke-width="2"/>
+                <line x1="6" y1="79" x2="84" y2="79" stroke="#262626" stroke-width="2"/>
+                <circle cx="20" cy="96" r="7" fill="#181818" stroke="#2e2e2e" stroke-width="2"/>
+                <circle cx="70" cy="96" r="7" fill="#181818" stroke="#2e2e2e" stroke-width="2"/>
+            </svg>
+        </div>
+
+        {# Container medium - 72% #}
+        <div style="position: absolute; bottom: 1px; left: 72%; opacity: 0.4;">
+            <svg width="60" height="78" viewBox="0 0 60 78" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="24" width="56" height="50" rx="3" fill="#202020" stroke="#2c2c2c" stroke-width="1.5"/>
+                <rect x="0" y="15" width="60" height="13" rx="3" fill="#282828" stroke="#353535" stroke-width="1.5"/>
+                <rect x="20" y="17" width="20" height="4" rx="2" fill="#383838"/>
+                <line x1="5" y1="38" x2="55" y2="38" stroke="#2a2a2a" stroke-width="1.5"/>
+                <line x1="5" y1="52" x2="55" y2="52" stroke="#2a2a2a" stroke-width="1.5"/>
+                <line x1="5" y1="65" x2="55" y2="65" stroke="#2a2a2a" stroke-width="1.5"/>
+                <circle cx="15" cy="75" r="6" fill="#181818" stroke="#2e2e2e" stroke-width="1.5"/>
+                <circle cx="45" cy="75" r="6" fill="#181818" stroke="#2e2e2e" stroke-width="1.5"/>
+            </svg>
+        </div>
+
+        {# Container small - 87% #}
+        <div style="position: absolute; bottom: 1px; left: 87%; opacity: 0.44;">
+            <svg width="52" height="68" viewBox="0 0 52 68" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="22" width="48" height="43" rx="3" fill="#1e1e1e" stroke="#2b2b2b" stroke-width="1.5"/>
+                <rect x="0" y="14" width="52" height="12" rx="3" fill="#272727" stroke="#333" stroke-width="1.5"/>
+                <rect x="17" y="16" width="18" height="4" rx="2" fill="#343434"/>
+                <line x1="5" y1="34" x2="47" y2="34" stroke="#282828" stroke-width="1.5"/>
+                <line x1="5" y1="46" x2="47" y2="46" stroke="#282828" stroke-width="1.5"/>
+                <line x1="5" y1="58" x2="47" y2="58" stroke="#282828" stroke-width="1.5"/>
+                <circle cx="13" cy="65" r="5" fill="#181818" stroke="#303030" stroke-width="1.5"/>
+                <circle cx="39" cy="65" r="5" fill="#181818" stroke="#303030" stroke-width="1.5"/>
+            </svg>
+        </div>
+
+        {# === ANIMATED GARBAGE TRUCK === #}
+        <div style="position: absolute; bottom: 1px; animation: driveTruck 26s linear infinite;">
+            <svg width="526" height="165" viewBox="0 0 526 165" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+                {# --- Exhaust smoke --- #}
+                <circle class="truck-smoke-a" cx="376" cy="8"  r="7" fill="#707070"/>
+                <circle class="truck-smoke-b" cx="379" cy="4"  r="5" fill="#646464"/>
+                <circle class="truck-smoke-c" cx="372" cy="2"  r="4" fill="#585858"/>
+
+                {# --- Exhaust pipe --- #}
+                <rect x="372" y="2" width="7" height="34" rx="3.5" fill="#8a8a8a" stroke="#999" stroke-width="0.5"/>
+                <ellipse cx="375" cy="2" rx="4" ry="2.5" fill="#787878"/>
+
+                {# === REAR LOADING MECHANISM (задний погрузчик) === #}
+                {# Main loader frame #}
+                <rect x="2" y="36" width="90" height="112" rx="3" fill="#363636" stroke="#424242" stroke-width="1.5"/>
+                {# Hydraulic top frame #}
+                <rect x="6" y="22" width="82" height="18" rx="3" fill="#2e2e2e" stroke="#3c3c3c" stroke-width="1"/>
+                {# Hydraulic cylinders #}
+                <rect x="14" y="16" width="6" height="26" rx="3" fill="#484848" stroke="#565656" stroke-width="0.5"/>
+                <rect x="74" y="16" width="6" height="26" rx="3" fill="#484848" stroke="#565656" stroke-width="0.5"/>
+                {# Cylinder caps #}
+                <ellipse cx="17" cy="16" rx="4" ry="3" fill="#505050" stroke="#5e5e5e" stroke-width="0.5"/>
+                <ellipse cx="77" cy="16" rx="4" ry="3" fill="#505050" stroke="#5e5e5e" stroke-width="0.5"/>
+                {# Loading plate (bottom) #}
+                <path d="M2 116 L92 116 L92 148 L2 148 Z" fill="#2c2c2c" stroke="#3a3a3a" stroke-width="1"/>
+                {# Loading lip at very bottom #}
+                <path d="M2 148 L92 148 L96 156 L-2 156 Z" fill="#262626"/>
+                {# Orange warning stripes #}
+                <rect x="2" y="52" width="90" height="6" fill="#e89420" opacity="0.75"/>
+                <rect x="2" y="116" width="90" height="5" fill="#e89420" opacity="0.7"/>
+                {# Loader horizontal ribs #}
+                <line x1="5" y1="70"  x2="89" y2="70"  stroke="#424242" stroke-width="1.5"/>
+                <line x1="5" y1="86"  x2="89" y2="86"  stroke="#424242" stroke-width="1.5"/>
+                <line x1="5" y1="102" x2="89" y2="102" stroke="#424242" stroke-width="1.5"/>
+
+                {# === MAIN BLUE BODY === #}
+                <rect x="88" y="28" width="272" height="120" rx="2" fill="#1e62c0"/>
+                {# Top orange stripe #}
+                <rect x="88" y="28" width="272" height="8" rx="2" fill="#e89420"/>
+                {# Bottom orange stripe #}
+                <rect x="88" y="140" width="272" height="8" rx="1" fill="#e89420"/>
+                {# Left/right edge shadow #}
+                <rect x="88" y="36" width="4" height="104" fill="#1855aa"/>
+                <rect x="356" y="36" width="4" height="104" fill="#1855aa"/>
+                {# Body center line (horizontal) #}
+                <line x1="92" y1="88" x2="356" y2="88" stroke="#1855aa" stroke-width="1.5"/>
+                {# Top edge highlight #}
+                <rect x="92" y="36" width="264" height="3" fill="#2972d8" opacity="0.5"/>
+                {# Rivet dots along top edge #}
+                <circle cx="102" cy="32" r="2" fill="#1855aa"/>
+                <circle cx="135" cy="32" r="2" fill="#1855aa"/>
+                <circle cx="168" cy="32" r="2" fill="#1855aa"/>
+                <circle cx="201" cy="32" r="2" fill="#1855aa"/>
+                <circle cx="234" cy="32" r="2" fill="#1855aa"/>
+                <circle cx="267" cy="32" r="2" fill="#1855aa"/>
+                <circle cx="300" cy="32" r="2" fill="#1855aa"/>
+                <circle cx="333" cy="32" r="2" fill="#1855aa"/>
+
+                {# === CAB (белая кабина) === #}
+                {# Cab body #}
+                <path d="M358 40 Q368 34 386 32 L514 32 L516 148 L358 148 Z" fill="#d2d2d4"/>
+                {# Cab roof #}
+                <rect x="360" y="27" width="154" height="16" rx="6" fill="#cacaca"/>
+                {# Air deflector #}
+                <path d="M367 26 Q400 15 438 20 L438 27 L367 27 Z" fill="#c2c2c2" stroke="#b8b8b8" stroke-width="0.5"/>
+
+                {# Windshield #}
+                <path d="M402 38 Q420 33 512 33 L513 96 L402 96 Z" fill="#8ec4dc" opacity="0.72"/>
+                <path d="M402 38 Q420 33 512 33 L513 96 L402 96 Z" fill="none" stroke="#bababa" stroke-width="1.5"/>
+                {# Windshield glare #}
+                <path d="M406 40 Q424 35 460 35 L460 64 L406 64 Z" fill="white" opacity="0.13"/>
+                {# Wiper #}
+                <line x1="410" y1="92" x2="496" y2="73" stroke="#9a9a9a" stroke-width="1.5" stroke-linecap="round"/>
+
+                {# Door separator line #}
+                <line x1="400" y1="34" x2="400" y2="148" stroke="#acacac" stroke-width="2"/>
+                {# Side window (door) #}
+                <rect x="362" y="44" width="36" height="40" rx="4" fill="#8ec4dc" opacity="0.68"/>
+                <rect x="362" y="44" width="36" height="40" rx="4" fill="none" stroke="#acacac" stroke-width="1"/>
+                {# Door handle #}
+                <rect x="368" y="103" width="24" height="5" rx="2.5" fill="#8a8a8a"/>
+                <circle cx="392" cy="105" r="3" fill="#969696"/>
+
+                {# Cab front face (flat) #}
+                <rect x="505" y="50" width="12" height="84" rx="2" fill="#c2c2c4"/>
+                {# Grille lower #}
+                <rect x="506" y="90" width="10" height="36" rx="1" fill="#aaaaac"/>
+                <line x1="507" y1="97"  x2="515" y2="97"  stroke="#929292" stroke-width="1.5"/>
+                <line x1="507" y1="106" x2="515" y2="106" stroke="#929292" stroke-width="1.5"/>
+                <line x1="507" y1="115" x2="515" y2="115" stroke="#929292" stroke-width="1.5"/>
+                <line x1="507" y1="122" x2="515" y2="122" stroke="#929292" stroke-width="1.5"/>
+
+                {# Headlight #}
+                <rect x="506" y="54" width="11" height="18" rx="3" fill="#fff8d0"/>
+                <ellipse cx="511" cy="63" rx="9" ry="7" fill="#fff8d0" opacity="0.22"/>
+                {# Orange indicator #}
+                <rect x="506" y="74" width="11" height="7" rx="2" fill="#ff8800" opacity="0.9"/>
+
+                {# Front bumper #}
+                <rect x="502" y="132" width="16" height="14" rx="2" fill="#b2b2b4" stroke="#a2a2a4" stroke-width="1"/>
+                <rect x="508" y="144" width="8" height="4" rx="2" fill="#929294"/>
+
+                {# Side mirror #}
+                <rect x="514" y="38" width="12" height="9" rx="3" fill="#bababa"/>
+                <rect x="512" y="36" width="3" height="14" rx="1.5" fill="#aaaaaa"/>
+
+                {# Orange stripe bottom of cab #}
+                <rect x="358" y="140" width="158" height="8" rx="1" fill="#e89420"/>
+                {# Door step #}
+                <rect x="362" y="132" width="44" height="6" rx="2" fill="#bababa" stroke="#aaaaaa" stroke-width="0.5"/>
+
+                {# === CHASSIS === #}
+                <rect x="5" y="136" width="509" height="12" rx="3" fill="#1a1a1a"/>
+
+                {# === WHEELS === #}
+                {# Rear wheel #}
+                <circle cx="112" cy="148" r="22" fill="#1a1a1a" stroke="#6a6a6a" stroke-width="5"/>
+                <circle cx="112" cy="148" r="9"  fill="#2a2a2a" stroke="#7a7a7a" stroke-width="3"/>
+                <g style="transform-box:fill-box;transform-origin:center;animation:wheelSpin 1.4s linear infinite;">
+                    <line x1="112" y1="139" x2="112" y2="157" stroke="#5a5a5a" stroke-width="2"/>
+                    <line x1="103" y1="148" x2="121" y2="148" stroke="#5a5a5a" stroke-width="2"/>
+                    <line x1="106" y1="141" x2="118" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                    <line x1="118" y1="141" x2="106" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                </g>
+
+                {# Middle wheel #}
+                <circle cx="248" cy="148" r="22" fill="#1a1a1a" stroke="#6a6a6a" stroke-width="5"/>
+                <circle cx="248" cy="148" r="9"  fill="#2a2a2a" stroke="#7a7a7a" stroke-width="3"/>
+                <g style="transform-box:fill-box;transform-origin:center;animation:wheelSpin 1.4s linear infinite;animation-delay:-0.35s;">
+                    <line x1="248" y1="139" x2="248" y2="157" stroke="#5a5a5a" stroke-width="2"/>
+                    <line x1="239" y1="148" x2="257" y2="148" stroke="#5a5a5a" stroke-width="2"/>
+                    <line x1="242" y1="141" x2="254" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                    <line x1="254" y1="141" x2="242" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                </g>
+
+                {# Front wheel #}
+                <circle cx="432" cy="148" r="22" fill="#1a1a1a" stroke="#6a6a6a" stroke-width="5"/>
+                <circle cx="432" cy="148" r="9"  fill="#2a2a2a" stroke="#7a7a7a" stroke-width="3"/>
+                <g style="transform-box:fill-box;transform-origin:center;animation:wheelSpin 1.4s linear infinite;animation-delay:-0.7s;">
+                    <line x1="432" y1="139" x2="432" y2="157" stroke="#5a5a5a" stroke-width="2"/>
+                    <line x1="423" y1="148" x2="441" y2="148" stroke="#5a5a5a" stroke-width="2"/>
+                    <line x1="426" y1="141" x2="438" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                    <line x1="438" y1="141" x2="426" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                </g>
+            </svg>
+        </div>
+
+        {# === SECOND TRUCK: moves right → left, positioned in the vertical middle === #}
+        {# Outer div handles right-to-left movement; inner div flips the truck to face left #}
+        <div style="position: absolute; bottom: 42vh; animation: driveTruckRtL 30s linear infinite; animation-delay: -15s;">
+            <div style="transform: scaleX(-1);">
+                <svg width="526" height="165" viewBox="0 0 526 165" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+                    {# Smoke #}
+                    <circle class="truck-smoke-a" cx="376" cy="8"  r="7" fill="#707070"/>
+                    <circle class="truck-smoke-b" cx="379" cy="4"  r="5" fill="#646464"/>
+                    <circle class="truck-smoke-c" cx="372" cy="2"  r="4" fill="#585858"/>
+                    <rect x="372" y="2" width="7" height="34" rx="3.5" fill="#8a8a8a" stroke="#999" stroke-width="0.5"/>
+                    <ellipse cx="375" cy="2" rx="4" ry="2.5" fill="#787878"/>
+
+                    {# Rear loader #}
+                    <rect x="2" y="36" width="90" height="112" rx="3" fill="#363636" stroke="#424242" stroke-width="1.5"/>
+                    <rect x="6" y="22" width="82" height="18" rx="3" fill="#2e2e2e" stroke="#3c3c3c" stroke-width="1"/>
+                    <rect x="14" y="16" width="6" height="26" rx="3" fill="#484848" stroke="#565656" stroke-width="0.5"/>
+                    <rect x="74" y="16" width="6" height="26" rx="3" fill="#484848" stroke="#565656" stroke-width="0.5"/>
+                    <ellipse cx="17" cy="16" rx="4" ry="3" fill="#505050" stroke="#5e5e5e" stroke-width="0.5"/>
+                    <ellipse cx="77" cy="16" rx="4" ry="3" fill="#505050" stroke="#5e5e5e" stroke-width="0.5"/>
+                    <path d="M2 116 L92 116 L92 148 L2 148 Z" fill="#2c2c2c" stroke="#3a3a3a" stroke-width="1"/>
+                    <path d="M2 148 L92 148 L96 156 L-2 156 Z" fill="#262626"/>
+                    <rect x="2" y="52" width="90" height="6" fill="#e89420" opacity="0.75"/>
+                    <rect x="2" y="116" width="90" height="5" fill="#e89420" opacity="0.7"/>
+                    <line x1="5" y1="70"  x2="89" y2="70"  stroke="#424242" stroke-width="1.5"/>
+                    <line x1="5" y1="86"  x2="89" y2="86"  stroke="#424242" stroke-width="1.5"/>
+                    <line x1="5" y1="102" x2="89" y2="102" stroke="#424242" stroke-width="1.5"/>
+
+                    {# Blue body #}
+                    <rect x="88" y="28" width="272" height="120" rx="2" fill="#1e62c0"/>
+                    <rect x="88" y="28" width="272" height="8" rx="2" fill="#e89420"/>
+                    <rect x="88" y="140" width="272" height="8" rx="1" fill="#e89420"/>
+                    <rect x="88" y="36" width="4" height="104" fill="#1855aa"/>
+                    <rect x="356" y="36" width="4" height="104" fill="#1855aa"/>
+                    <line x1="92" y1="88" x2="356" y2="88" stroke="#1855aa" stroke-width="1.5"/>
+                    <rect x="92" y="36" width="264" height="3" fill="#2972d8" opacity="0.5"/>
+                    <circle cx="102" cy="32" r="2" fill="#1855aa"/>
+                    <circle cx="135" cy="32" r="2" fill="#1855aa"/>
+                    <circle cx="168" cy="32" r="2" fill="#1855aa"/>
+                    <circle cx="201" cy="32" r="2" fill="#1855aa"/>
+                    <circle cx="234" cy="32" r="2" fill="#1855aa"/>
+                    <circle cx="267" cy="32" r="2" fill="#1855aa"/>
+                    <circle cx="300" cy="32" r="2" fill="#1855aa"/>
+                    <circle cx="333" cy="32" r="2" fill="#1855aa"/>
+
+                    {# Cab #}
+                    <path d="M358 40 Q368 34 386 32 L514 32 L516 148 L358 148 Z" fill="#d2d2d4"/>
+                    <rect x="360" y="27" width="154" height="16" rx="6" fill="#cacaca"/>
+                    <path d="M367 26 Q400 15 438 20 L438 27 L367 27 Z" fill="#c2c2c2" stroke="#b8b8b8" stroke-width="0.5"/>
+                    <path d="M402 38 Q420 33 512 33 L513 96 L402 96 Z" fill="#8ec4dc" opacity="0.72"/>
+                    <path d="M402 38 Q420 33 512 33 L513 96 L402 96 Z" fill="none" stroke="#bababa" stroke-width="1.5"/>
+                    <path d="M406 40 Q424 35 460 35 L460 64 L406 64 Z" fill="white" opacity="0.13"/>
+                    <line x1="410" y1="92" x2="496" y2="73" stroke="#9a9a9a" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="400" y1="34" x2="400" y2="148" stroke="#acacac" stroke-width="2"/>
+                    <rect x="362" y="44" width="36" height="40" rx="4" fill="#8ec4dc" opacity="0.68"/>
+                    <rect x="362" y="44" width="36" height="40" rx="4" fill="none" stroke="#acacac" stroke-width="1"/>
+                    <rect x="368" y="103" width="24" height="5" rx="2.5" fill="#8a8a8a"/>
+                    <circle cx="392" cy="105" r="3" fill="#969696"/>
+                    <rect x="505" y="50" width="12" height="84" rx="2" fill="#c2c2c4"/>
+                    <rect x="506" y="90" width="10" height="36" rx="1" fill="#aaaaac"/>
+                    <line x1="507" y1="97"  x2="515" y2="97"  stroke="#929292" stroke-width="1.5"/>
+                    <line x1="507" y1="106" x2="515" y2="106" stroke="#929292" stroke-width="1.5"/>
+                    <line x1="507" y1="115" x2="515" y2="115" stroke="#929292" stroke-width="1.5"/>
+                    <line x1="507" y1="122" x2="515" y2="122" stroke="#929292" stroke-width="1.5"/>
+                    <rect x="506" y="54" width="11" height="18" rx="3" fill="#fff8d0"/>
+                    <ellipse cx="511" cy="63" rx="9" ry="7" fill="#fff8d0" opacity="0.22"/>
+                    <rect x="506" y="74" width="11" height="7" rx="2" fill="#ff8800" opacity="0.9"/>
+                    <rect x="502" y="132" width="16" height="14" rx="2" fill="#b2b2b4" stroke="#a2a2a4" stroke-width="1"/>
+                    <rect x="514" y="38" width="12" height="9" rx="3" fill="#bababa"/>
+                    <rect x="512" y="36" width="3" height="14" rx="1.5" fill="#aaaaaa"/>
+                    <rect x="358" y="140" width="158" height="8" rx="1" fill="#e89420"/>
+                    <rect x="362" y="132" width="44" height="6" rx="2" fill="#bababa" stroke="#aaaaaa" stroke-width="0.5"/>
+
+                    {# Chassis #}
+                    <rect x="5" y="136" width="509" height="12" rx="3" fill="#1a1a1a"/>
+
+                    {# Rear wheel #}
+                    <circle cx="112" cy="148" r="22" fill="#1a1a1a" stroke="#6a6a6a" stroke-width="5"/>
+                    <circle cx="112" cy="148" r="9"  fill="#2a2a2a" stroke="#7a7a7a" stroke-width="3"/>
+                    <g style="transform-box:fill-box;transform-origin:center;animation:wheelSpin 1.4s linear infinite;">
+                        <line x1="112" y1="139" x2="112" y2="157" stroke="#5a5a5a" stroke-width="2"/>
+                        <line x1="103" y1="148" x2="121" y2="148" stroke="#5a5a5a" stroke-width="2"/>
+                        <line x1="106" y1="141" x2="118" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                        <line x1="118" y1="141" x2="106" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                    </g>
+                    {# Middle wheel #}
+                    <circle cx="248" cy="148" r="22" fill="#1a1a1a" stroke="#6a6a6a" stroke-width="5"/>
+                    <circle cx="248" cy="148" r="9"  fill="#2a2a2a" stroke="#7a7a7a" stroke-width="3"/>
+                    <g style="transform-box:fill-box;transform-origin:center;animation:wheelSpin 1.4s linear infinite;animation-delay:-0.35s;">
+                        <line x1="248" y1="139" x2="248" y2="157" stroke="#5a5a5a" stroke-width="2"/>
+                        <line x1="239" y1="148" x2="257" y2="148" stroke="#5a5a5a" stroke-width="2"/>
+                        <line x1="242" y1="141" x2="254" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                        <line x1="254" y1="141" x2="242" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                    </g>
+                    {# Front wheel #}
+                    <circle cx="432" cy="148" r="22" fill="#1a1a1a" stroke="#6a6a6a" stroke-width="5"/>
+                    <circle cx="432" cy="148" r="9"  fill="#2a2a2a" stroke="#7a7a7a" stroke-width="3"/>
+                    <g style="transform-box:fill-box;transform-origin:center;animation:wheelSpin 1.4s linear infinite;animation-delay:-0.7s;">
+                        <line x1="432" y1="139" x2="432" y2="157" stroke="#5a5a5a" stroke-width="2"/>
+                        <line x1="423" y1="148" x2="441" y2="148" stroke="#5a5a5a" stroke-width="2"/>
+                        <line x1="426" y1="141" x2="438" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                        <line x1="438" y1="141" x2="426" y2="155" stroke="#5a5a5a" stroke-width="1.5"/>
+                    </g>
+                </svg>
+            </div>
+        </div>
+
+    </div>{# end scene layer #}
+
+    {# Login form centered #}
+    <div style="position: relative; z-index: 10; width: 100%; max-width: 460px; padding: 0 1rem;">
+        <div id="login-card" style="background: rgba(18,18,20,0.88); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.08); border-radius: 1.25rem; padding: 2.75rem 2.5rem 2.25rem; box-shadow: 0 24px 64px rgba(0,0,0,0.6);">
+
+            <h1 style="font-size: 1.75rem; font-weight: 700; color: #fff; text-align: center; margin: 0 0 0.5rem;">Корпоративный портал</h1>
+            <p style="font-size: 0.82rem; color: rgba(255,255,255,0.45); text-align: center; margin: 0 0 2rem; line-height: 1.5;">
+                Информационные системы и цифровые сервисы<br>ГУП ДНР «Донснабкомплект»
+            </p>
 
             <form action="{{ path('app_login') }}" method="post">
                 <input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('authenticate') }}">
 
                 {% if error %}
-                    <div class="alert alert-danger" style="border-radius: 0.75rem; background: rgba(220,53,69,0.15); border: 1px solid rgba(220,53,69,0.3); color: #ff6b6b;">
-                        Неправильные логин или пароль
+                    <div class="alert alert-danger" style="border-radius: 0.75rem; background: rgba(220,53,69,0.12); border: 1px solid rgba(220,53,69,0.25); color: #ff7b7b; font-size: 0.875rem; padding: 0.75rem 1rem; margin-bottom: 1.25rem;">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Неправильные логин или пароль
                     </div>
                 {% endif %}
 
                 {% if app.user %}
-                    <div class="mb-3" style="color: #fff;">
-                        You are logged in as {{ app.user.userIdentifier }}, <a href="{{ logout_path() }}" style="color: #90caf9;">Logout</a>
+                    <div class="mb-3" style="color: #fff; font-size: 0.875rem;">
+                        Вы вошли как {{ app.user.userIdentifier }}, <a href="{{ logout_path() }}" style="color: #90caf9;">Выйти</a>
                     </div>
                 {% endif %}
 
-                <div class="form-group position-relative has-icon-left mb-4">
+                <div class="form-group position-relative has-icon-left mb-3">
                     <input type="text" value="{{ last_username }}" name="_username" id="username" class="form-control" autocomplete="username" placeholder="Имя пользователя" required autofocus
-                           style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 0.75rem; padding: 0.75rem 0.75rem 0.75rem 2.5rem;">
+                           style="background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 0.75rem; padding: 0.8rem 0.75rem 0.8rem 2.75rem; font-size: 0.95rem; transition: border-color 0.2s, background 0.2s;">
                     <div class="form-control-icon">
-                        <i class="bi bi-person" style="color: rgba(255,255,255,0.5);"></i>
+                        <i class="bi bi-person" style="color: rgba(255,255,255,0.4);"></i>
                     </div>
                 </div>
-                <div class="form-group position-relative has-icon-left mb-4">
+                <div class="form-group position-relative has-icon-left mb-3">
                     <input type="password" name="_password" id="password" class="form-control" autocomplete="current-password" placeholder="Пароль" required
-                           style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 0.75rem; padding: 0.75rem 0.75rem 0.75rem 2.5rem;">
+                           style="background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 0.75rem; padding: 0.8rem 0.75rem 0.8rem 2.75rem; font-size: 0.95rem; transition: border-color 0.2s, background 0.2s;">
                     <div class="form-control-icon">
-                        <i class="bi bi-shield-lock" style="color: rgba(255,255,255,0.5);"></i>
+                        <i class="bi bi-shield-lock" style="color: rgba(255,255,255,0.4);"></i>
                     </div>
                 </div>
 
-                <button class="btn btn-primary btn-block btn-lg shadow-lg mt-3" type="submit" style="width: 100%; border-radius: 0.75rem; padding: 0.75rem; font-size: 1.1rem;">Войти</button>
+                <div style="text-align: center; margin-bottom: 1.5rem;">
+                    <a href="#" style="font-size: 0.82rem; color: rgba(255,255,255,0.4); text-decoration: none;"
+                       onmouseover="this.style.color='rgba(255,255,255,0.7)'" onmouseout="this.style.color='rgba(255,255,255,0.4)'">
+                        Забыли пароль?
+                    </a>
+                </div>
+
+                <button class="btn btn-primary btn-block btn-lg" type="submit"
+                        style="width: 100%; border-radius: 0.75rem; padding: 0.85rem; font-size: 1rem; font-weight: 700; letter-spacing: 0.03em; background: #3b5bdb; border-color: #3b5bdb;">
+                    Войти
+                </button>
             </form>
+
+            <p style="text-align: center; margin: 1.75rem 0 0; font-size: 0.78rem; color: rgba(255,255,255,0.3);">
+                Авторизованный доступ к ресурсам предприятия
+            </p>
         </div>
     </div>
 </div>
@@ -98,59 +475,55 @@
 </script>
 
 <style>
-    @keyframes floatingPath {
-        0% { stroke-dashoffset: 0; }
-        100% { stroke-dashoffset: -2; }
+    body, body * {
+        font-family: 'Montserrat', sans-serif !important;
     }
+    /* Truck drive: enters from left, exits to the right */
+    @keyframes driveTruck {
+        from { transform: translateX(-540px); }
+        to   { transform: translateX(110vw);  }
+    }
+    /* Truck drive: enters from right, exits to the left */
+    @keyframes driveTruckRtL {
+        from { transform: translateX(110vw);  }
+        to   { transform: translateX(-540px); }
+    }
+    /* Wheel spin */
+    @keyframes wheelSpin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+    }
+    /* Exhaust smoke puffs */
+    @keyframes smokeA {
+        0%   { opacity: 0.65; transform: translate(0, 0)    scale(1);   }
+        100% { opacity: 0;    transform: translate(-6px, -40px) scale(2.4); }
+    }
+    @keyframes smokeB {
+        0%   { opacity: 0.5;  transform: translate(0, 0)    scale(1);   }
+        100% { opacity: 0;    transform: translate(5px, -50px) scale(2.8); }
+    }
+    @keyframes smokeC {
+        0%   { opacity: 0.4;  transform: translate(0, 0)    scale(1);   }
+        100% { opacity: 0;    transform: translate(-3px,-32px) scale(2); }
+    }
+    .truck-smoke-a { animation: smokeA 2s   ease-out infinite; }
+    .truck-smoke-b { animation: smokeB 2.5s ease-out infinite; animation-delay: -0.8s; }
+    .truck-smoke-c { animation: smokeC 1.7s ease-out infinite; animation-delay: -1.3s; }
+
+    /* Login card entrance */
     @keyframes fadeInUp {
         from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
+        to   { opacity: 1; transform: translateY(0); }
     }
-    #login-card {
-        animation: fadeInUp 1.2s ease forwards;
-    }
-    #login-card input::placeholder {
-        color: rgba(255,255,255,0.4);
+    #login-card { animation: fadeInUp 1.2s ease forwards; }
+    #login-card input::placeholder { color: rgba(255,255,255,0.35); }
+    #login-card input:focus {
+        outline: none;
+        background: rgba(255,255,255,0.11) !important;
+        border-color: rgba(255,255,255,0.3) !important;
+        box-shadow: 0 0 0 3px rgba(255,255,255,0.05);
     }
 </style>
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        function createFloatingPaths(svgId, position) {
-            var svg = document.getElementById(svgId);
-            if (!svg) return;
-            var ns = 'http://www.w3.org/2000/svg';
-
-            for (var i = 0; i < 36; i++) {
-                var p = document.createElementNS(ns, 'path');
-                var d = 'M-' + (380 - i * 5 * position) + ' -' + (189 + i * 6) +
-                    'C-' + (380 - i * 5 * position) + ' -' + (189 + i * 6) +
-                    ' -' + (312 - i * 5 * position) + ' ' + (216 - i * 6) +
-                    ' ' + (152 - i * 5 * position) + ' ' + (343 - i * 6) +
-                    'C' + (616 - i * 5 * position) + ' ' + (470 - i * 6) +
-                    ' ' + (684 - i * 5 * position) + ' ' + (875 - i * 6) +
-                    ' ' + (684 - i * 5 * position) + ' ' + (875 - i * 6);
-
-                p.setAttribute('d', d);
-                p.setAttribute('stroke', 'currentColor');
-                p.setAttribute('stroke-width', (0.5 + i * 0.03).toString());
-                p.setAttribute('stroke-opacity', (0.08 + i * 0.025).toString());
-                p.setAttribute('fill', 'none');
-                p.setAttribute('pathLength', '1');
-                p.style.strokeDasharray = '0.3 0.7';
-                p.style.strokeDashoffset = '0';
-
-                var duration = 20 + Math.random() * 10;
-                p.style.animation = 'floatingPath ' + duration + 's linear infinite';
-                p.style.animationDelay = (-Math.random() * duration) + 's';
-
-                svg.appendChild(p);
-            }
-        }
-
-        createFloatingPaths('paths-svg-1', 1);
-        createFloatingPaths('paths-svg-2', -1);
-    });
-</script>
 </body>
 
 </html>

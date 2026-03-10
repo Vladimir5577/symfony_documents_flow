@@ -18,9 +18,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var selectedOne = document.getElementById('assign-new-selected-one');
     var confirmBtn = document.getElementById('assign-new-confirm-btn');
     var usersUrlTemplate = orgDataContainer.getAttribute('data-users-url-template') || '';
+    var usersSearchUrl = orgDataContainer.getAttribute('data-users-search-url') || '';
 
     var selectedOrgId = null;
     var selectedUser = null;
+    var searchDebounceTimer = null;
+
+    var searchInput = document.getElementById('assign-new-user-search');
+    var searchClearBtn = document.getElementById('assign-new-user-search-clear');
 
     function getChildren(parentId) {
         return nodes.filter(function (n) { return n.parentId === parentId; });
@@ -62,6 +67,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (prev) prev.classList.remove('selected');
                 row.classList.add('selected');
                 selectedOrgId = node.id;
+                if (searchInput) {
+                    searchInput.value = '';
+                    searchClearBtn.classList.add('d-none');
+                }
                 if (hasKids && childContainer) {
                     var isOpen = childContainer.classList.contains('open');
                     childContainer.classList.toggle('open', !isOpen);
@@ -81,6 +90,34 @@ document.addEventListener('DOMContentLoaded', function () {
         else treeEl.innerHTML = '<div class="text-muted small">Нет организаций</div>';
     }
 
+    function renderUsersInList(data) {
+        usersPlaceholder.classList.add('d-none');
+        usersList.classList.remove('d-none');
+        usersList.innerHTML = '';
+        if (!data || data.length === 0) {
+            usersList.innerHTML = '<div class="text-muted small">Пользователи не найдены</div>';
+            return;
+        }
+        data.forEach(function (u) {
+            var label = u.profession ? (u.name + ' — ' + u.profession) : u.name;
+            var item = document.createElement('div');
+            item.className = 'assign-new-user-item';
+            item.dataset.id = u.id;
+            item.dataset.name = u.name;
+            item.dataset.label = label;
+            item.textContent = label;
+            if (selectedUser && String(selectedUser.id) === String(u.id)) item.classList.add('selected');
+            item.addEventListener('click', function () {
+                selectedUser = { id: u.id, name: u.name, label: label };
+                usersList.querySelectorAll('.assign-new-user-item').forEach(function (el) { el.classList.remove('selected'); });
+                item.classList.add('selected');
+                renderSelectedOne();
+                confirmBtn.disabled = false;
+            });
+            usersList.appendChild(item);
+        });
+    }
+
     function loadOrgUsers(orgId) {
         usersPlaceholder.classList.remove('d-none');
         usersPlaceholder.textContent = 'Загрузка...';
@@ -94,30 +131,7 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                usersPlaceholder.classList.add('d-none');
-                usersList.classList.remove('d-none');
-                if (!data || data.length === 0) {
-                    usersList.innerHTML = '<div class="text-muted small">В организации нет пользователей</div>';
-                    return;
-                }
-                data.forEach(function (u) {
-                    var label = u.profession ? (u.name + ' — ' + u.profession) : u.name;
-                    var item = document.createElement('div');
-                    item.className = 'assign-new-user-item';
-                    item.dataset.id = u.id;
-                    item.dataset.name = u.name;
-                    item.dataset.label = label;
-                    item.textContent = label;
-                    if (selectedUser && String(selectedUser.id) === String(u.id)) item.classList.add('selected');
-                    item.addEventListener('click', function () {
-                        selectedUser = { id: u.id, name: u.name, label: label };
-                        usersList.querySelectorAll('.assign-new-user-item').forEach(function (el) { el.classList.remove('selected'); });
-                        item.classList.add('selected');
-                        renderSelectedOne();
-                        confirmBtn.disabled = false;
-                    });
-                    usersList.appendChild(item);
-                });
+                renderUsersInList(data);
             })
             .catch(function () {
                 usersPlaceholder.classList.remove('d-none');
@@ -214,11 +228,63 @@ document.addEventListener('DOMContentLoaded', function () {
             usersPlaceholder.textContent = 'Выберите организацию';
             usersList.classList.add('d-none');
             usersList.innerHTML = '';
+            if (searchInput) {
+                searchInput.value = '';
+                searchClearBtn.classList.add('d-none');
+            }
         });
     }
 
     renderTree();
     renderSelectedOne();
     confirmBtn.disabled = true;
+
+    // Search logic
+    if (searchInput) {
+        searchInput.addEventListener('input', function () {
+            var query = searchInput.value.trim();
+            searchClearBtn.classList.toggle('d-none', query.length === 0);
+            clearTimeout(searchDebounceTimer);
+            if (query.length < 2) {
+                if (query.length === 0) {
+                    usersPlaceholder.classList.remove('d-none');
+                    usersPlaceholder.textContent = 'Выберите организацию';
+                    usersList.classList.add('d-none');
+                    usersList.innerHTML = '';
+                }
+                return;
+            }
+            searchDebounceTimer = setTimeout(function () {
+                var prev = treeEl.querySelector('.org-tree-item.selected');
+                if (prev) prev.classList.remove('selected');
+                selectedOrgId = null;
+
+                usersPlaceholder.classList.remove('d-none');
+                usersPlaceholder.textContent = 'Поиск...';
+                usersList.classList.add('d-none');
+                usersList.innerHTML = '';
+
+                fetch(usersSearchUrl + '?query=' + encodeURIComponent(query), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        renderUsersInList(data);
+                    })
+                    .catch(function () {
+                        usersPlaceholder.classList.remove('d-none');
+                        usersPlaceholder.textContent = 'Ошибка поиска';
+                        usersList.classList.add('d-none');
+                    });
+            }, 300);
+        });
+
+        searchClearBtn.addEventListener('click', function () {
+            searchInput.value = '';
+            searchClearBtn.classList.add('d-none');
+            usersPlaceholder.classList.remove('d-none');
+            usersPlaceholder.textContent = 'Выберите организацию';
+            usersList.classList.add('d-none');
+            usersList.innerHTML = '';
+        });
+    }
 });
 </script>

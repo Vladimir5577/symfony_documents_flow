@@ -74,6 +74,21 @@
             justify-content: space-between;
         }
 
+        .kanban-column-header.column-draggable .column-title {
+            cursor: text;
+        }
+        .column-title-input {
+            font-size: 1rem;
+            font-weight: 600;
+            border: 1px solid var(--bs-primary) !important;
+            border-radius: 6px;
+            padding: 0.15rem 0.4rem !important;
+            background: rgba(var(--bs-primary-rgb), 0.06) !important;
+            box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.2) !important;
+            outline: none !important;
+            width: 100%;
+        }
+
         .column-color-btn {
             padding: 0.2rem 0.35rem;
             line-height: 1;
@@ -196,6 +211,23 @@
 
         .gu-transit .kanban-card {
             opacity: 0.5;
+        }
+
+        /* Column drag & drop */
+        .kanban-column.gu-mirror {
+            opacity: 0.85;
+            transform: rotate(2deg);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+            z-index: 9999;
+        }
+        .kanban-column.gu-transit {
+            opacity: 0.3;
+        }
+        .kanban-column-header.column-draggable {
+            cursor: grab;
+        }
+        .kanban-column-header.column-draggable:active {
+            cursor: grabbing;
         }
 
         .kanban-card-header {
@@ -1255,7 +1287,7 @@
 
     {% if board.project is defined and board.project and memberRole.value != 'VIEWER' %}
     {# Данные дерева организаций для модалки «Добавить пользователя» #}
-    <div id="org-tree-data-assign-new" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}" class="d-none">
+    <div id="org-tree-data-assign-new" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}" data-users-search-url="{{ path('app_document_users_search') }}" class="d-none">
         {% if organizations is defined and organizations|length > 0 %}
             {% for org in organizations %}
                 {% if org %}
@@ -1272,8 +1304,8 @@
         <div class="kanban-board-wrap">
         <div class="kanban-board" id="kanban-board">
             {% for column in board.columns %}
-            <div class="kanban-column" data-column-id="{{ column.id }}" data-header-color="{{ column.headerColor.value }}">
-                <div class="kanban-column-header">
+            <div class="kanban-column" data-column-id="{{ column.id }}" data-position="{{ column.position }}" data-header-color="{{ column.headerColor.value }}">
+                <div class="kanban-column-header{% if isBoardAdmin|default(false) %} column-draggable{% endif %}">
                     <span>
                         <span class="column-title">{{ column.title }}</span>
                         <span class="column-count" style="display:none;">{{ column.cards|filter(c => not c.archived)|length }}</span>
@@ -1542,7 +1574,7 @@
                         <div class="task-info-field">
                             <label class="task-info-field-label">СРОК</label>
                             <div class="task-info-input-wrap">
-                                <input type="datetime-local" class="form-control task-info-input" id="task-due-at" {% if memberRole.value == 'VIEWER' %}disabled{% endif %}>
+                                <input type="datetime-local" class="form-control task-info-input" id="task-due-at" min="{{ 'now'|date('Y-m-d') }}T00:00" {% if memberRole.value == 'VIEWER' %}disabled{% endif %}>
                                 <i class="bi bi-calendar3 task-info-input-icon"></i>
                             </div>
                         </div>
@@ -1895,33 +1927,22 @@
                     var saveRename = function() {
                         var newTitle = input.value.trim();
                         if (newTitle && newTitle !== titleSpan.textContent.trim()) {
-                            // Send rename request
-                            fetch('/kanban/board/' + boardId + '/rename', {
+                            KanbanApp.apiFetch('/kanban/board/' + boardId + '/rename', {
                                 method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Requested-With': 'XMLHttpRequest'
-                                },
                                 body: JSON.stringify({ title: newTitle })
-                            })
-                            .then(function(response) {
-                                if (response.ok) {
-                                    return response.json();
-                                }
-                                throw new Error('Ошибка переименования');
                             })
                             .then(function(data) {
                                 if (data.success) {
                                     titleSpan.textContent = newTitle;
                                 } else {
                                     input.value = titleSpan.textContent;
-                                    alert('Ошибка: ' + (data.error || 'Не удалось переименовать доску'));
+                                    KanbanApp.showToast(data.error || 'Не удалось переименовать доску');
                                 }
                             })
                             .catch(function(error) {
                                 console.error('Error:', error);
                                 input.value = titleSpan.textContent;
-                                alert('Ошибка: ' + error.message);
+                                KanbanApp.showToast(error.message);
                             });
                         } else {
                             input.value = titleSpan.textContent;
@@ -1960,35 +1981,23 @@
 
                     // Confirm deletion
                     if (confirm('Вы уверены, что хотите удалить эту доску? Это действие нельзя отменить.')) {
-                        // Send delete request
-                        fetch('/kanban/board/' + boardId + '/delete', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest'
-                            }
-                        })
-                        .then(function(response) {
-                            if (response.ok) {
-                                return response.json();
-                            }
-                            throw new Error('Ошибка удаления');
+                        KanbanApp.apiFetch('/kanban/board/' + boardId + '/delete', {
+                            method: 'POST'
                         })
                         .then(function(data) {
                             if (data.success) {
-                                // Redirect to project boards list or another board
                                 if (data.redirectUrl) {
                                     window.location.href = data.redirectUrl;
                                 } else {
                                     window.location.href = '/kanban/personal-projects';
                                 }
                             } else {
-                                alert('Ошибка: ' + (data.error || 'Не удалось удалить доску'));
+                                KanbanApp.showToast(data.error || 'Не удалось удалить доску');
                             }
                         })
                         .catch(function(error) {
                             console.error('Error:', error);
-                            alert('Ошибка: ' + error.message);
+                            KanbanApp.showToast(error.message);
                         });
                     }
                 });
@@ -2095,24 +2104,11 @@
                     var card = document.querySelector('.kanban-card[data-card-id="' + cardId + '"]');
 
                     // Send color change request
-                    fetch('/api/kanban/cards/' + cardId, {
+                    KanbanApp.apiFetch('/api/kanban/cards/' + cardId, {
                         method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
                         body: JSON.stringify({ borderColor: color || null })
                     })
-                    .then(function(response) {
-                        if (response.ok) {
-                            return response.json();
-                        }
-                        return response.json().then(function(data) {
-                            throw new Error(data.error || 'Ошибка изменения цвета');
-                        });
-                    })
                     .then(function(data) {
-                        // Update card color
                         card.removeAttribute('data-border-color');
                         if (data.borderColor) {
                             card.setAttribute('data-border-color', data.borderColor);
@@ -2120,7 +2116,7 @@
                     })
                     .catch(function(error) {
                         console.error('Error:', error);
-                        alert('Ошибка: ' + error.message);
+                        KanbanApp.showToast(error.message);
                     });
 
                     // Close menu
@@ -2168,30 +2164,16 @@
                     var saveRename = function() {
                         var newTitle = input.value.trim();
                         if (newTitle && newTitle !== originalTitle) {
-                            // Send rename request
-                            fetch('/api/kanban/cards/' + cardId, {
+                            KanbanApp.apiFetch('/api/kanban/cards/' + cardId, {
                                 method: 'PATCH',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-Requested-With': 'XMLHttpRequest'
-                                },
                                 body: JSON.stringify({ title: newTitle })
                             })
-                            .then(function(response) {
-                                if (response.ok) {
-                                    return response.json();
-                                }
-                                return response.json().then(function(data) {
-                                    throw new Error(data.error || 'Ошибка переименования');
-                                });
-                            })
                             .then(function(data) {
-                                // Update title with the response data
                                 titleDiv.textContent = data.title;
                             })
                             .catch(function(error) {
                                 console.error('Error:', error);
-                                alert('Ошибка: ' + error.message);
+                                KanbanApp.showToast(error.message);
                             });
                         }
 
@@ -2229,37 +2211,24 @@
 
                     // Confirm deletion
                     if (confirm('Вы уверены, что хотите удалить эту карточку?')) {
-                        // Send delete request
-                        fetch('/api/kanban/cards/' + cardId, {
-                            method: 'DELETE',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest'
-                            }
+                        KanbanApp.apiFetch('/api/kanban/cards/' + cardId, {
+                            method: 'DELETE'
                         })
-                        .then(function(response) {
-                            if (response.ok || response.status === 204) {
-                                // Remove card and its dropdown from DOM
-                                card.remove();
-                                if (dropdown && dropdown.parentNode) dropdown.remove();
-                                // Update column counter
-                                var column = card.closest('.kanban-column');
-                                if (column) {
-                                    var counter = column.querySelector('.column-count');
-                                    if (counter) {
-                                        var count = parseInt(counter.textContent) - 1;
-                                        counter.textContent = count;
-                                    }
+                        .then(function() {
+                            card.remove();
+                            if (dropdown && dropdown.parentNode) dropdown.remove();
+                            var column = card.closest('.kanban-column');
+                            if (column) {
+                                var counter = column.querySelector('.column-count');
+                                if (counter) {
+                                    var count = parseInt(counter.textContent) - 1;
+                                    counter.textContent = count;
                                 }
-                            } else {
-                                return response.json().then(function(data) {
-                                    throw new Error(data.error || 'Не удалось удалить карточку');
-                                });
                             }
                         })
                         .catch(function(error) {
                             console.error('Error:', error);
-                            alert('Ошибка: ' + error.message);
+                            KanbanApp.showToast(error.message);
                         });
                     }
                 }

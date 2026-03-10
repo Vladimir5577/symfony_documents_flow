@@ -57,6 +57,7 @@ $ chmod -R 775 /uploads
 11. If need run dbgate
 ```bash
 $ docker compose -f docker-compose.dbgate.yml up -d
+$ docker compose -f docker-compose.dbgate.yml down -v
 ```
 
 ## Xdebug

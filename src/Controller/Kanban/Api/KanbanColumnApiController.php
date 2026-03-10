@@ -91,6 +91,29 @@ final class KanbanColumnApiController extends AbstractController
 
         $this->em->flush();
 
+        // Rebalance column positions if neighbours are too close
+        if (isset($payload['position'])) {
+            $columns = $this->columnRepo->createQueryBuilder('c')
+                ->where('c.board = :board')
+                ->setParameter('board', $board)
+                ->orderBy('c.position', 'ASC')
+                ->getQuery()
+                ->getResult();
+
+            $needsRebalance = false;
+            for ($i = 1; $i < count($columns); $i++) {
+                if (abs($columns[$i]->getPosition() - $columns[$i - 1]->getPosition()) < 1e-5) {
+                    $needsRebalance = true;
+                    break;
+                }
+            }
+
+            if ($needsRebalance) {
+                $this->columnRepo->rebalancePositions($board);
+                $this->em->flush();
+            }
+        }
+
         return $this->json([
             'id' => $column->getId(),
             'title' => $column->getTitle(),

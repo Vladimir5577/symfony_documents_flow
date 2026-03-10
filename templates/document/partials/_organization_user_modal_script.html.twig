@@ -6,13 +6,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var usersSelect = document.getElementById('document_users');
     var choicesInstance = window.__documentFlowOrgUserModalChoices || null;
 
-    var nodes = Array.from(orgDataContainer.querySelectorAll('.org-node')).map(function (el) {
-        return {
-            id: el.getAttribute('data-org-id'),
-            parentId: el.getAttribute('data-parent-id') || null,
-            name: el.getAttribute('data-name')
-        };
-    });
+    var nodes = Array.from(orgDataContainer.querySelectorAll('.org-node'))
+        .map(function (el) {
+            return {
+                id: el.getAttribute('data-org-id'),
+                parentId: el.getAttribute('data-parent-id') || null,
+                name: el.getAttribute('data-name') || ''
+            };
+        });
 
     var treeEl = document.getElementById('org-tree');
     var orgUsersPlaceholder = document.getElementById('org-users-placeholder');
@@ -21,9 +22,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var modalSelectedList = document.getElementById('modal-selected-list');
     var addSelectedBtn = document.getElementById('add-selected-users-btn');
     var usersUrlTemplate = orgDataContainer.getAttribute('data-users-url-template') || '';
+    var usersSearchUrl = orgDataContainer.getAttribute('data-users-search-url') || '';
 
     var selectedOrgId = null;
     var modalSelectedUsers = [];
+    var searchDebounceTimer = null;
+
+    var searchInput = document.getElementById('modal-user-search');
+    var searchClearBtn = document.getElementById('modal-user-search-clear');
 
     function getChildren(parentId) {
         return nodes.filter(function (n) { return n.parentId === parentId; });
@@ -65,6 +71,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (prev) prev.classList.remove('selected');
                 row.classList.add('selected');
                 selectedOrgId = node.id;
+                if (searchInput) {
+                    searchInput.value = '';
+                    searchClearBtn.classList.add('d-none');
+                }
                 if (hasKids && childContainer) {
                     var isOpen = childContainer.classList.contains('open');
                     childContainer.classList.toggle('open', !isOpen);
@@ -84,6 +94,54 @@ document.addEventListener('DOMContentLoaded', function () {
         else treeEl.innerHTML = '<div class="text-muted small">Нет организаций</div>';
     }
 
+    function renderUsersInList(data) {
+        orgUsersPlaceholder.classList.add('d-none');
+        orgUsersList.classList.remove('d-none');
+        orgUsersList.innerHTML = '';
+        if (!data || data.length === 0) {
+            orgUsersList.innerHTML = '<div class="text-muted small">Пользователи не найдены</div>';
+            return;
+        }
+        data.forEach(function (u) {
+            var li = document.createElement('div');
+            li.className = 'form-check';
+            var isSelected = modalSelectedUsers.some(function (s) { return String(s.id) === String(u.id); });
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'form-check-input org-user-cb';
+            cb.value = u.id;
+            cb.checked = isSelected;
+            cb.dataset.id = u.id;
+            cb.dataset.name = u.name;
+            cb.dataset.label = u.profession
+                ? (u.name + ' — ' + u.profession)
+                : u.name;
+            var label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.setAttribute('for', 'org-user-' + u.id);
+            label.textContent = cb.dataset.label;
+            cb.id = 'org-user-' + u.id;
+            li.appendChild(cb);
+            li.appendChild(label);
+            orgUsersList.appendChild(li);
+            cb.addEventListener('change', function () {
+                if (this.checked) {
+                    if (!modalSelectedUsers.some(function (s) { return String(s.id) === String(this.dataset.id); }.bind(this))) {
+                        modalSelectedUsers.push({
+                            id: this.dataset.id,
+                            name: this.dataset.name,
+                            label: this.dataset.label || this.dataset.name
+                        });
+                    }
+                } else {
+                    modalSelectedUsers = modalSelectedUsers.filter(function (s) { return String(s.id) !== String(this.dataset.id); }.bind(this));
+                }
+                renderModalSelected();
+                addSelectedBtn.disabled = modalSelectedUsers.length === 0;
+            });
+        });
+    }
+
     function loadOrgUsers(orgId) {
         orgUsersPlaceholder.classList.remove('d-none');
         orgUsersPlaceholder.textContent = 'Загрузка...';
@@ -97,50 +155,7 @@ document.addEventListener('DOMContentLoaded', function () {
         fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                orgUsersPlaceholder.classList.add('d-none');
-                orgUsersList.classList.remove('d-none');
-                if (!data || data.length === 0) {
-                    orgUsersList.innerHTML = '<div class="text-muted small">В организации нет пользователей</div>';
-                    return;
-                }
-                data.forEach(function (u) {
-                    var li = document.createElement('div');
-                    li.className = 'form-check';
-                    var isSelected = modalSelectedUsers.some(function (s) { return String(s.id) === String(u.id); });
-                    var cb = document.createElement('input');
-                    cb.type = 'checkbox';
-                    cb.className = 'form-check-input org-user-cb';
-                    cb.value = u.id;
-                    cb.checked = isSelected;
-                    cb.dataset.id = u.id;
-                    cb.dataset.name = u.name; // ФИО
-                    cb.dataset.label = u.profession
-                        ? (u.name + ' — ' + u.profession)
-                        : u.name;
-                    var label = document.createElement('label');
-                    label.className = 'form-check-label';
-                    label.setAttribute('for', 'org-user-' + u.id);
-                    label.textContent = cb.dataset.label;
-                    cb.id = 'org-user-' + u.id;
-                    li.appendChild(cb);
-                    li.appendChild(label);
-                    orgUsersList.appendChild(li);
-                    cb.addEventListener('change', function () {
-                        if (this.checked) {
-                            if (!modalSelectedUsers.some(function (s) { return String(s.id) === String(this.dataset.id); }.bind(this))) {
-                                modalSelectedUsers.push({
-                                    id: this.dataset.id,
-                                    name: this.dataset.name,
-                                    label: this.dataset.label || this.dataset.name
-                                });
-                            }
-                        } else {
-                            modalSelectedUsers = modalSelectedUsers.filter(function (s) { return String(s.id) !== String(this.dataset.id); }.bind(this));
-                        }
-                        renderModalSelected();
-                        addSelectedBtn.disabled = modalSelectedUsers.length === 0;
-                    });
-                });
+                renderUsersInList(data);
             })
             .catch(function () {
                 orgUsersPlaceholder.classList.remove('d-none');
@@ -214,5 +229,55 @@ document.addEventListener('DOMContentLoaded', function () {
     renderTree();
     renderModalSelected();
     addSelectedBtn.disabled = true;
+
+    // Search logic
+    if (searchInput) {
+        searchInput.addEventListener('input', function () {
+            var query = searchInput.value.trim();
+            searchClearBtn.classList.toggle('d-none', query.length === 0);
+            clearTimeout(searchDebounceTimer);
+            if (query.length < 2) {
+                if (query.length === 0) {
+                    // Reset to placeholder
+                    orgUsersPlaceholder.classList.remove('d-none');
+                    orgUsersPlaceholder.textContent = 'Выберите организацию';
+                    orgUsersList.classList.add('d-none');
+                    orgUsersList.innerHTML = '';
+                }
+                return;
+            }
+            searchDebounceTimer = setTimeout(function () {
+                // Deselect org in tree
+                var prev = treeEl.querySelector('.org-tree-item.selected');
+                if (prev) prev.classList.remove('selected');
+                selectedOrgId = null;
+
+                orgUsersPlaceholder.classList.remove('d-none');
+                orgUsersPlaceholder.textContent = 'Поиск...';
+                orgUsersList.classList.add('d-none');
+                orgUsersList.innerHTML = '';
+
+                fetch(usersSearchUrl + '?query=' + encodeURIComponent(query), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        renderUsersInList(data);
+                    })
+                    .catch(function () {
+                        orgUsersPlaceholder.classList.remove('d-none');
+                        orgUsersPlaceholder.textContent = 'Ошибка поиска';
+                        orgUsersList.classList.add('d-none');
+                    });
+            }, 300);
+        });
+
+        searchClearBtn.addEventListener('click', function () {
+            searchInput.value = '';
+            searchClearBtn.classList.add('d-none');
+            orgUsersPlaceholder.classList.remove('d-none');
+            orgUsersPlaceholder.textContent = 'Выберите организацию';
+            orgUsersList.classList.add('d-none');
+            orgUsersList.innerHTML = '';
+        });
+    }
 });
 </script>

@@ -28,4 +28,20 @@ class KanbanColumnRepository extends ServiceEntityRepository
 
         return (float) ($result ?? 0.0);
     }
+
+    public function rebalancePositions(KanbanBoard $board): void
+    {
+        $columns = $this->createQueryBuilder('c')
+            ->where('c.board = :board')
+            ->setParameter('board', $board)
+            ->orderBy('c.position', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        $pos = 1.0;
+        foreach ($columns as $column) {
+            $column->setPosition($pos);
+            $pos += 1.0;
+        }
+    }
 }

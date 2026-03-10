@@ -46,6 +46,7 @@ abstract class AbstractOrganization
 
     /** @var Collection<int, self> */
     #[ORM\OneToMany(mappedBy: 'parent', targetEntity: self::class)]
+    #[ORM\OrderBy(['name' => 'ASC'])]
     private Collection $childOrganizations;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]

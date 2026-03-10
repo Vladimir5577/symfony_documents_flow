@@ -67,7 +67,7 @@ services:
 
 networks:
   project-net:
-    name: symfony_documents_flow_project-net
+    name: project-net
     external: true
   monitoring-net:
     driver: bridge

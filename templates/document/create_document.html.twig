@@ -123,32 +123,17 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-12">
-                                        <div class="form-group">
-                                            <label class="d-block mt-3">Статус документа</label>
-                                            {% for value, label in document_statuses %}
-                                                <div class="form-check">
-                                                    <input type="radio" id="document_status_{{ value }}" class="form-check-input" name="status" value="{{ value }}" {% if form_data.status|default('NEW') == value %}checked{% endif %} required>
-                                                    <label class="form-check-label" for="document_status_{{ value }}">{{ label }}</label>
-                                                </div>
-                                            {% endfor %}
-                                        </div>
-                                    </div>
+                                    <input type="hidden"
+                                           name="status"
+                                           id="document_status_input"
+                                           value="{{ form_data.status|default('DRAFT') }}">
                                     <div class="col-12">
                                         <div class="form-group mt-3">
                                             <label for="document_deadline">Срок выполнения</label>
-                                            <input type="date" id="document_deadline" class="form-control" name="deadline" value="{{ form_data.deadline|default("now"|date_modify("+1 week")|date("Y-m-d")) }}">
+                                            <input type="date" id="document_deadline" class="form-control" name="deadline" value="{{ form_data.deadline|default("now"|date_modify("+1 week")|date("Y-m-d")) }}" min="{{ "now"|date("Y-m-d") }}">
                                         </div>
                                     </div>
-                                    <div class="col-12">
-                                        <div class="form-group">
-                                            <label class="d-block mt-3">Публикация докуента</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input type="checkbox" id="document_is_published" class="form-check-input" name="is_published" value="1" {% if form_data.is_published|default(false) %}checked{% endif %}>
-                                            <label class="form-check-label" for="document_is_published">Опубликовать документ</label>
-                                        </div>
-                                    </div>
+                                    {# публикация теперь управляется кнопкой "Создать и отправить" #}
 
                                     <div class="col-12">
                                         <div class="form-group mt-3">
@@ -162,8 +147,20 @@
                                         </div>
                                     </div>
 
-                                    <div class="col-12 d-flex justify-content-end">
-                                        <button type="submit" class="btn btn-primary me-1 mb-1">Создать документ</button>
+                                    <div class="col-12 d-flex justify-content-end flex-wrap align-items-center gap-2">
+                                        <div class="me-auto small text-muted">
+                                            Черновик не отправляется и виден только вам. «Создать и отправить» — документ сразу пойдёт по маршруту обработки.
+                                        </div>
+                                        <button type="button"
+                                                id="document_save_draft_btn"
+                                                class="btn btn-outline-secondary me-1 mb-1">
+                                            Сохранить как черновик
+                                        </button>
+                                        <button type="button"
+                                                id="document_create_send_btn"
+                                                class="btn btn-primary me-1 mb-1">
+                                            Создать и отправить
+                                        </button>
                                         <a href="{{ path('app_new_document') }}" class="btn btn-light-secondary me-1 mb-1">Отмена</a>
                                     </div>
                                 </div>
@@ -175,7 +172,7 @@
         </div>
     </section>
 
-    <div id="org-tree-data" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}">
+    <div id="org-tree-data" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}" data-users-search-url="{{ path('app_document_users_search') }}">
         {% if organizations is defined and organizations|length > 0 %}
             {% for org in organizations %}
                 {% if org %}
@@ -283,6 +280,49 @@
                 });
 
                 input.addEventListener('change', renderList);
+            })();
+
+            (function () {
+                const form = document.querySelector('form.form');
+                if (!form) {
+                    return;
+                }
+
+                const statusInput = document.getElementById('document_status_input');
+                const saveDraftBtn = document.getElementById('document_save_draft_btn');
+                const createSendBtn = document.getElementById('document_create_send_btn');
+
+                function removePublishInput() {
+                    const existing = form.querySelector('input[name="is_published"]');
+                    if (existing) {
+                        existing.remove();
+                    }
+                }
+
+                if (saveDraftBtn && statusInput) {
+                    saveDraftBtn.addEventListener('click', function () {
+                        statusInput.value = 'DRAFT';
+                        removePublishInput();
+                        form.submit();
+                    });
+                }
+
+                if (createSendBtn && statusInput) {
+                    createSendBtn.addEventListener('click', function () {
+                        statusInput.value = 'NEW';
+
+                        let publishInput = form.querySelector('input[name="is_published"]');
+                        if (!publishInput) {
+                            publishInput = document.createElement('input');
+                            publishInput.type = 'hidden';
+                            publishInput.name = 'is_published';
+                            form.appendChild(publishInput);
+                        }
+                        publishInput.value = '1';
+
+                        form.submit();
+                    });
+                }
             })();
         });
     </script>
