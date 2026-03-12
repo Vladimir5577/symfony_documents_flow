@@ -8,14 +8,14 @@
 
 {% block main %}
 
-    <h1 class="mb-0">Редактирование документа</h1>
+    <h1>Редактирование документа: {{ document.name }}</h1>
 
     <section id="multiple-column-form">
         <div class="row match-height">
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h4 class="card-title">{{ document.name }}</h4>
+                        <h4 class="card-title">Форма редактирования документа</h4>
                     </div>
                     <div class="card-content">
                         <div class="card-body">
@@ -23,17 +23,11 @@
                                 <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_document') }}">
 
                                 {% for message in app.flashes('error') %}
-                                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                        {{ message }}
-                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                                    </div>
+                                    <div class="alert alert-danger">{{ message }}</div>
                                 {% endfor %}
 
                                 {% for message in app.flashes('success') %}
-                                    <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                        {{ message }}
-                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                                    </div>
+                                    <div class="alert alert-success">{{ message }}</div>
                                 {% endfor %}
 
                                 <div class="row">
@@ -51,18 +45,28 @@
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label for="organization_id">Организация <span class="text-danger">*</span></label>
-                                            <select id="organization_id" class="form-control" name="organization_id" required>
-                                                {% if organizations is defined and organizations|length > 0 %}
-                                                    {% for org in organizations %}
-                                                        {% if org %}
-                                                            {% include 'auth/organization_tree_option.html.twig' with {'organization': org, 'level': 0, 'selected_id': form_data.organization_id|default('')} %}
-                                                        {% endif %}
-                                                    {% endfor %}
+                                            {% if is_admin|default(false) %}
+                                                <label for="organization_id">Организация отправитель <span class="text-danger">*</span></label>
+                                                <select id="organization_id" class="form-control" name="organization_id" required>
+                                                    {% if organizations is defined and organizations|length > 0 %}
+                                                        {% for org in organizations %}
+                                                            {% if org %}
+                                                                {% include 'auth/organization_tree_option.html.twig' with {'organization': org, 'level': 0, 'selected_id': form_data.organization_id|default('')} %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        <option value="">Организации не найдены</option>
+                                                    {% endif %}
+                                                </select>
+                                            {% else %}
+                                                <label for="organization_id">Организация отправитель</label>
+                                                {% if user_organization|default(null) %}
+                                                    <input type="hidden" name="organization_id" value="{{ user_organization.id }}">
+                                                    <input type="text" id="organization_id" class="form-control" value="{{ user_organization.name }}" readonly disabled>
                                                 {% else %}
-                                                    <option value="">Организации не найдены</option>
+                                                    <p class="form-control-plaintext text-muted mb-0">Организация не назначена. Обратитесь к администратору.</p>
                                                 {% endif %}
-                                            </select>
+                                            {% endif %}
                                         </div>
                                     </div>
                                     <div class="col-12">
@@ -77,53 +81,47 @@
                                         </div>
                                     </div>
                                     <div class="col-12">
-                                        <div class="form-group">
-                                            <label for="document_deadline" class="mt-3">Срок выполнения</label>
-                                            <input type="date" id="document_deadline" class="form-control" name="deadline" value="{{ form_data.deadline|default('') }}">
+                                        <div class="form-group mt-3">
+                                            <label for="document_deadline">Срок выполнения</label>
+                                            <input type="date" id="document_deadline" class="form-control" name="deadline" value="{{ form_data.deadline|default('') }}" min="{{ "now"|date("Y-m-d") }}">
                                         </div>
                                     </div>
                                     <div class="col-12">
-                                        <div class="form-group">
-                                            <label class="d-block mt-3">Публикация докуента</label>
+                                        <div class="form-group mt-3">
+                                            <label class="d-block mb-2">Публикация документа</label>
+                                            <div class="form-check">
+                                                <input type="checkbox" id="document_is_published" class="form-check-input" name="is_published" value="1" {% if form_data.is_published|default(false) %}checked{% endif %}>
+                                                <label class="form-check-label" for="document_is_published">Опубликовать документ</label>
+                                            </div>
                                         </div>
-                                        <div class="form-check">
-                                            <input type="checkbox" id="document_is_published" class="form-check-input" name="is_published" value="1" {% if form_data.is_published|default(false) %}checked{% endif %}>
-                                            <label class="form-check-label" for="document_is_published">Опубликовать документ</label>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-group mt-3">
+                                            <label class="d-block mb-2">Файлы документа</label>
+                                            {% set ext = document.originalFile|split('.')|last|lower %}
+
+                                            {% if ext in ['pdf'] %}
+                                                <a href="{{ path('app_document_download_file', {id: document.id, type: 'original', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
+                                                    Просмотр pdf
+                                                </a>
+                                            {% endif %}
+
+                                            {% if ext in ['doc', 'docx'] %}
+                                                <a href="{{ path('app_edit_docx', {id: document.id, filename: document.originalFile}) }}" class="btn btn-sm btn-outline-warning" target="_blank" rel="noopener">
+                                                    Просмотр и редактирование word документа
+                                                </a>
+                                            {% endif %}
+
+                                            {% if ext in ['jpeg', 'jpg', 'png'] %}
+                                                <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="{{ path('app_document_download_file', {id: document.id, type: 'original', inline: 1}) }}">
+                                                    Просмотр image
+                                                </button>
+                                            {% endif %}
                                         </div>
                                     </div>
 
-                                    {#  #### File  ###################################  #}
-
-                                    <div class="form-group">
-                                        <label class="form-label d-block">Файл документа</label>
-                                    </div>
-
-                                    <div class="form-group">
-                                        {% set ext = document.originalFile|split('.')|last|lower %}
-
-                                        {% if ext in ['pdf'] %}
-                                            <label class="form-label d-block">Файл pdf расширения</label>
-                                            <a href="{{ path('app_document_download_file', {id: document.id, type: 'original', inline: 1}) }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
-                                                Просмотр pdf
-                                            </a>
-                                        {% endif %}
-
-                                        {% if ext in ['doc', 'docx'] %}
-                                            <label class="form-label d-block">Файл word расширения</label>
-                                            <a href="{{ path('app_edit_docx', {id: document.id, filename: document.originalFile}) }}" class="btn btn-sm btn-outline-warning" target="_blank" rel="noopener">
-                                                Просмотр и редактировани word документа
-                                            </a>
-                                        {% endif %}
-
-                                        {% if ext in ['jpeg', 'jpg', 'png'] %}
-                                            <label class="form-label d-block">Файл типа image</label>
-                                            <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="{{ path('app_document_download_file', {id: document.id, type: 'original', inline: 1}) }}">
-                                                Просмотр image
-                                            </button>
-                                        {% endif %}
-                                    </div>
-
-                                    <div class="col-12 d-flex justify-content-end">
+                                    <div class="col-12 d-flex justify-content-end flex-wrap align-items-center gap-2">
                                         <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить изменения</button>
                                         <a href="{{ path('app_view_outgoing_document', {'id': document.id}) }}" class="btn btn-light-secondary me-1 mb-1">Отмена</a>
                                     </div>

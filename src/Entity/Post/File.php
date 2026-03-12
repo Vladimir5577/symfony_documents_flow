@@ -1,15 +1,15 @@
 <?php
 
-namespace App\Entity\Document;
+namespace App\Entity\Post;
 
-use App\Repository\Document\FileRepository;
+use App\Repository\Post\FileRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\HttpFoundation\File\File as SymfonyFile;
 use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
 #[ORM\Entity(repositoryClass: FileRepository::class)]
-#[ORM\Table(name: 'file_document')]
+#[ORM\Table(name: 'file_post')]
 #[Vich\Uploadable]
 class File
 {
@@ -24,11 +24,11 @@ class File
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
-    #[ORM\ManyToOne(targetEntity: Document::class, inversedBy: 'files')]
-    #[ORM\JoinColumn(name: 'document_id', referencedColumnName: 'id', nullable: false)]
-    private ?Document $document = null;
+    #[ORM\ManyToOne(targetEntity: Post::class, inversedBy: 'files')]
+    #[ORM\JoinColumn(name: 'post_id', referencedColumnName: 'id', nullable: false)]
+    private ?Post $post = null;
 
-    #[Vich\UploadableField(mapping: 'document_files', fileNameProperty: 'filePath')]
+    #[Vich\UploadableField(mapping: 'post_files', fileNameProperty: 'filePath')]
     private ?SymfonyFile $file = null;
 
     #[ORM\Column(type: Types::STRING, length: 255, nullable: true)]
@@ -63,14 +63,14 @@ class File
         return $this;
     }
 
-    public function getDocument(): ?Document
+    public function getPost(): ?Post
     {
-        return $this->document;
+        return $this->post;
     }
 
-    public function setDocument(?Document $document): static
+    public function setPost(?Post $post): static
     {
-        $this->document = $document;
+        $this->post = $post;
 
         return $this;
     }
@@ -83,11 +83,6 @@ class File
     public function setFile(?SymfonyFile $file = null): void
     {
         $this->file = $file;
-
-        // Automatically generate a unique file name when the file is set
-//        if ($file) {
-//            $this->filePath = uniqid('file_', true) . '.' . $file->guessExtension();
-//        }
     }
 
     public function getFilePath(): ?string
@@ -102,3 +97,4 @@ class File
         return $this;
     }
 }
+

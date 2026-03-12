@@ -13,3 +13,23 @@ vich_uploader:
                     property: document.id
             delete_on_remove: true
             delete_on_update: true
+        post_files:
+            uri_prefix: /uploads/posts
+            upload_destination: '%private_upload_dir_posts%'
+            namer: Vich\UploaderBundle\Naming\SmartUniqueNamer
+            directory_namer:
+                service: Vich\UploaderBundle\Naming\PropertyDirectoryNamer
+                options:
+                    property: post.id
+            delete_on_remove: true
+            delete_on_update: true
+        post_cover:
+            uri_prefix: /uploads/posts
+            upload_destination: '%private_upload_dir_posts%'
+            namer: Vich\UploaderBundle\Naming\SmartUniqueNamer
+            directory_namer:
+                service: Vich\UploaderBundle\Naming\PropertyDirectoryNamer
+                options:
+                    property: id
+            delete_on_remove: true
+            delete_on_update: true

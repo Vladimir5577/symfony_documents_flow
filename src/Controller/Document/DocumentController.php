@@ -610,7 +610,7 @@ final class DocumentController extends AbstractController
             'is_published' => $document->isPublished(),
         ];
 
-        $renderForm = function (array $data = []) use ($document, $organizationsWithChildren, $initialFormData): Response {
+        $renderForm = function (array $data = []) use ($document, $organizationsWithChildren, $initialFormData, $isAdmin, $userOrganization): Response {
             $formData = $data !== [] ? $data : $initialFormData;
             return $this->render('document/edit_outgoing_document.html.twig', [
                 'active_tab' => 'outgoing_documents',
@@ -618,6 +618,8 @@ final class DocumentController extends AbstractController
                 'organizations' => $organizationsWithChildren,
                 'form_data' => $formData,
                 'document_statuses' => DocumentStatus::getCreationChoices(),
+                'is_admin' => $isAdmin,
+                'user_organization' => $userOrganization,
             ]);
         };
 

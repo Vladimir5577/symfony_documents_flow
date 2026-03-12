@@ -1,0 +1,290 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Создание поста{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+
+    <style>
+        .post-create-filedrop {
+            min-height: 140px;
+            border: 2px dashed var(--bs-border-color, rgba(0,0,0,.175));
+            background: var(--bs-body-bg);
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: border-color .2s, background-color .2s;
+        }
+        .post-create-filedrop:hover,
+        .post-create-filedrop.post-create-filedrop-dragover {
+            border-color: var(--bs-primary);
+            background: color-mix(in srgb, var(--bs-primary) 8%, var(--bs-body-bg));
+        }
+        .post-create-filedrop-text { color: var(--bs-secondary-color); font-size: 0.95rem; }
+        #post_files_list .list-group-item { padding: 0.5rem 0.75rem; }
+
+        .post-cover-preview {
+            max-width: 300px;
+            max-height: 200px;
+            object-fit: cover;
+            border-radius: 0.375rem;
+        }
+        .post-cover-dropzone {
+            min-height: 120px;
+            border: 2px dashed var(--bs-border-color, rgba(0,0,0,.175));
+            background: var(--bs-body-bg);
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: border-color .2s, background-color .2s;
+        }
+        .post-cover-dropzone:hover,
+        .post-cover-dropzone.post-cover-dropzone-dragover {
+            border-color: var(--bs-primary);
+            background: color-mix(in srgb, var(--bs-primary) 8%, var(--bs-body-bg));
+        }
+    </style>
+
+    <h1>Создание поста</h1>
+
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Форма создания поста</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('app_create_post') }}" method="post" class="form" enctype="multipart/form-data">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('create_post') }}">
+
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger">{{ message }}</div>
+                                {% endfor %}
+
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success">{{ message }}</div>
+                                {% endfor %}
+
+                                <div class="row">
+                                    <div class="col-md-8 col-12">
+                                        <div class="form-group">
+                                            <label for="post_title">Заголовок <span class="text-danger">*</span></label>
+                                            <input type="text" id="post_title" class="form-control" placeholder="Введите заголовок поста" name="title" value="{{ form_data.title|default('') }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4 col-12">
+                                        <div class="form-group">
+                                            <label for="post_type">Тип поста <span class="text-danger">*</span></label>
+                                            <select id="post_type" class="form-control" name="type" required>
+                                                <option value="">-- Выберите тип --</option>
+                                                {% for pt in post_types %}
+                                                    <option value="{{ pt.value }}" {% if form_data.type|default('') == pt.value %}selected{% endif %}>{{ pt.label() }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="post_content">Содержание</label>
+                                            <textarea id="post_content" class="form-control" placeholder="Введите содержание поста" name="content" rows="6">{{ form_data.content|default('') }}</textarea>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <div class="form-check mt-2">
+                                                <input class="form-check-input" type="checkbox" id="post_is_active" name="is_active" value="1" {% if form_data.is_active|default('1') %}checked{% endif %}>
+                                                <label class="form-check-label" for="post_is_active">Активный</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <div class="form-check mt-2">
+                                                <input class="form-check-input" type="checkbox" id="post_is_required_acknowledgment" name="is_required_acknowledgment" value="1" {% if form_data.is_required_acknowledgment|default('') %}checked{% endif %}>
+                                                <label class="form-check-label" for="post_is_required_acknowledgment">Требуется ознакомление</label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-group mt-3">
+                                            <label class="d-block mb-2">Лицевая картинка (обложка)</label>
+                                            <input type="file" id="post_cover_input" name="cover_image" accept="image/jpeg,image/png,image/webp" class="d-none">
+                                            <div id="post_cover_dropzone" class="post-cover-dropzone rounded" role="button" tabindex="0">
+                                                <span class="post-cover-dropzone-text">Перетащите изображение сюда или нажмите для выбора</span>
+                                            </div>
+                                            <div id="post_cover_preview_wrap" class="mt-2 d-none">
+                                                <img id="post_cover_preview" class="post-cover-preview" src="" alt="Превью обложки">
+                                                <button type="button" id="post_cover_remove" class="btn btn-sm btn-outline-danger ms-2">Удалить</button>
+                                            </div>
+                                            <small class="text-muted">JPG, PNG или WebP. Макс. 5 МБ.</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-group mt-3">
+                                            <label class="d-block mb-2">Файлы к посту</label>
+                                            <input type="file" id="post_files_input" name="files[]" multiple class="d-none">
+                                            <div id="post_files_dropzone" class="post-create-filedrop rounded" role="button" tabindex="0">
+                                                <span class="post-create-filedrop-text">Перетащите файлы сюда или нажмите для выбора</span>
+                                            </div>
+                                            <ul id="post_files_list" class="list-group list-group-flush mt-2 small"></ul>
+                                            <small class="text-muted">Макс. 5 МБ на файл. При ошибке валидации файлы нужно будет выбрать заново.</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12 d-flex justify-content-end flex-wrap align-items-center gap-2 mt-3">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Создать пост</button>
+                                        <a href="{{ path('app_dash_board') }}" class="btn btn-light-secondary me-1 mb-1">Отмена</a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+
+            // === Обложка ===
+            (function () {
+                var input = document.getElementById('post_cover_input');
+                var dropzone = document.getElementById('post_cover_dropzone');
+                var previewWrap = document.getElementById('post_cover_preview_wrap');
+                var previewImg = document.getElementById('post_cover_preview');
+                var removeBtn = document.getElementById('post_cover_remove');
+                if (!input || !dropzone) return;
+
+                function showPreview(file) {
+                    var reader = new FileReader();
+                    reader.onload = function (e) {
+                        previewImg.src = e.target.result;
+                        previewWrap.classList.remove('d-none');
+                        dropzone.classList.add('d-none');
+                    };
+                    reader.readAsDataURL(file);
+                }
+
+                function resetCover() {
+                    var dt = new DataTransfer();
+                    input.files = dt.files;
+                    previewImg.src = '';
+                    previewWrap.classList.add('d-none');
+                    dropzone.classList.remove('d-none');
+                }
+
+                dropzone.addEventListener('click', function () { input.click(); });
+                dropzone.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+
+                dropzone.addEventListener('dragover', function (e) {
+                    e.preventDefault(); e.stopPropagation();
+                    dropzone.classList.add('post-cover-dropzone-dragover');
+                });
+                dropzone.addEventListener('dragleave', function (e) {
+                    e.preventDefault(); e.stopPropagation();
+                    dropzone.classList.remove('post-cover-dropzone-dragover');
+                });
+                dropzone.addEventListener('drop', function (e) {
+                    e.preventDefault(); e.stopPropagation();
+                    dropzone.classList.remove('post-cover-dropzone-dragover');
+                    var dt = e.dataTransfer;
+                    if (!dt || !dt.files || !dt.files.length) return;
+                    var file = dt.files[0];
+                    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) return;
+                    var transfer = new DataTransfer();
+                    transfer.items.add(file);
+                    input.files = transfer.files;
+                    showPreview(file);
+                });
+
+                input.addEventListener('change', function () {
+                    if (input.files && input.files.length > 0) {
+                        showPreview(input.files[0]);
+                    }
+                });
+
+                removeBtn.addEventListener('click', resetCover);
+            })();
+
+            // === Файлы ===
+            (function () {
+                var input = document.getElementById('post_files_input');
+                var dropzone = document.getElementById('post_files_dropzone');
+                if (!input || !dropzone) return;
+
+                function formatSize(bytes) {
+                    if (bytes === 0) return '0 Б';
+                    var k = 1024;
+                    var sizes = ['Б', 'КБ', 'МБ', 'ГБ'];
+                    var i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                }
+
+                function renderList() {
+                    var listEl = document.getElementById('post_files_list');
+                    listEl.innerHTML = '';
+                    var files = input.files;
+                    for (var i = 0; i < files.length; i++) {
+                        (function (idx) {
+                            var file = files[idx];
+                            var li = document.createElement('li');
+                            li.className = 'list-group-item d-flex align-items-center gap-2';
+                            li.innerHTML = '<span class="flex-shrink-0 text-muted"><i class="bi bi-file-earmark"></i></span>' +
+                                '<span class="flex-grow-1 text-truncate" title="' + (file.name || '').replace(/"/g, '&quot;') + '">' + (file.name || '—') + '</span>' +
+                                '<span class="flex-shrink-0 text-muted small">' + formatSize(file.size) + '</span>' +
+                                '<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" data-index="' + idx + '" aria-label="Удалить">&times;</button>';
+                            li.querySelector('button').addEventListener('click', function () {
+                                var dt = new DataTransfer();
+                                for (var j = 0; j < files.length; j++) { if (j !== idx) dt.items.add(files[j]); }
+                                input.files = dt.files;
+                                renderList();
+                            });
+                            listEl.appendChild(li);
+                        })(i);
+                    }
+                }
+
+                dropzone.addEventListener('click', function () { input.click(); });
+                dropzone.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+
+                dropzone.addEventListener('dragover', function (e) {
+                    e.preventDefault(); e.stopPropagation();
+                    dropzone.classList.add('post-create-filedrop-dragover');
+                });
+                dropzone.addEventListener('dragleave', function (e) {
+                    e.preventDefault(); e.stopPropagation();
+                    dropzone.classList.remove('post-create-filedrop-dragover');
+                });
+                dropzone.addEventListener('drop', function (e) {
+                    e.preventDefault(); e.stopPropagation();
+                    dropzone.classList.remove('post-create-filedrop-dragover');
+                    var dt = e.dataTransfer;
+                    if (!dt || !dt.files || !dt.files.length) return;
+                    var existing = input.files;
+                    var newDt = new DataTransfer();
+                    for (var i = 0; i < existing.length; i++) newDt.items.add(existing[i]);
+                    for (var j = 0; j < dt.files.length; j++) newDt.items.add(dt.files[j]);
+                    input.files = newDt.files;
+                    renderList();
+                });
+
+                input.addEventListener('change', renderList);
+            })();
+        });
+    </script>
+
+{% endblock %}

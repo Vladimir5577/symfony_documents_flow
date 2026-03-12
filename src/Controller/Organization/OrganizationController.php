@@ -159,7 +159,7 @@ final class OrganizationController extends AbstractController
 
         if (!$userOrganization) {
             $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
-            return $this->redirectToRoute('app_dashboard');
+            return $this->redirectToRoute('app_dash_board');
         }
 
         $search = trim((string) $request->query->get('search', ''));

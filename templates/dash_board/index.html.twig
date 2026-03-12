@@ -1,32 +1,571 @@
 {% extends 'base_dashboard.html.twig' %}
 
-{% block title %}Приветствие!{% endblock %}
-
-
+{% block title %}Dashboard{% endblock %}
 
 {% block sidebar_list %}
     {% include 'sidebar/sidebar_list.html.twig' %}
 {% endblock %}
 
-
-
 {% block main %}
-    <h1>Вы залогинились успешно!</h1>
-    <p>Здравствуйте, <strong>{{ user_display_name }}</strong>!</p>
-    <p>Организация: <strong>{{ organization.name }}</strong></p>
-    {% if organization.description %}
-        <p>{{ organization.description }}</p>
-    {% endif %}
-    {% if organization.legalAddress %}
-        <p>Юридический адрес: {{ organization.legalAddress }}</p>
-    {% endif %}
-    {% if organization.actualAddress %}
-        <p>Фактический адрес: {{ organization.actualAddress }}</p>
-    {% endif %}
-    {% if organization.phone %}
-        <p>Телефон: {{ organization.phone }}</p>
-    {% endif %}
-    {% if organization.email %}
-        <p>Email: {{ organization.email }}</p>
-    {% endif %}
+
+    <style>
+        /* --- Появление блоков --- */
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .dash-animate {
+            animation: fadeSlideUp .5s cubic-bezier(.22,1,.36,1) both;
+        }
+        .dash-animate-d1 { animation-delay: .05s; }
+        .dash-animate-d2 { animation-delay: .15s; }
+        .dash-animate-d3 { animation-delay: .25s; }
+
+        /* --- Приветствие --- */
+        .dash-greeting {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .dash-search {
+            max-width: 260px;
+        }
+        .dash-search .form-control {
+            border-radius: 0.5rem;
+            padding-left: 2.25rem;
+            transition: box-shadow .25s, border-color .25s;
+        }
+        .dash-search .form-control:focus {
+            box-shadow: 0 0 0 3px rgba(67,94,190,.18);
+        }
+        .dash-search .search-icon {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--bs-secondary-color);
+            pointer-events: none;
+            transition: color .2s;
+        }
+        .dash-search .form-control:focus ~ .search-icon,
+        .dash-search:focus-within .search-icon {
+            color: var(--bs-primary);
+        }
+
+        /* --- Новости --- */
+        .dash-section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            border-left: 3px solid var(--bs-primary);
+            padding-left: 0.75rem;
+        }
+        .news-header-bar {
+            background: color-mix(in srgb, var(--bs-primary) 8%, var(--bs-body-bg));
+            border-bottom: 2px solid color-mix(in srgb, var(--bs-primary) 25%, var(--bs-border-color));
+            border-radius: 0.5rem 0.5rem 0 0;
+            padding: 0.85rem 1rem;
+            margin-bottom: 0.75rem;
+        }
+        .news-carousel-wrap {
+            position: relative;
+            margin: -0.75rem 0;
+        }
+        .news-carousel {
+            display: flex;
+            gap: 1rem;
+            overflow-x: auto;
+            overflow-y: visible;
+            scroll-behavior: smooth;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            padding: 0.75rem 0;
+        }
+        .news-carousel::-webkit-scrollbar { display: none; }
+        .news-card {
+            flex: 0 0 260px;
+            min-width: 260px;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            transition: transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s ease, border-color .3s;
+            cursor: pointer;
+        }
+        .news-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 12px 32px rgba(0,0,0,.14);
+            border-color: var(--bs-primary);
+        }
+        .news-card-img {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            display: block;
+            background: var(--bs-secondary-bg);
+            transition: transform .4s cubic-bezier(.22,1,.36,1);
+        }
+        .news-card:hover .news-card-img {
+            transform: scale(1.06);
+        }
+        .news-card-body {
+            padding: 0.75rem 1rem;
+        }
+        .news-card-badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 0.2rem 0.6rem;
+            border-radius: 0.25rem;
+            color: #fff;
+            position: absolute;
+            top: 0.75rem;
+            left: 0.75rem;
+            transition: transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s;
+        }
+        .news-card:hover .news-card-badge {
+            transform: scale(1.08);
+            box-shadow: 0 2px 8px rgba(0,0,0,.2);
+        }
+        .news-card-badge--news       { background: #198754; }
+        .news-card-badge--event      { background: #0d6efd; }
+        .news-card-badge--order      { background: #6f42c1; }
+        .news-card-badge--important  { background: #dc3545; }
+        .news-card-badge--instruction { background: #fd7e14; }
+        .news-card-badge--regulation { background: #20c997; }
+        .news-card-badge--disposition { background: #0dcaf0; }
+        .news-card-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            transition: color .2s;
+        }
+        .news-card:hover .news-card-title {
+            color: var(--bs-primary);
+        }
+        .news-card-date {
+            font-size: 0.8rem;
+            color: var(--bs-secondary-color);
+        }
+        .news-card-img-wrap {
+            position: relative;
+            overflow: hidden;
+        }
+        .news-nav-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 1px solid var(--bs-border-color);
+            background: var(--bs-body-bg);
+            color: var(--bs-body-color);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all .25s cubic-bezier(.22,1,.36,1);
+        }
+        .news-nav-btn:hover {
+            background: var(--bs-primary);
+            color: #fff;
+            border-color: var(--bs-primary);
+            transform: scale(1.12);
+            box-shadow: 0 4px 12px rgba(67,94,190,.3);
+        }
+        .news-nav-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* --- Панели (Чат / Уведомления) --- */
+        .dash-panel {
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            overflow-y: visible;
+            transition: box-shadow .3s, border-color .3s;
+        }
+        .dash-panel:hover {
+            box-shadow: 0 8px 28px rgba(0,0,0,.08);
+            border-color: color-mix(in srgb, var(--bs-primary) 30%, var(--bs-border-color));
+        }
+        .dash-panel-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            border-left: 3px solid var(--bs-primary);
+            padding-left: 0.65rem;
+        }
+
+        /* --- Чат --- */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            max-height: 340px;
+        }
+        .chat-msg {
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.65rem 0.5rem;
+            border-bottom: 1px solid var(--bs-border-color);
+            border-radius: 0.5rem;
+            transition: background .2s, transform .2s;
+            margin: 0 -0.5rem;
+        }
+        .chat-msg:last-child { border-bottom: none; }
+        .chat-msg:hover {
+            background: color-mix(in srgb, var(--bs-primary) 5%, var(--bs-body-bg));
+            transform: translateX(4px);
+        }
+        .chat-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bs-secondary-bg);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--bs-primary);
+            transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s;
+        }
+        .chat-msg:hover .chat-avatar {
+            transform: scale(1.1);
+            box-shadow: 0 3px 10px rgba(67,94,190,.2);
+        }
+        .chat-name { font-weight: 600; font-size: 0.9rem; }
+        .chat-text { font-size: 0.85rem; color: var(--bs-secondary-color); }
+        .chat-time { font-size: 0.75rem; color: var(--bs-secondary-color); white-space: nowrap; }
+        .chat-input-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--bs-border-color);
+        }
+        .chat-input-wrap .form-control {
+            border-radius: 1.5rem;
+            transition: box-shadow .25s, border-color .25s;
+        }
+        .chat-input-wrap .form-control:focus {
+            box-shadow: 0 0 0 3px rgba(67,94,190,.15);
+        }
+        .chat-input-wrap .btn {
+            transition: transform .2s, box-shadow .2s;
+        }
+        .chat-input-wrap .btn:hover {
+            transform: scale(1.15);
+        }
+        .chat-input-wrap .btn:active {
+            transform: scale(0.92);
+        }
+
+        /* --- Уведомления --- */
+        .notif-list {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            max-height: 340px;
+        }
+        .notif-item {
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.65rem 0.5rem;
+            border-bottom: 1px solid var(--bs-border-color);
+            align-items: flex-start;
+            border-radius: 0.5rem;
+            transition: background .2s, transform .2s;
+            margin: 0 -0.5rem;
+            cursor: pointer;
+        }
+        .notif-item:last-child { border-bottom: none; }
+        .notif-item:hover {
+            background: color-mix(in srgb, var(--bs-primary) 5%, var(--bs-body-bg));
+            transform: translateX(4px);
+        }
+        .notif-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 0.5rem;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s;
+        }
+        .notif-item:hover .notif-icon {
+            transform: scale(1.12) rotate(-3deg);
+            box-shadow: 0 3px 10px rgba(0,0,0,.1);
+        }
+        .notif-icon--doc { background: rgba(13,110,253,.12); color: #0d6efd; }
+        .notif-icon--user { background: rgba(25,135,84,.12); color: #198754; }
+        .notif-icon--task { background: rgba(220,53,69,.12); color: #dc3545; }
+        .notif-text { font-size: 0.85rem; flex: 1; }
+        .notif-time { font-size: 0.75rem; color: var(--bs-secondary-color); white-space: nowrap; }
+        .notif-dot {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--bs-primary);
+            margin-left: 0.35rem;
+            animation: dotPulse 2s ease-in-out infinite;
+        }
+        @keyframes dotPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: .4; transform: scale(1.4); }
+        }
+
+        /* --- Кнопка Добавить пост --- */
+        .btn-add-post {
+            transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .2s;
+        }
+        .btn-add-post:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 14px rgba(67,94,190,.35);
+        }
+        .btn-add-post:active {
+            transform: translateY(0) scale(0.97);
+        }
+    </style>
+
+    <!-- Приветствие + Поиск -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-5 dash-animate dash-animate-d1">
+        <div>
+            <span class="dash-greeting">Добрый день, {{ user_display_name }}!</span>
+        </div>
+        <div class="dash-search position-relative">
+            <span class="search-icon"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" placeholder="Поиск...">
+        </div>
+    </div>
+
+    <!-- Новости компании -->
+    <div class="mb-4 dash-animate dash-animate-d2">
+        <div class="news-header-bar">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2 class="dash-section-title mb-0">Новости компании</h2>
+                <div class="d-flex gap-2 align-items-center">
+                    {% if is_granted('ROLE_MANAGER') %}
+                        <a href="{{ path('app_create_post') }}" class="btn btn-sm btn-primary me-2 btn-add-post">
+                            <i class="bi bi-plus-lg"></i> Добавить пост
+                        </a>
+                    {% endif %}
+                    <button type="button" class="news-nav-btn" id="newsScrollLeft" aria-label="Назад">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <button type="button" class="news-nav-btn" id="newsScrollRight" aria-label="Вперёд">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+            <div class="news-carousel-wrap">
+            <div class="news-carousel" id="newsCarousel">
+
+                {% if posts is defined and posts|length > 0 %}
+                    {% for post in posts %}
+                        <div class="news-card">
+                            <div class="news-card-img-wrap">
+                                {% if post.coverImageName %}
+                                    <img class="news-card-img" src="/uploads/posts/{{ post.id }}/{{ post.coverImageName }}" alt="">
+                                {% else %}
+                                    <div class="news-card-img d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-image text-muted" style="font-size:2rem"></i>
+                                    </div>
+                                {% endif %}
+                                {% if post.type %}
+                                    {% set badge_class = 'news-card-badge--news' %}
+                                    {% if post.type.value == 'order' %}{% set badge_class = 'news-card-badge--order' %}
+                                    {% elseif post.type.value == 'instruction' %}{% set badge_class = 'news-card-badge--instruction' %}
+                                    {% elseif post.type.value == 'regulation' %}{% set badge_class = 'news-card-badge--regulation' %}
+                                    {% elseif post.type.value == 'disposition' %}{% set badge_class = 'news-card-badge--disposition' %}
+                                    {% endif %}
+                                    <span class="news-card-badge {{ badge_class }}">{{ post.type.label() }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="news-card-body">
+                                <div class="news-card-title">{{ post.title }}</div>
+                                <div class="news-card-date">{{ post.createdAt|date('d.m.Y') }}</div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    {# Заглушки пока нет данных #}
+                    <div class="news-card">
+                        <div class="news-card-img-wrap">
+                            <div class="news-card-img d-flex align-items-center justify-content-center">
+                                <i class="bi bi-megaphone text-muted" style="font-size:2rem"></i>
+                            </div>
+                            <span class="news-card-badge news-card-badge--news">Новость</span>
+                        </div>
+                        <div class="news-card-body">
+                            <div class="news-card-title">Запущент новый модели электронного архива</div>
+                            <div class="news-card-date">24.04.2024</div>
+                        </div>
+                    </div>
+                    <div class="news-card">
+                        <div class="news-card-img-wrap">
+                            <div class="news-card-img d-flex align-items-center justify-content-center">
+                                <i class="bi bi-calendar-event text-muted" style="font-size:2rem"></i>
+                            </div>
+                            <span class="news-card-badge news-card-badge--event">Событие</span>
+                        </div>
+                        <div class="news-card-body">
+                            <div class="news-card-title">Семинар по работе с документами — 26 апреля</div>
+                            <div class="news-card-date">22.04.2024</div>
+                        </div>
+                    </div>
+                    <div class="news-card">
+                        <div class="news-card-img-wrap">
+                            <div class="news-card-img d-flex align-items-center justify-content-center">
+                                <i class="bi bi-file-earmark-text text-muted" style="font-size:2rem"></i>
+                            </div>
+                            <span class="news-card-badge news-card-badge--order">Приказ</span>
+                        </div>
+                        <div class="news-card-body">
+                            <div class="news-card-title">Обновлены внутренние регламенты</div>
+                            <div class="news-card-date">19.04.2024</div>
+                        </div>
+                    </div>
+                    <div class="news-card">
+                        <div class="news-card-img-wrap">
+                            <div class="news-card-img d-flex align-items-center justify-content-center">
+                                <i class="bi bi-exclamation-triangle text-muted" style="font-size:2rem"></i>
+                            </div>
+                            <span class="news-card-badge news-card-badge--important">Важно</span>
+                        </div>
+                        <div class="news-card-body">
+                            <div class="news-card-title">Плановые работы на сервере — 30 апреля</div>
+                            <div class="news-card-date">18.04.2024</div>
+                        </div>
+                    </div>
+                {% endif %}
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Чат + Уведомления -->
+    <div class="row g-4 dash-animate dash-animate-d3">
+        <!-- Чат отдела -->
+        <div class="col-lg-7">
+            <div class="dash-panel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 class="dash-panel-title mb-0">Чат отдела</h3>
+                    <div class="d-flex align-items-center gap-1">
+                        <span style="width:8px;height:8px;border-radius:50%;background:#198754;display:inline-block"></span>
+                        <span class="text-muted small">Общий</span>
+                        <i class="bi bi-chevron-down text-muted small"></i>
+                    </div>
+                </div>
+
+                <div class="chat-messages">
+                    <div class="chat-msg">
+                        <div class="chat-avatar">СП</div>
+                        <div class="flex-grow-1">
+                            <div class="chat-name">Светлана Петрова</div>
+                            <div class="chat-text">Добрый день! У всех готово к совещанию?</div>
+                        </div>
+                        <div class="chat-time">10:25</div>
+                    </div>
+                    <div class="chat-msg">
+                        <div class="chat-avatar">ИС</div>
+                        <div class="flex-grow-1">
+                            <div class="chat-name">Иван Смирнов</div>
+                            <div class="chat-text">Отправил отчет по проекту в папку.</div>
+                        </div>
+                        <div class="chat-time">10:18</div>
+                    </div>
+                    <div class="chat-msg">
+                        <div class="chat-avatar">АВ</div>
+                        <div class="flex-grow-1">
+                            <div class="chat-name">Анна Волкова</div>
+                            <div class="chat-text">Документы загружены в систему. <i class="bi bi-check2-all text-success"></i></div>
+                        </div>
+                        <div class="chat-time">09:50</div>
+                    </div>
+                    <div class="chat-msg">
+                        <div class="chat-avatar">АГ</div>
+                        <div class="flex-grow-1">
+                            <div class="chat-name">Алексей Громов</div>
+                            <div class="chat-text">Нужна выписа подпись на договоре.</div>
+                        </div>
+                        <div class="chat-time">Вчера</div>
+                    </div>
+                </div>
+
+                <div class="chat-input-wrap">
+                    <input type="text" class="form-control" placeholder="Написать сообщение...">
+                    <button class="btn btn-sm btn-light" type="button"><i class="bi bi-plus-circle"></i></button>
+                    <button class="btn btn-sm btn-primary" type="button"><i class="bi bi-send-fill"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Уведомления -->
+        <div class="col-lg-5">
+            <div class="dash-panel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 class="dash-panel-title mb-0">Уведомления</h3>
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="text-muted small">Все</span>
+                        <i class="bi bi-chevron-down text-muted small"></i>
+                    </div>
+                </div>
+
+                <div class="notif-list">
+                    <div class="notif-item">
+                        <div class="notif-icon notif-icon--doc"><i class="bi bi-file-earmark-text"></i></div>
+                        <div class="notif-text">Документ 'Договор №105' требует согласования</div>
+                        <div class="notif-time">10:32 <span class="notif-dot"></span></div>
+                    </div>
+                    <div class="notif-item">
+                        <div class="notif-icon notif-icon--user"><i class="bi bi-person-check"></i></div>
+                        <div class="notif-text"><strong>Светлана Петрова</strong> прокомментировала ваш документ.</div>
+                        <div class="notif-time">09:45 <span class="notif-dot"></span></div>
+                    </div>
+                    <div class="notif-item">
+                        <div class="notif-icon notif-icon--user"><i class="bi bi-chat-dots"></i></div>
+                        <div class="notif-text"><strong>Иван Смирнов</strong> упомянул вас в чате</div>
+                        <div class="notif-time">Вчера, 16:20</div>
+                    </div>
+                    <div class="notif-item">
+                        <div class="notif-icon notif-icon--doc"><i class="bi bi-file-earmark-text"></i></div>
+                        <div class="notif-text">Новый приказ от 22.04.2024</div>
+                        <div class="notif-time">28.04</div>
+                    </div>
+                    <div class="notif-item">
+                        <div class="notif-icon notif-icon--task"><i class="bi bi-clipboard-check"></i></div>
+                        <div class="notif-text">Задача 'Подготовить отчет' — срок истёк</div>
+                        <div class="notif-time">21.04</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var carousel = document.getElementById('newsCarousel');
+            var leftBtn = document.getElementById('newsScrollLeft');
+            var rightBtn = document.getElementById('newsScrollRight');
+            if (!carousel || !leftBtn || !rightBtn) return;
+            var scrollAmount = 280;
+            leftBtn.addEventListener('click', function () { carousel.scrollBy({ left: -scrollAmount, behavior: 'smooth' }); });
+            rightBtn.addEventListener('click', function () { carousel.scrollBy({ left: scrollAmount, behavior: 'smooth' }); });
+        });
+    </script>
+
 {% endblock %}
