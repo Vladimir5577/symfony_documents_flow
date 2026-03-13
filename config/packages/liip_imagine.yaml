@@ -1,0 +1,17 @@
+liip_imagine:
+    resolvers:
+        default:
+            web_path: ~
+    filter_sets:
+        avatar_thumbnail:
+            quality: 85
+            filters:
+                thumbnail:
+                    size: [50, 50]
+                    mode: outbound
+        avatar_medium:
+            quality: 85
+            filters:
+                thumbnail:
+                    size: [200, 200]
+                    mode: outbound

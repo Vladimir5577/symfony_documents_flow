@@ -122,6 +122,24 @@
         </li>
     {% endif %}
 
+    <li class="sidebar-group-label">Новости</li>
+
+    <li class="sidebar-item {% if active_tab == 'all_posts' %}active{% endif %}">
+        <a href="{{ path('app_all_posts') }}" class="sidebar-link">
+            <i class="bi bi-newspaper"></i>
+            <span>Все посты</span>
+        </a>
+    </li>
+
+    {% if is_granted('ROLE_MANAGER') %}
+        <li class="sidebar-item {% if active_tab == 'create_post' %}active{% endif %}">
+            <a href="{{ path('app_create_post') }}" class="sidebar-link">
+                <i class="bi bi-plus-circle"></i>
+                <span>Создать пост</span>
+            </a>
+        </li>
+    {% endif %}
+
     <li class="sidebar-group-label">Инструменты</li>
 
     <li class="sidebar-item {% if active_tab == 'kanban_boards' %}active{% endif %}">

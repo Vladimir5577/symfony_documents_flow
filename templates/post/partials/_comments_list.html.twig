@@ -1,0 +1,6 @@
+{% for comment in comments %}
+    {% include 'post/partials/_comment.html.twig' with {'comment': comment} %}
+{% endfor %}
+{% if has_more is defined and has_more %}
+    <div data-has-more="1" data-next-offset="{{ next_offset }}"></div>
+{% endif %}

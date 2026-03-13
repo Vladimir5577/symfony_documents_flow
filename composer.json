@@ -12,6 +12,7 @@
         "doctrine/orm": "^3.6",
         "google/protobuf": "^5.34",
         "grpc/grpc": "^1.74",
+        "liip/imagine-bundle": "^2.17",
         "phpdocumentor/reflection-docblock": "^6.0",
         "phpoffice/phpspreadsheet": "^5.5",
         "phpoffice/phpword": "^1.4",

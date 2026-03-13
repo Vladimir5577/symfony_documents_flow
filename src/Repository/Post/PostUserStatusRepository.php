@@ -3,6 +3,8 @@
 namespace App\Repository\Post;
 
 use App\Entity\Post\PostUserStatus;
+use App\Entity\User\User;
+use App\Enum\Post\PostUserStatusType;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -16,28 +18,30 @@ class PostUserStatusRepository extends ServiceEntityRepository
         parent::__construct($registry, PostUserStatus::class);
     }
 
-    //    /**
-    //     * @return PostUserStatus[] Returns an array of PostUserStatus objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('p')
-    //            ->andWhere('p.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('p.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
+    /**
+     * @param int[] $postIds
+     * @return array<int, PostUserStatusType> post_id => status
+     */
+    public function findStatusesByPostsAndUser(array $postIds, User $user): array
+    {
+        if (empty($postIds)) {
+            return [];
+        }
 
-    //    public function findOneBySomeField($value): ?PostUserStatus
-    //    {
-    //        return $this->createQueryBuilder('p')
-    //            ->andWhere('p.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
+        $rows = $this->createQueryBuilder('s')
+            ->select('IDENTITY(s.post) AS post_id, s.status')
+            ->where('s.post IN (:postIds)')
+            ->andWhere('s.user = :user')
+            ->setParameter('postIds', $postIds)
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->getArrayResult();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $result[(int) $row['post_id']] = $row['status'];
+        }
+
+        return $result;
+    }
 }

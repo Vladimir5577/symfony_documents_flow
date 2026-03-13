@@ -356,18 +356,25 @@
         <div class="news-header-bar">
             <div class="d-flex justify-content-between align-items-center">
                 <h2 class="dash-section-title mb-0">Новости компании</h2>
-                <div class="d-flex gap-2 align-items-center">
-                    {% if is_granted('ROLE_MANAGER') %}
-                        <a href="{{ path('app_create_post') }}" class="btn btn-sm btn-primary me-2 btn-add-post">
-                            <i class="bi bi-plus-lg"></i> Добавить пост
+                <div class="d-flex flex-column align-items-end gap-2">
+                    <div class="d-flex gap-2 align-items-center">
+                        {% if is_granted('ROLE_MANAGER') %}
+                            <a href="{{ path('app_create_post') }}" class="btn btn-sm btn-primary btn-add-post">
+                                <i class="bi bi-plus-lg"></i> Добавить пост
+                            </a>
+                        {% endif %}
+                        <a href="{{ path('app_all_posts') }}" class="btn btn-sm btn-outline-secondary">
+                            Все новости
                         </a>
-                    {% endif %}
-                    <button type="button" class="news-nav-btn" id="newsScrollLeft" aria-label="Назад">
-                        <i class="bi bi-chevron-left"></i>
-                    </button>
-                    <button type="button" class="news-nav-btn" id="newsScrollRight" aria-label="Вперёд">
-                        <i class="bi bi-chevron-right"></i>
-                    </button>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <button type="button" class="news-nav-btn" id="newsScrollLeft" aria-label="Назад">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <button type="button" class="news-nav-btn" id="newsScrollRight" aria-label="Вперёд">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

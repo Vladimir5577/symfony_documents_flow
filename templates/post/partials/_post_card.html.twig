@@ -1,0 +1,108 @@
+{% set badge_colors = {
+    'order': '#6f42c1',
+    'news': '#198754',
+    'instruction': '#fd7e14',
+    'regulation': '#20c997',
+    'disposition': '#0dcaf0'
+} %}
+
+<div class="post-card card mb-4 shadow-sm {{ post.isRequiredAcknowledgment and (statuses[post.id] is not defined or statuses[post.id].value != 1) ? 'post-card--needs-ack' : '' }}"
+     data-post-id="{{ post.id }}">
+
+    {# Обложка #}
+    {% if post.coverImageName %}
+        <div class="post-card-cover">
+            <img src="/uploads/posts/{{ post.id }}/{{ post.coverImageName }}" alt="" class="w-100" style="max-height:320px;object-fit:cover">
+        </div>
+    {% endif %}
+
+    <div class="card-body">
+        {# Шапка: аватар, имя, дата, бейдж типа #}
+        <div class="d-flex align-items-center gap-2 mb-3">
+            {% if post.author.avatarName %}
+                <img src="/uploads/users/{{ post.author.id }}/{{ post.author.avatarName }}"
+                     alt="" class="rounded-circle" width="40" height="40" style="object-fit:cover">
+            {% else %}
+                <div class="rounded-circle bg-secondary-subtle d-flex align-items-center justify-content-center"
+                     style="width:40px;height:40px;font-size:0.85rem;font-weight:600;color:var(--bs-primary)">
+                    {{ post.author.lastname|default('?')|first }}{{ post.author.firstname|default('')|first }}
+                </div>
+            {% endif %}
+            <div class="flex-grow-1">
+                <div class="fw-semibold small">{{ post.author.lastname }} {{ post.author.firstname }} {{ post.author.patronymic|default('') }}</div>
+                <div class="text-muted" style="font-size:0.75rem">{{ post.createdAt|date('d.m.Y H:i') }}</div>
+            </div>
+            {% if post.type %}
+                <span class="badge" style="background:{{ badge_colors[post.type.value]|default('#6c757d') }};font-size:0.7rem">
+                    {{ post.type.label() }}
+                </span>
+            {% endif %}
+        </div>
+
+        {# Заголовок + контент #}
+        <h5 class="card-title mb-2">{{ post.title }}</h5>
+        {% if post.content %}
+            <div class="card-text mb-3" style="white-space:pre-line">{{ post.content }}</div>
+        {% endif %}
+
+        {# Файлы #}
+        {% if post.files|length > 0 %}
+            <div class="mb-3">
+                <div class="small text-muted mb-1"><i class="bi bi-paperclip"></i> Файлы:</div>
+                {% for file in post.files %}
+                    <a href="{{ path('app_post_file_download', {id: file.id}) }}" class="btn btn-sm btn-outline-secondary me-1 mb-1">
+                        <i class="bi bi-download"></i> {{ file.title ?: file.filePath }}
+                    </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {# Ознакомление #}
+        {% if post.isRequiredAcknowledgment %}
+            <div class="post-ack-block mb-3" id="ackBlock{{ post.id }}">
+                {% if statuses[post.id] is defined and statuses[post.id].value == 1 %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Ознакомлен</span>
+                {% else %}
+                    <button type="button" class="btn btn-sm btn-warning btn-acknowledge" data-post-id="{{ post.id }}">
+                        <i class="bi bi-eye"></i> Ознакомиться
+                    </button>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        {# Комментарии #}
+        <div class="post-comments border-top pt-3 mt-2">
+            <div class="small text-muted mb-2">
+                <i class="bi bi-chat-dots"></i> Комментарии
+                {% set cnt = comment_counts[post.id]|default(0) %}
+                {% if cnt > 0 %}({{ cnt }}){% endif %}
+            </div>
+
+            <div class="comments-container" id="comments{{ post.id }}">
+                {% if comments[post.id] is defined %}
+                    {% for comment in comments[post.id] %}
+                        {% include 'post/partials/_comment.html.twig' with {'comment': comment} %}
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            {% set cnt = comment_counts[post.id]|default(0) %}
+            {% set shown = comments[post.id] is defined ? comments[post.id]|length : 0 %}
+            {% if cnt > shown %}
+                <button type="button" class="btn btn-sm btn-link btn-load-comments p-0 mt-1"
+                        data-post-id="{{ post.id }}"
+                        data-offset="{{ shown }}">
+                    Ещё комментарии ({{ cnt - shown }})
+                </button>
+            {% endif %}
+
+            {# Форма добавления комментария #}
+            <div class="mt-2 d-flex gap-2">
+                <input type="text" class="form-control form-control-sm comment-input" placeholder="Написать комментарий..." data-post-id="{{ post.id }}">
+                <button type="button" class="btn btn-sm btn-primary btn-send-comment" data-post-id="{{ post.id }}">
+                    <i class="bi bi-send"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,11 @@
+{% for post in posts %}
+    {% include 'post/partials/_post_card.html.twig' with {
+        'post': post,
+        'comments': comments,
+        'comment_counts': comment_counts,
+        'statuses': statuses,
+    } %}
+{% endfor %}
+{% if has_more %}
+    <div id="loadMoreMarker" data-has-more="1" data-next-page="{{ page + 1 }}"></div>
+{% endif %}

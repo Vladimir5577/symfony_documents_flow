@@ -1,0 +1,248 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Все посты{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+
+<style>
+    .posts-feed {
+        max-width: 720px;
+        margin: 0 auto;
+    }
+
+    .post-card {
+        border-radius: 0.75rem;
+        overflow: hidden;
+        transition: box-shadow 0.3s, border-color 0.3s;
+    }
+    .post-card:hover {
+        box-shadow: 0 8px 28px rgba(0,0,0,.1) !important;
+    }
+
+    .post-card--needs-ack {
+        border-left: 4px solid #dc3545 !important;
+    }
+
+    .post-card-cover img {
+        border-radius: 0.75rem 0.75rem 0 0;
+    }
+
+    .post-comment {
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    .post-comment:last-child {
+        border-bottom: none;
+    }
+
+    .feed-spinner {
+        text-align: center;
+        padding: 2rem 0;
+    }
+    .feed-end-msg {
+        text-align: center;
+        padding: 1.5rem 0;
+        color: var(--bs-secondary-color);
+        font-size: 0.9rem;
+        display: none;
+    }
+
+    .post-filter-bar {
+        max-width: 720px;
+        margin: 0 auto 1.5rem;
+    }
+</style>
+
+<div class="post-filter-bar d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <h4 class="mb-0 fw-bold"><i class="bi bi-newspaper"></i> Все посты</h4>
+    <div>
+        <select class="form-select form-select-sm" id="postTypeFilter" style="min-width:180px">
+            <option value="">Все типы</option>
+            {% for pt in post_types %}
+                <option value="{{ pt.value }}" {{ current_type == pt.value ? 'selected' : '' }}>{{ pt.label() }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<div class="posts-feed" id="postsFeed">
+    {% include 'post/partials/_post_cards.html.twig' %}
+</div>
+
+<div class="feed-spinner" id="feedSpinner" style="display:none">
+    <div class="spinner-border spinner-border-sm text-primary" role="status">
+        <span class="visually-hidden">Загрузка...</span>
+    </div>
+    <span class="ms-2 text-muted small">Загрузка постов...</span>
+</div>
+
+<div class="feed-end-msg" id="feedEndMsg">
+    Больше постов нет
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const feed = document.getElementById('postsFeed');
+    const spinner = document.getElementById('feedSpinner');
+    const endMsg = document.getElementById('feedEndMsg');
+    const typeFilter = document.getElementById('postTypeFilter');
+    let loading = false;
+
+    // Filter change — full page reload
+    typeFilter.addEventListener('change', function() {
+        const val = this.value;
+        const url = new URL(window.location.href);
+        if (val) {
+            url.searchParams.set('type', val);
+        } else {
+            url.searchParams.delete('type');
+        }
+        url.searchParams.delete('page');
+        window.location.href = url.toString();
+    });
+
+    // Check initial state
+    function checkHasMore() {
+        const marker = feed.querySelector('#loadMoreMarker');
+        if (!marker) {
+            endMsg.style.display = 'block';
+        }
+    }
+    checkHasMore();
+
+    // Infinite scroll
+    function onScroll() {
+        if (loading) return;
+        const marker = feed.querySelector('#loadMoreMarker');
+        if (!marker) return;
+
+        const rect = marker.getBoundingClientRect();
+        if (rect.top < window.innerHeight + 200) {
+            loadMore(marker);
+        }
+    }
+
+    function loadMore(marker) {
+        loading = true;
+        spinner.style.display = 'block';
+
+        const page = marker.dataset.nextPage;
+        const url = new URL('{{ path("app_all_posts_load_more") }}', window.location.origin);
+        url.searchParams.set('page', page);
+        const currentType = typeFilter.value;
+        if (currentType) {
+            url.searchParams.set('type', currentType);
+        }
+
+        marker.remove();
+
+        fetch(url.toString(), {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(r => r.text())
+        .then(html => {
+            feed.insertAdjacentHTML('beforeend', html);
+            loading = false;
+            spinner.style.display = 'none';
+            checkHasMore();
+        })
+        .catch(() => {
+            loading = false;
+            spinner.style.display = 'none';
+        });
+    }
+
+    window.addEventListener('scroll', onScroll);
+
+    // Event delegation for comments and acknowledgment
+    document.addEventListener('click', function(e) {
+        // Send comment
+        const sendBtn = e.target.closest('.btn-send-comment');
+        if (sendBtn) {
+            const postId = sendBtn.dataset.postId;
+            const input = document.querySelector('.comment-input[data-post-id="' + postId + '"]');
+            const content = input.value.trim();
+            if (!content) return;
+
+            fetch('{{ path("app_post_add_comment", {id: "__ID__"}) }}'.replace('__ID__', postId), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: 'content=' + encodeURIComponent(content)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const container = document.getElementById('comments' + postId);
+                    container.insertAdjacentHTML('beforeend', data.html);
+                    input.value = '';
+                }
+            });
+            return;
+        }
+
+        // Load more comments
+        const loadCommentsBtn = e.target.closest('.btn-load-comments');
+        if (loadCommentsBtn) {
+            const postId = loadCommentsBtn.dataset.postId;
+            const offset = loadCommentsBtn.dataset.offset;
+
+            const url = new URL('{{ path("app_post_load_comments", {id: "__ID__"}) }}'.replace('__ID__', postId), window.location.origin);
+            url.searchParams.set('offset', offset);
+
+            fetch(url.toString(), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(r => r.text())
+            .then(html => {
+                const container = document.getElementById('comments' + postId);
+                container.innerHTML = html;
+                loadCommentsBtn.remove();
+            });
+            return;
+        }
+
+        // Acknowledge
+        const ackBtn = e.target.closest('.btn-acknowledge');
+        if (ackBtn) {
+            const postId = ackBtn.dataset.postId;
+
+            fetch('{{ path("app_post_acknowledge", {id: "__ID__"}) }}'.replace('__ID__', postId), {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    const ackBlock = document.getElementById('ackBlock' + postId);
+                    ackBlock.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Ознакомлен</span>';
+                    const card = document.querySelector('.post-card[data-post-id="' + postId + '"]');
+                    if (card) {
+                        card.classList.remove('post-card--needs-ack');
+                    }
+                }
+            });
+            return;
+        }
+    });
+
+    // Enter key to send comment
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && e.target.classList.contains('comment-input')) {
+            e.preventDefault();
+            const postId = e.target.dataset.postId;
+            const btn = document.querySelector('.btn-send-comment[data-post-id="' + postId + '"]');
+            if (btn) btn.click();
+        }
+    });
+});
+</script>
+
+{% endblock %}
