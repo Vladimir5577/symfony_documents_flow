@@ -1,7 +1,17 @@
 liip_imagine:
     resolvers:
         default:
-            web_path: ~
+            web_path:
+                web_root: '%kernel.project_dir%/public'
+                cache_prefix: 'media/cache'
+    loaders:
+        default:
+            filesystem:
+                data_root: '%kernel.project_dir%/public'
+        user_avatar:
+            filesystem:
+                data_root: '%private_upload_dir_users%'
+    data_loader: default
     filter_sets:
         avatar_thumbnail:
             quality: 85
@@ -10,6 +20,7 @@ liip_imagine:
                     size: [50, 50]
                     mode: outbound
         avatar_medium:
+            data_loader: user_avatar
             quality: 85
             filters:
                 thumbnail:

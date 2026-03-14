@@ -54,6 +54,12 @@ $ chown -R www-data:www-data /uploads
 $ chmod -R 775 /uploads
 ```
 
+Permissions to media cache
+```bash
+$  chown -R www-data:www-data public/media/
+chown -R 775 public/media/
+```
+
 11. If need run dbgate
 ```bash
 $ docker compose -f docker-compose.dbgate.yml up -d

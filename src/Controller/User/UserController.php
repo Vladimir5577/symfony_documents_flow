@@ -13,11 +13,13 @@ use App\Repository\User\WorkerRepository;
 use App\Service\User\LoginGeneratorService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class UserController extends AbstractController
@@ -456,6 +458,55 @@ final class UserController extends AbstractController
         ]);
     }
 
+    #[Route('/user/{id}/edit-photo', name: 'app_edit_user_photo', methods: ['GET'], requirements: ['id' => '\d+'])]
+    public function editUserPhoto(int $id, UserRepository $userRepository): Response
+    {
+        $user = $userRepository->find($id);
+        if (!$user) {
+            throw $this->createNotFoundException('Пользователь не найден');
+        }
+
+        return $this->render('user/edit_user_photo.html.twig', [
+            'active_tab' => 'edit_user',
+            'user' => $user,
+        ]);
+    }
+
+    #[Route('/user/{id}/update-photo', name: 'app_update_user_photo', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function updateUserPhoto(int $id, Request $request, UserRepository $userRepository, EntityManagerInterface $entityManager): Response
+    {
+        if (!$this->isCsrfTokenValid('user_photo_' . $id, $request->request->get('_csrf_token', ''))) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('app_edit_user_photo', ['id' => $id]);
+        }
+
+        $user = $userRepository->find($id);
+        if (!$user) {
+            throw $this->createNotFoundException('Пользователь не найден');
+        }
+
+        /** @var UploadedFile|null $file */
+        $file = $request->files->get('avatar_file');
+        if (!$file || !$file->isValid()) {
+            $this->addFlash('error', 'Выберите изображение для загрузки.');
+            return $this->redirectToRoute('app_edit_user_photo', ['id' => $id]);
+        }
+
+        $mime = $file->getMimeType();
+        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (!$mime || !in_array($mime, $allowed, true)) {
+            $this->addFlash('error', 'Допустимые форматы: JPG, PNG, GIF, WebP.');
+            return $this->redirectToRoute('app_edit_user_photo', ['id' => $id]);
+        }
+
+        $user->setAvatarFile($file);
+        $user->setUpdatedAt(new \DateTimeImmutable('now'));
+        $entityManager->flush();
+
+        $this->addFlash('success', 'Фото сохранено.');
+        return $this->redirectToRoute('app_view_user', ['id' => $id]);
+    }
+
     #[Route('/user_update', name: 'app_update_user', methods: ['POST'])]
     public function editUser(
         Request $request,
@@ -728,6 +779,7 @@ final class UserController extends AbstractController
     }
 
     #[Route('/user_delete/{id}', name: 'app_delete_user', methods: ['POST'], requirements: ['id' => '\d+'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteUser(int $id, Request $request, UserRepository $userRepository): Response
     {
         if (!$this->isCsrfTokenValid('delete_user_' . $id, $request->request->get('_csrf_token', ''))) {

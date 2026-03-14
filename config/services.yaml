@@ -19,6 +19,7 @@ parameters:
     private_upload_dir_documents_templates: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_TEMPLATES)%'
     private_upload_dir_posts: '%env(resolve:PRIVATE_UPLOAD_DIR_POSTS)%'
     private_upload_dir_users: '%env(resolve:PRIVATE_UPLOAD_DIR_USERS)%'
+    private_upload_dir_chats: '%env(resolve:PRIVATE_UPLOAD_DIR_CHATS)%'
 
     # onlyoffice url
     onlyoffice_document_server_url: '%env(resolve:ONLYOFFICE_DOCUMENT_SERVER_URL)%'

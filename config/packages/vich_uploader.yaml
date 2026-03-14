@@ -53,3 +53,13 @@ vich_uploader:
                     property: user.id
             delete_on_remove: true
             delete_on_update: true
+        chat_files:
+            uri_prefix: /uploads/chats
+            upload_destination: '%private_upload_dir_chats%'
+            namer: Vich\UploaderBundle\Naming\SmartUniqueNamer
+            directory_namer:
+                service: Vich\UploaderBundle\Naming\PropertyDirectoryNamer
+                options:
+                    property: message.id
+            delete_on_remove: true
+            delete_on_update: true

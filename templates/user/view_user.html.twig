@@ -19,14 +19,7 @@
     {% endfor %}
 
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Просмотр пользователя</h1>
-        <a href="{{ path('app_all_users', {page: page|default(1)}) }}" class="btn btn-secondary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-            Назад к списку
-        </a>
+        <h1 class="mb-0">Просмотр пользователя</h1>
     </div>
 
     <section class="section">
@@ -38,12 +31,24 @@
                     </div>
                     <div class="card-content">
                         <div class="card-body">
-                            <div class="row">
-                                <div class="col-12">
-                                    <table class="table table-borderless">
-                                        <tbody>
-                                            <tr>
-                                                <th class="text-muted" style="width: 30%;">Был(а) онлайн:</th>
+                            <div class="d-flex align-items-center gap-3 mb-3">
+                                {% if user.avatarName %}
+                                <div class="view-user-photo overflow-hidden rounded-3 border bg-light flex-shrink-0" style="width: 200px; height: 240px;">
+                                    <img src="{{ (user.id ~ '/' ~ user.avatarName) | imagine_filter('avatar_medium') }}"
+                                         alt=""
+                                         class="w-100 h-100"
+                                         style="object-fit: cover;">
+                                </div>
+                                <a href="{{ path('app_edit_user_photo', {id: user.id}) }}" class="btn btn-outline-primary btn-sm">Изменить фото</a>
+                                {% else %}
+                                <p class="text-muted small mb-0">Фото не загружено</p>
+                                <a href="{{ path('app_edit_user_photo', {id: user.id}) }}" class="btn btn-outline-primary btn-sm">Добавить фото</a>
+                                {% endif %}
+                            </div>
+                            <table class="table table-borderless">
+                                <tbody>
+                                    <tr>
+                                        <th class="text-muted" style="width: 30%;">Был(а) онлайн:</th>
                                                 <td>{% set _lastSeenTs = user.lastSeenAt ? user.lastSeenAt|date('U') : 0 %}{% set _diff = "now"|date('U') - _lastSeenTs %}{% if user.lastSeenAt and _diff < 300 %}<span class="text-success">Онлайн</span>{% else %}{{ user.lastSeenAt ? user.lastSeenAt|date('d.m.Y H:i') : '—' }}{% endif %}</td>
                                             </tr>
                                             <tr>
@@ -119,8 +124,6 @@
                                             {% endif %}
                                         </tbody>
                                     </table>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -130,6 +133,7 @@
 
     <div class="d-flex justify-content-end gap-2 mt-4">
 
+        {% if user.id != app.user.id and is_granted('ROLE_ADMIN') %}
         <a href="{{ path('app_edit_user', {id: user.id}) }}" class="btn btn-primary">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-edit">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -138,7 +142,6 @@
             Редактировать пользователя
         </a>
 
-        {% if user.id != app.user.id %}
         <form id="delete-user-form" method="post" action="{{ path('app_delete_user', {id: user.id}) }}" class="d-inline">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token('delete_user_' ~ user.id) }}">
             <button type="submit" class="btn btn-danger" id="delete-user-btn">
@@ -174,4 +177,4 @@
         }
     </style>
 
-    {% endblock %}
+{% endblock %}
