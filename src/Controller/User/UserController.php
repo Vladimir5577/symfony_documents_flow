@@ -12,11 +12,14 @@ use App\Repository\User\UserRepository;
 use App\Repository\User\WorkerRepository;
 use App\Service\User\LoginGeneratorService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
@@ -503,8 +506,38 @@ final class UserController extends AbstractController
         $user->setUpdatedAt(new \DateTimeImmutable('now'));
         $entityManager->flush();
 
+        // Сбрасываем ссылку на файл, чтобы при сериализации сессии (текущий пользователь
+        // может быть тем же User) не возникала ошибка "Serialization of File is not allowed"
+        $user->setAvatarFile(null);
+
         $this->addFlash('success', 'Фото сохранено.');
         return $this->redirectToRoute('app_view_user', ['id' => $id]);
+    }
+
+    #[Route('/user/{id}/avatar/original', name: 'app_user_avatar_original', methods: ['GET'], requirements: ['id' => '\d+'])]
+    public function userAvatarOriginal(
+        int $id,
+        Request $request,
+        UserRepository $userRepository,
+        #[Autowire('%private_upload_dir_users%')] string $usersUploadDir,
+    ): Response {
+        $user = $userRepository->find($id);
+        if (!$user || !$user->getAvatarName()) {
+            throw $this->createNotFoundException('Фото не найдено.');
+        }
+
+        $path = $usersUploadDir . \DIRECTORY_SEPARATOR . $user->getId() . \DIRECTORY_SEPARATOR . basename($user->getAvatarName());
+        if (!is_file($path)) {
+            throw $this->createNotFoundException('Файл не найден.');
+        }
+
+        $response = new BinaryFileResponse($path);
+        $response->setContentDisposition(
+            $request->query->getBoolean('inline', true) ? ResponseHeaderBag::DISPOSITION_INLINE : ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+            basename($user->getAvatarName())
+        );
+
+        return $response;
     }
 
     #[Route('/user_update', name: 'app_update_user', methods: ['POST'])]

@@ -29,7 +29,7 @@ class UserFile
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
-    #[ORM\Column(enumType: UserFileType::class)]
+    #[ORM\Column(enumType: UserFileType::class, nullable: true)]
     private ?UserFileType $type = null;
 
     #[Vich\UploadableField(mapping: 'user_files', fileNameProperty: 'filePath')]
@@ -40,6 +40,11 @@ class UserFile
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $originalName = null;
+
+    public function __construct()
+    {
+        $this->type = UserFileType::OTHER;
+    }
 
     public function getId(): ?int
     {
@@ -92,6 +97,14 @@ class UserFile
         $this->type = $type;
 
         return $this;
+    }
+
+    /**
+     * Тип для отображения и группировки: если тип не присвоен — считаем «Разное».
+     */
+    public function getTypeForDisplay(): UserFileType
+    {
+        return $this->type ?? UserFileType::OTHER;
     }
 
     public function getFile(): ?SymfonyFile

@@ -33,12 +33,20 @@
                         <div class="card-body">
                             <div class="d-flex align-items-center gap-3 mb-3">
                                 {% if user.avatarName %}
-                                <div class="view-user-photo overflow-hidden rounded-3 border bg-light flex-shrink-0" style="width: 200px; height: 240px;">
-                                    <img src="{{ (user.id ~ '/' ~ user.avatarName) | imagine_filter('avatar_medium') }}"
+                                {% set avatar_url = (user.id ~ '/' ~ user.avatarName) | imagine_filter('avatar_medium') %}
+                                {% set avatar_original_url = path('app_user_avatar_original', {id: user.id}) %}
+                                <button type="button"
+                                        class="view-user-photo overflow-hidden rounded-3 border bg-light flex-shrink-0 p-0 text-start"
+                                        style="width: 200px; height: 240px; cursor: pointer;"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#imagePreviewModal"
+                                        data-image-url="{{ avatar_original_url }}"
+                                        aria-label="Открыть фото в полном размере">
+                                    <img src="{{ avatar_url }}"
                                          alt=""
                                          class="w-100 h-100"
                                          style="object-fit: cover;">
-                                </div>
+                                </button>
                                 <a href="{{ path('app_edit_user_photo', {id: user.id}) }}" class="btn btn-outline-primary btn-sm">Изменить фото</a>
                                 {% else %}
                                 <p class="text-muted small mb-0">Фото не загружено</p>
@@ -176,5 +184,7 @@
             max-width: 140px;
         }
     </style>
+
+    {{ include('user/partials/_preview_image_script.html.twig') }}
 
 {% endblock %}

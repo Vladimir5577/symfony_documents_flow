@@ -104,6 +104,13 @@
         </a>
     </li>
 
+    <li class="sidebar-item {% if active_tab == 'my_files' %}active{% endif %}">
+        <a href="{{ path('app_my_files') }}" class="sidebar-link">
+            <i class="bi bi-folder2"></i>
+            <span>Мои файлы</span>
+        </a>
+    </li>
+
     {% if is_granted('ROLE_MANAGER') %}
         <li class="sidebar-group-label">Справочники</li>
 

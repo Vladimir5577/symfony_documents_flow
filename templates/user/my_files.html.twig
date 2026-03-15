@@ -1,0 +1,188 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Мои файлы{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Закрыть"></button>
+        </div>
+    {% endfor %}
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Закрыть"></button>
+        </div>
+    {% endfor %}
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <h1 class="mb-0">Мои файлы</h1>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <input type="search" id="my_files_search" name="search" class="form-control form-control-sm" placeholder="Поиск по названию" value="{{ search|default('') }}" style="width: 220px;" aria-label="Поиск по названию" autocomplete="off">
+            <a href="{{ path('app_my_files_upload') }}" class="btn btn-primary">Добавить файлы</a>
+        </div>
+    </div>
+
+    <section class="section">
+        {% if types_order|length == 0 %}
+            <div class="card">
+                <div class="card-body text-center text-muted py-5">
+                    {% if search|default('') != '' %}
+                        <p class="mb-0">По запросу «{{ search }}» ничего не найдено.</p>
+                        <a href="{{ path('app_my_files') }}" class="btn btn-outline-secondary btn-sm mt-3">Показать все файлы</a>
+                    {% else %}
+                        <p class="mb-0">Нет загруженных файлов.</p>
+                        <a href="{{ path('app_my_files_upload') }}" class="btn btn-outline-primary btn-sm mt-3">Добавить файлы</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <div id="myFilesCardsContainer">
+                {% for type in types_order %}
+                    {% set files = files_grouped[type.value] %}
+                    <div class="card {{ not loop.first ? 'mt-4' : '' }}">
+                        <div class="card-header">
+                            <h4 class="card-title mb-0">{{ type.label }} <span class="badge bg-secondary rounded-pill">{{ files|length }}</span></h4>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush">
+                                {% for file in files %}
+                                    <li class="list-group-item my-files-row d-flex align-items-center gap-3 px-3"
+                                        data-search-text="{{ ((file.title|default('')) ~ ' ' ~ (file.originalName|default('')))|lower }}">
+                                        <div class="flex-shrink-0 rounded d-flex align-items-center justify-content-center text-muted" style="width: 40px; height: 40px; background-color: var(--bs-secondary-bg);">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+                                        </div>
+                                        <span class="flex-grow-1 text-break">{{ file.title|default(file.originalName)|default('Без названия') }}</span>
+                                        <form method="post" action="{{ path('app_my_files_change_type', {id: file.id}) }}" class="d-inline flex-shrink-0" style="width: 160px;">
+                                            <input type="hidden" name="_token" value="{{ csrf_token('my_files_change_type_' ~ file.id) }}">
+                                            <input type="hidden" name="search_redirect" value="{{ search|default('') }}">
+                                            <select name="type" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Тип файла">
+                                                {% for ft in file_types %}
+                                                    <option value="{{ ft.value }}" {{ (file.typeForDisplay.value == ft.value) ? 'selected' : '' }}>{{ ft.label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </form>
+                                        <a href="{{ path('app_my_files_download', {id: file.id}) }}" class="btn btn-sm btn-outline-primary flex-shrink-0">Скачать</a>
+                                        <form method="post" action="{{ path('app_my_files_delete', {id: file.id}) }}" class="d-inline flex-shrink-0 my-files-delete-form" data-filename="{{ (file.title|default(file.originalName)|default('Без названия'))|e('html_attr') }}">
+                                            <input type="hidden" name="_token" value="{{ csrf_token('my_files_delete_' ~ file.id) }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                                        </form>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div id="my_files_search_results" class="card mt-4 d-none">
+                <div class="card-header">
+                    <h4 class="card-title mb-0">Результаты поиска</h4>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush" id="my_files_search_list"></ul>
+                </div>
+            </div>
+
+            <div id="my_files_no_results" class="card mt-4 d-none">
+                <div class="card-body text-center text-muted py-5">
+                    <p class="mb-0">По вашему запросу ничего не найдено.</p>
+                </div>
+            </div>
+        {% endif %}
+    </section>
+
+    {% if types_order|length > 0 %}
+    <script>
+        (function () {
+            var searchEl = document.getElementById('my_files_search');
+            var cardsContainer = document.getElementById('myFilesCardsContainer');
+            var searchResultsEl = document.getElementById('my_files_search_results');
+            var searchList = document.getElementById('my_files_search_list');
+            var noResultsEl = document.getElementById('my_files_no_results');
+            if (!searchEl || !cardsContainer) return;
+
+            function updateUrl(query) {
+                var url = new URL(window.location.href);
+                if (query) {
+                    url.searchParams.set('search', query);
+                } else {
+                    url.searchParams.delete('search');
+                }
+                window.history.replaceState({}, '', url.toString());
+            }
+
+            function runFilter() {
+                var query = searchEl.value.trim().toLowerCase();
+                var rows = cardsContainer.querySelectorAll('.my-files-row');
+                var visibleRows = [];
+
+                rows.forEach(function (li) {
+                    var text = (li.getAttribute('data-search-text') || '');
+                    var show = !query || text.indexOf(query) !== -1;
+                    li.style.display = show ? '' : 'none';
+                    if (show) visibleRows.push(li);
+                });
+
+                if (query) {
+                    cardsContainer.style.display = 'none';
+                    if (searchResultsEl && searchList) {
+                        searchList.innerHTML = '';
+                        visibleRows.forEach(function (li) {
+                            searchList.appendChild(li.cloneNode(true));
+                        });
+                        searchResultsEl.classList.remove('d-none');
+                    }
+                    if (noResultsEl) {
+                        noResultsEl.classList.toggle('d-none', visibleRows.length > 0);
+                    }
+                } else {
+                    cardsContainer.style.display = '';
+                    if (searchResultsEl) searchResultsEl.classList.add('d-none');
+                    if (searchList) searchList.innerHTML = '';
+                    if (noResultsEl) noResultsEl.classList.add('d-none');
+                }
+                updateUrl(query || null);
+            }
+
+            var debounceTimer;
+            searchEl.addEventListener('input', function () {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(runFilter, 120);
+            });
+            searchEl.addEventListener('search', function () {
+                runFilter();
+            });
+
+            runFilter();
+
+            var SwalLib = typeof Swal !== 'undefined' ? Swal : (typeof Sweetalert2 !== 'undefined' ? Sweetalert2 : null);
+            document.addEventListener('submit', function (e) {
+                var form = e.target;
+                if (!form || !form.classList || !form.classList.contains('my-files-delete-form')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                var fileName = form.getAttribute('data-filename') || '';
+                var title = fileName ? 'Удалить файл «' + fileName + '»?' : 'Удалить файл?';
+                if (SwalLib) {
+                    SwalLib.fire({
+                        title: title,
+                        showCancelButton: true,
+                        confirmButtonText: 'Удалить',
+                        cancelButtonText: 'Отменить'
+                    }).then(function (result) {
+                        if (result.isConfirmed) form.submit();
+                    });
+                } else {
+                    if (confirm(title)) form.submit();
+                }
+            });
+        })();
+    </script>
+    {% endif %}
+{% endblock %}
