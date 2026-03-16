@@ -1,0 +1,62 @@
+{% macro folder_tree(folders, parentId, level) %}
+    {% for folder in folders %}
+        {% if (parentId is null and folder.parent is null) or (parentId is not null and folder.parent is not null and folder.parent.id == parentId) %}
+            <div class="move-tree-item" data-folder-id="{{ folder.id }}" data-target-value="{{ folder.id }}" style="padding-left: {{ (level * 20) + 8 }}px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="text-warning me-1" viewBox="0 0 16 16"><path d="M.54 3.87.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3H13.5a2 2 0 0 1 2 2v1H.5a.5.5 0 0 1 0-1zm-.087 1h15.093l-1.372 9.112A2 2 0 0 1 12.19 16H3.81a2 2 0 0 1-1.983-1.738z"/></svg>
+                {{ folder.name }}
+            </div>
+            {{ _self.folder_tree(folders, folder.id, level + 1) }}
+        {% endif %}
+    {% endfor %}
+{% endmacro %}
+
+<div class="modal fade" id="moveModal" tabindex="-1" aria-labelledby="moveModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" id="moveForm" action="">
+                <input type="hidden" name="_token" id="moveToken" value="">
+                <input type="hidden" name="target_folder_id" id="moveTargetFolderId" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="moveModalLabel">Переместить: <span id="moveItemName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">Выберите папку назначения:</p>
+                    <div class="border rounded p-2" style="max-height: 300px; overflow-y: auto;">
+                        <div class="move-tree-item selected" data-target-value="" style="padding-left: 8px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16"><path d="M.54 3.87.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3H13.5a2 2 0 0 1 2 2v1H.5a.5.5 0 0 1 0-1zm-.087 1h15.093l-1.372 9.112A2 2 0 0 1 12.19 16H3.81a2 2 0 0 1-1.983-1.738z"/></svg>
+                            Корень
+                        </div>
+                        {{ _self.folder_tree(allFolders, null, 1) }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Переместить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var moveModal = document.getElementById('moveModal');
+    if (!moveModal) return;
+
+    moveModal.addEventListener('click', function(e) {
+        var item = e.target.closest('.move-tree-item');
+        if (!item) return;
+
+        moveModal.querySelectorAll('.move-tree-item').forEach(function(el) {
+            el.classList.remove('selected');
+        });
+        item.classList.add('selected');
+
+        var targetInput = document.getElementById('moveTargetFolderId');
+        if (targetInput) {
+            targetInput.value = item.getAttribute('data-target-value') || '';
+        }
+    });
+});
+</script>

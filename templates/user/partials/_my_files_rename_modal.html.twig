@@ -1,0 +1,23 @@
+<div class="modal fade" id="renameModal" tabindex="-1" aria-labelledby="renameModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" id="renameForm" action="">
+                <input type="hidden" name="_token" id="renameToken" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="renameModalLabel">Переименовать</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="renameInput" class="form-label">Новое название</label>
+                        <input type="text" class="form-control" id="renameInput" name="name" required maxlength="255">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

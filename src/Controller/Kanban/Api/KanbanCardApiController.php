@@ -107,6 +107,7 @@ final class KanbanCardApiController extends AbstractController
                 'filename' => $att->getFilename(),
                 'contentType' => $att->getContentType(),
                 'sizeBytes' => $att->getSizeBytes(),
+                'context' => $att->getContext(),
                 'createdAt' => $att->getCreatedAt()?->format('c'),
             ];
         }

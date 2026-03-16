@@ -47,11 +47,19 @@ final class KanbanAttachmentApiController extends AbstractController
 
         $attachment = $this->attachmentService->upload($file, $card);
 
+        $context = $request->request->get('context', 'info');
+        if (!in_array($context, ['chat', 'info'], true)) {
+            $context = 'info';
+        }
+        $attachment->setContext($context);
+        $this->attachmentService->flush();
+
         return $this->json([
             'id' => $attachment->getId(),
             'filename' => $attachment->getFilename(),
             'contentType' => $attachment->getContentType(),
             'sizeBytes' => $attachment->getSizeBytes(),
+            'context' => $attachment->getContext(),
             'createdAt' => $attachment->getCreatedAt()?->format('c'),
         ], Response::HTTP_CREATED);
     }

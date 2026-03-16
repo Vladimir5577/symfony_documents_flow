@@ -1,0 +1,24 @@
+<div class="modal fade" id="createFolderModal" tabindex="-1" aria-labelledby="createFolderModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{{ path('app_my_files_folder_create') }}">
+                <input type="hidden" name="_token" value="{{ csrf_token('my_files_folder_create') }}">
+                <input type="hidden" name="parent_id" value="{{ currentFolder ? currentFolder.id : '' }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createFolderModalLabel">Новая папка</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="newFolderName" class="form-label">Название папки</label>
+                        <input type="text" class="form-control" id="newFolderName" name="name" required autofocus maxlength="255" placeholder="Введите название">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Создать</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

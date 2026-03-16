@@ -32,6 +32,9 @@ class KanbanAttachment
     #[ORM\JoinColumn(name: 'card_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private KanbanCard $card;
 
+    #[ORM\Column(length: 20, options: ['default' => 'info'])]
+    private string $context = 'info';
+
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
@@ -99,5 +102,16 @@ class KanbanAttachment
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;
+    }
+
+    public function getContext(): string
+    {
+        return $this->context;
+    }
+
+    public function setContext(string $context): static
+    {
+        $this->context = $context;
+        return $this;
     }
 }

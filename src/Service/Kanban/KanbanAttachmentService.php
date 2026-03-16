@@ -71,6 +71,11 @@ class KanbanAttachmentService
         return $this->kanbanUploadDir . '/' . $attachment->getStorageKey();
     }
 
+    public function flush(): void
+    {
+        $this->em->flush();
+    }
+
     public function delete(KanbanAttachment $attachment): void
     {
         $path = $this->getFilePath($attachment);

@@ -5,6 +5,7 @@ namespace App\Entity\User;
 use App\Repository\User\UserFileRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use Gedmo\Mapping\Annotation as Gedmo;
 use Symfony\Component\HttpFoundation\File\File as SymfonyFile;
 use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
@@ -44,6 +45,13 @@ class UserFile
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $originalName = null;
+
+    #[ORM\Column(type: Types::BIGINT, nullable: true)]
+    private ?string $fileSize = null;
+
+    #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    #[Gedmo\Timestampable(on: 'create')]
+    private ?\DateTimeImmutable $createdAt = null;
 
     public function getId(): ?int
     {
@@ -128,6 +136,30 @@ class UserFile
     public function setOriginalName(?string $originalName): static
     {
         $this->originalName = $originalName;
+
+        return $this;
+    }
+
+    public function getFileSize(): ?string
+    {
+        return $this->fileSize;
+    }
+
+    public function setFileSize(?string $fileSize): static
+    {
+        $this->fileSize = $fileSize;
+
+        return $this;
+    }
+
+    public function getCreatedAt(): ?\DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function setCreatedAt(?\DateTimeImmutable $createdAt): static
+    {
+        $this->createdAt = $createdAt;
 
         return $this;
     }

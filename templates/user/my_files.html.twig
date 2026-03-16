@@ -21,169 +21,576 @@
     {% endfor %}
 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <h1 class="mb-0">Мои файлы</h1>
+        <div class="d-flex align-items-center gap-3">
+            {% if currentFolder is not null %}
+                <a href="{{ breadcrumbs|length > 1 ? path('app_my_files_folder', {id: breadcrumbs[breadcrumbs|length - 2].id}) : path('app_my_files') }}" class="btn btn-outline-success btn-sm" title="Назад">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8"/></svg>
+                </a>
+            {% endif %}
+            <div>
+                <h1 class="mb-1">{% if currentFolder is not null %}Папка: «{{ currentFolder.name }}»{% else %}Мои файлы{% endif %}</h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0">
+                        <li class="breadcrumb-item {% if currentFolder is null %}active{% endif %}">
+                            {% if currentFolder is not null %}
+                                <a href="{{ path('app_my_files') }}">Корень</a>
+                            {% else %}
+                                Корень
+                            {% endif %}
+                        </li>
+                        {% for bc in breadcrumbs %}
+                            <li class="breadcrumb-item {% if loop.last %}active{% endif %}">
+                                {% if not loop.last %}
+                                    <a href="{{ path('app_my_files_folder', {id: bc.id}) }}">{{ bc.name }}</a>
+                                {% else %}
+                                    {{ bc.name }}
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ol>
+                </nav>
+            </div>
+        </div>
         <div class="d-flex flex-wrap align-items-center gap-2">
-            <input type="search" id="my_files_search" name="search" class="form-control form-control-sm" placeholder="Поиск по названию" value="{{ search|default('') }}" style="width: 220px;" aria-label="Поиск по названию" autocomplete="off">
-            <a href="{{ path('app_my_files_upload') }}" class="btn btn-primary">Добавить файлы</a>
+            <input type="search" id="my_files_search" class="form-control form-control-sm" placeholder="Поиск по всем файлам..." style="width: 220px;" aria-label="Поиск" autocomplete="off">
+            <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createFolderModal">Новая папка</button>
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal">Загрузить</button>
         </div>
     </div>
 
-    <section class="section">
-        {% if folder_groups|length == 0 %}
+    {# Search results container (hidden by default) #}
+    <div id="searchResultsContainer" class="d-none">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Результаты поиска</h4>
+            </div>
+            <div class="card-body">
+                <div id="searchResultsList"></div>
+                <div id="searchNoResults" class="text-center text-muted py-4 d-none">
+                    По вашему запросу ничего не найдено.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Main file list container #}
+    <div id="fileListContainer">
+        <section class="section">
             <div class="card">
-                <div class="card-body text-center text-muted py-5">
-                    {% if search|default('') != '' %}
-                        <p class="mb-0">По запросу «{{ search }}» ничего не найдено.</p>
-                        <a href="{{ path('app_my_files') }}" class="btn btn-outline-secondary btn-sm mt-3">Показать все файлы</a>
-                    {% else %}
-                        <p class="mb-0">Нет загруженных файлов.</p>
-                        <a href="{{ path('app_my_files_upload') }}" class="btn btn-outline-primary btn-sm mt-3">Добавить файлы</a>
-                    {% endif %}
-                </div>
-            </div>
-        {% else %}
-            <div id="myFilesCardsContainer">
-                {% for group in folder_groups %}
-                    {% set files = group.files %}
-                    <div class="card {{ not loop.first ? 'mt-4' : '' }}">
-                        <div class="card-header">
-                            <h4 class="card-title mb-0">{{ group.label }} <span class="badge bg-secondary rounded-pill">{{ files|length }}</span></h4>
-                        </div>
-                        <div class="card-body">
-                            <ul class="list-group list-group-flush">
-                                {% for file in files %}
-                                    <li class="list-group-item my-files-row d-flex align-items-center gap-3 px-3"
-                                        data-search-text="{{ ((file.title|default('')) ~ ' ' ~ (file.originalName|default('')))|lower }}">
-                                        <div class="flex-shrink-0 rounded d-flex align-items-center justify-content-center text-muted" style="width: 40px; height: 40px; background-color: var(--bs-secondary-bg);">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
-                                        </div>
-                                        <span class="flex-grow-1 text-break">{{ file.title|default(file.originalName)|default('Без названия') }}</span>
-                                        <form method="post" action="{{ path('app_my_files_change_folder', {id: file.id}) }}" class="d-inline flex-shrink-0" style="width: 180px;">
-                                            <input type="hidden" name="_token" value="{{ csrf_token('my_files_change_folder_' ~ file.id) }}">
-                                            <input type="hidden" name="search_redirect" value="{{ search|default('') }}">
-                                            <select name="folder_id" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Папка файла">
-                                                <option value="" {{ file.folder is null ? 'selected' : '' }}>Корень</option>
-                                                {% for folder in folders %}
-                                                    <option value="{{ folder.id }}" {{ file.folder and file.folder.id == folder.id ? 'selected' : '' }}>{{ folder.name }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </form>
-                                        <a href="{{ path('app_my_files_download', {id: file.id}) }}" class="btn btn-sm btn-outline-primary flex-shrink-0">Скачать</a>
-                                        <form method="post" action="{{ path('app_my_files_delete', {id: file.id}) }}" class="d-inline flex-shrink-0 my-files-delete-form" data-filename="{{ (file.title|default(file.originalName)|default('Без названия'))|e('html_attr') }}">
-                                            <input type="hidden" name="_token" value="{{ csrf_token('my_files_delete_' ~ file.id) }}">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
-                                        </form>
-                                    </li>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="overflow: visible;">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;"></th>
+                                    <th>Название</th>
+                                    <th style="width: 120px;">Размер</th>
+                                    <th style="width: 140px;">Дата</th>
+                                    <th style="width: 100px;"></th>
+                                    <th style="width: 50px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for folder in folders %}
+                                    <tr>
+                                        <td class="text-center align-middle">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="text-warning" viewBox="0 0 16 16"><path d="M.54 3.87.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3H13.5a2 2 0 0 1 2 2v1H.5a.5.5 0 0 1 0-1zm-.087 1h15.093l-1.372 9.112A2 2 0 0 1 12.19 16H3.81a2 2 0 0 1-1.983-1.738z"/></svg>
+                                        </td>
+                                        <td class="align-middle">
+                                            <a href="{{ path('app_my_files_folder', {id: folder.id}) }}" class="text-decoration-none fw-semibold">
+                                                {{ folder.name }}
+                                            </a>
+                                            <span class="badge bg-secondary rounded-pill ms-1">{{ folderFileCounts[folder.id]|default(0) }}</span>
+                                        </td>
+                                        <td class="align-middle text-muted">&mdash;</td>
+                                        <td class="align-middle text-muted small">{{ folder.createdAt ? folder.createdAt|date('d.m.Y H:i') : '' }}</td>
+                                        <td class="align-middle"></td>
+                                        <td class="align-middle text-end">
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"/></svg>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li><a class="dropdown-item" href="#" data-action="rename-folder" data-id="{{ folder.id }}" data-name="{{ folder.name|e('html_attr') }}" data-token="{{ csrf_token('my_files_folder_rename_' ~ folder.id) }}">Переименовать</a></li>
+                                                    <li><a class="dropdown-item" href="#" data-action="move-folder" data-id="{{ folder.id }}" data-name="{{ folder.name|e('html_attr') }}" data-token="{{ csrf_token('my_files_move_' ~ folder.id) }}">Переместить</a></li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><a class="dropdown-item text-danger" href="#" data-action="delete-folder" data-id="{{ folder.id }}" data-name="{{ folder.name|e('html_attr') }}" data-token="{{ csrf_token('my_files_folder_delete_' ~ folder.id) }}">Удалить</a></li>
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 {% endfor %}
-                            </ul>
-                        </div>
+
+                                {% for file in files %}
+                                    <tr>
+                                        <td class="text-center align-middle">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="text-muted" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+                                        </td>
+                                        <td class="align-middle text-break">{{ file.title|default(file.originalName)|default('Без названия') }}</td>
+                                        <td class="align-middle text-muted small">{{ file.fileSize ? file.fileSize|format_file_size : '' }}</td>
+                                        <td class="align-middle text-muted small">{{ file.createdAt ? file.createdAt|date('d.m.Y H:i') : '' }}</td>
+                                        <td class="align-middle">
+                                            <a href="{{ path('app_my_files_download', {id: file.id}) }}" class="btn btn-sm btn-outline-primary">Скачать</a>
+                                        </td>
+                                        <td class="align-middle text-end">
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-link text-muted p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"/></svg>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li><a class="dropdown-item" href="#" data-action="rename-file" data-id="{{ file.id }}" data-name="{{ (file.title|default(file.originalName)|default('Без названия'))|e('html_attr') }}" data-token="{{ csrf_token('my_files_rename_' ~ file.id) }}">Переименовать</a></li>
+                                                    <li><a class="dropdown-item" href="#" data-action="move-file" data-id="{{ file.id }}" data-name="{{ (file.title|default(file.originalName)|default('Без названия'))|e('html_attr') }}" data-token="{{ csrf_token('my_files_move_' ~ file.id) }}">Переместить</a></li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><a class="dropdown-item text-danger" href="#" data-action="delete-file" data-id="{{ file.id }}" data-name="{{ (file.title|default(file.originalName)|default('Без названия'))|e('html_attr') }}" data-token="{{ csrf_token('my_files_delete_' ~ file.id) }}">Удалить</a></li>
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+
+                                {% if folders is empty and files is empty %}
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-5">
+                                            {% if currentFolder is not null %}
+                                                Папка пуста.
+                                            {% else %}
+                                                Нет файлов. Нажмите «Загрузить» чтобы добавить файлы.
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
                     </div>
-                {% endfor %}
-            </div>
-
-            <div id="my_files_search_results" class="card mt-4 d-none">
-                <div class="card-header">
-                    <h4 class="card-title mb-0">Результаты поиска</h4>
-                </div>
-                <div class="card-body">
-                    <ul class="list-group list-group-flush" id="my_files_search_list"></ul>
                 </div>
             </div>
+        </section>
+    </div>
 
-            <div id="my_files_no_results" class="card mt-4 d-none">
-                <div class="card-body text-center text-muted py-5">
-                    <p class="mb-0">По вашему запросу ничего не найдено.</p>
-                </div>
-            </div>
-        {% endif %}
-    </section>
+    {% include 'user/partials/_my_files_create_folder_modal.html.twig' %}
+    {% include 'user/partials/_my_files_rename_modal.html.twig' %}
+    {% include 'user/partials/_my_files_move_modal.html.twig' %}
+    {% include 'user/partials/_my_files_upload_modal.html.twig' %}
 
-    {% if folder_groups|length > 0 %}
     <script>
-        (function () {
-            var searchEl = document.getElementById('my_files_search');
-            var cardsContainer = document.getElementById('myFilesCardsContainer');
-            var searchResultsEl = document.getElementById('my_files_search_results');
-            var searchList = document.getElementById('my_files_search_list');
-            var noResultsEl = document.getElementById('my_files_no_results');
-            if (!searchEl || !cardsContainer) return;
+    (function () {
+        var SwalLib = typeof Swal !== 'undefined' ? Swal : (typeof Sweetalert2 !== 'undefined' ? Sweetalert2 : null);
 
-            function updateUrl(query) {
-                var url = new URL(window.location.href);
-                if (query) {
-                    url.searchParams.set('search', query);
+        // --- Context menu actions ---
+        document.addEventListener('click', function (e) {
+            var el = e.target.closest('[data-action]');
+            if (!el) return;
+            e.preventDefault();
+            var action = el.getAttribute('data-action');
+            var id = el.getAttribute('data-id');
+            var name = el.getAttribute('data-name');
+
+            if (action === 'rename-file' || action === 'rename-folder') {
+                var renameModal = document.getElementById('renameModal');
+                var renameInput = document.getElementById('renameInput');
+                var renameForm = document.getElementById('renameForm');
+                if (!renameModal || !renameInput || !renameForm) return;
+
+                renameInput.value = name;
+                var token = el.getAttribute('data-token');
+                if (action === 'rename-file') {
+                    renameForm.action = '/my_files/file/' + id + '/rename';
                 } else {
-                    url.searchParams.delete('search');
+                    renameForm.action = '/my_files/folder/' + id + '/rename';
                 }
-                window.history.replaceState({}, '', url.toString());
+                document.getElementById('renameToken').value = token;
+                var bsModal = new bootstrap.Modal(renameModal);
+                bsModal.show();
+                setTimeout(function() { renameInput.focus(); renameInput.select(); }, 300);
             }
 
-            function runFilter() {
-                var query = searchEl.value.trim().toLowerCase();
-                var rows = cardsContainer.querySelectorAll('.my-files-row');
-                var visibleRows = [];
+            if (action === 'move-file' || action === 'move-folder') {
+                var moveModal = document.getElementById('moveModal');
+                var moveForm = document.getElementById('moveForm');
+                var moveItemName = document.getElementById('moveItemName');
+                if (!moveModal || !moveForm) return;
 
-                rows.forEach(function (li) {
-                    var text = (li.getAttribute('data-search-text') || '');
-                    var show = !query || text.indexOf(query) !== -1;
-                    li.style.display = show ? '' : 'none';
-                    if (show) visibleRows.push(li);
+                var token = el.getAttribute('data-token');
+                if (moveItemName) moveItemName.textContent = name;
+                if (action === 'move-file') {
+                    moveForm.action = '/my_files/file/' + id + '/move';
+                } else {
+                    moveForm.action = '/my_files/folder/' + id + '/move';
+                }
+                document.getElementById('moveToken').value = token;
+                // Hide the folder being moved from the tree
+                var movingFolderId = (action === 'move-folder') ? id : null;
+                var treeItems = moveModal.querySelectorAll('[data-folder-id]');
+                treeItems.forEach(function(item) {
+                    item.style.display = '';
                 });
-
-                if (query) {
-                    cardsContainer.style.display = 'none';
-                    if (searchResultsEl && searchList) {
-                        searchList.innerHTML = '';
-                        visibleRows.forEach(function (li) {
-                            searchList.appendChild(li.cloneNode(true));
-                        });
-                        searchResultsEl.classList.remove('d-none');
-                    }
-                    if (noResultsEl) {
-                        noResultsEl.classList.toggle('d-none', visibleRows.length > 0);
-                    }
-                } else {
-                    cardsContainer.style.display = '';
-                    if (searchResultsEl) searchResultsEl.classList.add('d-none');
-                    if (searchList) searchList.innerHTML = '';
-                    if (noResultsEl) noResultsEl.classList.add('d-none');
+                if (movingFolderId) {
+                    treeItems.forEach(function(item) {
+                        if (item.getAttribute('data-folder-id') === movingFolderId) {
+                            item.style.display = 'none';
+                        }
+                    });
                 }
-                updateUrl(query || null);
+                var bsModal = new bootstrap.Modal(moveModal);
+                bsModal.show();
             }
 
-            var debounceTimer;
-            searchEl.addEventListener('input', function () {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(runFilter, 120);
-            });
-            searchEl.addEventListener('search', function () {
-                runFilter();
-            });
-
-            runFilter();
-
-            var SwalLib = typeof Swal !== 'undefined' ? Swal : (typeof Sweetalert2 !== 'undefined' ? Sweetalert2 : null);
-            document.addEventListener('submit', function (e) {
-                var form = e.target;
-                if (!form || !form.classList || !form.classList.contains('my-files-delete-form')) return;
-                e.preventDefault();
-                e.stopPropagation();
-                var fileName = form.getAttribute('data-filename') || '';
-                var title = fileName ? 'Удалить файл «' + fileName + '»?' : 'Удалить файл?';
+            if (action === 'delete-file') {
+                var token = el.getAttribute('data-token');
+                var title = 'Удалить файл «' + name + '»?';
                 if (SwalLib) {
                     SwalLib.fire({
                         title: title,
+                        icon: 'warning',
                         showCancelButton: true,
                         confirmButtonText: 'Удалить',
-                        cancelButtonText: 'Отменить'
+                        cancelButtonText: 'Отменить',
+                        confirmButtonColor: '#dc3545',
                     }).then(function (result) {
-                        if (result.isConfirmed) form.submit();
+                        if (result.isConfirmed) {
+                            var form = document.createElement('form');
+                            form.method = 'POST';
+                            form.action = '/my_files/delete/' + id;
+                            var tokenInput = document.createElement('input');
+                            tokenInput.type = 'hidden';
+                            tokenInput.name = '_token';
+                            tokenInput.value = token;
+                            form.appendChild(tokenInput);
+                            document.body.appendChild(form);
+                            form.submit();
+                        }
                     });
                 } else {
-                    if (confirm(title)) form.submit();
+                    if (confirm(title)) {
+                        var form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = '/my_files/delete/' + id;
+                        var tokenInput = document.createElement('input');
+                        tokenInput.type = 'hidden';
+                        tokenInput.name = '_token';
+                        tokenInput.value = token;
+                        form.appendChild(tokenInput);
+                        document.body.appendChild(form);
+                        form.submit();
+                    }
+                }
+            }
+
+            if (action === 'delete-folder') {
+                var deleteToken = el.getAttribute('data-token');
+                fetch('/my_files/folder/' + id + '/info')
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        var msg = 'Папка «' + data.name + '»';
+                        if (data.folders > 0 || data.files > 0) {
+                            var parts = [];
+                            if (data.folders > 0) parts.push('подпапок: ' + data.folders);
+                            if (data.files > 0) parts.push('файлов: ' + data.files);
+                            msg += ' содержит ' + parts.join(', ') + '. Всё содержимое будет удалено!';
+                        }
+                        if (SwalLib) {
+                            SwalLib.fire({
+                                title: 'Удалить папку?',
+                                html: msg,
+                                icon: 'warning',
+                                showCancelButton: true,
+                                confirmButtonText: 'Удалить',
+                                cancelButtonText: 'Отменить',
+                                confirmButtonColor: '#dc3545',
+                            }).then(function (result) {
+                                if (result.isConfirmed) {
+                                    var form = document.createElement('form');
+                                    form.method = 'POST';
+                                    form.action = '/my_files/folder/' + id + '/delete';
+                                    var tokenInput = document.createElement('input');
+                                    tokenInput.type = 'hidden';
+                                    tokenInput.name = '_token';
+                                    tokenInput.value = deleteToken;
+                                    form.appendChild(tokenInput);
+                                    document.body.appendChild(form);
+                                    form.submit();
+                                }
+                            });
+                        }
+                    });
+            }
+        });
+
+        // --- Search ---
+        var searchEl = document.getElementById('my_files_search');
+        var fileListContainer = document.getElementById('fileListContainer');
+        var searchResultsContainer = document.getElementById('searchResultsContainer');
+        var searchResultsList = document.getElementById('searchResultsList');
+        var searchNoResults = document.getElementById('searchNoResults');
+        var searchTimer;
+
+        if (searchEl) {
+            searchEl.addEventListener('input', function () {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(doSearch, 300);
+            });
+            searchEl.addEventListener('search', function () {
+                clearTimeout(searchTimer);
+                doSearch();
+            });
+        }
+
+        function formatSize(bytes) {
+            if (!bytes) return '';
+            bytes = parseFloat(bytes);
+            if (bytes < 1024) return Math.round(bytes) + ' Б';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' КБ';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' ГБ';
+        }
+
+        function doSearch() {
+            var q = searchEl.value.trim();
+            if (!q) {
+                fileListContainer.classList.remove('d-none');
+                searchResultsContainer.classList.add('d-none');
+                return;
+            }
+
+            fileListContainer.classList.add('d-none');
+            searchResultsContainer.classList.remove('d-none');
+
+            fetch('/my_files/search?q=' + encodeURIComponent(q))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    searchResultsList.innerHTML = '';
+                    if (!data.results || data.results.length === 0) {
+                        searchNoResults.classList.remove('d-none');
+                        return;
+                    }
+                    searchNoResults.classList.add('d-none');
+
+                    var list = document.createElement('div');
+                    list.className = 'list-group list-group-flush';
+
+                    data.results.forEach(function(file) {
+                        var item = document.createElement('div');
+                        item.className = 'list-group-item d-flex align-items-center gap-3';
+
+                        var pathHtml = '';
+                        if (file.path && file.path.length > 0) {
+                            var pathParts = file.path.map(function(p) {
+                                return '<a href="/my_files/folder/' + p.id + '" class="text-decoration-none">' + escapeHtml(p.name) + '</a>';
+                            });
+                            pathHtml = '<small class="text-muted d-block">' + pathParts.join(' / ') + '</small>';
+                        } else {
+                            pathHtml = '<small class="text-muted d-block">Корень</small>';
+                        }
+
+                        item.innerHTML = '<div class="flex-shrink-0 text-muted">' +
+                            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>' +
+                            '</div>' +
+                            '<div class="flex-grow-1">' +
+                            '<span class="text-break">' + escapeHtml(file.title) + '</span>' +
+                            pathHtml +
+                            '</div>' +
+                            '<span class="text-muted small flex-shrink-0">' + formatSize(file.fileSize) + '</span>' +
+                            '<a href="/my_files/download/' + file.id + '" class="btn btn-sm btn-outline-primary flex-shrink-0">Скачать</a>';
+
+                        list.appendChild(item);
+                    });
+
+                    searchResultsList.appendChild(list);
+                });
+        }
+
+        function escapeHtml(text) {
+            var d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
+        // --- Upload modal ---
+        var uploadDropzone = document.getElementById('uploadDropzone');
+        var uploadFileInput = document.getElementById('uploadFileInput');
+        var uploadFileList = document.getElementById('uploadFileList');
+        var uploadStartBtn = document.getElementById('uploadStartBtn');
+        var uploadDoneBtn = document.getElementById('uploadDoneBtn');
+        var uploadSelectedFiles = [];
+
+        if (uploadDropzone && uploadFileInput) {
+            uploadDropzone.addEventListener('click', function() { uploadFileInput.click(); });
+            uploadDropzone.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); uploadFileInput.click(); } });
+
+            uploadDropzone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadDropzone.classList.add('my-files-filedrop-dragover');
+            });
+            uploadDropzone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadDropzone.classList.remove('my-files-filedrop-dragover');
+            });
+            uploadDropzone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadDropzone.classList.remove('my-files-filedrop-dragover');
+                if (e.dataTransfer && e.dataTransfer.files) {
+                    for (var i = 0; i < e.dataTransfer.files.length; i++) {
+                        uploadSelectedFiles.push(e.dataTransfer.files[i]);
+                    }
+                    renderUploadList();
                 }
             });
-        })();
+
+            uploadFileInput.addEventListener('change', function() {
+                for (var i = 0; i < uploadFileInput.files.length; i++) {
+                    uploadSelectedFiles.push(uploadFileInput.files[i]);
+                }
+                uploadFileInput.value = '';
+                renderUploadList();
+            });
+        }
+
+        function renderUploadList() {
+            if (!uploadFileList) return;
+            uploadFileList.innerHTML = '';
+            uploadSelectedFiles.forEach(function(file, idx) {
+                var li = document.createElement('div');
+                li.className = 'list-group-item d-flex align-items-center gap-2';
+                li.id = 'upload-item-' + idx;
+                li.innerHTML = '<span class="flex-grow-1 text-truncate" title="' + escapeHtml(file.name) + '">' + escapeHtml(file.name) + '</span>' +
+                    '<span class="text-muted small flex-shrink-0">' + formatSize(file.size) + '</span>' +
+                    '<div class="progress flex-shrink-0 d-none" style="width: 100px; height: 6px;" id="upload-progress-' + idx + '"><div class="progress-bar" role="progressbar" style="width: 0%"></div></div>' +
+                    '<span class="badge d-none" id="upload-status-' + idx + '"></span>' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0 upload-remove-btn" data-idx="' + idx + '">×</button>';
+                uploadFileList.appendChild(li);
+            });
+
+            if (uploadStartBtn) {
+                uploadStartBtn.disabled = uploadSelectedFiles.length === 0;
+                uploadStartBtn.classList.remove('d-none');
+            }
+            if (uploadDoneBtn) uploadDoneBtn.classList.add('d-none');
+        }
+
+        if (uploadFileList) {
+            uploadFileList.addEventListener('click', function(e) {
+                var btn = e.target.closest('.upload-remove-btn');
+                if (!btn) return;
+                var idx = parseInt(btn.getAttribute('data-idx'), 10);
+                uploadSelectedFiles.splice(idx, 1);
+                renderUploadList();
+            });
+        }
+
+        if (uploadStartBtn) {
+            uploadStartBtn.addEventListener('click', function() {
+                if (uploadSelectedFiles.length === 0) return;
+                uploadStartBtn.disabled = true;
+                // Hide remove buttons
+                var removeBtns = uploadFileList.querySelectorAll('.upload-remove-btn');
+                removeBtns.forEach(function(btn) { btn.classList.add('d-none'); });
+                // Show progress bars
+                uploadSelectedFiles.forEach(function(f, idx) {
+                    var progressEl = document.getElementById('upload-progress-' + idx);
+                    if (progressEl) progressEl.classList.remove('d-none');
+                });
+
+                var folderId = {{ currentFolder ? currentFolder.id : 0 }};
+                uploadFilesSequentially(0, folderId);
+            });
+        }
+
+        function uploadFilesSequentially(idx, folderId) {
+            if (idx >= uploadSelectedFiles.length) {
+                // All done
+                if (uploadStartBtn) uploadStartBtn.classList.add('d-none');
+                if (uploadDoneBtn) uploadDoneBtn.classList.remove('d-none');
+                return;
+            }
+
+            var file = uploadSelectedFiles[idx];
+            var formData = new FormData();
+            formData.append('file', file);
+            if (folderId > 0) formData.append('folder_id', folderId);
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/my_files/upload-single', true);
+
+            var progressEl = document.getElementById('upload-progress-' + idx);
+            var statusEl = document.getElementById('upload-status-' + idx);
+            var progressBar = progressEl ? progressEl.querySelector('.progress-bar') : null;
+
+            xhr.upload.onprogress = function(e) {
+                if (e.lengthComputable && progressBar) {
+                    var pct = Math.round((e.loaded / e.total) * 100);
+                    progressBar.style.width = pct + '%';
+                }
+            };
+
+            xhr.onload = function() {
+                if (progressEl) progressEl.classList.add('d-none');
+                if (statusEl) {
+                    statusEl.classList.remove('d-none');
+                    if (xhr.status === 200) {
+                        statusEl.className = 'badge bg-success';
+                        statusEl.textContent = 'Готово';
+                    } else {
+                        statusEl.className = 'badge bg-danger';
+                        statusEl.textContent = 'Ошибка';
+                    }
+                }
+                uploadFilesSequentially(idx + 1, folderId);
+            };
+
+            xhr.onerror = function() {
+                if (progressEl) progressEl.classList.add('d-none');
+                if (statusEl) {
+                    statusEl.classList.remove('d-none');
+                    statusEl.className = 'badge bg-danger';
+                    statusEl.textContent = 'Ошибка';
+                }
+                uploadFilesSequentially(idx + 1, folderId);
+            };
+
+            xhr.send(formData);
+        }
+
+        if (uploadDoneBtn) {
+            uploadDoneBtn.addEventListener('click', function() {
+                window.location.reload();
+            });
+        }
+
+        // Reset upload modal on close
+        var uploadModalEl = document.getElementById('uploadModal');
+        if (uploadModalEl) {
+            uploadModalEl.addEventListener('hidden.bs.modal', function() {
+                uploadSelectedFiles = [];
+                if (uploadFileList) uploadFileList.innerHTML = '';
+                if (uploadStartBtn) { uploadStartBtn.disabled = true; uploadStartBtn.classList.remove('d-none'); }
+                if (uploadDoneBtn) uploadDoneBtn.classList.add('d-none');
+            });
+        }
+    })();
     </script>
-    {% endif %}
+
+    <style>
+        .my-files-filedrop {
+            min-height: 120px;
+            border: 2px dashed var(--bs-border-color, rgba(0,0,0,.175));
+            background: var(--bs-body-bg);
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: border-color .2s, background-color .2s;
+        }
+        .my-files-filedrop:hover,
+        .my-files-filedrop.my-files-filedrop-dragover {
+            border-color: var(--bs-primary);
+            background: color-mix(in srgb, var(--bs-primary) 8%, var(--bs-body-bg));
+        }
+        .move-tree-item { cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+        .move-tree-item:hover { background: var(--bs-secondary-bg); }
+        .move-tree-item.selected { background: var(--bs-primary); color: #fff; }
+    </style>
 {% endblock %}

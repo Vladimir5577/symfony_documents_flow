@@ -1,0 +1,22 @@
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadModalLabel">Загрузить файлы{% if currentFolder %} в «{{ currentFolder.name }}»{% endif %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <input type="file" id="uploadFileInput" multiple class="d-none">
+                <div id="uploadDropzone" class="my-files-filedrop rounded mb-3" role="button" tabindex="0">
+                    <span class="text-muted">Перетащите файлы сюда или нажмите для выбора</span>
+                </div>
+                <div id="uploadFileList" class="list-group list-group-flush"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" id="uploadStartBtn" disabled>Загрузить</button>
+                <button type="button" class="btn btn-success d-none" id="uploadDoneBtn">Готово</button>
+            </div>
+        </div>
+    </div>
+</div>

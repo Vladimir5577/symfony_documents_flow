@@ -755,15 +755,17 @@ var KanbanApp = (function () {
             // Labels
             renderLabels(data.labels || []);
 
-            // Comments
-            renderComments(data.comments || []);
+            // Comments + chat attachments → unified chat stream
+            var chatAttachments = (data.attachments || []).filter(function (a) { return a.context === 'chat'; });
+            var infoAttachments = (data.attachments || []).filter(function (a) { return a.context !== 'chat'; });
+            renderChatStream(data.comments || [], chatAttachments);
             startCommentPolling(cardId);
 
             // Подзадачи: синхронизация сайдбар + блок на карточке
             refreshSubtaskViews(currentCardId, data.subtasks || []);
 
-            // Attachments
-            renderAttachments(data.attachments || []);
+            // Attachments (info only)
+            renderAttachments(infoAttachments);
 
             // Border colour picker
             var picker = document.getElementById("card-border-color-picker");
@@ -807,20 +809,36 @@ var KanbanApp = (function () {
         if (msgs) msgs.scrollTop = msgs.scrollHeight;
     }
 
-    function renderComments(comments) {
+    function renderChatStream(comments, chatAttachments) {
         var container = document.getElementById("chat-messages");
         if (!container) return;
         container.innerHTML = "";
         knownCommentIds.clear();
 
-        if (!comments.length) {
+        // Merge comments and chat attachments into a single sorted stream
+        var items = [];
+        comments.forEach(function (c) {
+            items.push({ type: 'comment', data: c, time: c.createdAt || '' });
+        });
+        (chatAttachments || []).forEach(function (a) {
+            items.push({ type: 'attachment', data: a, time: a.createdAt || '' });
+        });
+        items.sort(function (a, b) {
+            return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
+        });
+
+        if (!items.length) {
             container.innerHTML = '<div class="task-chat-msg task-chat-msg-placeholder"><div class="task-chat-msg-bubble"><div class="task-chat-msg-text">Сообщений пока нет.</div></div></div>';
             return;
         }
 
-        comments.forEach(function (c) {
-            knownCommentIds.add(c.id);
-            appendCommentBubble(c);
+        items.forEach(function (item) {
+            if (item.type === 'comment') {
+                knownCommentIds.add(item.data.id);
+                appendCommentBubble(item.data);
+            } else {
+                appendAttachmentBubble(item.data);
+            }
         });
         scrollChatToBottom();
     }
@@ -855,6 +873,10 @@ var KanbanApp = (function () {
         var downloadUrl = "/api/kanban/cards/" + currentCardId + "/attachments/" + att.id + "/download";
         var isImage = att.contentType && att.contentType.indexOf("image/") === 0;
 
+        var deleteBtn = config.canEdit
+            ? '<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2 chat-att-delete-btn" data-att-id="' + att.id + '" title="Удалить"><i class="bi bi-trash"></i></button>'
+            : '';
+
         var bodyHtml;
         if (isImage) {
             bodyHtml =
@@ -863,17 +885,20 @@ var KanbanApp = (function () {
                 '</a>' +
                 '<small class="text-muted d-block mt-1">' +
                 '<i class="bi bi-paperclip me-1"></i>' + escapeHtml(att.filename) + ' · ' + sizeKb + ' KB' +
+                deleteBtn +
                 '</small>';
         } else {
             bodyHtml =
                 '<a href="' + downloadUrl + '" class="text-decoration-none">' +
                 '<i class="bi bi-paperclip me-1"></i>' + escapeHtml(att.filename) +
                 '</a>' +
-                '<small class="text-muted ms-2">' + sizeKb + ' KB</small>';
+                '<small class="text-muted ms-2">' + sizeKb + ' KB</small>' +
+                deleteBtn;
         }
 
         var msg = document.createElement("div");
         msg.className = "task-chat-msg";
+        msg.setAttribute("data-attachment-id", att.id);
         msg.innerHTML =
             '<div class="task-chat-msg-bubble">' +
             '<div class="task-chat-msg-text">' + bodyHtml + '</div>' +
@@ -881,6 +906,21 @@ var KanbanApp = (function () {
             escapeHtml(config.currentUserName) + " · " + formatShortDate(att.createdAt || new Date().toISOString()) +
             "</span></div></div>";
         container.appendChild(msg);
+
+        var delBtn = msg.querySelector(".chat-att-delete-btn");
+        if (delBtn) {
+            delBtn.addEventListener("click", function () {
+                if (!confirm("Удалить вложение?")) return;
+                apiFetch("/api/kanban/cards/" + currentCardId + "/attachments/" + att.id, {
+                    method: "DELETE"
+                }).then(function () {
+                    msg.remove();
+                    if (currentCardData) {
+                        currentCardData.attachments = (currentCardData.attachments || []).filter(function (a) { return a.id !== att.id; });
+                    }
+                }).catch(function (err) { showToast(err.message); });
+            });
+        }
     }
 
     function initChat() {
@@ -956,18 +996,20 @@ var KanbanApp = (function () {
 
                 var formData = new FormData();
                 formData.append("file", file);
+                formData.append("context", "chat");
 
                 apiFetch("/api/kanban/cards/" + currentCardId + "/attachments", {
                     method: "POST",
                     body: formData
                 }).then(function (att) {
                     fileInput.value = "";
+                    att.context = "chat";
                     appendAttachmentBubble(att);
                     scrollChatToBottom();
                     if (currentCardData && att) {
                         currentCardData.attachments = currentCardData.attachments || [];
                         currentCardData.attachments.push(att);
-                        renderAttachments(currentCardData.attachments);
+                        renderAttachments(currentCardData.attachments.filter(function (a) { return a.context !== 'chat'; }));
                     }
                 }).catch(function (err) {
                     showToast(err.message);
@@ -1532,6 +1574,9 @@ select.addEventListener("change", function () {
                         method: "DELETE"
                     }).then(function () {
                         item.remove();
+                        if (currentCardData) {
+                            currentCardData.attachments = (currentCardData.attachments || []).filter(function (a) { return a.id !== att.id; });
+                        }
                     }).catch(function (err) { showToast(err.message); });
                 });
             }
@@ -1556,16 +1601,18 @@ select.addEventListener("change", function () {
 
             var formData = new FormData();
             formData.append("file", file);
+            formData.append("context", "info");
 
             apiFetch("/api/kanban/cards/" + currentCardId + "/attachments", {
                 method: "POST",
                 body: formData
             }).then(function (newAtt) {
                 input.value = "";
+                newAtt.context = "info";
                 if (currentCardData && newAtt) {
                     currentCardData.attachments = currentCardData.attachments || [];
                     currentCardData.attachments.push(newAtt);
-                    renderAttachments(currentCardData.attachments);
+                    renderAttachments(currentCardData.attachments.filter(function (a) { return a.context !== 'chat'; }));
                 }
             }).catch(function (err) {
                 showToast(err.message);
