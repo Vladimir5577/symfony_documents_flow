@@ -2,7 +2,6 @@
 
 namespace App\Entity\User;
 
-use App\Enum\User\UserFileType;
 use App\Repository\User\UserFileRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
@@ -10,7 +9,11 @@ use Symfony\Component\HttpFoundation\File\File as SymfonyFile;
 use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
 #[ORM\Entity(repositoryClass: UserFileRepository::class)]
-#[ORM\Table(name: 'file_user')]
+#[ORM\Table(name: 'file_user', indexes: [
+    new ORM\Index(name: 'idx_file_user_user_id', columns: ['user_id']),
+    new ORM\Index(name: 'idx_file_user_folder_id', columns: ['folder_id']),
+    new ORM\Index(name: 'idx_file_user_user_folder', columns: ['user_id', 'folder_id']),
+])]
 #[Vich\Uploadable]
 class UserFile
 {
@@ -29,8 +32,9 @@ class UserFile
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
-    #[ORM\Column(enumType: UserFileType::class, nullable: true)]
-    private ?UserFileType $type = null;
+    #[ORM\ManyToOne(targetEntity: UserFolderFile::class)]
+    #[ORM\JoinColumn(name: 'folder_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?UserFolderFile $folder = null;
 
     #[Vich\UploadableField(mapping: 'user_files', fileNameProperty: 'filePath')]
     private ?SymfonyFile $file = null;
@@ -40,11 +44,6 @@ class UserFile
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $originalName = null;
-
-    public function __construct()
-    {
-        $this->type = UserFileType::OTHER;
-    }
 
     public function getId(): ?int
     {
@@ -87,24 +86,16 @@ class UserFile
         return $this;
     }
 
-    public function getType(): ?UserFileType
+    public function getFolder(): ?UserFolderFile
     {
-        return $this->type;
+        return $this->folder;
     }
 
-    public function setType(?UserFileType $type): static
+    public function setFolder(?UserFolderFile $folder): static
     {
-        $this->type = $type;
+        $this->folder = $folder;
 
         return $this;
-    }
-
-    /**
-     * Тип для отображения и группировки: если тип не присвоен — считаем «Разное».
-     */
-    public function getTypeForDisplay(): UserFileType
-    {
-        return $this->type ?? UserFileType::OTHER;
     }
 
     public function getFile(): ?SymfonyFile

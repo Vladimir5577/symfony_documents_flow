@@ -53,10 +53,11 @@
                                 {% endfor %}
 
                                 <div class="mb-3">
-                                    <label for="my_files_type" class="form-label">Категория</label>
-                                    <select id="my_files_type" name="type" class="form-select">
-                                        {% for ft in file_types %}
-                                            <option value="{{ ft.value }}" {{ ft.value == 'other' ? 'selected' : '' }}>{{ ft.label }}</option>
+                                    <label for="my_files_folder" class="form-label">Папка</label>
+                                    <select id="my_files_folder" name="folder_id" class="form-select">
+                                        <option value="" {{ selected_folder_id is empty ? 'selected' : '' }}>Корень</option>
+                                        {% for folder in folders %}
+                                            <option value="{{ folder.id }}" {{ selected_folder_id == folder.id ? 'selected' : '' }}>{{ folder.name }}</option>
                                         {% endfor %}
                                     </select>
                                 </div>

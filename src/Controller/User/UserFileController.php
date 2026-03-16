@@ -4,7 +4,8 @@ namespace App\Controller\User;
 
 use App\Entity\User\User;
 use App\Entity\User\UserFile;
-use App\Enum\User\UserFileType;
+use App\Entity\User\UserFolderFile;
+use App\Repository\User\UserFolderFileRepository;
 use App\Repository\User\UserFileRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -19,7 +20,11 @@ use Symfony\Component\Routing\Attribute\Route;
 final class UserFileController extends AbstractController
 {
     #[Route('/my_files', name: 'app_my_files', methods: ['GET'])]
-    public function myFiles(Request $request, UserFileRepository $userFileRepository): Response
+    public function myFiles(
+        Request $request,
+        UserFileRepository $userFileRepository,
+        UserFolderFileRepository $userFolderFileRepository,
+    ): Response
     {
         $user = $this->getUser();
         if (!$user instanceof User) {
@@ -28,34 +33,49 @@ final class UserFileController extends AbstractController
 
         $search = trim((string) $request->query->get('search', ''));
         $files = $userFileRepository->findByUser($user);
+        $folders = $userFolderFileRepository->findBy(['user' => $user], ['name' => 'ASC']);
 
-        $filesGrouped = [];
+        $folderGroups = [];
         foreach ($files as $file) {
-            $type = $file->getTypeForDisplay();
-            $filesGrouped[$type->value][] = $file;
+            $folder = $file->getFolder();
+            $groupKey = $folder instanceof UserFolderFile ? 'folder_' . $folder->getId() : 'root';
+
+            if (!isset($folderGroups[$groupKey])) {
+                $folderGroups[$groupKey] = [
+                    'key' => $groupKey,
+                    'label' => $folder?->getName() ?? 'Корень',
+                    'files' => [],
+                ];
+            }
+
+            $folderGroups[$groupKey]['files'][] = $file;
         }
 
-        $typesOrder = [];
-        foreach (UserFileType::cases() as $type) {
-            if (!empty($filesGrouped[$type->value])) {
-                $typesOrder[] = $type;
+        uasort($folderGroups, static function (array $left, array $right): int {
+            if ($left['key'] === 'root') {
+                return -1;
             }
-        }
+            if ($right['key'] === 'root') {
+                return 1;
+            }
+
+            return strcasecmp((string) $left['label'], (string) $right['label']);
+        });
 
         return $this->render('user/my_files.html.twig', [
             'active_tab' => 'my_files',
-            'files_grouped' => $filesGrouped,
-            'types_order' => $typesOrder,
-            'file_types' => UserFileType::cases(),
+            'folder_groups' => array_values($folderGroups),
+            'folders' => $folders,
             'search' => $search,
         ]);
     }
 
-    #[Route('/my_files/change-type/{id}', name: 'app_my_files_change_type', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function changeType(
+    #[Route('/my_files/change-folder/{id}', name: 'app_my_files_change_folder', methods: ['POST'], requirements: ['id' => '\d+'])]
+    public function changeFolder(
         int $id,
         Request $request,
         UserFileRepository $userFileRepository,
+        UserFolderFileRepository $userFolderFileRepository,
         EntityManagerInterface $entityManager,
     ): Response {
         $user = $this->getUser();
@@ -68,18 +88,26 @@ final class UserFileController extends AbstractController
             throw $this->createNotFoundException('Файл не найден.');
         }
 
-        $csrfToken = 'my_files_change_type_' . $id;
+        $csrfToken = 'my_files_change_folder_' . $id;
         if (!$this->isCsrfTokenValid($csrfToken, $request->request->get('_token', ''))) {
             $this->addFlash('error', 'Неверный токен. Попробуйте снова.');
             return $this->redirectToRoute('app_my_files', [], Response::HTTP_SEE_OTHER);
         }
 
-        $typeValue = $request->request->get('type', 'other');
-        $type = UserFileType::tryFrom($typeValue) ?? UserFileType::OTHER;
-        $userFile->setType($type);
+        $folderId = (int) $request->request->get('folder_id', 0);
+        $folder = null;
+        if ($folderId > 0) {
+            $folder = $userFolderFileRepository->find($folderId);
+            if (!$folder instanceof UserFolderFile || $folder->getUser()?->getId() !== $user->getId()) {
+                $this->addFlash('error', 'Папка не найдена.');
+                return $this->redirectToRoute('app_my_files', [], Response::HTTP_SEE_OTHER);
+            }
+        }
+
+        $userFile->setFolder($folder);
         $entityManager->flush();
 
-        $this->addFlash('success', 'Тип файла изменён.');
+        $this->addFlash('success', 'Папка файла изменена.');
         $searchRedirect = trim((string) $request->request->get('search_redirect', ''));
 
         return $this->redirectToRoute('app_my_files', $searchRedirect !== '' ? ['search' => $searchRedirect] : [], Response::HTTP_SEE_OTHER);
@@ -157,26 +185,44 @@ final class UserFileController extends AbstractController
     }
 
     #[Route('/my_files_upload', name: 'app_my_files_upload', methods: ['GET', 'POST'])]
-    public function myFilesUpload(Request $request, EntityManagerInterface $entityManager): Response
+    public function myFilesUpload(
+        Request $request,
+        EntityManagerInterface $entityManager,
+        UserFolderFileRepository $userFolderFileRepository,
+    ): Response
     {
         $user = $this->getUser();
         if (!$user instanceof User) {
             return $this->redirectToRoute('app_login');
         }
 
-        $fileTypes = UserFileType::cases();
+        $folders = $userFolderFileRepository->findBy(['user' => $user], ['name' => 'ASC']);
+        $selectedFolderId = null;
 
         if ($request->isMethod('POST')) {
             if (!$this->isCsrfTokenValid('my_files_upload', $request->request->get('_token', ''))) {
                 $this->addFlash('error', 'Неверный токен. Попробуйте снова.');
                 return $this->render('user/my_files_upload.html.twig', [
                     'active_tab' => 'my_files',
-                    'file_types' => $fileTypes,
+                    'folders' => $folders,
+                    'selected_folder_id' => $selectedFolderId,
                 ]);
             }
 
-            $typeValue = $request->request->get('type', 'other');
-            $type = UserFileType::tryFrom($typeValue) ?? UserFileType::OTHER;
+            $selectedFolderId = (int) $request->request->get('folder_id', 0);
+            $selectedFolderId = $selectedFolderId > 0 ? $selectedFolderId : null;
+            $folder = null;
+            if ($selectedFolderId !== null) {
+                $folder = $userFolderFileRepository->find($selectedFolderId);
+                if (!$folder instanceof UserFolderFile || $folder->getUser()?->getId() !== $user->getId()) {
+                    $this->addFlash('error', 'Папка не найдена.');
+                    return $this->render('user/my_files_upload.html.twig', [
+                        'active_tab' => 'my_files',
+                        'folders' => $folders,
+                        'selected_folder_id' => $selectedFolderId,
+                    ]);
+                }
+            }
 
             $uploadedFiles = $request->files->get('files');
             if (!\is_array($uploadedFiles)) {
@@ -195,7 +241,8 @@ final class UserFileController extends AbstractController
                     ));
                     return $this->render('user/my_files_upload.html.twig', [
                         'active_tab' => 'my_files',
-                        'file_types' => $fileTypes,
+                        'folders' => $folders,
+                        'selected_folder_id' => $selectedFolderId,
                     ]);
                 }
                 if ($uploadedFile->getError() !== \UPLOAD_ERR_OK) {
@@ -205,7 +252,8 @@ final class UserFileController extends AbstractController
                     ));
                     return $this->render('user/my_files_upload.html.twig', [
                         'active_tab' => 'my_files',
-                        'file_types' => $fileTypes,
+                        'folders' => $folders,
+                        'selected_folder_id' => $selectedFolderId,
                     ]);
                 }
             }
@@ -217,7 +265,7 @@ final class UserFileController extends AbstractController
                 }
                 $userFile = new UserFile();
                 $userFile->setUser($user);
-                $userFile->setType($type);
+                $userFile->setFolder($folder);
                 $userFile->setFile($uploadedFile);
                 $userFile->setOriginalName($uploadedFile->getClientOriginalName());
                 $userFile->setTitle(pathinfo($uploadedFile->getClientOriginalName(), \PATHINFO_FILENAME));
@@ -232,7 +280,8 @@ final class UserFileController extends AbstractController
 
         return $this->render('user/my_files_upload.html.twig', [
             'active_tab' => 'my_files',
-            'file_types' => $fileTypes,
+            'folders' => $folders,
+            'selected_folder_id' => $selectedFolderId,
         ]);
     }
 }
