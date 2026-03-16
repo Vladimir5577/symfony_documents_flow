@@ -3,6 +3,8 @@
 namespace App\Repository\Chat;
 
 use App\Entity\Chat\ChatParticipant;
+use App\Entity\Chat\ChatRoom;
+use App\Entity\User\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -16,28 +18,40 @@ class ChatParticipantRepository extends ServiceEntityRepository
         parent::__construct($registry, ChatParticipant::class);
     }
 
-    //    /**
-    //     * @return ChatParticipant[] Returns an array of ChatParticipant objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('c')
-    //            ->andWhere('c.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('c.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
+    public function isParticipant(ChatRoom $room, User $user): bool
+    {
+        return (bool) $this->createQueryBuilder('cp')
+            ->select('1')
+            ->andWhere('cp.room = :room')
+            ->andWhere('cp.user = :user')
+            ->setParameter('room', $room)
+            ->setParameter('user', $user)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
 
-    //    public function findOneBySomeField($value): ?ChatParticipant
-    //    {
-    //        return $this->createQueryBuilder('c')
-    //            ->andWhere('c.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
+    /**
+     * @return ChatParticipant[]
+     */
+    public function findByRoom(ChatRoom $room): array
+    {
+        return $this->createQueryBuilder('cp')
+            ->andWhere('cp.room = :room')
+            ->setParameter('room', $room)
+            ->join('cp.user', 'u')
+            ->addSelect('u')
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function countByRoom(ChatRoom $room): int
+    {
+        return (int) $this->createQueryBuilder('cp')
+            ->select('COUNT(cp.id)')
+            ->andWhere('cp.room = :room')
+            ->setParameter('room', $room)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }

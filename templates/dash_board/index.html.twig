@@ -203,128 +203,285 @@
             padding-left: 0.65rem;
         }
 
-        /* --- Чат --- */
-        .chat-messages {
+        /* --- Telegram-style Chat --- */
+        .chat-container {
+            display: flex;
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background: var(--bs-body-bg);
+            height: calc(100vh - 280px);
+            min-height: 450px;
+        }
+        .chat-sidebar {
+            width: 320px;
+            min-width: 320px;
+            border-right: 1px solid var(--bs-border-color);
+            display: flex;
+            flex-direction: column;
+            background: var(--bs-body-bg);
+        }
+        .chat-sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+        .chat-sidebar-search {
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+        .chat-sidebar-search .form-control {
+            border-radius: 1rem;
+            font-size: 0.85rem;
+        }
+        .chat-room-list {
             flex: 1;
             overflow-y: auto;
-            overflow-x: hidden;
-            max-height: 340px;
         }
-        .chat-msg {
+        .chat-room-item {
             display: flex;
             gap: 0.75rem;
-            padding: 0.65rem 0.5rem;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            border-bottom: 1px solid color-mix(in srgb, var(--bs-border-color) 50%, transparent);
+            transition: background .15s;
+        }
+        .chat-room-item:hover { background: color-mix(in srgb, var(--bs-primary) 5%, var(--bs-body-bg)); }
+        .chat-room-item.active { background: color-mix(in srgb, var(--bs-primary) 12%, var(--bs-body-bg)); }
+        .chat-room-avatar {
+            width: 46px; height: 46px; border-radius: 50%;
+            background: color-mix(in srgb, var(--bs-primary) 15%, var(--bs-body-bg));
+            flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+            font-weight: 600; font-size: 0.85rem; color: var(--bs-primary);
+            overflow: hidden;
+        }
+        .chat-room-info { flex: 1; min-width: 0; }
+        .chat-room-name { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; display: inline-block; }
+        .chat-room-time { font-size: 0.72rem; color: var(--bs-secondary-color); }
+        .chat-room-preview { font-size: 0.82rem; color: var(--bs-secondary-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; display: inline-block; }
+        .chat-room-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 20px; height: 20px; border-radius: 10px;
+            background: var(--bs-primary); color: #fff;
+            font-size: 0.7rem; font-weight: 700; padding: 0 6px;
+        }
+        .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .chat-placeholder {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+        }
+        .chat-main-inner { display: flex; flex-direction: column; height: 100%; }
+        .chat-main-header {
+            display: flex; align-items: center;
+            padding: 0.85rem 1rem;
             border-bottom: 1px solid var(--bs-border-color);
-            border-radius: 0.5rem;
-            transition: background .2s, transform .2s;
-            margin: 0 -0.5rem;
+            background: var(--bs-body-bg);
         }
-        .chat-msg:last-child { border-bottom: none; }
-        .chat-msg:hover {
-            background: color-mix(in srgb, var(--bs-primary) 5%, var(--bs-body-bg));
-            transform: translateX(4px);
+        .chat-messages-area {
+            flex: 1; overflow-y: auto; padding: 1rem;
+            display: flex; flex-direction: column; gap: 0.5rem;
+            position: relative;
         }
-        .chat-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: var(--bs-secondary-bg);
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            font-size: 0.85rem;
-            color: var(--bs-primary);
-            transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s;
-        }
-        .chat-msg:hover .chat-avatar {
-            transform: scale(1.1);
-            box-shadow: 0 3px 10px rgba(67,94,190,.2);
-        }
-        .chat-name { font-weight: 600; font-size: 0.9rem; }
-        .chat-text { font-size: 0.85rem; color: var(--bs-secondary-color); }
-        .chat-time { font-size: 0.75rem; color: var(--bs-secondary-color); white-space: nowrap; }
-        .chat-input-wrap {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-top: 0.75rem;
-            padding-top: 0.75rem;
+        .chat-input-bar {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.75rem 1rem;
             border-top: 1px solid var(--bs-border-color);
         }
-        .chat-input-wrap .form-control {
-            border-radius: 1.5rem;
-            transition: box-shadow .25s, border-color .25s;
+        .chat-input-bar .form-control { border-radius: 1.5rem; }
+
+        /* Bubbles */
+        .chat-bubble {
+            max-width: 70%; padding: 0.55rem 0.85rem;
+            border-radius: 1rem; position: relative;
+            font-size: 0.9rem; word-wrap: break-word;
         }
-        .chat-input-wrap .form-control:focus {
-            box-shadow: 0 0 0 3px rgba(67,94,190,.15);
+        .chat-bubble-mine {
+            align-self: flex-end;
+            background: color-mix(in srgb, var(--bs-primary) 15%, var(--bs-body-bg));
+            border-bottom-right-radius: 0.25rem;
         }
-        .chat-input-wrap .btn {
-            transition: transform .2s, box-shadow .2s;
+        .chat-bubble-other {
+            align-self: flex-start;
+            background: var(--bs-secondary-bg);
+            border-bottom-left-radius: 0.25rem;
         }
-        .chat-input-wrap .btn:hover {
-            transform: scale(1.15);
+        .chat-bubble-text { white-space: pre-wrap; word-break: break-word; }
+        .chat-bubble-mine .chat-bubble-text { padding-right: 1.2rem; }
+        .chat-bubble-time { font-size: 0.68rem; color: var(--bs-secondary-color); text-align: right; margin-top: 2px; }
+        .chat-bubble-files { margin-top: 4px; }
+        .chat-file-link { display: block; font-size: 0.82rem; text-decoration: none; }
+        .chat-file-link:hover { text-decoration: underline; }
+        .chat-deleted { color: var(--bs-secondary-color); font-style: italic; font-size: 0.85rem; }
+        .chat-delete-btn {
+            position: absolute; top: 4px; right: 4px;
+            background: none; border: none; color: var(--bs-secondary-color);
+            cursor: pointer; font-size: 0.75rem; opacity: 0;
+            transition: opacity .15s;
         }
-        .chat-input-wrap .btn:active {
-            transform: scale(0.92);
+        .chat-bubble:hover .chat-delete-btn { opacity: 1; }
+        .chat-delete-btn:hover { color: var(--bs-danger); }
+
+        /* 3-dot action menu */
+        .chat-msg-actions {
+            position: absolute; top: 4px; right: 4px;
+            opacity: 0; transition: opacity .15s;
+        }
+        .chat-bubble:hover .chat-msg-actions { opacity: 1; }
+        .chat-actions-btn {
+            background: none; border: none; color: var(--bs-secondary-color);
+            cursor: pointer; font-size: 0.85rem; padding: 2px 4px; border-radius: 4px;
+            transition: background .15s, color .15s;
+        }
+        .chat-actions-btn:hover { background: rgba(0,0,0,.08); color: var(--bs-body-color); }
+        .chat-actions-menu {
+            display: none; position: absolute; right: 0; top: 100%;
+            background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);
+            border-radius: 0.5rem; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+            min-width: 160px; z-index: 10; overflow: hidden;
+        }
+        .chat-actions-menu.open { display: block; }
+        .chat-action-item {
+            display: flex; align-items: center; gap: 0.5rem;
+            width: 100%; padding: 0.5rem 0.85rem; border: none;
+            background: none; font-size: 0.85rem; cursor: pointer;
+            color: var(--bs-body-color); transition: background .15s;
+        }
+        .chat-action-item:hover { background: rgba(0,0,0,.06); }
+        .chat-action-delete { color: var(--bs-danger); }
+        .chat-action-delete:hover { background: rgba(220,53,69,.08); }
+
+        /* Edit mode */
+        .chat-edit-input {
+            font-size: 0.85rem; border-radius: 0.5rem; resize: none;
+        }
+        .chat-edit-buttons { display: flex; gap: 0.25rem; }
+
+        /* Edited label */
+        .chat-edited-label {
+            font-style: italic; opacity: 0.7;
         }
 
-        /* --- Уведомления --- */
-        .notif-list {
+        /* User popover */
+        .chat-user-popover {
+            position: absolute; z-index: 100;
+            width: 280px;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.75rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,.15);
+            animation: chatPopoverIn .15s ease-out;
+            overflow: hidden;
+        }
+        @keyframes chatPopoverIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .chat-popover-header {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.85rem;
+        }
+        .chat-popover-avatar {
+            width: 48px; height: 48px; border-radius: 50%;
+            flex-shrink: 0; object-fit: cover;
+        }
+        .chat-popover-avatar-initials {
+            width: 48px; height: 48px; border-radius: 50%;
+            flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+            background: #e0e0e0; font-weight: 600; font-size: 1rem;
+        }
+        .chat-popover-name { font-weight: 600; font-size: 0.95rem; line-height: 1.2; }
+        .chat-popover-profession { font-size: 0.8rem; color: var(--bs-secondary-color); }
+        .chat-popover-lastseen { font-size: 0.75rem; color: var(--bs-success); }
+        .chat-popover-lastseen.offline { color: var(--bs-secondary-color); }
+        .chat-popover-body {
+            padding: 0 0.85rem 0.75rem;
+            border-top: 1px solid var(--bs-border-color);
+        }
+        .chat-popover-row {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.4rem 0; font-size: 0.82rem;
+            color: var(--bs-body-color);
+        }
+        .chat-popover-row i { color: var(--bs-secondary-color); width: 16px; text-align: center; }
+        .chat-popover-footer {
+            padding: 0 0.85rem 0.75rem;
+        }
+        .chat-popover-footer .btn { font-size: 0.82rem; }
+        .chat-room-avatar[data-user-id] { cursor: pointer; }
+        .chat-room-avatar[data-user-id]:hover {
+            box-shadow: 0 0 0 2px var(--bs-primary);
+        }
+        .chat-bubble-sender { font-size: 0.78rem; font-weight: 600; color: var(--bs-primary); margin-bottom: 2px; cursor: pointer; }
+        .chat-body-wrap {
+            flex: 1; display: flex; overflow: hidden; min-height: 0;
+        }
+        .chat-body-wrap .chat-messages-area {
             flex: 1;
-            overflow-y: auto;
-            overflow-x: hidden;
-            max-height: 340px;
         }
-        .notif-item {
-            display: flex;
-            gap: 0.75rem;
-            padding: 0.65rem 0.5rem;
+        .chat-participants-panel {
+            width: 260px; min-width: 260px;
+            border-left: 1px solid var(--bs-border-color);
+            display: flex; flex-direction: column;
+            background: var(--bs-body-bg);
+        }
+        .chat-participants-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.75rem 0.85rem;
             border-bottom: 1px solid var(--bs-border-color);
-            align-items: flex-start;
-            border-radius: 0.5rem;
-            transition: background .2s, transform .2s;
-            margin: 0 -0.5rem;
-            cursor: pointer;
         }
-        .notif-item:last-child { border-bottom: none; }
-        .notif-item:hover {
-            background: color-mix(in srgb, var(--bs-primary) 5%, var(--bs-body-bg));
-            transform: translateX(4px);
+        .chat-participants-list {
+            flex: 1; overflow-y: auto; padding: 0.5rem 0;
         }
-        .notif-icon {
-            width: 38px;
-            height: 38px;
-            border-radius: 0.5rem;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1rem;
-            transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s;
+        .chat-participant-item {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.5rem 0.85rem;
+            transition: background .15s;
         }
-        .notif-item:hover .notif-icon {
-            transform: scale(1.12) rotate(-3deg);
-            box-shadow: 0 3px 10px rgba(0,0,0,.1);
+        .chat-participant-item:hover { background: rgba(0,0,0,.04); }
+        .chat-participant-avatar {
+            width: 34px; height: 34px; border-radius: 50%;
+            background: color-mix(in srgb, var(--bs-primary) 15%, var(--bs-body-bg));
+            flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+            font-weight: 600; font-size: 0.75rem; color: var(--bs-primary);
+            overflow: hidden;
         }
-        .notif-icon--doc { background: rgba(13,110,253,.12); color: #0d6efd; }
-        .notif-icon--user { background: rgba(25,135,84,.12); color: #198754; }
-        .notif-icon--task { background: rgba(220,53,69,.12); color: #dc3545; }
-        .notif-text { font-size: 0.85rem; flex: 1; }
-        .notif-time { font-size: 0.75rem; color: var(--bs-secondary-color); white-space: nowrap; }
-        .notif-dot {
-            display: inline-block;
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: var(--bs-primary);
-            margin-left: 0.35rem;
-            animation: dotPulse 2s ease-in-out infinite;
+        .chat-participant-avatar img {
+            width: 100%; height: 100%; object-fit: cover;
         }
-        @keyframes dotPulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50%      { opacity: .4; transform: scale(1.4); }
+        .chat-participant-name {
+            flex: 1; font-size: 0.85rem; font-weight: 500;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .chat-participant-creator {
+            font-size: 0.7rem; color: var(--bs-primary); font-weight: 600;
+        }
+        .chat-participant-remove {
+            background: none; border: none; color: var(--bs-secondary-color);
+            cursor: pointer; font-size: 0.85rem; opacity: 0; transition: opacity .15s, color .15s;
+            padding: 2px 4px;
+        }
+        .chat-participant-item:hover .chat-participant-remove { opacity: 1; }
+        .chat-participant-remove:hover { color: var(--bs-danger); }
+        .chat-participants-actions {
+            padding: 0.65rem 0.85rem;
+            border-top: 1px solid var(--bs-border-color);
+        }
+        @media (max-width: 991.98px) {
+            .chat-participants-panel {
+                position: absolute; right: 0; top: 0; bottom: 0;
+                z-index: 5; box-shadow: -4px 0 16px rgba(0,0,0,.1);
+            }
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 991.98px) {
+            .chat-container { height: calc(100vh - 200px); }
+            .chat-sidebar { width: 100%; min-width: 100%; }
+            .chat-main { display: none; }
+            .chat-container.chat-room-open .chat-sidebar { display: none; }
+            .chat-container.chat-room-open .chat-main { display: flex; }
         }
 
         /* --- Кнопка Добавить пост --- */
@@ -464,104 +621,90 @@
         </div>
     </div>
 
-    <!-- Чат + Уведомления -->
-    <div class="row g-4 dash-animate dash-animate-d3">
-        <!-- Чат отдела -->
-        <div class="col-lg-7">
-            <div class="dash-panel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h3 class="dash-panel-title mb-0">Чат отдела</h3>
-                    <div class="d-flex align-items-center gap-1">
-                        <span style="width:8px;height:8px;border-radius:50%;background:#198754;display:inline-block"></span>
-                        <span class="text-muted small">Общий</span>
-                        <i class="bi bi-chevron-down text-muted small"></i>
+    <!-- Чат (Telegram-style) -->
+    <div class="dash-animate dash-animate-d3">
+        <div id="chat-container" class="chat-container">
+            <!-- Sidebar -->
+            <div class="chat-sidebar">
+                <div class="chat-sidebar-header">
+                    <h3 class="dash-panel-title mb-0">Чат</h3>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#chatNewPrivateModal" title="Новый чат">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                        {% if is_granted('ROLE_MANAGER') %}
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#chatNewGroupModal" title="Новая группа">
+                                <i class="bi bi-people-fill"></i>
+                            </button>
+                        {% endif %}
                     </div>
                 </div>
-
-                <div class="chat-messages">
-                    <div class="chat-msg">
-                        <div class="chat-avatar">СП</div>
-                        <div class="flex-grow-1">
-                            <div class="chat-name">Светлана Петрова</div>
-                            <div class="chat-text">Добрый день! У всех готово к совещанию?</div>
-                        </div>
-                        <div class="chat-time">10:25</div>
-                    </div>
-                    <div class="chat-msg">
-                        <div class="chat-avatar">ИС</div>
-                        <div class="flex-grow-1">
-                            <div class="chat-name">Иван Смирнов</div>
-                            <div class="chat-text">Отправил отчет по проекту в папку.</div>
-                        </div>
-                        <div class="chat-time">10:18</div>
-                    </div>
-                    <div class="chat-msg">
-                        <div class="chat-avatar">АВ</div>
-                        <div class="flex-grow-1">
-                            <div class="chat-name">Анна Волкова</div>
-                            <div class="chat-text">Документы загружены в систему. <i class="bi bi-check2-all text-success"></i></div>
-                        </div>
-                        <div class="chat-time">09:50</div>
-                    </div>
-                    <div class="chat-msg">
-                        <div class="chat-avatar">АГ</div>
-                        <div class="flex-grow-1">
-                            <div class="chat-name">Алексей Громов</div>
-                            <div class="chat-text">Нужна выписа подпись на договоре.</div>
-                        </div>
-                        <div class="chat-time">Вчера</div>
-                    </div>
+                <div class="chat-sidebar-search">
+                    <input type="text" id="chat-room-search" class="form-control form-control-sm" placeholder="Поиск чатов...">
                 </div>
-
-                <div class="chat-input-wrap">
-                    <input type="text" class="form-control" placeholder="Написать сообщение...">
-                    <button class="btn btn-sm btn-light" type="button"><i class="bi bi-plus-circle"></i></button>
-                    <button class="btn btn-sm btn-primary" type="button"><i class="bi bi-send-fill"></i></button>
+                <div class="chat-room-list" id="chat-room-list">
+                    <div class="text-muted small p-3 text-center">Загрузка...</div>
                 </div>
             </div>
-        </div>
 
-        <!-- Уведомления -->
-        <div class="col-lg-5">
-            <div class="dash-panel">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h3 class="dash-panel-title mb-0">Уведомления</h3>
-                    <div class="d-flex align-items-center gap-1">
-                        <span class="text-muted small">Все</span>
-                        <i class="bi bi-chevron-down text-muted small"></i>
-                    </div>
+            <!-- Main chat area -->
+            <div class="chat-main">
+                <div id="chat-placeholder" class="chat-placeholder">
+                    <i class="bi bi-chat-text" style="font-size:3rem;opacity:.3"></i>
+                    <p class="text-muted mt-2">Выберите чат для начала переписки</p>
                 </div>
-
-                <div class="notif-list">
-                    <div class="notif-item">
-                        <div class="notif-icon notif-icon--doc"><i class="bi bi-file-earmark-text"></i></div>
-                        <div class="notif-text">Документ 'Договор №105' требует согласования</div>
-                        <div class="notif-time">10:32 <span class="notif-dot"></span></div>
+                <div id="chat-main-panel" class="chat-main-inner d-none">
+                    <div class="chat-main-header">
+                        <button class="btn btn-sm btn-light d-lg-none me-2" id="chat-back-btn"><i class="bi bi-arrow-left"></i></button>
+                        <h5 class="mb-0 flex-grow-1" id="chat-header-title">Чат</h5>
+                        <button class="btn btn-sm btn-outline-secondary d-none" id="chat-participants-btn" title="Участники"><i class="bi bi-people"></i> <span id="chat-participants-count"></span></button>
                     </div>
-                    <div class="notif-item">
-                        <div class="notif-icon notif-icon--user"><i class="bi bi-person-check"></i></div>
-                        <div class="notif-text"><strong>Светлана Петрова</strong> прокомментировала ваш документ.</div>
-                        <div class="notif-time">09:45 <span class="notif-dot"></span></div>
+                    <div class="chat-body-wrap">
+                        <div class="chat-messages-area" id="chat-messages-area"></div>
+                        <!-- Participants panel (slide-out) -->
+                        <div class="chat-participants-panel d-none" id="chat-participants-panel">
+                            <div class="chat-participants-header">
+                                <h6 class="mb-0">Участники</h6>
+                                <button class="btn btn-sm btn-light" id="chat-participants-close"><i class="bi bi-x-lg"></i></button>
+                            </div>
+                            <div class="chat-participants-list" id="chat-participants-list"></div>
+                            <div class="chat-participants-actions d-none" id="chat-participants-actions">
+                                <button class="btn btn-sm btn-outline-primary w-100" id="chat-add-participant-btn"><i class="bi bi-person-plus"></i> Добавить участника</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="notif-item">
-                        <div class="notif-icon notif-icon--user"><i class="bi bi-chat-dots"></i></div>
-                        <div class="notif-text"><strong>Иван Смирнов</strong> упомянул вас в чате</div>
-                        <div class="notif-time">Вчера, 16:20</div>
-                    </div>
-                    <div class="notif-item">
-                        <div class="notif-icon notif-icon--doc"><i class="bi bi-file-earmark-text"></i></div>
-                        <div class="notif-text">Новый приказ от 22.04.2024</div>
-                        <div class="notif-time">28.04</div>
-                    </div>
-                    <div class="notif-item">
-                        <div class="notif-icon notif-icon--task"><i class="bi bi-clipboard-check"></i></div>
-                        <div class="notif-text">Задача 'Подготовить отчет' — срок истёк</div>
-                        <div class="notif-time">21.04</div>
+                    <div class="chat-input-bar">
+                        <button class="btn btn-sm btn-light" type="button" id="chat-file-btn" title="Прикрепить файл"><i class="bi bi-paperclip"></i></button>
+                        <input type="file" id="chat-file-input" multiple accept=".doc,.docx,.xls,.xlsx,.pdf,.png,.jpg,.jpeg" style="display:none">
+                        <input type="text" class="form-control" id="chat-message-input" placeholder="Написать сообщение...">
+                        <button class="btn btn-sm btn-primary" type="button" id="chat-send-btn"><i class="bi bi-send-fill"></i></button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    {# Org tree data for chat modals #}
+    <div id="chat-org-tree-data" data-users-url-template="{{ path('app_document_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}" data-users-search-url="{{ path('app_document_users_search') }}" class="d-none">
+        {% if organizations is defined and organizations|length > 0 %}
+            {% for org in organizations %}
+                {% if org %}
+                    {% include 'document/_organization_tree_data.html.twig' with {'organization': org} %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    {% include 'chat/partials/_new_chat_modal.html.twig' %}
+    {% include 'chat/partials/_new_group_modal.html.twig' %}
+
+    <script>
+        window.__chatConfig = {
+            mercureUrl: '{{ mercure_public_url }}',
+            currentUserId: {{ current_user_id }},
+        };
+    </script>
+    <script src="/front_end/assets/static/js/chat.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {

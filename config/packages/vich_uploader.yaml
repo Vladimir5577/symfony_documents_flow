@@ -60,6 +60,6 @@ vich_uploader:
             directory_namer:
                 service: Vich\UploaderBundle\Naming\PropertyDirectoryNamer
                 options:
-                    property: message.id
+                    property: message.room.id
             delete_on_remove: true
             delete_on_update: true

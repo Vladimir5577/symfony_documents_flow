@@ -3,6 +3,8 @@
 namespace App\Repository\Chat;
 
 use App\Entity\Chat\ChatMessage;
+use App\Entity\Chat\ChatRoom;
+use App\Entity\User\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -16,28 +18,57 @@ class ChatMessageRepository extends ServiceEntityRepository
         parent::__construct($registry, ChatMessage::class);
     }
 
-    //    /**
-    //     * @return ChatMessage[] Returns an array of ChatMessage objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('c')
-    //            ->andWhere('c.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('c.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
+    /**
+     * @return ChatMessage[]
+     */
+    public function findByRoomPaginated(ChatRoom $room, ?int $beforeId, int $limit = 30): array
+    {
+        $em = $this->getEntityManager();
+        $filters = $em->getFilters();
+        $disabledSoftDelete = false;
 
-    //    public function findOneBySomeField($value): ?ChatMessage
-    //    {
-    //        return $this->createQueryBuilder('c')
-    //            ->andWhere('c.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
+        if ($filters->isEnabled('softdeleteable')) {
+            $filters->disable('softdeleteable');
+            $disabledSoftDelete = true;
+        }
+
+        try {
+            $qb = $this->createQueryBuilder('m')
+                ->andWhere('m.room = :room')
+                ->setParameter('room', $room)
+                ->leftJoin('m.sender', 's')
+                ->addSelect('s')
+                ->leftJoin('m.files', 'f')
+                ->addSelect('f')
+                ->orderBy('m.id', 'DESC')
+                ->setMaxResults($limit);
+
+            if ($beforeId !== null) {
+                $qb->andWhere('m.id < :beforeId')
+                    ->setParameter('beforeId', $beforeId);
+            }
+
+            return $qb->getQuery()->getResult();
+        } finally {
+            if ($disabledSoftDelete) {
+                $filters->enable('softdeleteable');
+            }
+        }
+    }
+
+    public function countUnreadForUser(ChatRoom $room, User $user): int
+    {
+        return (int) $this->createQueryBuilder('m')
+            ->select('COUNT(m.id)')
+            ->andWhere('m.room = :room')
+            ->andWhere('m.sender != :user')
+            ->setParameter('room', $room)
+            ->setParameter('user', $user)
+            ->andWhere('NOT EXISTS (
+                SELECT 1 FROM App\Entity\Chat\ChatMessageRead r
+                WHERE r.message = m AND r.user = :user
+            )')
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }

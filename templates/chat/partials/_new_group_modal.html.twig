@@ -1,0 +1,72 @@
+{# Модалка создания группового чата (ROLE_MANAGER) #}
+<div class="modal fade" id="chatNewGroupModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Создать групповой чат</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex flex-column gap-3">
+                    <div>
+                        <label class="form-label fw-semibold">Название группы</label>
+                        <input type="text" id="chat-group-name" class="form-control" placeholder="Введите название..." autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Поиск пользователя</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="chat-group-user-search" class="form-control" placeholder="Поиск по фамилии..." autocomplete="off">
+                            <button type="button" id="chat-group-search-clear" class="btn btn-outline-secondary d-none">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Организации</label>
+                        <div id="chat-group-org-tree" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;"></div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Работники подразделения</label>
+                        <div id="chat-group-users-block" class="border rounded p-2" style="max-height: 180px; overflow-y: auto;">
+                            <div id="chat-group-users-placeholder" class="text-muted small">Выберите организацию</div>
+                            <div id="chat-group-users-list" class="d-none"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Выбранные участники</label>
+                        <div id="chat-group-selected-block" class="border rounded p-2" style="min-height: 48px; max-height: 150px; overflow-y: auto;">
+                            <div id="chat-group-selected-placeholder" class="text-muted small">Пока никого не выбрано</div>
+                            <div id="chat-group-selected-list" class="d-none d-flex flex-wrap gap-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="chat-group-confirm-btn" disabled>Создать группу</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    #chat-group-org-tree .org-tree-item { display: flex; align-items: center; padding: 6px 8px; cursor: pointer; border-radius: 4px; }
+    #chat-group-org-tree .org-tree-item:hover { background-color: rgba(0,0,0,.06); }
+    #chat-group-org-tree .org-tree-item.selected { background-color: #0d6efd; color: #fff; }
+    #chat-group-org-tree .org-tree-toggle { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; margin-right: 4px; font-size: 12px; }
+    #chat-group-org-tree .org-tree-toggle.open { transform: rotate(90deg); }
+    #chat-group-org-tree .org-tree-icon { margin-right: 6px; flex-shrink: 0; }
+    #chat-group-org-tree .org-tree-children { display: none; }
+    #chat-group-org-tree .org-tree-children.open { display: block; }
+    #chat-group-users-list .chat-group-user-item { padding: 6px 8px; cursor: pointer; border-radius: 4px; }
+    #chat-group-users-list .chat-group-user-item:hover { background-color: rgba(0,0,0,.06); }
+    #chat-group-users-list .chat-group-user-item.selected { background-color: rgba(13, 110, 253, 0.2); }
+    #chat-group-selected-list .chat-group-selected-tag {
+        display: inline-flex; align-items: center; gap: 4px;
+        background: rgba(13,110,253,.1); color: #0d6efd;
+        padding: 4px 10px; border-radius: 1rem; font-size: 0.85rem;
+    }
+    #chat-group-selected-list .chat-group-selected-tag .btn-remove {
+        background: none; border: none; color: #dc3545; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0;
+    }
+</style>

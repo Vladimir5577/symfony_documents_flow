@@ -1,0 +1,61 @@
+{# Модалка выбора пользователя для приватного чата #}
+<div class="modal fade" id="chatNewPrivateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Новый чат</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">Выберите организацию, затем сотрудника для начала чата.</p>
+                <div class="d-flex flex-column gap-3">
+                    <div>
+                        <label class="form-label fw-semibold">Поиск пользователя</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="chat-private-user-search" class="form-control" placeholder="Поиск по фамилии..." autocomplete="off">
+                            <button type="button" id="chat-private-search-clear" class="btn btn-outline-secondary d-none">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Организации</label>
+                        <div id="chat-private-org-tree" class="border rounded p-2" style="max-height: 220px; overflow-y: auto;"></div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Работники подразделения</label>
+                        <div id="chat-private-users-block" class="border rounded p-2" style="max-height: 180px; overflow-y: auto;">
+                            <div id="chat-private-users-placeholder" class="text-muted small">Выберите организацию</div>
+                            <div id="chat-private-users-list" class="d-none"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Выбранный пользователь</label>
+                        <div id="chat-private-selected-block" class="border rounded p-2" style="min-height: 48px;">
+                            <div id="chat-private-selected-placeholder" class="text-muted small">Пока никого не выбрано</div>
+                            <div id="chat-private-selected-one" class="d-none d-flex align-items-center justify-content-between"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="chat-private-confirm-btn" disabled>Начать чат</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    #chat-private-org-tree .org-tree-item { display: flex; align-items: center; padding: 6px 8px; cursor: pointer; border-radius: 4px; }
+    #chat-private-org-tree .org-tree-item:hover { background-color: rgba(0,0,0,.06); }
+    #chat-private-org-tree .org-tree-item.selected { background-color: #0d6efd; color: #fff; }
+    #chat-private-org-tree .org-tree-toggle { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; margin-right: 4px; font-size: 12px; }
+    #chat-private-org-tree .org-tree-toggle.open { transform: rotate(90deg); }
+    #chat-private-org-tree .org-tree-icon { margin-right: 6px; flex-shrink: 0; }
+    #chat-private-org-tree .org-tree-children { display: none; }
+    #chat-private-org-tree .org-tree-children.open { display: block; }
+    #chat-private-users-list .chat-private-user-item { padding: 6px 8px; cursor: pointer; border-radius: 4px; }
+    #chat-private-users-list .chat-private-user-item:hover { background-color: rgba(0,0,0,.06); }
+    #chat-private-users-list .chat-private-user-item.selected { background-color: rgba(13, 110, 253, 0.2); }
+</style>

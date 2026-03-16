@@ -70,6 +70,22 @@ services:
 #    volumes:
 #        - ./../onlyoffice_data:/var/www/onlyoffice/Data
 
+  mercure:
+    image: dunglas/mercure
+    container_name: mercure
+    restart: unless-stopped
+    environment:
+      SERVER_NAME: ':80'
+      MERCURE_PUBLISHER_JWT_KEY: '${MERCURE_JWT_SECRET}'
+      MERCURE_SUBSCRIBER_JWT_KEY: '${MERCURE_JWT_SECRET}'
+      MERCURE_EXTRA_DIRECTIVES: |
+        cors_origins http://localhost:${NGINX_PORT:-8080}
+        anonymous
+    ports:
+      - "${MERCURE_PORT:-3000}:80"
+    networks:
+      - project-net
+
 networks:
   project-net:
     name: project-net

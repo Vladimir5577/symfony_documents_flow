@@ -3,6 +3,7 @@
 namespace App\Entity\Chat;
 
 use App\Entity\Organization\Department;
+use App\Entity\User\User;
 use App\Enum\Chat\ChatRoomType;
 use App\Repository\Chat\ChatRoomRepository;
 use Doctrine\DBAL\Types\Types;
@@ -22,9 +23,16 @@ class ChatRoom
     #[ORM\Column(length: 50, enumType: ChatRoomType::class, nullable: false)]
     private ChatRoomType $type;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $name = null;
+
     #[ORM\OneToOne]
     #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: true)]
     private ?Department $organization = null;
+
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'created_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $createdBy = null;
 
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
@@ -67,6 +75,30 @@ class ChatRoom
     public function setCreatedAt(\DateTimeImmutable $createdAt): static
     {
         $this->createdAt = $createdAt;
+
+        return $this;
+    }
+
+    public function getName(): ?string
+    {
+        return $this->name;
+    }
+
+    public function setName(?string $name): static
+    {
+        $this->name = $name;
+
+        return $this;
+    }
+
+    public function getCreatedBy(): ?User
+    {
+        return $this->createdBy;
+    }
+
+    public function setCreatedBy(?User $createdBy): static
+    {
+        $this->createdBy = $createdBy;
 
         return $this;
     }
