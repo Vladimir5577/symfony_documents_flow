@@ -227,7 +227,7 @@ class KanbanService
         if ($prevUpdatedAt !== null && $card->getUpdatedAt() !== null) {
             $diff = abs($card->getUpdatedAt()->getTimestamp() - $prevUpdatedAt->getTimestamp());
             if ($diff > 1) {
-                throw new ConflictHttpException('Карточка была изменена другим пользователем.');
+//                throw new ConflictHttpException('Карточка была изменена другим пользователем.');
             }
         }
 

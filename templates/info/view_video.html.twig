@@ -1,0 +1,26 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Приветствие!{% endblock %}
+
+
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+
+
+{% block main %}
+    <h1>{{ video.label }}</h1>
+
+    <div class="card mt-4">
+        <div class="card-body">
+            <video class="w-100" controls preload="metadata">
+                <source src="{{ path('app_instruction_video_file', { video: video.key }) }}" type="video/mp4">
+                Ваш браузер не поддерживает видео.
+            </video>
+        </div>
+    </div>
+
+
+{% endblock %}
