@@ -10,11 +10,10 @@ use Symfony\Component\HttpFoundation\File\File as SymfonyFile;
 use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
 #[ORM\Entity(repositoryClass: UserFileRepository::class)]
-#[ORM\Table(name: 'file_user', indexes: [
-    new ORM\Index(name: 'idx_file_user_user_id', columns: ['user_id']),
-    new ORM\Index(name: 'idx_file_user_folder_id', columns: ['folder_id']),
-    new ORM\Index(name: 'idx_file_user_user_folder', columns: ['user_id', 'folder_id']),
-])]
+#[ORM\Table(name: 'file_user')]
+#[ORM\Index(name: 'idx_file_user_user_id', columns: ['user_id'])]
+#[ORM\Index(name: 'idx_file_user_folder_id', columns: ['folder_id'])]
+#[ORM\Index(name: 'idx_file_user_user_folder', columns: ['user_id', 'folder_id'])]
 #[Vich\Uploadable]
 class UserFile
 {

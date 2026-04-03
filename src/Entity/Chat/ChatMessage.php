@@ -11,7 +11,7 @@ use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
 
 #[ORM\Entity(repositoryClass: ChatMessageRepository::class)]
-#[ORM\Table(indexes: [new ORM\Index(name: 'IDX_CHAT_MESSAGE_ROOM_CREATED_AT', columns: ['room_id', 'created_at'])])]
+#[ORM\Index(name: 'IDX_CHAT_MESSAGE_ROOM_CREATED_AT', columns: ['room_id', 'created_at'])]
 #[Gedmo\SoftDeleteable(fieldName: 'deletedAt', timeAware: false, hardDelete: false)]
 class ChatMessage
 {

@@ -1,4 +1,7 @@
 liip_imagine:
+    twig:
+        mode: lazy
+    templating: false
     resolvers:
         default:
             web_path:
@@ -11,6 +14,9 @@ liip_imagine:
         user_avatar:
             filesystem:
                 data_root: '%private_upload_dir_users%'
+        kanban_attachment:
+            filesystem:
+                data_root: '%private_upload_kanban_dir%'
     data_loader: default
     filter_sets:
         avatar_thumbnail:
@@ -26,3 +32,10 @@ liip_imagine:
                 thumbnail:
                     size: [200, 200]
                     mode: outbound
+        kanban_attachment_preview:
+            data_loader: kanban_attachment
+            quality: 85
+            filters:
+                thumbnail:
+                    size: [400, 400]
+                    mode: inbound

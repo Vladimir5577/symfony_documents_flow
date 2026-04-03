@@ -8,11 +8,10 @@ use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
 
 #[ORM\Entity(repositoryClass: UserFolderFileRepository::class)]
-#[ORM\Table(name: 'user_folder_file', indexes: [
-    new ORM\Index(name: 'idx_user_folder_file_user_id', columns: ['user_id']),
-    new ORM\Index(name: 'idx_user_folder_file_parent_id', columns: ['parent_id']),
-    new ORM\Index(name: 'idx_user_folder_file_user_parent', columns: ['user_id', 'parent_id']),
-])]
+#[ORM\Table(name: 'user_folder_file')]
+#[ORM\Index(name: 'idx_user_folder_file_user_id', columns: ['user_id'])]
+#[ORM\Index(name: 'idx_user_folder_file_parent_id', columns: ['parent_id'])]
+#[ORM\Index(name: 'idx_user_folder_file_user_parent', columns: ['user_id', 'parent_id'])]
 class UserFolderFile
 {
     #[ORM\Id]

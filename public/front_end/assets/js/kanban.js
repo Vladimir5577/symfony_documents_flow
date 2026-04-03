@@ -21,6 +21,24 @@ var KanbanApp = (function () {
         return div.innerHTML;
     }
 
+    function escapeAttr(str) {
+        if (str == null || str === "") {
+            return "";
+        }
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/"/g, "&quot;")
+            .replace(/</g, "&lt;");
+    }
+
+    function kanbanAttachmentDownloadUrl(cardId, attId) {
+        return "/api/kanban/cards/" + cardId + "/attachments/" + attId + "/download";
+    }
+
+    function kanbanAttachmentInlineUrl(cardId, attId) {
+        return kanbanAttachmentDownloadUrl(cardId, attId) + "?inline=1";
+    }
+
     function showToast(message, type) {
         type = type || "danger";
         var container = document.getElementById("toast-container");
@@ -578,11 +596,17 @@ var KanbanApp = (function () {
             var preview = data.description.length > 80 ? data.description.substring(0, 80) + "..." : data.description;
             if (descEl) {
                 descEl.textContent = preview;
-            } else if (titleEl) {
+            } else {
                 var newDesc = document.createElement("div");
                 newDesc.className = "kanban-card-description";
                 newDesc.textContent = preview;
-                titleEl.after(newDesc);
+                // Как в Twig: описание снаружи .kanban-card-header, не после .kanban-card-title (иначе попадает в flex-ряд с меню).
+                var headerEl = cardEl.querySelector(".kanban-card-header");
+                if (headerEl) {
+                    headerEl.after(newDesc);
+                } else if (titleEl) {
+                    titleEl.after(newDesc);
+                }
             }
         } else if (data.description === "" || data.description === null) {
             if (descEl) descEl.remove();
@@ -682,7 +706,7 @@ var KanbanApp = (function () {
         initSubtasks();
         initSubtaskAssigneeArea();
         initCardSubtasksWidgets();
-        initAttachments();
+        initDescriptionAttachments();
         initDueAt();
         initAssignees();
         initAssignNewUserModal();
@@ -757,15 +781,16 @@ var KanbanApp = (function () {
 
             // Comments + chat attachments → unified chat stream
             var chatAttachments = (data.attachments || []).filter(function (a) { return a.context === 'chat'; });
-            var infoAttachments = (data.attachments || []).filter(function (a) { return a.context !== 'chat'; });
             renderChatStream(data.comments || [], chatAttachments);
             startCommentPolling(cardId);
 
             // Подзадачи: синхронизация сайдбар + блок на карточке
             refreshSubtaskViews(currentCardId, data.subtasks || []);
 
-            // Attachments (info only)
-            renderAttachments(infoAttachments);
+            // Description attachments
+            var descriptionAttachments = (data.attachments || []).filter(function (a) { return a.context === 'description'; });
+            descriptionAttachments.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+            renderDescriptionAttachments(descriptionAttachments);
 
             // Border colour picker
             var picker = document.getElementById("card-border-color-picker");
@@ -870,7 +895,8 @@ var KanbanApp = (function () {
         if (ph) ph.remove();
 
         var sizeKb = Math.round((att.sizeBytes || 0) / 1024);
-        var downloadUrl = "/api/kanban/cards/" + currentCardId + "/attachments/" + att.id + "/download";
+        var downloadUrl = kanbanAttachmentDownloadUrl(currentCardId, att.id);
+        var inlineUrl = kanbanAttachmentInlineUrl(currentCardId, att.id);
         var isImage = att.contentType && att.contentType.indexOf("image/") === 0;
 
         var deleteBtn = config.canEdit
@@ -879,12 +905,13 @@ var KanbanApp = (function () {
 
         var bodyHtml;
         if (isImage) {
+            var previewSrc = att.previewUrl || inlineUrl;
             bodyHtml =
-                '<a href="' + downloadUrl + '" target="_blank" class="d-block">' +
-                '<img src="' + downloadUrl + '" class="chat-img-preview" alt="' + escapeHtml(att.filename) + '">' +
-                '</a>' +
+                '<button type="button" class="btn btn-link p-0 border-0 d-block text-start kanban-att-img-modal-trigger" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="' + escapeAttr(inlineUrl) + '" aria-label="Просмотр изображения">' +
+                '<img src="' + escapeAttr(previewSrc) + '" class="chat-img-preview" alt="' + escapeHtml(att.filename) + '">' +
+                '</button>' +
                 '<small class="text-muted d-block mt-1">' +
-                '<i class="bi bi-paperclip me-1"></i>' + escapeHtml(att.filename) + ' · ' + sizeKb + ' KB' +
+                '<a href="' + escapeAttr(downloadUrl) + '" class="text-muted text-decoration-none"><i class="bi bi-paperclip me-1"></i>' + escapeHtml(att.filename) + '</a> · ' + sizeKb + ' KB' +
                 deleteBtn +
                 '</small>';
         } else {
@@ -1009,7 +1036,7 @@ var KanbanApp = (function () {
                     if (currentCardData && att) {
                         currentCardData.attachments = currentCardData.attachments || [];
                         currentCardData.attachments.push(att);
-                        renderAttachments(currentCardData.attachments.filter(function (a) { return a.context !== 'chat'; }));
+                        renderDescriptionAttachments(currentCardData.attachments.filter(function (a) { return a.context === 'description'; }));
                     }
                 }).catch(function (err) {
                     showToast(err.message);
@@ -1540,10 +1567,18 @@ select.addEventListener("change", function () {
         });
     }
 
-    // ── Attachments ──
+    // ── Description Attachments ──
 
-    function renderAttachments(attachments) {
-        var container = document.getElementById("attachments-list");
+    function isImageAttachment(att) {
+        if (att.contentType && att.contentType.indexOf("image/") === 0) {
+            return true;
+        }
+        var ext = (att.filename || "").split(".").pop().toLowerCase();
+        return ["png", "jpg", "jpeg", "webp"].indexOf(ext) !== -1;
+    }
+
+    function renderDescriptionAttachments(attachments) {
+        var container = document.getElementById("description-attachments-list");
         if (!container) return;
         container.innerHTML = "";
 
@@ -1553,27 +1588,56 @@ select.addEventListener("change", function () {
         }
 
         attachments.forEach(function (att) {
-            var item = document.createElement("div");
-            item.className = "attachment-item";
-            var sizeKb = Math.round(att.sizeBytes / 1024);
-            item.innerHTML =
-                "<div>" +
-                '<a href="/api/kanban/cards/' + currentCardId + "/attachments/" + att.id + '/download" class="text-decoration-none">' +
-                '<i class="bi bi-paperclip me-1"></i>' + escapeHtml(att.filename) +
-                "</a>" +
-                '<small class="text-muted ms-2">' + sizeKb + " KB</small>" +
-                "</div>" +
-                (config.canEdit ? '<button type="button" class="btn btn-sm btn-link text-danger p-0 att-delete-btn" data-att-id="' + att.id + '"><i class="bi bi-trash"></i></button>' : "");
-            container.appendChild(item);
+            var wrapper = document.createElement("div");
+            wrapper.className = "mb-2";
 
-            var delBtn = item.querySelector(".att-delete-btn");
+            var downloadUrl = kanbanAttachmentDownloadUrl(currentCardId, att.id);
+            var inlineUrl = kanbanAttachmentInlineUrl(currentCardId, att.id);
+            var sizeKb = Math.round(att.sizeBytes / 1024);
+
+            if (isImageAttachment(att)) {
+                var previewSrc = att.previewUrl || inlineUrl;
+                var imgWrap = document.createElement("div");
+                imgWrap.style.position = "relative";
+                imgWrap.style.display = "inline-block";
+                imgWrap.innerHTML =
+                    '<button type="button" class="btn btn-link p-0 border-0 mb-0 text-start kanban-att-img-modal-trigger" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="' + escapeAttr(inlineUrl) + '" aria-label="Просмотр изображения">' +
+                        '<img src="' + escapeAttr(previewSrc) + '" class="chat-img-preview" alt="' + escapeHtml(att.filename) + '" style="max-width:240px;">' +
+                    "</button>" +
+                    (config.canEdit
+                        ? '<button type="button" class="btn btn-sm btn-link text-danger p-0 att-delete-btn" data-att-id="' + att.id + '" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;"><i class="bi bi-trash" style="color:#fff;"></i></button>'
+                        : "");
+                wrapper.appendChild(imgWrap);
+
+                var caption = document.createElement("div");
+                caption.className = "small text-muted mt-1";
+                caption.innerHTML =
+                    '<a href="' + escapeAttr(downloadUrl) + '" class="text-muted text-decoration-none">' + escapeHtml(att.filename) + "</a> (" + sizeKb + " KB)";
+                wrapper.appendChild(caption);
+            } else {
+                var item = document.createElement("div");
+                item.className = "attachment-item";
+                item.innerHTML =
+                    "<div>" +
+                    '<a href="' + downloadUrl + '" class="text-decoration-none">' +
+                    '<i class="bi bi-paperclip me-1"></i>' + escapeHtml(att.filename) +
+                    "</a>" +
+                    '<small class="text-muted ms-2">' + sizeKb + " KB</small>" +
+                    "</div>" +
+                    (config.canEdit ? '<button type="button" class="btn btn-sm btn-link text-danger p-0 att-delete-btn" data-att-id="' + att.id + '"><i class="bi bi-trash"></i></button>' : "");
+                wrapper.appendChild(item);
+            }
+
+            container.appendChild(wrapper);
+
+            var delBtn = wrapper.querySelector(".att-delete-btn");
             if (delBtn) {
                 delBtn.addEventListener("click", function () {
                     if (!confirm("Удалить вложение?")) return;
                     apiFetch("/api/kanban/cards/" + currentCardId + "/attachments/" + att.id, {
                         method: "DELETE"
                     }).then(function () {
-                        item.remove();
+                        wrapper.remove();
                         if (currentCardData) {
                             currentCardData.attachments = (currentCardData.attachments || []).filter(function (a) { return a.id !== att.id; });
                         }
@@ -1583,9 +1647,9 @@ select.addEventListener("change", function () {
         });
     }
 
-    function initAttachments() {
-        var input = document.getElementById("attachment-input");
-        if (!input) return;
+    function initDescriptionAttachments() {
+        var input = document.getElementById("description-attachment-input");
+        if (!input || !config.canEdit) return;
 
         input.addEventListener("change", function () {
             if (!input.files.length || !currentCardId) return;
@@ -1601,18 +1665,20 @@ select.addEventListener("change", function () {
 
             var formData = new FormData();
             formData.append("file", file);
-            formData.append("context", "info");
+            formData.append("context", "description");
 
             apiFetch("/api/kanban/cards/" + currentCardId + "/attachments", {
                 method: "POST",
                 body: formData
             }).then(function (newAtt) {
                 input.value = "";
-                newAtt.context = "info";
+                newAtt.context = "description";
                 if (currentCardData && newAtt) {
                     currentCardData.attachments = currentCardData.attachments || [];
                     currentCardData.attachments.push(newAtt);
-                    renderAttachments(currentCardData.attachments.filter(function (a) { return a.context !== 'chat'; }));
+                    var desc = currentCardData.attachments.filter(function (a) { return a.context === 'description'; });
+                    desc.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+                    renderDescriptionAttachments(desc);
                 }
             }).catch(function (err) {
                 showToast(err.message);

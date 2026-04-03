@@ -6,6 +6,7 @@ use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanAttachmentRepository;
 use App\Repository\Kanban\KanbanCardRepository;
+use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
 use App\Service\Kanban\KanbanAttachmentService;
 use App\Service\Kanban\KanbanService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -24,6 +25,7 @@ final class KanbanAttachmentApiController extends AbstractController
         private readonly KanbanAttachmentRepository $attachmentRepo,
         private readonly KanbanService $kanbanService,
         private readonly KanbanAttachmentService $attachmentService,
+        private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
     ) {
     }
 
@@ -48,7 +50,7 @@ final class KanbanAttachmentApiController extends AbstractController
         $attachment = $this->attachmentService->upload($file, $card);
 
         $context = $request->request->get('context', 'info');
-        if (!in_array($context, ['chat', 'info'], true)) {
+        if (!in_array($context, ['chat', 'info', 'description'], true)) {
             $context = 'info';
         }
         $attachment->setContext($context);
@@ -61,11 +63,12 @@ final class KanbanAttachmentApiController extends AbstractController
             'sizeBytes' => $attachment->getSizeBytes(),
             'context' => $attachment->getContext(),
             'createdAt' => $attachment->getCreatedAt()?->format('c'),
+            'previewUrl' => $this->kanbanAttachmentPreviewUrlGenerator->getPreviewUrl($attachment),
         ], Response::HTTP_CREATED);
     }
 
     #[Route('/{id}/download', name: 'api_kanban_attachments_download', methods: ['GET'])]
-    public function download(int $cardId, int $id): Response
+    public function download(int $cardId, int $id, Request $request): Response
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -88,7 +91,10 @@ final class KanbanAttachmentApiController extends AbstractController
         }
 
         $response = new BinaryFileResponse($filePath);
-        $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, $attachment->getFilename());
+        $disposition = $request->query->getBoolean('inline', false)
+            ? ResponseHeaderBag::DISPOSITION_INLINE
+            : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
+        $response->setContentDisposition($disposition, $attachment->getFilename());
 
         return $response;
     }

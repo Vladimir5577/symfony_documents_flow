@@ -10,6 +10,7 @@ use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanColumnRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
+use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -30,6 +31,7 @@ final class KanbanCardApiController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly UserRepository $userRepo,
         private readonly NotificationService $notificationService,
+        private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
     ) {
     }
 
@@ -109,6 +111,7 @@ final class KanbanCardApiController extends AbstractController
                 'sizeBytes' => $att->getSizeBytes(),
                 'context' => $att->getContext(),
                 'createdAt' => $att->getCreatedAt()?->format('c'),
+                'previewUrl' => $this->kanbanAttachmentPreviewUrlGenerator->getPreviewUrl($att),
             ];
         }
 

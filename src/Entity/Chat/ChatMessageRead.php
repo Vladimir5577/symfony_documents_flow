@@ -8,10 +8,8 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: ChatMessageReadRepository::class)]
-#[ORM\Table(
-    indexes: [new ORM\Index(name: 'IDX_CHAT_MESSAGE_READ_USER_ID', columns: ['user_id'])],
-    uniqueConstraints: [new ORM\UniqueConstraint(name: 'UNIQ_CHAT_MESSAGE_READ_MESSAGE_USER', columns: ['message_id', 'user_id'])]
-)]
+#[ORM\Index(name: 'IDX_CHAT_MESSAGE_READ_USER_ID', columns: ['user_id'])]
+#[ORM\UniqueConstraint(name: 'UNIQ_CHAT_MESSAGE_READ_MESSAGE_USER', columns: ['message_id', 'user_id'])]
 class ChatMessageRead
 {
     #[ORM\Id]

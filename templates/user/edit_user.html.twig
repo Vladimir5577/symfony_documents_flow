@@ -45,6 +45,7 @@
                                 {% endfor %}
 
                                 <div class="row">
+                                    {% if is_admin %}
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="first-name-column">Фамилия <span class="text-danger">*</span></label>
@@ -63,6 +64,7 @@
                                             <input type="text" id="city-column" class="form-control" placeholder="Отчество" name="city-column" value="{{ user.patronymic ?? '' }}">
                                         </div>
                                     </div>
+                                    {% endif %}
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="phone-column">Телефон</label>
@@ -81,7 +83,7 @@
                                         </div>
                                     </div>
                                     {% endif %}
-                                    {% if organizations is defined and organizations %}
+                                    {% if is_admin and organizations is defined and organizations %}
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="organization_id">Подразделение к которому принадлежит пользователь <span class="text-danger">*</span></label>
@@ -103,7 +105,7 @@
                                         </div>
                                     </div>
                                     {% endif %}
-                                    {% if roles is defined and roles %}
+                                    {% if is_admin and roles is defined and roles %}
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label>Роль</label>
@@ -139,6 +141,7 @@
                                             <input type="password" id="confirm-password-column" class="form-control" name="confirm_password" placeholder="Повторите пароль">
                                         </div>
                                     </div>
+                                    {% if is_admin %}
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="profession-column">Профессия (опционально)</label>
@@ -151,6 +154,7 @@
                                             <textarea id="description-column" class="form-control" name="description-column" placeholder="Описание" rows="3">{{ worker.description|default('') }}</textarea>
                                         </div>
                                     </div>
+                                    {% endif %}
                                     <div class="col-12 d-flex justify-content-end">
                                         <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить изменения</button>
                                         <a href="{{ path('app_view_user', {id: user.id}) }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
@@ -164,7 +168,7 @@
         </div>
     </section>
 
-    {% if organizations is defined and organizations %}
+    {% if is_admin and organizations is defined and organizations %}
         <div id="org-tree-data" class="d-none"
              data-users-url-template="{{ path('app_user_org_users', {'id': 0})|replace({'0':'__ORG__'}) }}"
              data-preselected-boss-id="{{ user.boss ? user.boss.id : '' }}">

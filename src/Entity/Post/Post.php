@@ -15,14 +15,10 @@ use Symfony\Component\HttpFoundation\File\File as SymfonyFile;
 use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
 #[ORM\Entity(repositoryClass: PostRepository::class)]
-#[ORM\Table(
-    name: 'post',
-    indexes: [
-        new ORM\Index(
-            name: 'idx_post_visible_created_at',
-            columns: ['deleted_at', 'is_active', 'created_at']
-        ),
-    ]
+#[ORM\Table(name: 'post')]
+#[ORM\Index(
+    name: 'idx_post_visible_created_at',
+    columns: ['deleted_at', 'is_active', 'created_at']
 )]
 #[Gedmo\SoftDeleteable(fieldName: 'deletedAt', timeAware: false, hardDelete: false)]
 #[Vich\Uploadable]

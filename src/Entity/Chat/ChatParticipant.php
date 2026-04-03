@@ -7,10 +7,8 @@ use App\Repository\Chat\ChatParticipantRepository;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: ChatParticipantRepository::class)]
-#[ORM\Table(
-    indexes: [new ORM\Index(name: 'IDX_CHAT_PARTICIPANT_USER_ID', columns: ['user_id'])],
-    uniqueConstraints: [new ORM\UniqueConstraint(name: 'UNIQ_CHAT_PARTICIPANT_ROOM_USER', columns: ['room_id', 'user_id'])]
-)]
+#[ORM\Index(name: 'IDX_CHAT_PARTICIPANT_USER_ID', columns: ['user_id'])]
+#[ORM\UniqueConstraint(name: 'UNIQ_CHAT_PARTICIPANT_ROOM_USER', columns: ['room_id', 'user_id'])]
 class ChatParticipant
 {
     #[ORM\Id]
