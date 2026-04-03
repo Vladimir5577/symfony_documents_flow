@@ -1,7 +1,12 @@
 # symfony_documents_flow
 
 ### Install in docker:
-1. Copy .env.example to .env (optionally put you credentials inside).
+Generate token for mercure
+```bash
+$ openssl rand -base64 32
+```
+
+1. Copy .env.example to .env (optionally put you credentials inside). Put mercure token generated above.
 ```bash
 $ cp .env.example .env
 ````
@@ -54,7 +59,7 @@ $ chown -R www-data:www-data /uploads
 $ chmod -R 775 /uploads
 ```
 
-Permissions to media cache
+Permissions to media cache (for resized images)
 ```bash
 $  chown -R www-data:www-data public/media/
 chown -R 775 public/media/

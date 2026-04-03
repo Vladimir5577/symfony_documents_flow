@@ -1,0 +1,24 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Приветствие!{% endblock %}
+
+
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+
+
+{% block main %}
+    <h1>Инфо</h1>
+
+    <div class="mt-4">
+        {% for video in videos %}
+            <a class="card mb-3 text-decoration-none text-reset" href="{{ path('app_instruction_video', { video: video.key }) }}">
+                <div class="card-body">{{ video.label }}</div>
+            </a>
+        {% endfor %}
+    </div>
+
+{% endblock %}
