@@ -59,10 +59,11 @@ $ chown -R www-data:www-data /uploads
 $ chmod -R 775 /uploads
 ```
 
-Permissions to media cache (for resized images)
+Permissions to media cache (LiipImagine: avatars, kanban attachment previews, etc.)
 ```bash
-$  chown -R www-data:www-data public/media/
-chown -R 775 public/media/
+$ mkdir -p public/media/cache
+$ chown -R www-data:www-data public/media/
+$ chmod -R 775 public/media/
 ```
 
 11. If need run dbgate

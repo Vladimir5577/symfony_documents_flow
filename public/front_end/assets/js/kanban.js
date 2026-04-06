@@ -678,6 +678,11 @@ var KanbanApp = (function () {
                     pane.classList.add("active");
                     pane.hidden = false;
                     if (targetId === "pane-chat") scrollChatToBottom();
+                    if (targetId === "pane-description") {
+                        requestAnimationFrame(function () {
+                            requestAnimationFrame(fitTaskDescriptionTextarea);
+                        });
+                    }
                 }
             });
         });
@@ -754,9 +759,14 @@ var KanbanApp = (function () {
             }
             document.getElementById("task-sidebar-id").textContent = data.columnTitle || "";
 
-            // Description
+            // Description (высота под весь текст; без внутреннего скролла в textarea)
             var textarea = document.getElementById("task-description-textarea");
-            if (textarea) textarea.value = data.description || "";
+            if (textarea) {
+                textarea.value = data.description || "";
+                requestAnimationFrame(function () {
+                    requestAnimationFrame(fitTaskDescriptionTextarea);
+                });
+            }
 
             // Priority
             var priSelect = document.getElementById("task-priority-select");
@@ -1093,9 +1103,28 @@ var KanbanApp = (function () {
 
     // ── Description auto-save ──
 
+    function fitTaskDescriptionTextarea() {
+        var textarea = document.getElementById("task-description-textarea");
+        if (!textarea) return;
+        textarea.style.height = "auto";
+        textarea.style.height = textarea.scrollHeight + "px";
+    }
+
     function initDescription() {
         var textarea = document.getElementById("task-description-textarea");
-        if (!textarea || !config.canEdit) return;
+        if (!textarea) return;
+
+        function onInput() {
+            requestAnimationFrame(fitTaskDescriptionTextarea);
+        }
+        textarea.addEventListener("input", onInput);
+        textarea.addEventListener("paste", function () {
+            requestAnimationFrame(function () {
+                requestAnimationFrame(fitTaskDescriptionTextarea);
+            });
+        });
+
+        if (!config.canEdit) return;
 
         textarea.addEventListener("blur", function () {
             if (currentCardId) {
