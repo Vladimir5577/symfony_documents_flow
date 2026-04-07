@@ -310,10 +310,8 @@ final class ProjectKanbanController extends AbstractController
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
 
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
         $userOrganization = $user->getOrganization();
-        $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree(null);
         $organizationsWithChildren = [];
         foreach ($organizationTree as $org) {
             $loadedOrg = $organizationRepository->findWithChildren($org->getId());

@@ -68,10 +68,9 @@ final class DocumentController extends AbstractController
 
         $isAdmin = $this->isGranted('ROLE_ADMIN');
         $userOrganization = $currentUser->getOrganization();
-        $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
 
         // Получаем дерево организаций для пользователя
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree(null);
 
         // Загружаем организации с дочерними для отображения дерева
         $organizationsWithChildren = [];
