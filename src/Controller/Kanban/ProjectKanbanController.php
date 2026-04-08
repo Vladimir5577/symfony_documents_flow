@@ -111,19 +111,11 @@ final class ProjectKanbanController extends AbstractController
 
         $memberRole = $this->kanbanService->getMemberRole($board, $user);
 
-        if ($memberRole !== KanbanBoardMemberRole::KANBAN_ADMIN && !$this->boardRepo->userHasAssignedCardsOnBoard($board, $user)) {
-            throw $this->createAccessDeniedException('Нет доступа к этой доске: на вас не назначены задачи.');
-        }
-
         $projectBoards = [];
         $organizations = [];
         if ($board->getProject() !== null) {
             $project = $board->getProject();
-            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
-                $projectBoards = $this->boardRepo->findByProject($project);
-            } else {
-                $projectBoards = $this->boardRepo->findByProjectAndUserWithAssignedCards($project, $user);
-            }
+            $projectBoards = $this->boardRepo->findByProject($project);
             $userOrganization = $user->getOrganization();
             $organizationTree = $organizationRepository->getOrganizationTree(null);
             foreach ($organizationTree as $org) {
@@ -213,8 +205,7 @@ final class ProjectKanbanController extends AbstractController
 
         $firstBoard = $project->getBoards()->first() ?: null;
         if ($firstBoard) {
-            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
-            $memberRole = $this->kanbanService->getMemberRole($firstBoard, $user);
+            return $this->redirectToRoute('app_kanban_board', ['id' => $firstBoard->getId()]);
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         } else {
@@ -222,9 +213,7 @@ final class ProjectKanbanController extends AbstractController
         }
 
         $isProjectAdmin = $memberRole === KanbanBoardMemberRole::KANBAN_ADMIN;
-        $projectBoards = $isProjectAdmin
-            ? $this->boardRepo->findByProject($project)
-            : $this->boardRepo->findByProjectAndUserWithAssignedCards($project, $user);
+        $projectBoards = $this->boardRepo->findByProject($project);
 
         $projectUsers = $this->projectUserRepo->findByProject($project);
 
