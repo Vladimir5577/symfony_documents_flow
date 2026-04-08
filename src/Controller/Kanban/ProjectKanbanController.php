@@ -124,10 +124,8 @@ final class ProjectKanbanController extends AbstractController
             } else {
                 $projectBoards = $this->boardRepo->findByProjectAndUserWithAssignedCards($project, $user);
             }
-            $isAdmin = $this->isGranted('ROLE_ADMIN');
             $userOrganization = $user->getOrganization();
-            $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
-            $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+            $organizationTree = $organizationRepository->getOrganizationTree(null);
             foreach ($organizationTree as $org) {
                 $loadedOrg = $organizationRepository->findWithChildren($org->getId());
                 if ($loadedOrg) {

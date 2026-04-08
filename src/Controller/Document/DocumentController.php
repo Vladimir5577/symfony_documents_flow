@@ -336,9 +336,7 @@ final class DocumentController extends AbstractController
             return new JsonResponse(['error' => 'Organization not found'], JsonResponse::HTTP_NOT_FOUND);
         }
 
-        $users = $organization instanceof Department
-            ? $userRepository->findByOrganization($organization)
-            : $userRepository->findWorkWithDocumentsByOrganization($organization);
+        $users = $userRepository->findByOrganization($organization);
 
         $data = [];
         foreach ($users as $user) {
