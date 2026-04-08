@@ -130,64 +130,21 @@ final class OrganizationController extends AbstractController
             throw $this->createAccessDeniedException('Необходима авторизация');
         }
 
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
-
-        if ($isAdmin) {
-            // Админ видит все родительские организации с пагинацией и поиском
-            $page = max(1, (int) $request->query->get('page', 1));
-            $search = trim((string) $request->query->get('search', ''));
-            $limit = 10;
-
-            $pagination = $organizationRepository->findPaginated($page, $limit, $search);
-
-            return $this->render('organization/all_organizations.html.twig', [
-                'active_tab' => 'all_organizations',
-                'controller_name' => 'OrganizationController',
-                'organizations' => $pagination['organizations'],
-                'search' => $search,
-                'pagination' => [
-                    'current_page' => $pagination['page'],
-                    'total_pages' => $pagination['totalPages'],
-                    'total_items' => $pagination['total'],
-                    'items_per_page' => $pagination['limit'],
-                ],
-            ]);
-        }
-
-        // Обычный пользователь видит только свою организацию
-        $userOrganization = $currentUser->getOrganization();
-
-        if (!$userOrganization) {
-            $this->addFlash('error', 'Не удалось определить организацию. Обратитесь к администратору.');
-            return $this->redirectToRoute('app_dash_board');
-        }
-
+        $page = max(1, (int) $request->query->get('page', 1));
         $search = trim((string) $request->query->get('search', ''));
-        $organizations = [$userOrganization];
-        if ($search !== '') {
-            $term = mb_strtolower($search);
-            $match = false
-                || ($userOrganization->getName() && mb_strpos(mb_strtolower($userOrganization->getName()), $term) !== false)
-                || ($userOrganization->getFullName() && mb_strpos(mb_strtolower($userOrganization->getFullName()), $term) !== false)
-                || ($userOrganization->getLegalAddress() && mb_strpos(mb_strtolower($userOrganization->getLegalAddress()), $term) !== false)
-                || ($userOrganization->getActualAddress() && mb_strpos(mb_strtolower($userOrganization->getActualAddress()), $term) !== false)
-                || ($userOrganization->getPhone() && mb_strpos(mb_strtolower($userOrganization->getPhone()), $term) !== false)
-                || ($userOrganization->getEmail() && mb_strpos(mb_strtolower($userOrganization->getEmail()), $term) !== false);
-            if (!$match) {
-                $organizations = [];
-            }
-        }
+        $limit = 10;
+        $pagination = $organizationRepository->findPaginated($page, $limit, $search);
 
         return $this->render('organization/all_organizations.html.twig', [
             'active_tab' => 'all_organizations',
             'controller_name' => 'OrganizationController',
-            'organizations' => $organizations,
+            'organizations' => $pagination['organizations'],
             'search' => $search,
             'pagination' => [
-                'current_page' => 1,
-                'total_pages' => 1,
-                'total_items' => count($organizations),
-                'items_per_page' => 1,
+                'current_page' => $pagination['page'],
+                'total_pages' => $pagination['totalPages'],
+                'total_items' => $pagination['total'],
+                'items_per_page' => $pagination['limit'],
             ],
         ]);
     }
@@ -204,42 +161,14 @@ final class OrganizationController extends AbstractController
         $search = trim((string) $request->query->get('search', ''));
         $limit = 10;
 
-        if ($this->isGranted('ROLE_ADMIN')) {
-            $pagination = $organizationRepository->findPaginated($page, $limit, $search);
-            $organizations = $pagination['organizations'];
-            $paginationData = [
-                'current_page' => $pagination['page'],
-                'total_pages' => $pagination['totalPages'],
-                'total_items' => $pagination['total'],
-                'items_per_page' => $pagination['limit'],
-            ];
-        } else {
-            $userOrganization = $currentUser->getOrganization();
-            $organizations = [];
-            if ($userOrganization) {
-                if ($search === '') {
-                    $organizations = [$userOrganization];
-                } else {
-                    $term = mb_strtolower($search);
-                    $match = false
-                        || ($userOrganization->getName() && mb_strpos(mb_strtolower($userOrganization->getName()), $term) !== false)
-                        || ($userOrganization->getFullName() && mb_strpos(mb_strtolower($userOrganization->getFullName()), $term) !== false)
-                        || ($userOrganization->getLegalAddress() && mb_strpos(mb_strtolower($userOrganization->getLegalAddress()), $term) !== false)
-                || ($userOrganization->getActualAddress() && mb_strpos(mb_strtolower($userOrganization->getActualAddress()), $term) !== false)
-                        || ($userOrganization->getPhone() && mb_strpos(mb_strtolower($userOrganization->getPhone()), $term) !== false)
-                        || ($userOrganization->getEmail() && mb_strpos(mb_strtolower($userOrganization->getEmail()), $term) !== false);
-                    if ($match) {
-                        $organizations = [$userOrganization];
-                    }
-                }
-            }
-            $paginationData = [
-                'current_page' => 1,
-                'total_pages' => 1,
-                'total_items' => count($organizations),
-                'items_per_page' => $limit,
-            ];
-        }
+        $pagination = $organizationRepository->findPaginated($page, $limit, $search);
+        $organizations = $pagination['organizations'];
+        $paginationData = [
+            'current_page' => $pagination['page'],
+            'total_pages' => $pagination['totalPages'],
+            'total_items' => $pagination['total'],
+            'items_per_page' => $pagination['limit'],
+        ];
 
         $organizationsData = [];
         foreach ($organizations as $org) {

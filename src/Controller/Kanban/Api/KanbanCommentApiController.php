@@ -51,6 +51,7 @@ final class KanbanCommentApiController extends AbstractController
             'authorName' => $c->getAuthor()->getLastname() . ' ' . $c->getAuthor()->getFirstname(),
             'authorId' => $c->getAuthor()->getId(),
             'createdAt' => $c->getCreatedAt()?->format('c'),
+            'updatedAt' => $c->getUpdatedAt()?->format('c'),
         ], $comments);
 
         return $this->json($data);
@@ -92,6 +93,75 @@ final class KanbanCommentApiController extends AbstractController
             'authorId' => $user->getId(),
             'createdAt' => $comment->getCreatedAt()?->format('c'),
         ], Response::HTTP_CREATED);
+    }
+
+    #[Route('/{commentId}', name: 'api_kanban_comments_update', methods: ['PUT'])]
+    public function update(int $cardId, int $commentId, Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $card = $this->cardRepo->find($cardId);
+        if (!$card) {
+            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+
+        $comment = $this->commentRepo->find($commentId);
+        if (!$comment || $comment->getCard()->getId() !== $cardId) {
+            return $this->json(['error' => 'Комментарий не найден.'], Response::HTTP_NOT_FOUND);
+        }
+
+        if ($comment->getAuthor()->getId() !== $user->getId()) {
+            return $this->json(['error' => 'Только автор может редактировать комментарий.'], Response::HTTP_FORBIDDEN);
+        }
+
+        $payload = json_decode($request->getContent(), true) ?? [];
+        $body = trim($payload['body'] ?? '');
+        if ($body === '') {
+            return $this->json(['error' => 'body обязателен.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $comment->setBody($body);
+        $this->em->flush();
+
+        return $this->json([
+            'id' => $comment->getId(),
+            'body' => $comment->getBody(),
+            'authorName' => $comment->getAuthor()->getLastname() . ' ' . $comment->getAuthor()->getFirstname(),
+            'authorId' => $comment->getAuthor()->getId(),
+            'createdAt' => $comment->getCreatedAt()?->format('c'),
+            'updatedAt' => $comment->getUpdatedAt()?->format('c'),
+        ]);
+    }
+
+    #[Route('/{commentId}', name: 'api_kanban_comments_delete', methods: ['DELETE'])]
+    public function delete(int $cardId, int $commentId): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $card = $this->cardRepo->find($cardId);
+        if (!$card) {
+            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+
+        $comment = $this->commentRepo->find($commentId);
+        if (!$comment || $comment->getCard()->getId() !== $cardId) {
+            return $this->json(['error' => 'Комментарий не найден.'], Response::HTTP_NOT_FOUND);
+        }
+
+        if ($comment->getAuthor()->getId() !== $user->getId()) {
+            return $this->json(['error' => 'Только автор может удалить комментарий.'], Response::HTTP_FORBIDDEN);
+        }
+
+        $this->em->remove($comment);
+        $this->em->flush();
+
+        return $this->json(null, Response::HTTP_NO_CONTENT);
     }
 
     private function sendCommentNotifications(\App\Entity\Kanban\KanbanCard $card, User $commentAuthor): void

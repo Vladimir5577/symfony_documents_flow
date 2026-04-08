@@ -98,7 +98,9 @@ final class KanbanCardApiController extends AbstractController
                 'id' => $com->getId(),
                 'body' => $com->getBody(),
                 'authorName' => $com->getAuthor()->getLastname() . ' ' . $com->getAuthor()->getFirstname(),
+                'authorId' => $com->getAuthor()->getId(),
                 'createdAt' => $com->getCreatedAt()?->format('c'),
+                'updatedAt' => $com->getUpdatedAt()?->format('c'),
             ];
         }
 

@@ -800,6 +800,30 @@
             white-space: nowrap;
         }
 
+        .task-chat-msg-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.125rem;
+        }
+
+        .task-chat-msg-actions .chat-msg-edit-btn,
+        .task-chat-msg-actions .chat-msg-delete-btn {
+            opacity: 0;
+            transition: opacity 0.15s;
+            font-size: 0.75rem;
+        }
+
+        .task-chat-msg-bubble:hover .chat-msg-edit-btn,
+        .task-chat-msg-bubble:hover .chat-msg-delete-btn {
+            opacity: 1;
+        }
+
+        .chat-msg-edit-input {
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            padding: 0.375rem 0.75rem;
+        }
+
         .task-chat-input-wrap {
             display: flex;
             gap: 0.5rem;
@@ -1527,8 +1551,12 @@
                         <textarea class="form-control task-description-textarea" id="task-description-textarea" placeholder="Введите описание задачи..." {% if memberRole.value == 'VIEWER' %}readonly{% endif %}></textarea>
                         {% if memberRole.value != 'VIEWER' %}
                         <div class="mt-3">
-                            <div class="mb-2">
-                                <input type="file" id="description-attachment-input" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx">
+                            <div class="mb-2 d-flex align-items-center gap-2 flex-wrap">
+                                <input type="file" id="description-attachment-input" class="d-none" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="description-attachment-trigger">
+                                    Выбрать файл
+                                </button>
+                                <span id="description-attachment-filename" class="small text-muted">Файл не выбран</span>
                             </div>
                             <div id="description-attachments-list"></div>
                         </div>
