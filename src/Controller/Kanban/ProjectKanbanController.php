@@ -205,7 +205,11 @@ final class ProjectKanbanController extends AbstractController
 
         $firstBoard = $project->getBoards()->first() ?: null;
         if ($firstBoard) {
-            return $this->redirectToRoute('app_kanban_board', ['id' => $firstBoard->getId()]);
+            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+            $memberRole = $this->kanbanService->getMemberRole($firstBoard, $user);
+            if ($memberRole !== KanbanBoardMemberRole::KANBAN_ADMIN) {
+                return $this->redirectToRoute('app_kanban_board', ['id' => $firstBoard->getId()]);
+            }
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         } else {
