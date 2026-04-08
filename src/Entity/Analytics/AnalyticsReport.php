@@ -16,9 +16,11 @@ use Gedmo\Mapping\Annotation as Gedmo;
 
 #[ORM\Entity(repositoryClass: AnalyticsReportRepository::class)]
 #[ORM\Table(name: 'analytics_reports')]
-#[ORM\UniqueConstraint(name: 'uniq_analytics_reports_org_version_period', columns: ['organization_id', 'board_version_id', 'period_id'])]
+#[ORM\UniqueConstraint(name: 'uniq_analytics_reports_org_board_period', columns: ['organization_id', 'board_id', 'period_id'])]
 #[ORM\Index(name: 'idx_analytics_reports_period_id', columns: ['period_id'])]
 #[ORM\Index(name: 'idx_analytics_reports_organization_id', columns: ['organization_id'])]
+#[ORM\Index(name: 'idx_analytics_reports_organization_period', columns: ['organization_id', 'period_id'])]
+#[ORM\Index(name: 'idx_analytics_reports_board_id', columns: ['board_id'])]
 #[ORM\Index(name: 'idx_analytics_reports_status', columns: ['status'])]
 #[ORM\Index(name: 'idx_analytics_reports_status_period', columns: ['status', 'period_id'])]
 class AnalyticsReport
@@ -31,6 +33,10 @@ class AnalyticsReport
     #[ORM\ManyToOne(targetEntity: AbstractOrganization::class)]
     #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?AbstractOrganization $organization = null;
+
+    #[ORM\ManyToOne(targetEntity: AnalyticsBoard::class)]
+    #[ORM\JoinColumn(name: 'board_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    private ?AnalyticsBoard $board = null;
 
     #[ORM\ManyToOne(targetEntity: AnalyticsBoardVersion::class)]
     #[ORM\JoinColumn(name: 'board_version_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
@@ -98,6 +104,18 @@ class AnalyticsReport
         return $this;
     }
 
+    public function getBoard(): ?AnalyticsBoard
+    {
+        return $this->board;
+    }
+
+    public function setBoard(?AnalyticsBoard $board): static
+    {
+        $this->board = $board;
+
+        return $this;
+    }
+
     public function getBoardVersion(): ?AnalyticsBoardVersion
     {
         return $this->boardVersion;
@@ -106,6 +124,7 @@ class AnalyticsReport
     public function setBoardVersion(?AnalyticsBoardVersion $boardVersion): static
     {
         $this->boardVersion = $boardVersion;
+        $this->board = $boardVersion?->getBoard();
 
         return $this;
     }

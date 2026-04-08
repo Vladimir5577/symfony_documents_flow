@@ -1,0 +1,131 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Отчёт: {{ report.board.name }} — {{ report.period.description }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>Заполнение отчёта</h1>
+            <p class="text-muted mb-0">{{ report.board.name }} — {{ report.period.description }} (v{{ report.boardVersion.versionNumber }})</p>
+        </div>
+        <a href="{{ path('app_analytics_report') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Назад к списку
+        </a>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <div class="mb-3">
+        Статус:
+        {% if report.status.value == 'draft' %}
+            <span class="badge bg-info">Черновик</span>
+        {% elseif report.status.value == 'submitted' %}
+            <span class="badge bg-warning">Отправлен</span>
+        {% else %}
+            <span class="badge bg-success">Утверждён</span>
+        {% endif %}
+
+        Полнота:
+        {% if report.complete %}
+            <span class="badge bg-success">Все обязательные метрики заполнены</span>
+        {% else %}
+            <span class="badge bg-danger">Не всё заполнено</span>
+        {% endif %}
+    </div>
+
+    {% if report.status.value == 'draft' %}
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Метрики</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('app_analytics_report_fill', {id: report.id}) }}" method="post" class="form">
+                                <input type="hidden" name="_token" value="{{ csrf_token('report_fill_' ~ report.id) }}">
+
+                                <table class="table table-bordered">
+                                    <thead>
+                                    <tr>
+                                        <th>Метрика</th>
+                                        <th>Тип</th>
+                                        <th>Ед. изм.</th>
+                                        <th>Значение</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for vm in report.boardVersion.versionMetrics %}
+                                        {% set metric = vm.metric %}
+                                        {% set value = currentValues[vm.id] ?? '' %}
+
+                                        <tr>
+                                            <td>
+                                                <strong>{{ metric.name }}</strong>
+                                                <br><small class="text-muted"><code>{{ metric.businessKey }}</code></small>
+                                                {% if vm.required %}<span class="text-danger">*</span>{% endif %}
+                                            </td>
+                                            <td>{{ metric.type }}</td>
+                                            <td>{{ metric.unit }}</td>
+                                            <td>
+                                                {% if metric.type == 'bool' %}
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="values[{{ vm.id }}]" id="yes_{{ vm.id }}" value="1" {{ value == '1' ? 'checked' : '' }}>
+                                                        <label class="form-check-label" for="yes_{{ vm.id }}">Да</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="values[{{ vm.id }}]" id="no_{{ vm.id }}" value="0" {{ value == '0' ? 'checked' : '' }}>
+                                                        <label class="form-check-label" for="no_{{ vm.id }}">Нет</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="values[{{ vm.id }}]" id="na_{{ vm.id }}" value="" {{ value == '' ? 'checked' : '' }}>
+                                                        <label class="form-check-label" for="na_{{ vm.id }}">—</label>
+                                                    </div>
+                                                {% elseif metric.type == 'text' %}
+                                                    <input type="text" name="values[{{ vm.id }}]" class="form-control" value="{{ value }}" {{ vm.required ? 'required' : '' }}>
+                                                {% else %}
+                                                    <input type="number" step="any" name="values[{{ vm.id }}]" class="form-control" value="{{ value }}" {{ vm.required ? 'required' : '' }}>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+
+                                <div class="d-flex justify-content-between">
+                                    <button type="submit" class="btn btn-primary">Сохранить</button>
+
+                                    {% if report.complete %}
+                                        <form action="{{ path('app_analytics_report_submit', {id: report.id}) }}" method="post" onsubmit="return confirm('Отправить отчёт на утверждение? После отправки редактирование будет невозможно.');">
+                                            <input type="hidden" name="_token" value="{{ csrf_token('report_submit_' ~ report.id) }}">
+                                            <button type="submit" class="btn btn-success">Отправить на утверждение</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    {% else %}
+    <div class="card">
+        <div class="card-body">
+            <p class="text-muted">Отчёт находится в статусе <strong>{{ report.status.value == 'submitted' ? 'на утверждении' : 'утверждён' }}</strong>. Редактирование невозможно.</p>
+        </div>
+    </div>
+    {% endif %}
+
+{% endblock %}

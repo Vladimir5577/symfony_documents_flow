@@ -12,6 +12,10 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
 
+/**
+ * В PostgreSQL рекомендуется частичный уникальный индекс на (board_id) WHERE status = 'published'
+ * (имя напр. uniq_analytics_board_versions_one_published_per_board) — добавляется вручную в миграцию.
+ */
 #[ORM\Entity(repositoryClass: AnalyticsBoardVersionRepository::class)]
 #[ORM\Table(name: 'analytics_board_versions')]
 #[ORM\UniqueConstraint(name: 'uniq_analytics_board_versions_board_version', columns: ['board_id', 'version_number'])]

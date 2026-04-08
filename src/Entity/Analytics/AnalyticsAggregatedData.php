@@ -11,8 +11,13 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: AnalyticsAggregatedDataRepository::class)]
 #[ORM\Table(name: 'analytics_aggregated_data')]
-#[ORM\UniqueConstraint(name: 'uniq_analytics_aggregated_data', columns: ['business_key', 'period_id', 'organization_id'])]
-#[ORM\Index(name: 'idx_analytics_aggregated_data_period_org', columns: ['period_id', 'organization_id'])]
+#[ORM\UniqueConstraint(name: 'uniq_analytics_agg', columns: ['metric_id', 'period_id', 'organization_id', 'board_id', 'report_id'])]
+#[ORM\Index(name: 'idx_analytics_agg_period_org', columns: ['period_id', 'organization_id'])]
+#[ORM\Index(name: 'idx_analytics_agg_business_key_org', columns: ['business_key', 'organization_id'])]
+#[ORM\Index(name: 'idx_analytics_agg_metric_org', columns: ['metric_id', 'organization_id'])]
+#[ORM\Index(name: 'idx_analytics_agg_board', columns: ['board_id'])]
+#[ORM\Index(name: 'idx_analytics_agg_report', columns: ['report_id'])]
+#[ORM\Index(name: 'idx_analytics_agg_effective_at', columns: ['effective_at'])]
 class AnalyticsAggregatedData
 {
     #[ORM\Id]
@@ -20,8 +25,17 @@ class AnalyticsAggregatedData
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(name: 'business_key', length: 128)]
-    private ?string $businessKey = null;
+    #[ORM\ManyToOne(targetEntity: AnalyticsMetric::class)]
+    #[ORM\JoinColumn(name: 'metric_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    private ?AnalyticsMetric $metric = null;
+
+    #[ORM\ManyToOne(targetEntity: AnalyticsBoard::class)]
+    #[ORM\JoinColumn(name: 'board_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
+    private ?AnalyticsBoard $board = null;
+
+    #[ORM\ManyToOne(targetEntity: AnalyticsReport::class)]
+    #[ORM\JoinColumn(name: 'report_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
+    private ?AnalyticsReport $report = null;
 
     #[ORM\ManyToOne(targetEntity: AnalyticsPeriod::class)]
     #[ORM\JoinColumn(name: 'period_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
@@ -31,7 +45,31 @@ class AnalyticsAggregatedData
     #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?AbstractOrganization $organization = null;
 
-    #[ORM\Column(name: 'aggregated_value_number', type: Types::DECIMAL, precision: 20, scale: 8)]
+    #[ORM\Column(name: 'business_key', length: 128)]
+    private ?string $businessKey = null;
+
+    #[ORM\Column(name: 'metric_name_snapshot', length: 255, nullable: true)]
+    private ?string $metricNameSnapshot = null;
+
+    #[ORM\Column(name: 'metric_unit_snapshot', length: 64, nullable: true)]
+    private ?string $metricUnitSnapshot = null;
+
+    #[ORM\Column(name: 'metric_type_snapshot', length: 64, nullable: true)]
+    private ?string $metricTypeSnapshot = null;
+
+    #[ORM\Column(name: 'aggregation_type', length: 64)]
+    private ?string $aggregationType = null;
+
+    #[ORM\Column(name: 'effective_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $effectiveAt = null;
+
+    #[ORM\Column(name: 'value', type: Types::DECIMAL, precision: 20, scale: 8, nullable: true)]
+    private ?string $value = null;
+
+    #[ORM\Column(name: 'value_int', nullable: true)]
+    private ?int $valueInt = null;
+
+    #[ORM\Column(name: 'aggregated_value_number', type: Types::DECIMAL, precision: 20, scale: 8, nullable: true)]
     private ?string $aggregatedValueNumber = null;
 
     #[ORM\Column(name: 'source_count')]
@@ -45,15 +83,39 @@ class AnalyticsAggregatedData
         return $this->id;
     }
 
-    public function getBusinessKey(): ?string
+    public function getMetric(): ?AnalyticsMetric
     {
-        return $this->businessKey;
+        return $this->metric;
     }
 
-    public function setBusinessKey(string $businessKey): static
+    public function setMetric(?AnalyticsMetric $metric): static
     {
-        $this->businessKey = $businessKey;
+        $this->metric = $metric;
+        if ($metric !== null) {
+            $this->businessKey = $metric->getBusinessKey();
+        }
+        return $this;
+    }
 
+    public function getBoard(): ?AnalyticsBoard
+    {
+        return $this->board;
+    }
+
+    public function setBoard(?AnalyticsBoard $board): static
+    {
+        $this->board = $board;
+        return $this;
+    }
+
+    public function getReport(): ?AnalyticsReport
+    {
+        return $this->report;
+    }
+
+    public function setReport(?AnalyticsReport $report): static
+    {
+        $this->report = $report;
         return $this;
     }
 
@@ -65,7 +127,6 @@ class AnalyticsAggregatedData
     public function setPeriod(?AnalyticsPeriod $period): static
     {
         $this->period = $period;
-
         return $this;
     }
 
@@ -77,19 +138,94 @@ class AnalyticsAggregatedData
     public function setOrganization(?AbstractOrganization $organization): static
     {
         $this->organization = $organization;
-
         return $this;
     }
 
-    public function getAggregatedValueNumber(): ?string
+    public function getBusinessKey(): ?string
     {
-        return $this->aggregatedValueNumber;
+        return $this->businessKey;
     }
 
-    public function setAggregatedValueNumber(string $aggregatedValueNumber): static
+    public function setBusinessKey(string $businessKey): static
     {
-        $this->aggregatedValueNumber = $aggregatedValueNumber;
+        $this->businessKey = $businessKey;
+        return $this;
+    }
 
+    public function getMetricNameSnapshot(): ?string
+    {
+        return $this->metricNameSnapshot;
+    }
+
+    public function setMetricNameSnapshot(?string $metricNameSnapshot): static
+    {
+        $this->metricNameSnapshot = $metricNameSnapshot;
+        return $this;
+    }
+
+    public function getMetricUnitSnapshot(): ?string
+    {
+        return $this->metricUnitSnapshot;
+    }
+
+    public function setMetricUnitSnapshot(?string $metricUnitSnapshot): static
+    {
+        $this->metricUnitSnapshot = $metricUnitSnapshot;
+        return $this;
+    }
+
+    public function getMetricTypeSnapshot(): ?string
+    {
+        return $this->metricTypeSnapshot;
+    }
+
+    public function setMetricTypeSnapshot(?string $metricTypeSnapshot): static
+    {
+        $this->metricTypeSnapshot = $metricTypeSnapshot;
+        return $this;
+    }
+
+    public function getAggregationType(): ?string
+    {
+        return $this->aggregationType;
+    }
+
+    public function setAggregationType(string $aggregationType): static
+    {
+        $this->aggregationType = $aggregationType;
+        return $this;
+    }
+
+    public function getEffectiveAt(): ?\DateTimeImmutable
+    {
+        return $this->effectiveAt;
+    }
+
+    public function setEffectiveAt(?\DateTimeImmutable $effectiveAt): static
+    {
+        $this->effectiveAt = $effectiveAt;
+        return $this;
+    }
+
+    public function getValue(): ?string
+    {
+        return $this->value;
+    }
+
+    public function setValue(?string $value): static
+    {
+        $this->value = $value;
+        return $this;
+    }
+
+    public function getValueInt(): ?int
+    {
+        return $this->valueInt;
+    }
+
+    public function setValueInt(?int $valueInt): static
+    {
+        $this->valueInt = $valueInt;
         return $this;
     }
 
@@ -101,7 +237,6 @@ class AnalyticsAggregatedData
     public function setSourceCount(int $sourceCount): static
     {
         $this->sourceCount = $sourceCount;
-
         return $this;
     }
 
@@ -110,10 +245,21 @@ class AnalyticsAggregatedData
         return $this->calculatedAt;
     }
 
-    public function setCalculatedAt(\DateTimeImmutable $calculatedAt): static
+    public function setCalculatedAt(?\DateTimeImmutable $calculatedAt): static
     {
         $this->calculatedAt = $calculatedAt;
+        return $this;
+    }
 
+    // Legacy alias
+    public function getAggregatedValueNumber(): ?string
+    {
+        return $this->value ?? $this->aggregatedValueNumber;
+    }
+
+    public function setAggregatedValueNumber(string $aggregatedValueNumber): static
+    {
+        $this->aggregatedValueNumber = $aggregatedValueNumber;
         return $this;
     }
 }

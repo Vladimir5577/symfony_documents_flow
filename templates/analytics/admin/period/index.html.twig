@@ -1,0 +1,136 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Периоды{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">Периоды</h1>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <section class="section">
+        {# Автогенерация #}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Создать периоды</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-auto">
+                                <form action="{{ path('app_analytics_admin_period_generate') }}" method="post">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('period_generate') }}">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-magic me-1"></i>Автогенерация ближайших 4 недель
+                                    </button>
+                                </form>
+                            </div>
+                            <div class="col">
+                                <span class="text-muted small">Создаёт ближайшие ISO-недели, которых ещё нет в системе.</span>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <form action="{{ path('app_analytics_admin_period_create') }}" method="post" class="form">
+                            <input type="hidden" name="_token" value="{{ csrf_token('period_create') }}">
+
+                            <div class="row align-items-end">
+                                <div class="col-auto">
+                                    <label class="form-label">Год (ISO) <span class="text-danger">*</span></label>
+                                    <input type="number" name="iso_year" class="form-control" value="{{ 'now'|date('Y') }}" min="2020" max="2099" style="width:100px" required>
+                                </div>
+                                <div class="col-auto">
+                                    <label class="form-label">Неделя <span class="text-danger">*</span></label>
+                                    <input type="number" name="iso_week" class="form-control" min="1" max="53" style="width:100px" required>
+                                </div>
+                                <div class="col-auto">
+                                    <button type="submit" class="btn btn-secondary">
+                                        <i class="bi bi-plus-lg me-1"></i>Создать вручную
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Список периодов #}
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Список периодов</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                <tr>
+                                    <th>Период</th>
+                                    <th>Начало</th>
+                                    <th>Конец</th>
+                                    <th>Статус</th>
+                                    <th>Действия</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% if periods|length > 0 %}
+                                    {% for period in periods %}
+                                        <tr>
+                                            <td><strong>{{ period.description }}</strong></td>
+                                            <td>{{ period.startDate ? period.startDate|date('d.m.Y') : '—' }}</td>
+                                            <td>{{ period.endDate ? period.endDate|date('d.m.Y') : '—' }}</td>
+                                            <td>
+                                                {% if period.closed %}
+                                                    <span class="badge bg-danger">Закрыт</span>
+                                                {% else %}
+                                                    <span class="badge bg-success">Открыт</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if period.closed %}
+                                                    <form action="{{ path('app_analytics_admin_period_open', {id: period.id}) }}" method="post" class="d-inline">
+                                                        <input type="hidden" name="_token" value="{{ csrf_token('period_open_' ~ period.id) }}">
+                                                        <button type="submit" class="btn btn-sm btn-outline-success">
+                                                            <i class="bi bi-unlock"></i> Открыть
+                                                        </button>
+                                                    </form>
+                                                {% else %}
+                                                    <form action="{{ path('app_analytics_admin_period_close', {id: period.id}) }}" method="post" class="d-inline">
+                                                        <input type="hidden" name="_token" value="{{ csrf_token('period_close_' ~ period.id) }}">
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                            <i class="bi bi-lock"></i> Закрыть
+                                                        </button>
+                                                    </form>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">Периоды не созданы</td>
+                                    </tr>
+                                {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

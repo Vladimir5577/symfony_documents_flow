@@ -1,0 +1,91 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Доски аналитики{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">Доски аналитики</h1>
+        <a href="{{ path('app_analytics_admin_board_new') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>Создать доску
+        </a>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <section class="section">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Список досок</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Название</th>
+                                    <th>Описание</th>
+                                    <th>Версии</th>
+                                    <th>Обновлена</th>
+                                    <th>Действия</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% if boards|length > 0 %}
+                                    {% for board in boards %}
+                                        <tr>
+                                            <td>{{ board.id }}</td>
+                                            <td>{{ board.name }}</td>
+                                            <td>{{ board.description|default('—') }}</td>
+                                            <td>
+                                                {% for version in board.boardVersions %}
+                                                    <span class="badge
+                                                        {%- if version.status.value == 'published' %} bg-success
+                                                        {%- elseif version.status.value == 'archived' %} bg-secondary
+                                                        {%- else %} bg-info{% endif %} me-1">
+                                                        v{{ version.versionNumber }} ({{ version.status.value }})
+                                                    </span>
+                                                {% else %}
+                                                    —
+                                                {% endfor %}
+                                            </td>
+                                            <td>{{ board.updatedAt ? board.updatedAt|date('d.m.Y H:i') : '—' }}</td>
+                                            <td>
+                                                <a href="{{ path('app_analytics_admin_board_show', {id: board.id}) }}" class="btn btn-sm btn-outline-primary">
+                                                    <i class="bi bi-eye"></i>
+                                                </a>
+                                                <form action="{{ path('app_analytics_admin_board_delete', {id: board.id}) }}" method="post" class="d-inline" onsubmit="return confirm('Удалить доску «{{ board.name }}» и все её версии?')">
+                                                    <input type="hidden" name="_token" value="{{ csrf_token('board_delete_' ~ board.id) }}">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">Доски пока не созданы</td>
+                                    </tr>
+                                {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

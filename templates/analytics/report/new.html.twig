@@ -1,0 +1,71 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Создание отчёта{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Создание отчёта</h1>
+        <a href="{{ path('app_analytics_report') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Назад к списку
+        </a>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Выберите доску для отчёта</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            {% if orgBoards|length > 0 %}
+                                <form action="{{ path('app_analytics_report_new') }}" method="post" class="form">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('report_new') }}">
+
+                                    <div class="row">
+                                        <div class="col-md-6 col-12">
+                                            <div class="form-group">
+                                                <label class="form-label">Доска <span class="text-danger">*</span></label>
+                                                <select name="board_id" class="form-select" required>
+                                                    <option value="">— Выберите доску —</option>
+                                                    {% for orgBoard in orgBoards %}
+                                                        <option value="{{ orgBoard.board.id }}">
+                                                            {{ orgBoard.board.name }}
+                                                            {% if orgBoard.required %}(обязательная){% endif %}
+                                                        </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-12 d-flex justify-content-end">
+                                            <button type="submit" class="btn btn-primary me-1 mb-1">Создать отчёт</button>
+                                            <a href="{{ path('app_analytics_report') }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
+                                        </div>
+                                    </div>
+                                </form>
+                            {% else %}
+                                <p class="text-muted">Вам не назначено ни одной доски с опубликованной версией. Обратитесь к администратору.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

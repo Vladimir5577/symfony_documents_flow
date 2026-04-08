@@ -1,4 +1,4 @@
-    BD structures
+    DB structures
     =============
 
 1. users - already exist
@@ -33,6 +33,7 @@
     created_at	timestamp	Дата создания
     updated_at	timestamp	Дата последнего изменения (для draft-правок и смены статуса)
     UNIQUE(board_id, version_number)		Уникальность номера версии внутри доски
+    (PostgreSQL) UNIQUE(board_id) WHERE status = 'published'		Не более одной опубликованной версии на доску; добавить вручную в миграцию (Doctrine mapping не выражает), имя индекса например `uniq_analytics_board_versions_one_published_per_board`
 
 6. analytics_board_version_metrics
     id	PK	Уникальный идентификатор
@@ -47,25 +48,33 @@
     organization_id	FK → organization.id	Организация
     board_id	FK → analytics_boards.id	Доска
     is_required	boolean	Обязательная для заполнения доска или нет
+    UNIQUE(organization_id, board_id)		Одна доска не назначается организации дважды
 
 8. analytics_periods
     id	PK	Уникальный идентификатор периода
-    year	int	Год периода (например 2026)
-    week_number	int	Номер недели в году (1..53)
-    start_date	date	Дата начала периода
-    end_date	date	Дата окончания периода
+    iso_year	int	Год по ISO 8601 (год «недельного» календаря), не всегда совпадает с календарным годом дат start/end
+    iso_week	int	Номер недели по ISO 8601 (1..53)
+    start_date	date	Понедельник этой ISO-недели (канонический ключ интервала вместе с iso_year/iso_week)
+    end_date	date	Воскресенье этой ISO-недели
     is_closed	boolean	Закрыт ли период для редактирования
-    description	string	Дополнительно, например “Неделя 15 2026”
+    description	string	Дополнительно, например «2026-W03»
     created_at	timestamp	Дата создания периода
     updated_at	timestamp	Дата последнего изменения (например, закрытие периода)
-    UNIQUE(year, week_number)		Одна календарная неделя один раз
+    UNIQUE(iso_year, iso_week)		Одна ISO-неделя в системе ровно один раз
+
+    Семантика ISO 8601 (важно):
+    - Неделя начинается с понедельника; неделя 1 — та, где есть первый четверг года.
+    - У границы декабрь/январь «неделя 1» может начинаться в предыдущем календарном году, а последние дни декабря относиться к iso_year следующего года.
+    - Нельзя хранить «календарный год + номер недели» без уточнения: пара (iso_year, iso_week) согласована со стандартом.
+    - При создании периода удобно выставлять start_date/end_date через `DateTimeImmutable::setISODate(iso_year, iso_week)` (в сущности — фабрика `AnalyticsPeriod::forIsoWeek`).
 
 9. analytics_reports
     id	PK	Уникальный идентификатор отчёта
     organization_id	FK → organization.id	Организация, которая заполняет отчёт
+    board_id	FK → analytics_boards.id	Доска (денормализация для уникальности и запросов)
     board_version_id	FK → analytics_board_versions.id	Версия доски, по которой заполнен отчёт
     period_id	FK → analytics_periods.id	Период отчёта
-    created_by	FK → Users.id	Пользователь, который создал отчёт
+    created_by	FK → "user".id	Пользователь, который создал отчёт
     status	enum	draft / submitted / approved
     is_complete	boolean	Все обязательные метрики заполнены (кэш результата проверки)
     comment	text	Комментарий к отчёту (опционально)
@@ -73,10 +82,9 @@
     updated_at	timestamp	Дата последнего изменения (пока отчёт не approved)
     submitted_at	timestamp	Дата отправки (если есть)
     approved_at	timestamp	Дата утверждения (если есть)
-    approved_by	FK → Users.id	Кто утвердил отчёт (если есть)
-    UNIQUE(organization_id, board_version_id, period_id)		Один отчёт на организацию/версию/период
-    Примечание: `board_id` в отчёте не хранится; при необходимости берётся через `analytics_board_versions.board_id`.
-    Бизнес-правило "один отчёт на доску (вне зависимости от версии)" контролируется сервисом (проверка через JOIN).
+    approved_by	FK → "user".id	Кто утвердил отчёт (если есть)
+    UNIQUE(organization_id, board_id, period_id)		Один отчёт на организацию/доску/период (независимо от версии)
+    Примечание: `board_id` дублирует `analytics_board_versions.board_id` выбранной версии. При сохранении отчёта сервис обязан выставить `board_id` в ту же доску, что и у `board_version_id` (консистентность на уровне приложения; при желании можно добавить CHECK в БД).
 
 --------------------------
 Проверка полноты отчёта (required-метрики)
@@ -95,16 +103,23 @@
     value_number decimal NULL
     value_text string NULL
     value_bool boolean NULL
+    value_json	JSONB NULL	Структурированное значение (select / multi-select / произвольный JSON); в MVP может быть пустым
     effective_at	timestamp NOT NULL DEFAULT NOW()	Business timestamp: момент, на который действует значение (используется для агрегации `last`)
-    created_by	FK → Users.id	Кто внес данные
+    created_by	FK → "user".id	Кто внес данные
     created_at	timestamp	Технический timestamp создания записи
     updated_at	timestamp	Дата последнего изменения значения
     UNIQUE(report_id, board_version_metric_id)		Одна метрика версии один раз в отчёте
     CHECK (
       (value_number IS NOT NULL)::int +
       (value_text IS NOT NULL)::int +
-      (value_bool IS NOT NULL)::int = 1
-    )		Ровно один тип значения должен быть заполнен
+      (value_bool IS NOT NULL)::int +
+      (value_json IS NOT NULL)::int = 1
+    )		Ровно одно из полей значения заполнено (скаляр ИЛИ JSON)
+
+    Про value_json (future-proof):
+    - Примеры: одиночный select `{"code":"fuel_a"}`; multi-select `["a","b"]`; при необходимости снимок подписей рядом с кодами.
+    - Агрегации sum/avg/min/max и предрасчёт в `analytics_aggregated_data` по умолчанию только для числовых метрик; для JSON — отображение, отдельные отчёты или правила на уровне сервиса.
+    - Индексация по содержимому JSON (GIN и т.д.) — по мере появления запросов.
 
 --------------------------
 Snapshot метрики в отчёте
@@ -119,14 +134,15 @@ Snapshot метрики в отчёте
 
 11. analytics_aggregated_data (optional)
     - id
-    - business_key
+    - metric_id	FK → analytics_metrics.id	Ссылка на метрику (целостность, защита от удаления строки метрики при наличии агрегатов)
+    - business_key	string	Денормализация `analytics_metrics.business_key` для фильтров графиков без JOIN; при записи должна совпадать с метрикой
     - period_id
     - organization_id
     - aggregated_value_number
     - source_count
     - calculated_at
-    - UNIQUE(business_key, period_id, organization_id)
-    Примечание: агрегаты хранятся по бизнес-смыслу метрики (`business_key`), а не по версии доски.
+    - UNIQUE(metric_id, period_id, organization_id)		Один агрегат на метрику / период / организацию
+    Примечание: агрегаты логически привязаны к метрике (`metric_id`), а не к версии доски. `business_key` дублируется для удобства чтения и длинной истории по стабильному ключу.
     `source_count` = количество raw-записей (`analytics_report_values`), участвовавших в расчёте агрегата.
 
 --------------------------
@@ -134,11 +150,11 @@ Snapshot метрики в отчёте
 Выбран Вариант A (простой и достаточный для MVP+):
 1) Пересчёт агрегатов выполняется при переходе отчёта в `approved`.
 2) Пересчёт агрегатов выполняется при любом изменении уже approved-отчёта (если такой сценарий разрешён).
-3) Пересчёт делается адресно по связке `business_key + period_id + organization_id`, без полного rebuild.
+3) Пересчёт делается адресно по связке `metric_id + period_id + organization_id` (канонический ключ строки; `business_key` синхронизировать с метрикой), без полного rebuild.
 4) До первого пересчёта графики могут читать данные напрямую из `analytics_report_values` (fallback), если запись в агрегатах отсутствует.
 5) Если в проекте будет разрешено массовое ретро-редактирование, следующий шаг — перейти на Вариант B (`source_updated_at`) или materialized view/джобу.
 6) `RecalculateAggregatesService` выполняется в транзакции.
-7) При upsert агрегата используется блокировка строки по ключу (`business_key`, `period_id`, `organization_id`) для защиты от гонок.
+7) При upsert агрегата используется блокировка строки по ключу (`metric_id`, `period_id`, `organization_id`) для защиты от гонок.
 
 --------------------------
 Защита от "битых" агрегатов
@@ -156,26 +172,36 @@ Snapshot метрики в отчёте
    - INDEX(report_id)
    - INDEX(board_version_metric_id)
    - INDEX(report_id, board_version_metric_id)
+   - INDEX(board_version_metric_id, effective_at) — агрегация `last` (MAX(effective_at)) по метрике версии доски; в PostgreSQL при желании усилить планировщик: вторую колонку объявить `DESC` в ручной миграции (Doctrine mapping это не выражает)
+   - INDEX(effective_at) — выборки только по времени без фильтра по метрике
 2) `analytics_reports`
    - INDEX(period_id)
    - INDEX(organization_id)
+   - INDEX(organization_id, period_id) — отчёты организации за период
+   - INDEX(board_id)
    - INDEX(status)
 3) `analytics_aggregated_data`
-   - INDEX(business_key, period_id, organization_id)
+   - UNIQUE(metric_id, period_id, organization_id) покрывает точечные выборки по тройке
    - INDEX(period_id, organization_id)
+   - INDEX(business_key, organization_id) — фильтры графиков по стабильному ключу без JOIN
+   - INDEX(metric_id, organization_id) — ряды по метрике в разрезе организации
+4) `analytics_periods`
+   - UNIQUE(iso_year, iso_week) уже даёт индекс для выборки по неделе
+   - INDEX(start_date) — сортировки и диапазоны по датам
 Примечание: без этих индексов выборки для графиков и сводной аналитики будут деградировать на росте данных.
 
 --------------------------
 ENUM/CHECK ограничения (обязательно в БД)
 1) `analytics_board_versions.status`:
    - CHECK/ENUM: `draft | published | archived`.
+   - (PostgreSQL) частичный уникальный индекс: одна строка с `published` на `board_id` — дописать SQL в миграцию после `doctrine:migrations:diff` (генератор сам не создаёт).
 2) `analytics_reports.status`:
    - CHECK/ENUM: `draft | submitted | approved`.
 3) `analytics_metrics.aggregation_type`:
    - CHECK/ENUM: `sum | avg | min | max | last`.
 4) `analytics_metrics.type`:
    - рекомендуется CHECK/ENUM (например: `number | currency | distance | liters | count | text | bool`) и единый справочник допустимых типов.
-5) Для `analytics_report_values` сохраняется CHECK "ровно одно из value_* заполнено".
+5) Для `analytics_report_values` — CHECK: ровно одно из `value_number`, `value_text`, `value_bool`, `value_json` заполнено.
 
 --------------------------
 FK стратегии (ON DELETE / ON UPDATE)
@@ -194,17 +220,21 @@ FK стратегии (ON DELETE / ON UPDATE)
    - ON DELETE RESTRICT, ON UPDATE CASCADE
 6) `analytics_reports.organization_id -> organization.id`
    - ON DELETE RESTRICT, ON UPDATE CASCADE
-7) `analytics_reports.board_version_id -> analytics_board_versions.id`
+7) `analytics_reports.board_id -> analytics_boards.id`
    - ON DELETE RESTRICT, ON UPDATE CASCADE
-8) `analytics_reports.period_id -> analytics_periods.id`
+8) `analytics_reports.board_version_id -> analytics_board_versions.id`
    - ON DELETE RESTRICT, ON UPDATE CASCADE
-9) `analytics_reports.created_by / approved_by -> users.id`
-   - ON DELETE RESTRICT (или SET NULL для `approved_by`, если допустим soft-delete пользователей), ON UPDATE CASCADE
-10) `analytics_report_values.report_id -> analytics_reports.id`
+9) `analytics_reports.period_id -> analytics_periods.id`
+   - ON DELETE RESTRICT, ON UPDATE CASCADE
+10) `analytics_reports.created_by / approved_by -> "user".id`
+    - ON DELETE RESTRICT (или SET NULL для `approved_by`, если допустим soft-delete пользователей), ON UPDATE CASCADE
+11) `analytics_report_values.report_id -> analytics_reports.id`
     - ON DELETE CASCADE, ON UPDATE CASCADE
-11) `analytics_report_values.board_version_metric_id -> analytics_board_version_metrics.id`
+12) `analytics_report_values.board_version_metric_id -> analytics_board_version_metrics.id`
     - ON DELETE RESTRICT, ON UPDATE CASCADE
-12) `analytics_report_values.created_by -> users.id`
+13) `analytics_report_values.created_by -> "user".id`
+    - ON DELETE RESTRICT, ON UPDATE CASCADE
+14) `analytics_aggregated_data.metric_id -> analytics_metrics.id`
     - ON DELETE RESTRICT, ON UPDATE CASCADE
 
 --------------------------
@@ -215,8 +245,8 @@ FK стратегии (ON DELETE / ON UPDATE)
 2) Если нужно добавить/удалить/изменить метрику:
    - создать новую версию доски из текущей (копия состава метрик),
    - внести изменения в новой версии (draft),
-   - опубликовать новую версию (status = published),
-   - предыдущую версию перевести в archived (или оставить для истории).
+   - в одной транзакции: перевести предыдущую published в `archived`, затем выставить новой `published` (иначе нарушится частичный UNIQUE по `board_id` для `published` в PostgreSQL),
+   - либо сначала archived у старой, затем published у новой — без окна «две published».
 3) Все новые отчёты создаются только по текущей published-версии.
 4) Старые отчёты не изменяются и остаются привязаны к своей версии (analytics_reports.board_version_id).
 5) Пример:
@@ -274,7 +304,7 @@ WHERE business_key = :target_business_key
 - `analytics_aggregated_data.aggregated_value_number` уже содержит предрасчитанное значение по правилу метрики.
 
 Важно для графиков по длинному периоду (когда версии менялись):
-- использовать фильтрацию по `business_key`;
+- использовать фильтрацию по `business_key` (или по `metric_id` с JOIN к `analytics_metrics` при необходимости);
 - версии досок не влияют на чтение агрегатов;
 - сложные JOIN по `board_version_metric_id` для длинной истории не требуются.
 
@@ -339,7 +369,7 @@ WHERE business_key = :target_business_key
 4) Администратор назначает доску организации:
    - создаёт связь в `analytics_organization_boards` (`organization_id`, `board_id`, `is_required`).
 5) Руководитель организации заполняет отчёт:
-   - создаётся `analytics_reports` по текущей published-версии доски (`board_version_id`);
+   - создаётся `analytics_reports` по текущей published-версии доски (`board_version_id` + тот же `board_id`, что у версии);
    - значения вносятся в `analytics_report_values`.
 6) Отправка отчёта:
    - `draft -> submitted` только после проверки required-метрик (`is_complete = true`).
@@ -419,3 +449,7 @@ analytics/report/fill.html.twig
 Аналитика (2)
 analytics/dashboard/index.html.twig
 analytics/chart/show.html.twig
+
+
+$  php bin/console doctrine:fixtures:load --no-interaction --append --group=analytics
+

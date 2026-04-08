@@ -147,4 +147,56 @@
         </a>
     </li>
 
+    {% if is_granted('ROLE_ADMIN') %}
+        <li class="sidebar-item has-sub {% if active_tab in ['analytics_dashboard', 'analytics_chart', 'analytics_reports', 'analytics_approval'] %}active{% endif %}">
+            <a href="#" class="sidebar-link">
+                <i class="bi bi-bar-chart-line"></i>
+                <span>Аналитика</span>
+            </a>
+
+            <ul class="submenu">
+                <li class="submenu-item {% if active_tab == 'analytics_dashboard' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_dashboard') }}" class="submenu-link"><i class="bi bi-speedometer2"></i> Дашборд</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_chart' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_chart_show') }}" class="submenu-link"><i class="bi bi-graph-up"></i> Сравнительная аналитика</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_reports' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_report') }}" class="submenu-link"><i class="bi bi-file-earmark-text"></i> Отчеты</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_approval' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_approval') }}" class="submenu-link"><i class="bi bi-check2-circle"></i> Утверждение</a>
+                </li>
+            </ul>
+        </li>
+
+        <li class="sidebar-item has-sub {% if active_tab in ['analytics_metrics', 'analytics_boards', 'analytics_periods', 'analytics_org_boards'] %}active{% endif %}">
+            <a href="#" class="sidebar-link">
+                <i class="bi bi-sliders"></i>
+                <span>Настройки аналитики</span>
+            </a>
+
+            <ul class="submenu">
+                <li class="submenu-item {% if active_tab == 'analytics_metrics' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_admin_metric_index') }}" class="submenu-link"><i class="bi bi-speedometer2"></i> Метрики</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_boards' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_admin_board') }}" class="submenu-link"><i class="bi bi-easel"></i> Доски</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_periods' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_admin_period') }}" class="submenu-link"><i class="bi bi-calendar3"></i> Периоды</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_org_boards' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_admin_organization_board') }}" class="submenu-link"><i class="bi bi-building-gear"></i> Организации и доски</a>
+                </li>
+            </ul>
+        </li>
+    {% endif %}
+
 </ul>

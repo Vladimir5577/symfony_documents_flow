@@ -1,0 +1,127 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Редактирование v{{ version.versionNumber }} — {{ board.name }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Состав метрик — v{{ version.versionNumber }}</h1>
+        <a href="{{ path('app_analytics_admin_board_show', {id: board.id}) }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Назад к доске
+        </a>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <div class="mb-3">
+        Статус:
+        {% if version.status.value == 'published' %}
+            <span class="badge bg-success">Опубликована</span>
+        {% elseif version.status.value == 'archived' %}
+            <span class="badge bg-secondary">Архив</span>
+        {% else %}
+            <span class="badge bg-info">Черновик</span>
+        {% endif %}
+    </div>
+
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Метрики доски</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('app_analytics_admin_board_version_edit', {boardId: board.id, versionId: version.id}) }}" method="post" class="form">
+                                <input type="hidden" name="_token" value="{{ csrf_token('version_edit_' ~ version.id) }}">
+
+                                {% if allMetrics|length > 0 %}
+                                    <table class="table table-bordered mb-0">
+                                        <thead>
+                                        <tr>
+                                            <th style="width:40px">Порядок</th>
+                                            <th>Бизнес-ключ</th>
+                                            <th>Название</th>
+                                            <th>Тип</th>
+                                            <th>Единица</th>
+                                            <th>Агрегация</th>
+                                            <th style="width:80px">Обязательна</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody id="metrics-sortable">
+                                        {% for item in allMetrics %}
+                                            {% set is_selected = false %}
+                                            {% set is_required = false %}
+                                            {% set item_pos = loop.index %}
+                                            {% for vm in version.versionMetrics %}
+                                                {% if vm.metric.id == item.id %}
+                                                    {% set is_selected = true %}
+                                                    {% set is_required = vm.isRequired %}
+                                                    {% set item_pos = vm.position %}
+                                                {% endif %}
+                                            {% endfor %}
+
+                                            <tr class="{{ is_selected ? '' : 'text-muted' }}">
+                                                <td>
+                                                    <input type="number" name="metrics[{{ item.id }}][position]" class="form-control form-control-sm" value="{{ item_pos }}" min="1" style="width:70px" {{ not is_selected ? 'disabled' : '' }}>
+                                                </td>
+                                                <td>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="metrics[{{ item.id }}][enabled]" id="metric_{{ item.id }}" value="1" {{ is_selected ? 'checked' : '' }}>
+                                                        <label class="form-check-label" for="metric_{{ item.id }}">
+                                                            <code>{{ item.businessKey }}</code>
+                                                        </label>
+                                                    </div>
+                                                </td>
+                                                <td>{{ item.name }}</td>
+                                                <td>{{ item.type }}</td>
+                                                <td>{{ item.unit }}</td>
+                                                <td><span class="badge bg-primary">{{ item.aggregationType.value }}</span></td>
+                                                <td class="text-center">
+                                                    <input class="form-check-input" type="checkbox" name="metrics[{{ item.id }}][is_required]" value="1" {{ is_required ? 'checked' : '' }} {{ not is_selected ? 'disabled' : '' }}>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                {% else %}
+                                    <p class="text-muted">Метрики ещё не созданы. <a href="{{ path('app_analytics_admin_metric_new') }}">Создать метрику</a></p>
+                                {% endif %}
+
+                                <div class="mt-3 d-flex justify-content-end">
+                                    <button type="submit" name="save_metrics" class="btn btn-primary">Сохранить состав</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        document.querySelectorAll('#metrics-sortable input[type="checkbox"][id^="metric_"]').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                var row = cb.closest('tr');
+                var inputs = row.querySelectorAll('input[type="number"], input:not([type="checkbox"])');
+                inputs.forEach(function(input) {
+                    input.disabled = !cb.checked;
+                });
+                // Required checkbox
+                var reqCb = row.querySelector('input[name*="is_required"]');
+                if (reqCb) reqCb.disabled = !cb.checked;
+                row.classList.toggle('text-muted', !cb.checked);
+            });
+        });
+    </script>
+{% endblock %}

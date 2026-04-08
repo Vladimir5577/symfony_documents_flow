@@ -16,6 +16,8 @@ use Gedmo\Mapping\Annotation as Gedmo;
 #[ORM\Index(name: 'idx_analytics_report_values_report_id', columns: ['report_id'])]
 #[ORM\Index(name: 'idx_analytics_report_values_board_version_metric_id', columns: ['board_version_metric_id'])]
 #[ORM\Index(name: 'idx_analytics_report_values_metric_report', columns: ['board_version_metric_id', 'report_id'])]
+#[ORM\Index(name: 'idx_analytics_report_values_bvm_effective_at', columns: ['board_version_metric_id', 'effective_at'])]
+#[ORM\Index(name: 'idx_analytics_report_values_effective_at', columns: ['effective_at'])]
 #[ORM\HasLifecycleCallbacks]
 class AnalyticsReportValue
 {
@@ -49,6 +51,10 @@ class AnalyticsReportValue
 
     #[ORM\Column(name: 'value_bool', nullable: true)]
     private ?bool $valueBool = null;
+
+    /** @var array<string, mixed>|list<mixed>|scalar|null Для select / multi-select / вложенных значений (PostgreSQL JSONB). */
+    #[ORM\Column(name: 'value_json', type: Types::JSONB, nullable: true)]
+    private mixed $valueJson = null;
 
     #[ORM\Column(name: 'effective_at', type: Types::DATETIME_IMMUTABLE)]
     private ?\DateTimeImmutable $effectiveAt = null;
@@ -168,6 +174,18 @@ class AnalyticsReportValue
     public function setValueBool(?bool $valueBool): static
     {
         $this->valueBool = $valueBool;
+
+        return $this;
+    }
+
+    public function getValueJson(): mixed
+    {
+        return $this->valueJson;
+    }
+
+    public function setValueJson(mixed $valueJson): static
+    {
+        $this->valueJson = $valueJson;
 
         return $this;
     }
