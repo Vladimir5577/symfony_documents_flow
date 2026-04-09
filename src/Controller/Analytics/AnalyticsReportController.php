@@ -10,6 +10,7 @@ use App\Enum\Analytics\AnalyticsReportStatus;
 use App\Repository\Analytics\AnalyticsBoardRepository;
 use App\Service\Analytics\CreateReportService;
 use App\Service\Analytics\FillReportValueService;
+use App\Service\Analytics\ApproveReportService;
 use App\Service\Analytics\SubmitReportService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -21,6 +22,91 @@ use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 final class AnalyticsReportController extends AbstractController
 {
+    /**
+     * Собрать id текущей организации и всех её родителей (вверх по дереву).
+     *
+     * @return int[]
+     */
+    private function getOrganizationHierarchyIds(AbstractOrganization $organization): array
+    {
+        $ids = [];
+        $current = $organization;
+
+        while ($current !== null) {
+            $id = $current->getId();
+            if ($id === null) {
+                break;
+            }
+
+            $ids[] = $id;
+            $current = $current->getParent();
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    private function isOrganizationInHierarchy(AbstractOrganization $userOrganization, ?AbstractOrganization $reportOrganization): bool
+    {
+        if ($reportOrganization === null || $reportOrganization->getId() === null) {
+            return false;
+        }
+
+        return in_array($reportOrganization->getId(), $this->getOrganizationHierarchyIds($userOrganization), true);
+    }
+
+    /**
+     * Возвращает доступные доски для организации пользователя:
+     * - только с published-версией;
+     * - если доска назначена на нескольких уровнях, выбираем ближайший к пользователю.
+     *
+     * @return array<int, \App\Entity\Analytics\AnalyticsOrganizationBoard> key = board_id
+     */
+    private function getAvailableBoardMapForOrganization(AbstractOrganization $organization, EntityManagerInterface $em): array
+    {
+        $orgBoardRepo = $em->getRepository(\App\Entity\Analytics\AnalyticsOrganizationBoard::class);
+        $orgIds = $this->getOrganizationHierarchyIds($organization);
+        $orgBoards = $orgBoardRepo->createQueryBuilder('ob')
+            ->join('ob.organization', 'o')
+            ->andWhere('o.id IN (:orgIds)')
+            ->setParameter('orgIds', $orgIds)
+            ->orderBy('ob.id', 'DESC')
+            ->getQuery()
+            ->getResult();
+
+        $availableBoardMap = [];
+        $orgRank = array_flip($orgIds); // меньше индекс = ближе к пользователю
+        foreach ($orgBoards as $orgBoard) {
+            $board = $orgBoard->getBoard();
+            $hasPublished = false;
+            foreach ($board->getBoardVersions() as $v) {
+                if ($v->getStatus()->value === 'published') {
+                    $hasPublished = true;
+                    break;
+                }
+            }
+
+            if (!$hasPublished) {
+                continue;
+            }
+
+            $boardIdKey = $board->getId();
+            $ownerOrgId = $orgBoard->getOrganization()?->getId();
+            if ($boardIdKey === null || $ownerOrgId === null) {
+                continue;
+            }
+
+            $rank = $orgRank[$ownerOrgId] ?? PHP_INT_MAX;
+            if (!isset($availableBoardMap[$boardIdKey]) || $rank < $availableBoardMap[$boardIdKey]['rank']) {
+                $availableBoardMap[$boardIdKey] = [
+                    'rank' => $rank,
+                    'orgBoard' => $orgBoard,
+                ];
+            }
+        }
+
+        return array_map(static fn(array $row) => $row['orgBoard'], $availableBoardMap);
+    }
+
     #[Route('/analytics/report', name: 'app_analytics_report')]
     public function index(
         CreateReportService $reportService,
@@ -46,11 +132,21 @@ final class AnalyticsReportController extends AbstractController
             $reports = $em->getRepository(AnalyticsReport::class)->findBy([], ['createdAt' => 'DESC']);
         } else {
             $orgBoardRepo = $em->getRepository(\App\Entity\Analytics\AnalyticsOrganizationBoard::class);
-            $orgBoards = $orgBoardRepo->findBy(['organization' => $organization]);
-            $reports = $em->getRepository(AnalyticsReport::class)->findBy(
-                ['organization' => $organization],
-                ['createdAt' => 'DESC']
-            );
+            $orgIds = $this->getOrganizationHierarchyIds($organization);
+            $orgBoards = $orgBoardRepo->createQueryBuilder('ob')
+                ->join('ob.organization', 'o')
+                ->andWhere('o.id IN (:orgIds)')
+                ->setParameter('orgIds', $orgIds)
+                ->orderBy('ob.id', 'DESC')
+                ->getQuery()
+                ->getResult();
+            $reports = $em->getRepository(AnalyticsReport::class)->createQueryBuilder('r')
+                ->join('r.organization', 'o')
+                ->andWhere('o.id IN (:orgIds)')
+                ->setParameter('orgIds', $orgIds)
+                ->orderBy('r.createdAt', 'DESC')
+                ->getQuery()
+                ->getResult();
         }
 
         return $this->render('analytics/report/index.html.twig', [
@@ -62,9 +158,33 @@ final class AnalyticsReportController extends AbstractController
 
     #[Route('/analytics/report/new', name: 'app_analytics_report_new')]
     public function new(
+        EntityManagerInterface $em,
+    ): Response {
+        $user = $this->getUser();
+        if (!$user) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $organization = $user->getOrganization();
+        if (!$organization) {
+            throw $this->createAccessDeniedException('Вам не назначена организация.');
+        }
+        $availableBoards = array_values($this->getAvailableBoardMapForOrganization($organization, $em));
+
+        return $this->render('analytics/report/new.html.twig', [
+            'orgBoards' => $availableBoards,
+            'active_tab' => 'analytics_reports',
+        ]);
+    }
+
+    #[Route('/analytics/report/fill-new', name: 'app_analytics_report_fill_new')]
+    public function fillNew(
         Request $request,
         CsrfTokenManagerInterface $csrf,
         CreateReportService $reportService,
+        FillReportValueService $fillService,
+        ApproveReportService $approveService,
+        SubmitReportService $submitService,
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
@@ -77,52 +197,84 @@ final class AnalyticsReportController extends AbstractController
             throw $this->createAccessDeniedException('Вам не назначена организация.');
         }
 
-        // Список досок, назначенных организации, для которых ещё нет отчёта за период
-        $orgBoardRepo = $em->getRepository(\App\Entity\Analytics\AnalyticsOrganizationBoard::class);
-        $orgBoards = $orgBoardRepo->findBy(['organization' => $organization]);
+        $availableBoardMap = $this->getAvailableBoardMapForOrganization($organization, $em);
+        $boardId = (int) $request->query->get('board_id', $request->request->getInt('board_id'));
+        if ($boardId <= 0 || !isset($availableBoardMap[$boardId])) {
+            $this->addFlash('error', 'Выберите доску для заполнения отчёта.');
+            return $this->redirectToRoute('app_analytics_report_new');
+        }
 
-        // Фильтруем: только те доски, у которых есть published-версия и нет существующего отчёта
-        $availableBoards = [];
-        foreach ($orgBoards as $orgBoard) {
-            $board = $orgBoard->getBoard();
-            $hasPublished = false;
-            foreach ($board->getBoardVersions() as $v) {
-                if ($v->getStatus()->value === 'published') {
-                    $hasPublished = true;
+        $orgBoard = $availableBoardMap[$boardId];
+        $board = $orgBoard->getBoard();
+        $ownerOrganization = $orgBoard->getOrganization();
+        if (!$board || !$ownerOrganization) {
+            $this->addFlash('error', 'Не удалось определить доску или организацию назначения.');
+            return $this->redirectToRoute('app_analytics_report_new');
+        }
+
+        $publishedVersion = null;
+        foreach ($board->getBoardVersions() as $v) {
+            if ($v->getStatus()->value === 'published') {
+                $publishedVersion = $v;
+                break;
+            }
+        }
+        if (!$publishedVersion) {
+            $this->addFlash('error', 'У выбранной доски нет опубликованной версии.');
+            return $this->redirectToRoute('app_analytics_report_new');
+        }
+
+        $periods = $em->getRepository(\App\Entity\Analytics\AnalyticsPeriod::class)
+            ->findBy(['isClosed' => false], ['startDate' => 'ASC']);
+        $currentPeriod = $periods[0] ?? null;
+
+        if ($request->isMethod('POST')) {
+            if (!$csrf->isTokenValid(new CsrfToken('report_fill_new_' . $boardId, $request->request->getString('_token')))) {
+                $this->addFlash('error', 'Неверный CSRF-токен.');
+                return $this->redirectToRoute('app_analytics_report_fill_new', ['board_id' => $boardId]);
+            }
+
+            $values = $request->request->all('values') ?? [];
+            $hasAnyValue = false;
+            foreach ($values as $value) {
+                if ($value !== '' && $value !== null) {
+                    $hasAnyValue = true;
                     break;
                 }
             }
-
-            if (!$hasPublished) {
-                continue;
+            if (!$hasAnyValue) {
+                $this->addFlash('error', 'Введите хотя бы одно значение перед сохранением.');
+                return $this->redirectToRoute('app_analytics_report_fill_new', ['board_id' => $boardId]);
             }
 
-            $availableBoards[] = $orgBoard;
-        }
-
-        if ($request->isMethod('POST')) {
-            if (!$csrf->isTokenValid(new CsrfToken('report_new', $request->request->getString('_token')))) {
-                $this->addFlash('error', 'Неверный CSRF-токен.');
-                return $this->redirectToRoute('app_analytics_report_new');
-            }
-
-            $boardId = $request->request->getInt('board_id');
-            if (!$boardId) {
-                $this->addFlash('error', 'Выберите доску.');
-                return $this->redirectToRoute('app_analytics_report_new');
-            }
+            $submitAction = $request->request->getString('submit_action', 'draft');
 
             try {
-                $report = $reportService->createReportForBoard($organization, $boardId, $user);
-                $this->addFlash('success', 'Отчёт создан. Заполните значения метрик.');
+                $report = $reportService->createReportForBoard($ownerOrganization, $boardId, $user);
+                $fillService->fillValues($report, $values, $user);
+
+                if ($submitAction === 'approve' || $submitAction === 'submit') {
+                    $submitService->submit($report);
+                    $approveService->approve($report, $user);
+                    $this->addFlash('success', 'Отчёт сохранён и утверждён.');
+
+                    return $this->redirectToRoute('app_analytics_report');
+                }
+
+                $this->addFlash('success', 'Отчёт создан как черновик, значения сохранены.');
+
                 return $this->redirectToRoute('app_analytics_report_fill', ['id' => $report->getId()]);
             } catch (\Throwable $e) {
                 $this->addFlash('error', $e->getMessage());
+                return $this->redirectToRoute('app_analytics_report_fill_new', ['board_id' => $boardId]);
             }
         }
 
-        return $this->render('analytics/report/new.html.twig', [
-            'orgBoards' => $availableBoards,
+        return $this->render('analytics/report/fill_new.html.twig', [
+            'board' => $board,
+            'boardVersion' => $publishedVersion,
+            'ownerOrganization' => $ownerOrganization,
+            'currentPeriod' => $currentPeriod,
             'active_tab' => 'analytics_reports',
         ]);
     }
@@ -140,24 +292,25 @@ final class AnalyticsReportController extends AbstractController
         if (!$user) {
             throw $this->createAccessDeniedException();
         }
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
 
         $report = $reportService->findByIdForUser($id, $user);
         if (!$report) {
             throw $this->createNotFoundException('Отчёт не найден.');
         }
 
-        if ($report->getStatus() !== AnalyticsReportStatus::Draft) {
-            $this->addFlash('error', 'Отчёт не является черновиком и не может быть отредактирован.');
-            return $this->redirectToRoute('app_analytics_report');
-        }
-
-        // Проверяем период не закрыт
-        if ($report->getPeriod() && $report->getPeriod()->isClosed()) {
-            $this->addFlash('error', 'Период закрыт. Редактирование запрещено.');
-            return $this->redirectToRoute('app_analytics_report');
-        }
+        $canEdit = $isAdmin
+            || (
+                $report->getStatus() !== AnalyticsReportStatus::Approved
+                && (!$report->getPeriod() || !$report->getPeriod()->isClosed())
+            );
 
         if ($request->isMethod('POST')) {
+            if (!$canEdit) {
+                $this->addFlash('error', 'Редактирование этого отчёта запрещено.');
+                return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
+            }
+
             if (!$csrf->isTokenValid(new CsrfToken('report_fill_' . $id, $request->request->getString('_token')))) {
                 $this->addFlash('error', 'Неверный CSRF-токен.');
                 return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
@@ -189,6 +342,41 @@ final class AnalyticsReportController extends AbstractController
         }
 
         return $this->render('analytics/report/fill.html.twig', [
+            'report' => $report,
+            'currentValues' => $currentValues,
+            'canEdit' => $canEdit,
+            'active_tab' => 'analytics_reports',
+        ]);
+    }
+
+    #[Route('/analytics/report/{id}/view', name: 'app_analytics_report_view')]
+    public function view(
+        int $id,
+        CreateReportService $reportService,
+    ): Response {
+        $user = $this->getUser();
+        if (!$user) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $report = $reportService->findByIdForUser($id, $user);
+        if (!$report) {
+            throw $this->createNotFoundException('Отчёт не найден.');
+        }
+
+        $currentValues = [];
+        foreach ($report->getValues() as $v) {
+            $mid = $v->getBoardVersionMetric()->getId();
+            if ($v->getValueNumber() !== null) {
+                $currentValues[$mid] = $v->getValueNumber();
+            } elseif ($v->getValueText() !== null) {
+                $currentValues[$mid] = $v->getValueText();
+            } elseif ($v->getValueBool() !== null) {
+                $currentValues[$mid] = $v->getValueBool() ? '1' : '0';
+            }
+        }
+
+        return $this->render('analytics/report/view.html.twig', [
             'report' => $report,
             'currentValues' => $currentValues,
             'active_tab' => 'analytics_reports',
@@ -226,5 +414,55 @@ final class AnalyticsReportController extends AbstractController
         }
 
         return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
+    }
+
+    #[Route('/analytics/report/{id}/delete', name: 'app_analytics_report_delete', methods: ['POST'])]
+    public function delete(
+        int $id,
+        Request $request,
+        CsrfTokenManagerInterface $csrf,
+        EntityManagerInterface $em,
+    ): Response {
+        $user = $this->getUser();
+        if (!$user) {
+            throw $this->createAccessDeniedException();
+        }
+
+        if (!$csrf->isTokenValid(new CsrfToken('report_delete_' . $id, $request->request->getString('_token')))) {
+            $this->addFlash('error', 'Неверный CSRF-токен.');
+            return $this->redirectToRoute('app_analytics_report');
+        }
+
+        $report = $em->getRepository(AnalyticsReport::class)->find($id);
+        if (!$report) {
+            throw $this->createNotFoundException('Отчёт не найден.');
+        }
+
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+        $isManager = $this->isGranted('ROLE_MANAGER');
+
+        if ($isAdmin) {
+            $em->remove($report);
+            $em->flush();
+
+            $this->addFlash('success', 'Отчёт удалён.');
+            return $this->redirectToRoute('app_analytics_report');
+        }
+
+        $canDeleteNotApproved = $report->getStatus() !== AnalyticsReportStatus::Approved
+            && $isManager
+            && $user->getOrganization()
+            && $this->isOrganizationInHierarchy($user->getOrganization(), $report->getOrganization());
+
+        if (!$canDeleteNotApproved) {
+            $this->addFlash('error', 'Недостаточно прав для удаления этого отчёта.');
+            return $this->redirectToRoute('app_analytics_report');
+        }
+
+        $em->remove($report);
+        $em->flush();
+
+        $this->addFlash('success', 'Отчёт удалён.');
+        return $this->redirectToRoute('app_analytics_report');
     }
 }

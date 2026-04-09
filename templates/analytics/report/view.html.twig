@@ -1,0 +1,99 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Просмотр отчёта: {{ report.board.name }} — {{ report.period ? report.period.displayLabel : '—' }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>Просмотр отчёта</h1>
+            <p class="text-muted mb-0">{{ report.board.name }} — {{ report.period ? report.period.displayLabel : '—' }} (v{{ report.boardVersion.versionNumber }})</p>
+        </div>
+        <a href="{{ path('app_analytics_report') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Назад к списку
+        </a>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <div class="mb-3">
+        Статус:
+        {% if report.status.value == 'draft' %}
+            <span class="badge bg-info">Черновик</span>
+        {% elseif report.status.value == 'submitted' %}
+            <span class="badge bg-warning">Отправлен</span>
+        {% else %}
+            <span class="badge bg-success">Утверждён</span>
+        {% endif %}
+
+        Полнота:
+        {% if report.complete %}
+            <span class="badge bg-success">Все обязательные метрики заполнены</span>
+        {% else %}
+            <span class="badge bg-danger">Не всё заполнено</span>
+        {% endif %}
+    </div>
+
+    <section>
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Метрики</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <table class="table table-bordered">
+                                <thead>
+                                <tr>
+                                    <th>Метрика</th>
+                                    <th>Тип</th>
+                                    <th>Ед. изм.</th>
+                                    <th>Значение</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for vm in report.boardVersion.versionMetrics %}
+                                    {% set metric = vm.metric %}
+                                    {% set value = currentValues[vm.id] ?? '' %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ metric.name }}</strong>
+                                            <br><small class="text-muted"><code>{{ metric.businessKey }}</code></small>
+                                            {% if vm.required %}<span class="text-danger">*</span>{% endif %}
+                                        </td>
+                                        <td>{{ metric.type }}</td>
+                                        <td>{{ metric.unit }}</td>
+                                        <td>
+                                            {% if metric.type == 'bool' %}
+                                                {% if value == '1' %}
+                                                    Да
+                                                {% elseif value == '0' %}
+                                                    Нет
+                                                {% else %}
+                                                    —
+                                                {% endif %}
+                                            {% else %}
+                                                {{ value is not empty ? value : '—' }}
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

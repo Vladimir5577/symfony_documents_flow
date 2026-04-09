@@ -7,6 +7,12 @@
 {% endblock %}
 
 {% block main %}
+    <style>
+        .report-row-clickable {
+            cursor: pointer;
+        }
+    </style>
+
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="mb-0">Мои отчёты</h1>
         <a href="{{ path('app_analytics_report_new') }}" class="btn btn-primary">
@@ -47,10 +53,10 @@
                                 <tbody>
                                 {% if reports|length > 0 %}
                                     {% for report in reports %}
-                                        <tr>
+                                        <tr class="report-row-clickable" onclick="window.location.href='{{ path('app_analytics_report_view', {id: report.id}) }}'">
                                             <td>{{ report.id }}</td>
                                             <td>{{ report.board.name }}</td>
-                                            <td>{{ report.period ? report.period.description : '—' }}</td>
+                                            <td>{{ report.period ? report.period.displayLabel : '—' }}</td>
                                             <td>v{{ report.boardVersion.versionNumber }}</td>
                                             <td>
                                                 {% if report.status.value == 'draft' %}
@@ -61,7 +67,7 @@
                                                     <span class="badge bg-success">Утверждён</span>
                                                 {% endif %}
                                             </td>
-                                            <td>
+                                            <td onclick="event.stopPropagation();">
                                                 {% if report.complete %}
                                                     <span class="badge bg-success">Да</span>
                                                 {% else %}
@@ -72,10 +78,52 @@
                                             <td>
                                                 {% if report.status.value == 'draft' %}
                                                     <a href="{{ path('app_analytics_report_fill', {id: report.id}) }}" class="btn btn-sm btn-outline-primary">
-                                                        <i class="bi bi-pencil"></i> Заполнить
+                                                        <i class="bi bi-pencil"></i> Редактировать
                                                     </a>
+                                                    {% if is_granted('ROLE_MANAGER') %}
+                                                        <form action="{{ path('app_analytics_report_delete', {id: report.id}) }}" method="post" class="d-inline">
+                                                            <input type="hidden" name="_token" value="{{ csrf_token('report_delete_' ~ report.id) }}">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить черновик отчёта?')">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                    {% endif %}
+                                                {% elseif report.status.value == 'approved' %}
+                                                    {% if is_granted('ROLE_ADMIN') %}
+                                                        <a href="{{ path('app_analytics_report_fill', {id: report.id}) }}" class="btn btn-sm btn-outline-primary">
+                                                            <i class="bi bi-pencil"></i> Редактировать
+                                                        </a>
+                                                        <form action="{{ path('app_analytics_report_delete', {id: report.id}) }}" method="post" class="d-inline">
+                                                            <input type="hidden" name="_token" value="{{ csrf_token('report_delete_' ~ report.id) }}">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить утверждённый отчёт?')">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                    {% else %}
+                                                        <span class="text-muted">Утверждён</span>
+                                                    {% endif %}
+                                                {% elseif report.status.value == 'submitted' %}
+                                                    <a href="{{ path('app_analytics_report_fill', {id: report.id}) }}" class="btn btn-sm btn-outline-primary">
+                                                        <i class="bi bi-pencil"></i> Редактировать
+                                                    </a>
+                                                    {% if is_granted('ROLE_ADMIN') or is_granted('ROLE_MANAGER') %}
+                                                        <form action="{{ path('app_analytics_approval_approve', {id: report.id}) }}" method="post" class="d-inline">
+                                                            <input type="hidden" name="_token" value="{{ csrf_token('report_approve_' ~ report.id) }}">
+                                                            <button type="submit" class="btn btn-sm btn-outline-success" onclick="return confirm('Утвердить отчёт #{{ report.id }}?');">
+                                                                <i class="bi bi-check-circle"></i> Утвердить
+                                                            </button>
+                                                        </form>
+                                                    {% endif %}
+                                                    {% if is_granted('ROLE_ADMIN') or is_granted('ROLE_MANAGER') %}
+                                                        <form action="{{ path('app_analytics_report_delete', {id: report.id}) }}" method="post" class="d-inline">
+                                                            <input type="hidden" name="_token" value="{{ csrf_token('report_delete_' ~ report.id) }}">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить отправленный отчёт?')">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                    {% endif %}
                                                 {% else %}
-                                                    <span class="text-muted">{{ report.status.value == 'submitted' ? 'На утверждении' : 'Утверждён' }}</span>
+                                                    <span class="text-muted">{{ report.status.value }}</span>
                                                 {% endif %}
                                             </td>
                                         </tr>

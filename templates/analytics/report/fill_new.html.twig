@@ -1,0 +1,147 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Заполнение отчёта{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>Заполнение отчёта</h1>
+            <p class="text-muted mb-0">{{ board.name }} — новая запись (v{{ boardVersion.versionNumber }})</p>
+        </div>
+        <a href="{{ path('app_analytics_report_new') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Назад к выбору доски
+        </a>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <div class="mb-3 text-muted small">
+        Организация отчёта: <strong>{{ ownerOrganization.name }}</strong>.
+        {% if currentPeriod %}
+            Период отчёта: <strong>{{ currentPeriod.displayLabel }}</strong>.
+        {% else %}
+            Период отчёта: <strong>не найден</strong>.
+        {% endif %}
+        Отчёт будет создан после нажатия одной из кнопок сохранения.
+    </div>
+
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Метрики</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form id="report-fill-new-form" action="{{ path('app_analytics_report_fill_new') }}" method="post" class="form">
+                                <input type="hidden" name="_token" value="{{ csrf_token('report_fill_new_' ~ board.id) }}">
+                                <input type="hidden" name="board_id" value="{{ board.id }}">
+
+                                <table class="table table-bordered">
+                                    <thead>
+                                    <tr>
+                                        <th>Метрика</th>
+                                        <th>Тип</th>
+                                        <th>Ед. изм.</th>
+                                        <th>Значение</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for vm in boardVersion.versionMetrics %}
+                                        {% set metric = vm.metric %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ metric.name }}</strong>
+                                                <br><small class="text-muted"><code>{{ metric.businessKey }}</code></small>
+                                                {% if vm.required %}<span class="text-danger">*</span>{% endif %}
+                                            </td>
+                                            <td>{{ metric.type }}</td>
+                                            <td>{{ metric.unit }}</td>
+                                            <td>
+                                                {% if metric.type == 'bool' %}
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="values[{{ vm.id }}]" id="yes_{{ vm.id }}" value="1">
+                                                        <label class="form-check-label" for="yes_{{ vm.id }}">Да</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="values[{{ vm.id }}]" id="no_{{ vm.id }}" value="0">
+                                                        <label class="form-check-label" for="no_{{ vm.id }}">Нет</label>
+                                                    </div>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="radio" name="values[{{ vm.id }}]" id="na_{{ vm.id }}" value="" checked>
+                                                        <label class="form-check-label" for="na_{{ vm.id }}">—</label>
+                                                    </div>
+                                                {% elseif metric.type == 'text' %}
+                                                    <input type="text" name="values[{{ vm.id }}]" class="form-control" value="">
+                                                {% else %}
+                                                    <input type="number" step="any" name="values[{{ vm.id }}]" class="form-control" value="">
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+
+                                <div class="d-flex justify-content-between gap-2">
+                                    <a href="{{ path('app_analytics_report_new') }}" class="btn btn-outline-secondary">Отмена</a>
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" name="submit_action" value="draft" class="btn btn-primary">
+                                            Сохранить как черновик
+                                        </button>
+                                        <button type="submit" name="submit_action" value="approve" class="btn btn-success">
+                                            Сохранить и утвердить
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <script>
+        (function () {
+            var form = document.getElementById('report-fill-new-form');
+            if (!form || typeof Swal === 'undefined') return;
+
+            form.addEventListener('submit', function (e) {
+                var submitter = e.submitter;
+                if (!submitter || submitter.value !== 'approve') return;
+
+                if (form.dataset.approveConfirmed === '1') {
+                    delete form.dataset.approveConfirmed;
+                    return;
+                }
+
+                e.preventDefault();
+                Swal.fire({
+                    title: 'Вы уверены?',
+                    text: 'Утвержденный отчет нельзя будет редактировать.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#198754',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Да, утвердить',
+                    cancelButtonText: 'Отмена'
+                }).then(function (result) {
+                    if (result.isConfirmed) {
+                        form.dataset.approveConfirmed = '1';
+                        form.requestSubmit(submitter);
+                    }
+                });
+            });
+        })();
+    </script>
+{% endblock %}

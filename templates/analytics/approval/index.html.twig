@@ -67,11 +67,11 @@
                                             <td>{{ report.id }}</td>
                                             <td>{{ report.organization.name }}</td>
                                             <td>{{ report.board.name }}</td>
-                                            <td>{{ report.period ? report.period.description : '—' }}</td>
+                                            <td>{{ report.period ? report.period.displayLabel : '—' }}</td>
                                             <td>v{{ report.boardVersion.versionNumber }}</td>
                                             <td>{{ report.createdAt ? report.createdAt|date('d.m.Y H:i') : '—' }}</td>
                                             <td>
-                                                <a href="{{ path('app_analytics_report_fill', {id: report.id}) }}" class="btn btn-sm btn-outline-info" target="_blank">
+                                                <a href="{{ path('app_analytics_report_view', {id: report.id}) }}" class="btn btn-sm btn-outline-info" target="_blank">
                                                     <i class="bi bi-eye"></i> Просмотр
                                                 </a>
                                                 <form action="{{ path('app_analytics_approval_approve', {id: report.id}) }}" method="post" class="d-inline">

@@ -91,7 +91,7 @@
                                 {% if periods|length > 0 %}
                                     {% for period in periods %}
                                         <tr>
-                                            <td><strong>{{ period.description }}</strong></td>
+                                            <td><strong>{{ period.displayLabel }}</strong></td>
                                             <td>{{ period.startDate ? period.startDate|date('d.m.Y') : '—' }}</td>
                                             <td>{{ period.endDate ? period.endDate|date('d.m.Y') : '—' }}</td>
                                             <td>

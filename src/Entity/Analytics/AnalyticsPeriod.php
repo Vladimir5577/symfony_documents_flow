@@ -150,6 +150,26 @@ class AnalyticsPeriod
         return $this;
     }
 
+    public function getDisplayLabel(): string
+    {
+        $isoYear = $this->getIsoYear();
+        $isoWeek = $this->getIsoWeek();
+        $startDate = $this->getStartDate();
+        $endDate = $this->getEndDate();
+
+        if ($isoYear !== null && $isoWeek !== null && $startDate !== null && $endDate !== null) {
+            return sprintf(
+                '%d-W%02d (%s-%s)',
+                $isoYear,
+                $isoWeek,
+                $startDate->format('d.m'),
+                $endDate->format('d.m')
+            );
+        }
+
+        return $this->getDescription() ?? '—';
+    }
+
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;

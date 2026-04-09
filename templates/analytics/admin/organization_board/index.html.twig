@@ -34,12 +34,25 @@
                             <div class="row align-items-end">
                                 <div class="col">
                                     <label class="form-label">Организация <span class="text-danger">*</span></label>
-                                    <select name="organization_id" class="form-select" required>
-                                        <option value="">— Выберите организацию —</option>
-                                        {% for org in organizations %}
-                                            <option value="{{ org.id }}">{{ org.name }}</option>
-                                        {% endfor %}
-                                    </select>
+                                    <input type="hidden" id="organization_id" name="organization_id" value="" required>
+                                    <div class="input-group">
+                                        <input
+                                            type="text"
+                                            id="org-display"
+                                            class="form-control"
+                                            readonly
+                                            placeholder="— Выберите организацию —"
+                                            style="cursor:pointer"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#orgPickerModal"
+                                        >
+                                        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#orgPickerModal">
+                                            <i class="bi bi-building"></i> Выбрать
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" id="clear-org-btn" style="display:none;">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="col">
                                     <label class="form-label">Доска <span class="text-danger">*</span></label>
@@ -128,4 +141,17 @@
             </div>
         </div>
     </section>
+
+    <div id="org-tree-data" class="d-none">
+        {% for org in organizations %}
+            <div
+                class="org-node"
+                data-org-id="{{ org.id }}"
+                data-parent-id="{{ org.parent ? org.parent.id : '' }}"
+                data-name="{{ org.name }}"
+            ></div>
+        {% endfor %}
+    </div>
+
+    {% include 'analytics/admin/organization_board/partials/_modal_select_organization.html.twig' %}
 {% endblock %}

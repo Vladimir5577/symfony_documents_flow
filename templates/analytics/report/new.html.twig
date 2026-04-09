@@ -7,6 +7,30 @@
 {% endblock %}
 
 {% block main %}
+    <style>
+        .board-choice-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 0.75rem;
+        }
+        .board-choice {
+            border: 1px solid rgba(130, 146, 167, 0.28);
+            border-radius: 0.6rem;
+            padding: 0.9rem 1rem;
+            cursor: pointer;
+            transition: border-color .2s, box-shadow .2s, background-color .2s;
+        }
+        .board-choice:hover {
+            border-color: rgba(67, 94, 190, 0.55);
+            background-color: rgba(67, 94, 190, 0.04);
+        }
+        .board-choice-input:checked + .board-choice {
+            border-color: rgba(67, 94, 190, 0.9);
+            box-shadow: 0 0 0 2px rgba(67, 94, 190, 0.18);
+            background-color: rgba(67, 94, 190, 0.08);
+        }
+    </style>
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Создание отчёта</h1>
         <a href="{{ path('app_analytics_report') }}" class="btn btn-secondary">
@@ -32,33 +56,27 @@
                     <div class="card-content">
                         <div class="card-body">
                             {% if orgBoards|length > 0 %}
-                                <form action="{{ path('app_analytics_report_new') }}" method="post" class="form">
-                                    <input type="hidden" name="_token" value="{{ csrf_token('report_new') }}">
-
-                                    <div class="row">
-                                        <div class="col-md-6 col-12">
-                                            <div class="form-group">
-                                                <label class="form-label">Доска <span class="text-danger">*</span></label>
-                                                <select name="board_id" class="form-select" required>
-                                                    <option value="">— Выберите доску —</option>
-                                                    {% for orgBoard in orgBoards %}
-                                                        <option value="{{ orgBoard.board.id }}">
-                                                            {{ orgBoard.board.name }}
-                                                            {% if orgBoard.required %}(обязательная){% endif %}
-                                                        </option>
-                                                    {% endfor %}
-                                                </select>
-                                            </div>
-                                        </div>
+                                <div class="form-group">
+                                    <label class="form-label">Доска <span class="text-danger">*</span></label>
+                                    <div class="small text-muted mb-2">Нажмите на карточку, чтобы перейти к заполнению. Отчёт будет создан только после первого сохранения данных.</div>
+                                    <div class="board-choice-list mt-2">
+                                        {% for orgBoard in orgBoards %}
+                                            <a href="{{ path('app_analytics_report_fill_new', {board_id: orgBoard.board.id}) }}" class="board-choice text-decoration-none text-reset">
+                                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                                    <div>
+                                                        <div class="fw-semibold">{{ orgBoard.board.name }}</div>
+                                                        <div class="small text-muted">
+                                                            Назначена: {{ orgBoard.organization.name }}
+                                                        </div>
+                                                    </div>
+                                                    {% if orgBoard.required %}
+                                                        <span class="badge bg-warning text-dark">Обязательная</span>
+                                                    {% endif %}
+                                                </div>
+                                            </a>
+                                        {% endfor %}
                                     </div>
-
-                                    <div class="row">
-                                        <div class="col-12 d-flex justify-content-end">
-                                            <button type="submit" class="btn btn-primary me-1 mb-1">Создать отчёт</button>
-                                            <a href="{{ path('app_analytics_report') }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
-                                        </div>
-                                    </div>
-                                </form>
+                                </div>
                             {% else %}
                                 <p class="text-muted">Вам не назначено ни одной доски с опубликованной версией. Обратитесь к администратору.</p>
                             {% endif %}

@@ -47,12 +47,31 @@ final class CreateReportService
         if (!$report) {
             return null;
         }
-        // Пользователь должен быть из той же организации
+
+        // Админ имеет доступ к любому отчёту.
+        if (method_exists($user, 'getRoles') && in_array('ROLE_ADMIN', (array) $user->getRoles(), true)) {
+            return $report;
+        }
+
+        // Пользователь должен быть из той же организации или дочерней/родительской по иерархии.
         $userOrg = $user->getOrganization();
-        if ($userOrg && $report->getOrganization()->getId() === $userOrg->getId()) {
+        if ($userOrg && $report->getOrganization() && $this->isOrganizationInHierarchy($userOrg, $report->getOrganization())) {
             return $report;
         }
         return null;
+    }
+
+    private function isOrganizationInHierarchy(AbstractOrganization $userOrganization, AbstractOrganization $reportOrganization): bool
+    {
+        $current = $userOrganization;
+        while ($current !== null) {
+            if ($current->getId() !== null && $current->getId() === $reportOrganization->getId()) {
+                return true;
+            }
+            $current = $current->getParent();
+        }
+
+        return false;
     }
 
     public function findById(int $id): ?AnalyticsReport
