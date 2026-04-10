@@ -1075,14 +1075,17 @@ var KanbanApp = (function () {
                 deleteBtn;
         }
 
-        var authorColor = getAvatarColor(config.currentUserName);
+        var authorName = att.authorName || config.currentUserName;
+        var isOwn = String(att.authorId) === String(config.currentUserId);
+        var authorColor = getAvatarColor(authorName);
+        var bgOpacity = isOwn ? '0.18' : '0.10';
 
         var msg = document.createElement("div");
-        msg.className = "task-chat-msg task-chat-msg-own";
+        msg.className = "task-chat-msg" + (isOwn ? " task-chat-msg-own" : "");
         msg.setAttribute("data-attachment-id", att.id);
         msg.innerHTML =
-            '<div class="task-chat-msg-bubble" style="border-right-color:' + authorColor + ';background:' + authorColor + '0.18;">' +
-            '<span class="task-chat-msg-author-name" style="color:' + authorColor + '">' + escapeHtml(config.currentUserName) + '</span>' +
+            '<div class="task-chat-msg-bubble" style="border-left-color:' + authorColor + ';border-right-color:' + (isOwn ? authorColor : 'transparent') + ';background:' + authorColor + bgOpacity + ';">' +
+            '<span class="task-chat-msg-author-name" style="color:' + authorColor + '">' + escapeHtml(authorName) + '</span>' +
             '<div class="task-chat-msg-text">' + bodyHtml + '</div>' +
             '<div class="task-chat-msg-meta">' +
             '<span class="task-chat-msg-time">' + formatShortDate(att.createdAt || new Date().toISOString()) +
