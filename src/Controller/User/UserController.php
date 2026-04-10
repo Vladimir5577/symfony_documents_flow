@@ -6,6 +6,7 @@ use App\Entity\User\User;
 use App\Entity\User\Worker;
 use App\Enum\WorkerStatus;
 use App\Enum\UserRole;
+use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\RoleRepository;
 use App\Repository\User\UserRepository;
@@ -27,6 +28,11 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class UserController extends AbstractController
 {
+    public function __construct(
+        private readonly CacheManager $imagineCacheManager,
+    ) {
+    }
+
     #[Route(path: '/register', name: 'user_register', methods: ['GET', 'POST'])]
     public function register(
         Request                     $request,
@@ -343,11 +349,20 @@ final class UserController extends AbstractController
         // Загружаем Worker для пользователя, если он существует
         $worker = $workerRepository->findOneBy(['user' => $user]);
 
+        $avatarPreviewUrl = null;
+        if ($user->getAvatarName()) {
+            $avatarPath = $user->getId() . '/' . $user->getAvatarName();
+            $avatarPreviewUrl = $this->toRelativePath(
+                $this->imagineCacheManager->getBrowserPath($avatarPath, 'avatar_medium')
+            );
+        }
+
         return $this->render('user/view_user.html.twig', [
             'active_tab' => 'view_user',
             'user' => $user,
             'worker' => $worker,
             'page' => $page,
+            'avatar_preview_url' => $avatarPreviewUrl,
         ]);
     }
 
@@ -482,10 +497,33 @@ final class UserController extends AbstractController
             throw $this->createNotFoundException('Пользователь не найден');
         }
 
+        $avatarPreviewUrl = null;
+        if ($user->getAvatarName()) {
+            $avatarPath = $user->getId() . '/' . $user->getAvatarName();
+            $avatarPreviewUrl = $this->toRelativePath(
+                $this->imagineCacheManager->getBrowserPath($avatarPath, 'avatar_medium')
+            );
+        }
+
         return $this->render('user/edit_user_photo.html.twig', [
             'active_tab' => 'edit_user',
             'user' => $user,
+            'avatar_preview_url' => $avatarPreviewUrl,
         ]);
+    }
+
+    private function toRelativePath(string $url): string
+    {
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+            $parts = parse_url($url);
+            $path = $parts['path'] ?? '/';
+            $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+            $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+
+            return $path . $query . $fragment;
+        }
+
+        return $url;
     }
 
     #[Route('/user/{id}/update-photo', name: 'app_update_user_photo', methods: ['POST'], requirements: ['id' => '\d+'])]

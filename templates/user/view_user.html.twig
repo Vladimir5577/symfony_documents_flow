@@ -33,7 +33,6 @@
                         <div class="card-body">
                             <div class="d-flex align-items-center gap-3 mb-3">
                                 {% if user.avatarName %}
-                                {% set avatar_url = (user.id ~ '/' ~ user.avatarName) | imagine_filter('avatar_medium') %}
                                 {% set avatar_original_url = path('app_user_avatar_original', {id: user.id}) %}
                                 <button type="button"
                                         class="view-user-photo overflow-hidden rounded-3 border bg-light flex-shrink-0 p-0 text-start"
@@ -42,7 +41,7 @@
                                         data-bs-target="#imagePreviewModal"
                                         data-image-url="{{ avatar_original_url }}"
                                         aria-label="Открыть фото в полном размере">
-                                    <img src="{{ avatar_url }}"
+                                    <img src="{{ avatar_preview_url }}"
                                          alt=""
                                          class="w-100 h-100"
                                          style="object-fit: cover;">
