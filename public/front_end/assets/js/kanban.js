@@ -897,6 +897,15 @@ var KanbanApp = (function () {
         scrollChatToBottom();
     }
 
+    function getAvatarColor(name) {
+        var hash = 0;
+        for (var i = 0; i < name.length; i++) {
+            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        var colors = ['#6366f1','#8b5cf6','#ec4899','#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#06b6d4','#3b82f6'];
+        return colors[Math.abs(hash) % colors.length];
+    }
+
     function appendCommentBubble(c) {
         var container = document.getElementById("chat-messages");
         if (!container) return;
@@ -914,16 +923,19 @@ var KanbanApp = (function () {
         }
 
         var editedMark = c.updatedAt ? ' <span class="text-muted fst-italic" style="font-size:0.75rem">(ред.)</span>' : '';
+        var authorColor = getAvatarColor(c.authorName);
+        var bgOpacity = isOwn ? '0.18' : '0.10';
 
         var msg = document.createElement("div");
-        msg.className = "task-chat-msg";
+        msg.className = "task-chat-msg" + (isOwn ? " task-chat-msg-own" : "");
         msg.setAttribute("data-comment-id", c.id);
         msg.innerHTML =
-            '<div class="task-chat-msg-bubble">' +
+            '<div class="task-chat-msg-bubble" style="border-left-color:' + authorColor + ';border-right-color:' + (isOwn ? authorColor : 'transparent') + ';background:' + authorColor + bgOpacity + ';">' +
+            '<span class="task-chat-msg-author-name" style="color:' + authorColor + '">' + escapeHtml(c.authorName) + '</span>' +
             '<div class="task-chat-msg-text">' + escapeHtml(c.body) + '</div>' +
-            '<div class="task-chat-msg-meta"><span class="task-chat-msg-time">' +
-            escapeHtml(c.authorName) + " · " + formatShortDate(c.createdAt) +
-            editedMark + '</span>' + actionsHtml + '</div></div>';
+            '<div class="task-chat-msg-meta">' +
+            '<span class="task-chat-msg-time">' + formatShortDate(c.createdAt) + editedMark + '</span>' +
+            actionsHtml + '</div></div>';
         container.appendChild(msg);
 
         var editBtn = msg.querySelector(".chat-msg-edit-btn");
@@ -1063,14 +1075,17 @@ var KanbanApp = (function () {
                 deleteBtn;
         }
 
+        var authorColor = getAvatarColor(config.currentUserName);
+
         var msg = document.createElement("div");
-        msg.className = "task-chat-msg";
+        msg.className = "task-chat-msg task-chat-msg-own";
         msg.setAttribute("data-attachment-id", att.id);
         msg.innerHTML =
-            '<div class="task-chat-msg-bubble">' +
+            '<div class="task-chat-msg-bubble" style="border-right-color:' + authorColor + ';background:' + authorColor + '0.18;">' +
+            '<span class="task-chat-msg-author-name" style="color:' + authorColor + '">' + escapeHtml(config.currentUserName) + '</span>' +
             '<div class="task-chat-msg-text">' + bodyHtml + '</div>' +
-            '<div class="task-chat-msg-meta"><span class="task-chat-msg-time">' +
-            escapeHtml(config.currentUserName) + " · " + formatShortDate(att.createdAt || new Date().toISOString()) +
+            '<div class="task-chat-msg-meta">' +
+            '<span class="task-chat-msg-time">' + formatShortDate(att.createdAt || new Date().toISOString()) +
             "</span></div></div>";
         container.appendChild(msg);
 
