@@ -48,6 +48,7 @@ final class KanbanAttachmentApiController extends AbstractController
         }
 
         $attachment = $this->attachmentService->upload($file, $card);
+        $attachment->setAuthor($user);
 
         $context = $request->request->get('context', 'info');
         if (!in_array($context, ['chat', 'info', 'description'], true)) {
@@ -64,6 +65,8 @@ final class KanbanAttachmentApiController extends AbstractController
             'context' => $attachment->getContext(),
             'createdAt' => $attachment->getCreatedAt()?->format('c'),
             'previewUrl' => $this->kanbanAttachmentPreviewUrlGenerator->getPreviewUrl($attachment),
+            'authorId' => $attachment->getAuthor()?->getId(),
+            'authorName' => $attachment->getAuthor()?->getLastname() . ' ' . $attachment->getAuthor()?->getFirstname(),
         ], Response::HTTP_CREATED);
     }
 

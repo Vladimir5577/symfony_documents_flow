@@ -39,6 +39,10 @@ class KanbanAttachment
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
 
+    #[ORM\ManyToOne(targetEntity: \App\Entity\User\User::class)]
+    #[ORM\JoinColumn(name: 'author_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?\App\Entity\User\User $author = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -112,6 +116,17 @@ class KanbanAttachment
     public function setContext(string $context): static
     {
         $this->context = $context;
+        return $this;
+    }
+
+    public function getAuthor(): ?\App\Entity\User\User
+    {
+        return $this->author;
+    }
+
+    public function setAuthor(?\App\Entity\User\User $author): static
+    {
+        $this->author = $author;
         return $this;
     }
 }

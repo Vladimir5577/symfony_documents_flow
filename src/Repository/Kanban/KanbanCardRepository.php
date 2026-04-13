@@ -43,6 +43,7 @@ class KanbanCardRepository extends ServiceEntityRepository
             ->leftJoin('c.comments', 'com')->addSelect('com')
             ->leftJoin('com.author', 'a')->addSelect('a')
             ->leftJoin('c.attachments', 'att')->addSelect('att')
+            ->leftJoin('att.author', 'atta')->addSelect('atta')
             ->leftJoin('c.labels', 'lbl')->addSelect('lbl')
             ->leftJoin('c.assignees', 'asgn')->addSelect('asgn')
             ->where('c.id = :id')

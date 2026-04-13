@@ -83,7 +83,7 @@
                                     <div id="user_photo_current_wrap" class="flex-shrink-0">
                                         <p class="text-muted small mb-1">Текущее фото</p>
                                         <div class="user-photo-preview-wrap">
-                                            <img id="user_photo_current_img" src="{{ (user.id ~ '/' ~ user.avatarName) | imagine_filter('avatar_medium') }}" alt="Текущее фото">
+                                            <img id="user_photo_current_img" src="{{ avatar_preview_url }}" alt="Текущее фото">
                                         </div>
                                     </div>
                                     {% endif %}

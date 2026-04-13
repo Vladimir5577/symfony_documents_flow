@@ -37,8 +37,7 @@ class KanbanProjectRepository extends ServiceEntityRepository
     /**
      * Проекты, которые пользователь должен видеть в списке:
      * - владелец проекта;
-     * - участник с хотя бы одной назначенной задачей на любой доске.
-     * Участники без назначенных задач не видят проект.
+     * - любой участник проекта.
      *
      * @return KanbanProject[]
      */
@@ -47,12 +46,8 @@ class KanbanProjectRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('p')
             ->select('DISTINCT p')
             ->leftJoin('App\Entity\Kanban\Project\KanbanProjectUser', 'pu', 'WITH', 'pu.kanbanProject = p AND pu.user = :user')
-            ->leftJoin('p.boards', 'b')
-            ->leftJoin('b.columns', 'col')
-            ->leftJoin('col.cards', 'card')
-            ->leftJoin('card.assignees', 'a')
             ->where('p.owner = :user')
-            ->orWhere('pu.id IS NOT NULL AND a = :user')
+            ->orWhere('pu.id IS NOT NULL')
             ->setParameter('user', $user)
             ->orderBy('p.updatedAt', 'DESC')
             ->getQuery()

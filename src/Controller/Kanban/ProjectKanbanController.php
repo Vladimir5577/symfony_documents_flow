@@ -111,23 +111,13 @@ final class ProjectKanbanController extends AbstractController
 
         $memberRole = $this->kanbanService->getMemberRole($board, $user);
 
-        if ($memberRole !== KanbanBoardMemberRole::KANBAN_ADMIN && !$this->boardRepo->userHasAssignedCardsOnBoard($board, $user)) {
-            throw $this->createAccessDeniedException('Нет доступа к этой доске: на вас не назначены задачи.');
-        }
-
         $projectBoards = [];
         $organizations = [];
         if ($board->getProject() !== null) {
             $project = $board->getProject();
-            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
-                $projectBoards = $this->boardRepo->findByProject($project);
-            } else {
-                $projectBoards = $this->boardRepo->findByProjectAndUserWithAssignedCards($project, $user);
-            }
-            $isAdmin = $this->isGranted('ROLE_ADMIN');
+            $projectBoards = $this->boardRepo->findByProject($project);
             $userOrganization = $user->getOrganization();
-            $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
-            $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+            $organizationTree = $organizationRepository->getOrganizationTree(null);
             foreach ($organizationTree as $org) {
                 $loadedOrg = $organizationRepository->findWithChildren($org->getId());
                 if ($loadedOrg) {
@@ -217,6 +207,9 @@ final class ProjectKanbanController extends AbstractController
         if ($firstBoard) {
             $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
             $memberRole = $this->kanbanService->getMemberRole($firstBoard, $user);
+            if ($memberRole !== KanbanBoardMemberRole::KANBAN_ADMIN) {
+                return $this->redirectToRoute('app_kanban_board', ['id' => $firstBoard->getId()]);
+            }
         } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         } else {
@@ -224,9 +217,7 @@ final class ProjectKanbanController extends AbstractController
         }
 
         $isProjectAdmin = $memberRole === KanbanBoardMemberRole::KANBAN_ADMIN;
-        $projectBoards = $isProjectAdmin
-            ? $this->boardRepo->findByProject($project)
-            : $this->boardRepo->findByProjectAndUserWithAssignedCards($project, $user);
+        $projectBoards = $this->boardRepo->findByProject($project);
 
         $projectUsers = $this->projectUserRepo->findByProject($project);
 
@@ -310,10 +301,8 @@ final class ProjectKanbanController extends AbstractController
             throw $this->createAccessDeniedException('Нет доступа к проекту.');
         }
 
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
         $userOrganization = $user->getOrganization();
-        $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree(null);
         $organizationsWithChildren = [];
         foreach ($organizationTree as $org) {
             $loadedOrg = $organizationRepository->findWithChildren($org->getId());

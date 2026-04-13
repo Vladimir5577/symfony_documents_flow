@@ -677,7 +677,10 @@ var KanbanApp = (function () {
                 if (pane) {
                     pane.classList.add("active");
                     pane.hidden = false;
-                    if (targetId === "pane-chat") scrollChatToBottom();
+                    if (targetId === "pane-chat") {
+                        scrollChatToBottom();
+                        focusChatInput();
+                    }
                     if (targetId === "pane-description") {
                         requestAnimationFrame(function () {
                             requestAnimationFrame(fitTaskDescriptionTextarea);
@@ -730,6 +733,10 @@ var KanbanApp = (function () {
         if (cardEl) cardEl.classList.add("kanban-card--open");
         var sidebar = document.getElementById("task-sidebar");
         sidebar.setAttribute("aria-hidden", "false");
+        // При открытии по клику на карточку фокус может теряться из-за анимации панели.
+        // Ставим фокус с небольшой задержкой, чтобы курсор стабильно попадал в чат.
+        setTimeout(focusChatInput, 0);
+        setTimeout(focusChatInput, 120);
 
         // Reset to chat tab
         document.querySelectorAll(".task-sidebar-tab").forEach(function (t) {
@@ -844,6 +851,18 @@ var KanbanApp = (function () {
         if (msgs) msgs.scrollTop = msgs.scrollHeight;
     }
 
+    function focusChatInput() {
+        var input = document.getElementById("task-chat-input");
+        if (!input || input.disabled || input.readOnly) return;
+        requestAnimationFrame(function () {
+            input.focus();
+            var len = input.value ? input.value.length : 0;
+            if (typeof input.setSelectionRange === "function") {
+                input.setSelectionRange(len, len);
+            }
+        });
+    }
+
     function renderChatStream(comments, chatAttachments) {
         var container = document.getElementById("chat-messages");
         if (!container) return;
@@ -878,6 +897,15 @@ var KanbanApp = (function () {
         scrollChatToBottom();
     }
 
+    function getAvatarColor(name) {
+        var hash = 0;
+        for (var i = 0; i < name.length; i++) {
+            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        var colors = ['#6366f1','#8b5cf6','#ec4899','#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#06b6d4','#3b82f6'];
+        return colors[Math.abs(hash) % colors.length];
+    }
+
     function appendCommentBubble(c) {
         var container = document.getElementById("chat-messages");
         if (!container) return;
@@ -885,16 +913,130 @@ var KanbanApp = (function () {
         var ph = container.querySelector(".task-chat-msg-placeholder");
         if (ph) ph.remove();
 
+        var isOwn = String(c.authorId) === String(config.currentUserId);
+
+        var actionsHtml = '';
+        if (isOwn && config.canEdit) {
+            actionsHtml =
+                '<button type="button" class="btn btn-sm btn-link text-secondary p-0 ms-1 chat-msg-edit-btn" data-comment-id="' + c.id + '" title="Редактировать"><i class="bi bi-pencil"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1 chat-msg-delete-btn" data-comment-id="' + c.id + '" title="Удалить"><i class="bi bi-trash"></i></button>';
+        }
+
+        var editedMark = c.updatedAt ? ' <span class="text-muted fst-italic" style="font-size:0.75rem">(ред.)</span>' : '';
+        var authorColor = getAvatarColor(c.authorName);
+        var bgOpacity = isOwn ? '0.18' : '0.10';
+
         var msg = document.createElement("div");
-        msg.className = "task-chat-msg";
+        msg.className = "task-chat-msg" + (isOwn ? " task-chat-msg-own" : "");
         msg.setAttribute("data-comment-id", c.id);
         msg.innerHTML =
-            '<div class="task-chat-msg-bubble">' +
+            '<div class="task-chat-msg-bubble" style="border-left-color:' + authorColor + ';border-right-color:' + (isOwn ? authorColor : 'transparent') + ';background:' + authorColor + bgOpacity + ';">' +
+            '<span class="task-chat-msg-author-name" style="color:' + authorColor + '">' + escapeHtml(c.authorName) + '</span>' +
             '<div class="task-chat-msg-text">' + escapeHtml(c.body) + '</div>' +
-            '<div class="task-chat-msg-meta"><span class="task-chat-msg-time">' +
-            escapeHtml(c.authorName) + " · " + formatShortDate(c.createdAt) +
-            "</span></div></div>";
+            '<div class="task-chat-msg-meta">' +
+            '<span class="task-chat-msg-time">' + formatShortDate(c.createdAt) + editedMark + '</span>' +
+            actionsHtml + '</div></div>';
         container.appendChild(msg);
+
+        var editBtn = msg.querySelector(".chat-msg-edit-btn");
+        if (editBtn) {
+            editBtn.addEventListener("click", function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleEditComment(parseInt(c.id), msg, c.body);
+            });
+        }
+        var deleteBtn = msg.querySelector(".chat-msg-delete-btn");
+        if (deleteBtn) {
+            deleteBtn.addEventListener("click", function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDeleteComment(parseInt(c.id), msg);
+            });
+        }
+    }
+
+    function handleEditComment(commentId, msgEl, currentBody) {
+        var textEl = msgEl.querySelector(".task-chat-msg-text");
+        if (!textEl) return;
+
+        // Check if already editing
+        var existingInput = msgEl.querySelector(".chat-msg-edit-input");
+        if (existingInput) return;
+
+        var saveBtn = msgEl.querySelector(".chat-msg-edit-btn");
+        if (!saveBtn) return;
+
+        var input = document.createElement("textarea");
+        input.className = "form-control form-control-sm chat-msg-edit-input";
+        input.value = currentBody;
+        input.rows = 2;
+        textEl.replaceWith(input);
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+
+        // Replace pencil icon with save icon
+        saveBtn.innerHTML = '<i class="bi bi-check-lg"></i>';
+        saveBtn.classList.remove("text-secondary");
+        saveBtn.classList.add("text-success");
+        saveBtn.setAttribute("title", "Сохранить");
+
+        function finishEdit() {
+            var newBody = input.value.trim();
+            if (!newBody || newBody === currentBody) {
+                renderChatStreamFromCurrentData();
+                return;
+            }
+
+            apiFetch("/api/kanban/cards/" + currentCardId + "/comments/" + commentId, {
+                method: "PUT",
+                body: JSON.stringify({ body: newBody })
+            }).then(function (data) {
+                if (currentCardData) {
+                    var idx = (currentCardData.comments || []).findIndex(function (c) { return c.id == commentId; });
+                    if (idx !== -1) currentCardData.comments[idx].body = newBody;
+                }
+                renderChatStreamFromCurrentData();
+            }).catch(function (err) {
+                showToast(err.message);
+                renderChatStreamFromCurrentData();
+            });
+        }
+
+        input.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                finishEdit();
+            }
+            if (e.key === "Escape") {
+                renderChatStreamFromCurrentData();
+            }
+        });
+        saveBtn.onclick = function (e) {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            finishEdit();
+        };
+    }
+
+    function handleDeleteComment(commentId, msgEl) {
+        if (!confirm("Удалить сообщение?")) return;
+
+        apiFetch("/api/kanban/cards/" + currentCardId + "/comments/" + commentId, {
+            method: "DELETE"
+        }).then(function () {
+            msgEl.remove();
+            if (currentCardData) {
+                currentCardData.comments = (currentCardData.comments || []).filter(function (c) { return c.id != commentId; });
+            }
+        }).catch(function (err) { showToast(err.message); });
+    }
+
+    function renderChatStreamFromCurrentData() {
+        var chatAttachments = (currentCardData && currentCardData.attachments || []).filter(function (a) { return a.context === 'chat'; });
+        renderChatStream(currentCardData && currentCardData.comments || [], chatAttachments);
     }
 
     function appendAttachmentBubble(att) {
@@ -933,14 +1075,20 @@ var KanbanApp = (function () {
                 deleteBtn;
         }
 
+        var authorName = att.authorName || config.currentUserName;
+        var isOwn = String(att.authorId) === String(config.currentUserId);
+        var authorColor = getAvatarColor(authorName);
+        var bgOpacity = isOwn ? '0.18' : '0.10';
+
         var msg = document.createElement("div");
-        msg.className = "task-chat-msg";
+        msg.className = "task-chat-msg" + (isOwn ? " task-chat-msg-own" : "");
         msg.setAttribute("data-attachment-id", att.id);
         msg.innerHTML =
-            '<div class="task-chat-msg-bubble">' +
+            '<div class="task-chat-msg-bubble" style="border-left-color:' + authorColor + ';border-right-color:' + (isOwn ? authorColor : 'transparent') + ';background:' + authorColor + bgOpacity + ';">' +
+            '<span class="task-chat-msg-author-name" style="color:' + authorColor + '">' + escapeHtml(authorName) + '</span>' +
             '<div class="task-chat-msg-text">' + bodyHtml + '</div>' +
-            '<div class="task-chat-msg-meta"><span class="task-chat-msg-time">' +
-            escapeHtml(config.currentUserName) + " · " + formatShortDate(att.createdAt || new Date().toISOString()) +
+            '<div class="task-chat-msg-meta">' +
+            '<span class="task-chat-msg-time">' + formatShortDate(att.createdAt || new Date().toISOString()) +
             "</span></div></div>";
         container.appendChild(msg);
 
@@ -975,11 +1123,13 @@ var KanbanApp = (function () {
                 id: tempId,
                 body: body,
                 authorName: config.currentUserName,
+                authorId: config.currentUserId,
                 createdAt: new Date().toISOString()
             };
             knownCommentIds.add(tempId);
             appendCommentBubble(tempComment);
             scrollChatToBottom();
+            focusChatInput();
 
             apiFetch("/api/kanban/cards/" + currentCardId + "/comments", {
                 method: "POST",
@@ -1289,6 +1439,7 @@ select.addEventListener("change", function () {
             var delBtn = row.querySelector(".subtask-delete-btn");
             if (delBtn) {
                 delBtn.addEventListener("click", function () {
+                    if (!confirm("Удалить подзадачу?")) return;
                     apiFetch("/api/kanban/cards/" + currentCardId + "/checklist/" + item.id, {
                         method: "DELETE"
                     }).then(function () {
@@ -1678,17 +1829,27 @@ select.addEventListener("change", function () {
 
     function initDescriptionAttachments() {
         var input = document.getElementById("description-attachment-input");
+        var triggerBtn = document.getElementById("description-attachment-trigger");
+        var fileNameEl = document.getElementById("description-attachment-filename");
         if (!input || !config.canEdit) return;
+
+        if (triggerBtn) {
+            triggerBtn.addEventListener("click", function () {
+                input.click();
+            });
+        }
 
         input.addEventListener("change", function () {
             if (!input.files.length || !currentCardId) return;
 
             var file = input.files[0];
+            if (fileNameEl) fileNameEl.textContent = file.name || "Файл не выбран";
             var ext = file.name.split(".").pop().toLowerCase();
             var allowed = ["pdf", "png", "jpg", "jpeg", "webp", "docx", "xlsx"];
             if (allowed.indexOf(ext) === -1) {
                 showToast("Тип файла ." + ext + " не поддерживается.");
                 input.value = "";
+                if (fileNameEl) fileNameEl.textContent = "Файл не выбран";
                 return;
             }
 
@@ -1701,6 +1862,7 @@ select.addEventListener("change", function () {
                 body: formData
             }).then(function (newAtt) {
                 input.value = "";
+                if (fileNameEl) fileNameEl.textContent = "Файл не выбран";
                 newAtt.context = "description";
                 if (currentCardData && newAtt) {
                     currentCardData.attachments = currentCardData.attachments || [];
@@ -1712,6 +1874,7 @@ select.addEventListener("change", function () {
             }).catch(function (err) {
                 showToast(err.message);
                 input.value = "";
+                if (fileNameEl) fileNameEl.textContent = "Файл не выбран";
             });
         });
     }

@@ -98,7 +98,9 @@ final class KanbanCardApiController extends AbstractController
                 'id' => $com->getId(),
                 'body' => $com->getBody(),
                 'authorName' => $com->getAuthor()->getLastname() . ' ' . $com->getAuthor()->getFirstname(),
+                'authorId' => $com->getAuthor()->getId(),
                 'createdAt' => $com->getCreatedAt()?->format('c'),
+                'updatedAt' => $com->getUpdatedAt()?->format('c'),
             ];
         }
 
@@ -112,6 +114,8 @@ final class KanbanCardApiController extends AbstractController
                 'context' => $att->getContext(),
                 'createdAt' => $att->getCreatedAt()?->format('c'),
                 'previewUrl' => $this->kanbanAttachmentPreviewUrlGenerator->getPreviewUrl($att),
+                'authorId' => $att->getAuthor()?->getId(),
+                'authorName' => $att->getAuthor()?->getLastname() . ' ' . $att->getAuthor()?->getFirstname(),
             ];
         }
 

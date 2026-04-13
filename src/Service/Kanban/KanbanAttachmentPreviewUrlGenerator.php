@@ -30,6 +30,23 @@ final class KanbanAttachmentPreviewUrlGenerator
             return null;
         }
 
-        return $this->imagineCacheManager->getBrowserPath($key, 'kanban_attachment_preview');
+        $browserPath = $this->imagineCacheManager->getBrowserPath($key, 'kanban_attachment_preview');
+
+        return $this->toRelativePath($browserPath);
+    }
+
+    private function toRelativePath(string $url): string
+    {
+        // Keep URLs same-origin on the client to avoid CORS caused by absolute host:port generation.
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+            $parts = parse_url($url);
+            $path = $parts['path'] ?? '/';
+            $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+            $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+
+            return $path . $query . $fragment;
+        }
+
+        return $url;
     }
 }

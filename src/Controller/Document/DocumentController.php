@@ -68,10 +68,9 @@ final class DocumentController extends AbstractController
 
         $isAdmin = $this->isGranted('ROLE_ADMIN');
         $userOrganization = $currentUser->getOrganization();
-        $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
 
         // Получаем дерево организаций для пользователя
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree(null);
 
         // Загружаем организации с дочерними для отображения дерева
         $organizationsWithChildren = [];
@@ -337,9 +336,7 @@ final class DocumentController extends AbstractController
             return new JsonResponse(['error' => 'Organization not found'], JsonResponse::HTTP_NOT_FOUND);
         }
 
-        $users = $organization instanceof Department
-            ? $userRepository->findByOrganization($organization)
-            : $userRepository->findWorkWithDocumentsByOrganization($organization);
+        $users = $userRepository->findByOrganization($organization);
 
         $data = [];
         foreach ($users as $user) {
