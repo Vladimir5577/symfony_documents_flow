@@ -43,7 +43,7 @@ class AnalyticsReportValue
     #[ORM\Column(name: 'metric_type_snapshot', length: 64, nullable: true)]
     private ?string $metricTypeSnapshot = null;
 
-    #[ORM\Column(name: 'value_number', type: Types::DECIMAL, precision: 20, scale: 8, nullable: true)]
+    #[ORM\Column(name: 'value_number', type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $valueNumber = null;
 
     #[ORM\Column(name: 'value_text', type: Types::TEXT, nullable: true)]

@@ -105,8 +105,6 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
      */
     private function valueFor(int $metricIdx, int $orgIdx, int $weekIdx): ?string
     {
-        $seed = ($metricIdx + 1) * 1000 + ($orgIdx + 1) * 100 + ($weekIdx + 1) * 7;
-
         $baseValues = match ($metricIdx) {
             0  => 150.0,   // fuel_consumption, л
             1  => 45000.0, // spare_parts_cost
@@ -123,10 +121,33 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
             default => 100.0,
         };
 
-        // Вариация: orgIdx даёт разброс до ±30%, weekIdx — тренд ±2% в неделю
-        $orgMultiplier = 1.0 + ($orgIdx - 3) * 0.08;
-        $weekTrend = 1.0 + $weekIdx * 0.015;
-        $value = $baseValues * $orgMultiplier * $weekTrend + ($seed % 50) * ($baseValues * 0.005);
+        $orgScale = [0.78, 0.92, 1.05, 1.18, 1.32, 0.88, 1.24][$orgIdx] ?? (1.0 + $orgIdx * 0.07);
+        $phase = ($metricIdx * 0.33) + ($orgIdx * 0.57);
+        $x = (float) $weekIdx;
+
+        // Для каждой организации — свой характер линии:
+        // 0: почти прямая нисходящая; 1: синус с ростом; 2: пила; 3: U-образная;
+        // 4: резкая волна; 5: ступени; 6: волна + локальные пики.
+        $shapeFactor = match ($orgIdx) {
+            0 => 1.18 - 0.038 * $x,
+            1 => 0.90 + 0.030 * $x + 0.16 * sin($x * 0.80 + $phase),
+            2 => 0.86 + 0.020 * $x + (((($weekIdx + $metricIdx) % 4) / 4.0) * 0.18 - 0.04),
+            3 => 0.82 + 0.010 * (($x - 5.0) ** 2),
+            4 => 0.95 + 0.028 * $x + 0.24 * sin($x * 1.05 + $phase),
+            5 => 0.88 + 0.045 * floor(($x + 1.0) / 2.0) / 5.0,
+            6 => 0.92 + 0.024 * $x + 0.14 * sin($x * 0.65 + $phase) + (($weekIdx % 5 === 0) ? 0.11 : 0.0),
+            default => 1.0 + 0.018 * $x,
+        };
+
+        // Метрика тоже добавляет свой ритм, чтобы линии разных метрик не были одинаковыми.
+        $metricRhythm = 1.0 + 0.04 * sin($x * (0.45 + ($metricIdx % 4) * 0.12) + $metricIdx * 0.2);
+
+        // Детерминированный небольшой шум.
+        $seed = ($metricIdx + 1) * 193 + ($orgIdx + 2) * 71 + ($weekIdx + 3) * 29;
+        $noise = (($seed % 17) - 8) / 100.0;
+
+        $value = $baseValues * $orgScale * $shapeFactor * $metricRhythm * (1.0 + $noise);
+        $value = max($baseValues * 0.20, $value);
 
         return number_format(round($value, 2), 2, '.', '');
     }

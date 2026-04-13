@@ -63,13 +63,13 @@ class AnalyticsAggregatedData
     #[ORM\Column(name: 'effective_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $effectiveAt = null;
 
-    #[ORM\Column(name: 'value', type: Types::DECIMAL, precision: 20, scale: 8, nullable: true)]
+    #[ORM\Column(name: 'value', type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $value = null;
 
     #[ORM\Column(name: 'value_int', nullable: true)]
     private ?int $valueInt = null;
 
-    #[ORM\Column(name: 'aggregated_value_number', type: Types::DECIMAL, precision: 20, scale: 8, nullable: true)]
+    #[ORM\Column(name: 'aggregated_value_number', type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $aggregatedValueNumber = null;
 
     #[ORM\Column(name: 'source_count')]
