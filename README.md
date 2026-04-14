@@ -81,6 +81,12 @@ $ docker compose -f docker-compose.dbgate.yml down -v
 
 ## Develop docks
 
+    Database
+    --------
+$ php bin/console doctrine:database:drop --force
+$ php bin/console doctrine:database:create
+
+
     Create
     ------
 $ php bin/console make:controller PageController

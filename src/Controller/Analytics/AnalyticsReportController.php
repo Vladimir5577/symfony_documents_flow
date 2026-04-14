@@ -224,9 +224,14 @@ final class AnalyticsReportController extends AbstractController
             return $this->redirectToRoute('app_analytics_report_new');
         }
 
-        $periods = $em->getRepository(\App\Entity\Analytics\AnalyticsPeriod::class)
-            ->findBy(['isClosed' => false], ['startDate' => 'ASC']);
-        $currentPeriod = $periods[0] ?? null;
+        $nowMoscow = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Moscow'));
+        $currentIsoYear = (int) $nowMoscow->format('o');
+        $currentIsoWeek = (int) $nowMoscow->format('W');
+        $currentIsoLabel = sprintf('%d-W%02d', $currentIsoYear, $currentIsoWeek);
+        $currentPeriod = $em->getRepository(\App\Entity\Analytics\AnalyticsPeriod::class)->findOneBy([
+            'isoYear' => $currentIsoYear,
+            'isoWeek' => $currentIsoWeek,
+        ]);
 
         if ($request->isMethod('POST')) {
             if (!$csrf->isTokenValid(new CsrfToken('report_fill_new_' . $boardId, $request->request->getString('_token')))) {
@@ -275,6 +280,7 @@ final class AnalyticsReportController extends AbstractController
             'boardVersion' => $publishedVersion,
             'ownerOrganization' => $ownerOrganization,
             'currentPeriod' => $currentPeriod,
+            'currentIsoLabel' => $currentIsoLabel,
             'active_tab' => 'analytics_reports',
         ]);
     }

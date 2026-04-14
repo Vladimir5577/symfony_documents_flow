@@ -30,9 +30,9 @@
         {% if currentPeriod %}
             Период отчёта: <strong>{{ currentPeriod.displayLabel }}</strong>.
         {% else %}
-            Период отчёта: <strong>не найден</strong>.
+            Период отчёта: <strong>{{ currentIsoLabel }}</strong> (будет создан автоматически при первом сохранении).
         {% endif %}
-        Отчёт будет создан после нажатия одной из кнопок сохранения.
+        Отчёт всегда создаётся в текущую ISO-неделю (Europe/Moscow) после нажатия одной из кнопок сохранения.
     </div>
 
     <section id="multiple-column-form">
