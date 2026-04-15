@@ -22,6 +22,7 @@
     id	PK	Уникальный идентификатор доски
     name	string	Название доски (Аналитика механиков, Финансовая аналитика)
     description	text	Дополнительное описание доски
+    period_type	enum	Частота заполнения отчётов: daily | weekly | monthly (default: weekly). Определяет, за какой промежуток создаётся отчёт
     created_at	timestamp	Дата создания
     updated_at	timestamp	Дата последнего изменения
 
@@ -52,21 +53,37 @@
 
 8. analytics_periods
     id	PK	Уникальный идентификатор периода
-    iso_year	int	Год по ISO 8601 (год «недельного» календаря), не всегда совпадает с календарным годом дат start/end
-    iso_week	int	Номер недели по ISO 8601 (1..53)
-    start_date	date	Понедельник этой ISO-недели (канонический ключ интервала вместе с iso_year/iso_week)
-    end_date	date	Воскресенье этой ISO-недели
+    type	enum	Тип периода: daily | weekly | monthly
+    period_date	date NULL	Конкретная дата (для daily)
+    iso_year	int NULL	Год по ISO 8601 (для weekly)
+    iso_week	int NULL	Номер недели по ISO 8601 (1..53, для weekly)
+    year	int NULL	Календарный год (для monthly)
+    month	int NULL	Месяц (1..12, для monthly)
+    start_date	date	Начало периода (заполнено всегда)
+    end_date	date	Конец периода (заполнено всегда)
     is_closed	boolean	Закрыт ли период для редактирования
-    description	string	Дополнительно, например «2026-W03»
+    description	string	Дополнительно, например «2026-W03» или «Апрель 2026» или «15.04.2026»
     created_at	timestamp	Дата создания периода
     updated_at	timestamp	Дата последнего изменения (например, закрытие периода)
-    UNIQUE(iso_year, iso_week)		Одна ISO-неделя в системе ровно один раз
+    UNIQUE(period_date)		Один daily-период на дату (NULL пропускается для других типов)
+    UNIQUE(iso_year, iso_week)		Одна ISO-неделя в системе (NULL пропускается для других типов)
+    UNIQUE(year, month)		Один monthly-период на месяц (NULL пропускается для других типов)
 
-    Семантика ISO 8601 (важно):
+    Семантика ISO 8601 (важно, для weekly):
     - Неделя начинается с понедельника; неделя 1 — та, где есть первый четверг года.
     - У границы декабрь/январь «неделя 1» может начинаться в предыдущем календарном году, а последние дни декабря относиться к iso_year следующего года.
     - Нельзя хранить «календарный год + номер недели» без уточнения: пара (iso_year, iso_week) согласована со стандартом.
     - При создании периода удобно выставлять start_date/end_date через `DateTimeImmutable::setISODate(iso_year, iso_week)` (в сущности — фабрика `AnalyticsPeriod::forIsoWeek`).
+
+    Фабрики создания:
+    - `AnalyticsPeriod::forIsoWeek(isoYear, isoWeek)` — weekly
+    - `AnalyticsPeriod::forDate(date)` — daily
+    - `AnalyticsPeriod::forMonth(year, month)` — monthly
+
+    Правило назначения периода (обновлено):
+    - Период отчёта определяется автоматически по `analytics_boards.period_type` и текущей дате (timezone `Europe/Moscow`).
+    - daily → период за сегодня; weekly → текущая ISO-неделя; monthly → текущий месяц.
+    - Если запись уже есть — используется она. Если нет — создаётся автоматически.
 
 9. analytics_reports
     id	PK	Уникальный идентификатор отчёта

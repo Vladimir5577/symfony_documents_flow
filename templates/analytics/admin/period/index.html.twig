@@ -20,7 +20,7 @@
     {% endfor %}
 
     <section class="section">
-        {# Автогенерация #}
+        {# Создание периодов #}
         <div class="row mb-4">
             <div class="col-12">
                 <div class="card">
@@ -28,34 +28,92 @@
                         <h4 class="card-title">Создать периоды</h4>
                     </div>
                     <div class="card-body">
-                        <div class="row align-items-center">
+                        {# Автогенерация #}
+                        <div class="row align-items-center mb-3">
                             <div class="col-auto">
                                 <form action="{{ path('app_analytics_admin_period_generate') }}" method="post">
                                     <input type="hidden" name="_token" value="{{ csrf_token('period_generate') }}">
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="bi bi-magic me-1"></i>Автогенерация ближайших 4 недель
-                                    </button>
+                                    <div class="row align-items-end g-2">
+                                        <div class="col-auto">
+                                            <label class="form-label">Тип</label>
+                                            <select name="period_type" class="form-select" style="width:160px">
+                                                <option value="daily">Ежедневно</option>
+                                                <option value="weekly" selected>Еженедельно</option>
+                                                <option value="monthly">Ежемесячно</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-auto">
+                                            <label class="form-label">Количество</label>
+                                            <input type="number" name="count" class="form-control" value="4" min="1" max="52" style="width:80px">
+                                        </div>
+                                        <div class="col-auto">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="bi bi-magic me-1"></i>Автогенерация
+                                            </button>
+                                        </div>
+                                    </div>
                                 </form>
                             </div>
                             <div class="col">
-                                <span class="text-muted small">Создаёт ближайшие ISO-недели, которых ещё нет в системе.</span>
+                                <span class="text-muted small">Создаёт ближайшие периоды указанного типа, которых ещё нет в системе.</span>
                             </div>
                         </div>
 
                         <hr>
 
+                        {# Создание вручную #}
                         <form action="{{ path('app_analytics_admin_period_create') }}" method="post" class="form">
                             <input type="hidden" name="_token" value="{{ csrf_token('period_create') }}">
 
-                            <div class="row align-items-end">
+                            <div class="row align-items-end g-2">
                                 <div class="col-auto">
+                                    <label class="form-label">Тип <span class="text-danger">*</span></label>
+                                    <select name="period_type" id="period_type_select" class="form-select" style="width:180px" required>
+                                        <option value="daily">Ежедневно</option>
+                                        <option value="weekly" selected>Еженедельно</option>
+                                        <option value="monthly">Ежемесячно</option>
+                                    </select>
+                                </div>
+
+                                {# Daily: дата #}
+                                <div class="col-auto" id="daily_fields" style="display:none">
+                                    <label class="form-label">Дата <span class="text-danger">*</span></label>
+                                    <input type="date" name="period_date" class="form-control" value="{{ 'now'|date('Y-m-d') }}">
+                                </div>
+
+                                {# Weekly: год + неделя #}
+                                <div class="col-auto" id="weekly_fields">
                                     <label class="form-label">Год (ISO) <span class="text-danger">*</span></label>
-                                    <input type="number" name="iso_year" class="form-control" value="{{ 'now'|date('Y') }}" min="2020" max="2099" style="width:100px" required>
+                                    <input type="number" name="iso_year" class="form-control" value="{{ 'now'|date('Y') }}" min="2020" max="2099" style="width:100px">
                                 </div>
-                                <div class="col-auto">
+                                <div class="col-auto" id="weekly_fields2">
                                     <label class="form-label">Неделя <span class="text-danger">*</span></label>
-                                    <input type="number" name="iso_week" class="form-control" min="1" max="53" style="width:100px" required>
+                                    <input type="number" name="iso_week" class="form-control" min="1" max="53" style="width:100px">
                                 </div>
+
+                                {# Monthly: год + месяц #}
+                                <div class="col-auto" id="monthly_fields" style="display:none">
+                                    <label class="form-label">Год <span class="text-danger">*</span></label>
+                                    <input type="number" name="year" class="form-control" value="{{ 'now'|date('Y') }}" min="2020" max="2099" style="width:100px">
+                                </div>
+                                <div class="col-auto" id="monthly_fields2" style="display:none">
+                                    <label class="form-label">Месяц <span class="text-danger">*</span></label>
+                                    <select name="month" class="form-select" style="width:140px">
+                                        <option value="1">Январь</option>
+                                        <option value="2">Февраль</option>
+                                        <option value="3">Март</option>
+                                        <option value="4">Апрель</option>
+                                        <option value="5">Май</option>
+                                        <option value="6">Июнь</option>
+                                        <option value="7">Июль</option>
+                                        <option value="8">Август</option>
+                                        <option value="9">Сентябрь</option>
+                                        <option value="10">Октябрь</option>
+                                        <option value="11">Ноябрь</option>
+                                        <option value="12">Декабрь</option>
+                                    </select>
+                                </div>
+
                                 <div class="col-auto">
                                     <button type="submit" class="btn btn-secondary">
                                         <i class="bi bi-plus-lg me-1"></i>Создать вручную
@@ -80,6 +138,7 @@
                             <table class="table table-hover mb-0">
                                 <thead>
                                 <tr>
+                                    <th>Тип</th>
                                     <th>Период</th>
                                     <th>Начало</th>
                                     <th>Конец</th>
@@ -91,6 +150,15 @@
                                 {% if periods|length > 0 %}
                                     {% for period in periods %}
                                         <tr>
+                                            <td>
+                                                {% if period.type.value == 'daily' %}
+                                                    <span class="badge bg-info">День</span>
+                                                {% elseif period.type.value == 'weekly' %}
+                                                    <span class="badge bg-primary">Неделя</span>
+                                                {% elseif period.type.value == 'monthly' %}
+                                                    <span class="badge bg-warning text-dark">Месяц</span>
+                                                {% endif %}
+                                            </td>
                                             <td><strong>{{ period.displayLabel }}</strong></td>
                                             <td>{{ period.startDate ? period.startDate|date('d.m.Y') : '—' }}</td>
                                             <td>{{ period.endDate ? period.endDate|date('d.m.Y') : '—' }}</td>
@@ -122,7 +190,7 @@
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted py-4">Периоды не созданы</td>
+                                        <td colspan="6" class="text-center text-muted py-4">Периоды не созданы</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>
@@ -133,4 +201,15 @@
             </div>
         </div>
     </section>
+
+    <script>
+        document.getElementById('period_type_select').addEventListener('change', function() {
+            const type = this.value;
+            document.getElementById('daily_fields').style.display = type === 'daily' ? '' : 'none';
+            document.getElementById('weekly_fields').style.display = type === 'weekly' ? '' : 'none';
+            document.getElementById('weekly_fields2').style.display = type === 'weekly' ? '' : 'none';
+            document.getElementById('monthly_fields').style.display = type === 'monthly' ? '' : 'none';
+            document.getElementById('monthly_fields2').style.display = type === 'monthly' ? '' : 'none';
+        });
+    </script>
 {% endblock %}

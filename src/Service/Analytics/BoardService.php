@@ -7,6 +7,7 @@ namespace App\Service\Analytics;
 use App\Entity\Analytics\AnalyticsBoard;
 use App\Entity\Analytics\AnalyticsBoardVersion;
 use App\Entity\Analytics\AnalyticsBoardVersionMetric;
+use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardRepository;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -35,11 +36,14 @@ final class BoardService
     /**
      * @throws \RuntimeException если имя занято.
      */
-    public function create(string $name, ?string $description): AnalyticsBoard
+    public function create(string $name, ?string $description, ?AnalyticsPeriodType $periodType = null): AnalyticsBoard
     {
         $board = new AnalyticsBoard();
         $board->setName(trim($name));
         $board->setDescription(trim($description ?? ''));
+        if ($periodType !== null) {
+            $board->setPeriodType($periodType);
+        }
 
         try {
             $this->em->persist($board);

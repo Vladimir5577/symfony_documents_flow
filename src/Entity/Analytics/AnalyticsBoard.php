@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity\Analytics;
 
+use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -25,6 +26,9 @@ class AnalyticsBoard
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
+
+    #[ORM\Column(name: 'period_type', length: 16, enumType: AnalyticsPeriodType::class)]
+    private AnalyticsPeriodType $periodType = AnalyticsPeriodType::Weekly;
 
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
@@ -116,6 +120,18 @@ class AnalyticsBoard
     public function removeBoardVersion(AnalyticsBoardVersion $version): static
     {
         $this->boardVersions->removeElement($version);
+
+        return $this;
+    }
+
+    public function getPeriodType(): AnalyticsPeriodType
+    {
+        return $this->periodType;
+    }
+
+    public function setPeriodType(AnalyticsPeriodType $periodType): static
+    {
+        $this->periodType = $periodType;
 
         return $this;
     }

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Controller\Analytics;
 
+use App\Entity\Analytics\AnalyticsPeriod;
 use App\Entity\Analytics\AnalyticsReport;
 use App\Entity\Organization\AbstractOrganization;
+use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Enum\Analytics\AnalyticsReportStatus;
 use App\Repository\Analytics\AnalyticsBoardRepository;
 use App\Service\Analytics\CreateReportService;
@@ -225,13 +227,14 @@ final class AnalyticsReportController extends AbstractController
         }
 
         $nowMoscow = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Moscow'));
-        $currentIsoYear = (int) $nowMoscow->format('o');
-        $currentIsoWeek = (int) $nowMoscow->format('W');
-        $currentIsoLabel = sprintf('%d-W%02d', $currentIsoYear, $currentIsoWeek);
-        $currentPeriod = $em->getRepository(\App\Entity\Analytics\AnalyticsPeriod::class)->findOneBy([
-            'isoYear' => $currentIsoYear,
-            'isoWeek' => $currentIsoWeek,
-        ]);
+        $periodRepo = $em->getRepository(AnalyticsPeriod::class);
+
+        $currentPeriod = match ($board->getPeriodType()) {
+            AnalyticsPeriodType::Daily => $periodRepo->findOneBy(['type' => AnalyticsPeriodType::Daily, 'periodDate' => $nowMoscow->setTime(0, 0, 0)]),
+            AnalyticsPeriodType::Weekly => $this->findWeeklyPeriod($periodRepo, $nowMoscow),
+            AnalyticsPeriodType::Monthly => $periodRepo->findOneBy(['type' => AnalyticsPeriodType::Monthly, 'year' => (int) $nowMoscow->format('Y'), 'month' => (int) $nowMoscow->format('n')]),
+        };
+        $currentIsoLabel = $currentPeriod?->getDisplayLabel() ?? $nowMoscow->format('d.m.Y');
 
         if ($request->isMethod('POST')) {
             if (!$csrf->isTokenValid(new CsrfToken('report_fill_new_' . $boardId, $request->request->getString('_token')))) {
@@ -470,5 +473,14 @@ final class AnalyticsReportController extends AbstractController
 
         $this->addFlash('success', 'Отчёт удалён.');
         return $this->redirectToRoute('app_analytics_report');
+    }
+
+    private function findWeeklyPeriod(object $periodRepo, \DateTimeImmutable $now): ?AnalyticsPeriod
+    {
+        return $periodRepo->findOneBy([
+            'type' => AnalyticsPeriodType::Weekly,
+            'isoYear' => (int) $now->format('o'),
+            'isoWeek' => (int) $now->format('W'),
+        ]);
     }
 }

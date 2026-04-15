@@ -41,6 +41,17 @@
                                             <input type="text" id="name" class="form-control" placeholder="Аналитика механиков" name="name" required>
                                         </div>
                                     </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="period_type">Частота отчётов <span class="text-danger">*</span></label>
+                                            <select id="period_type" name="period_type" class="form-select" required>
+                                                <option value="weekly" selected>Еженедельно</option>
+                                                <option value="daily">Ежедневно</option>
+                                                <option value="monthly">Ежемесячно</option>
+                                            </select>
+                                            <small class="text-muted">Как часто заполняются отчёты для этой доски</small>
+                                        </div>
+                                    </div>
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="description">Описание</label>

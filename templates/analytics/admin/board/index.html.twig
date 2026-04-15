@@ -36,6 +36,7 @@
                                 <tr>
                                     <th>ID</th>
                                     <th>Название</th>
+                                    <th>Частота</th>
                                     <th>Описание</th>
                                     <th>Версии</th>
                                     <th>Обновлена</th>
@@ -48,6 +49,15 @@
                                         <tr>
                                             <td>{{ board.id }}</td>
                                             <td>{{ board.name }}</td>
+                                            <td>
+                                                {% if board.periodType.value == 'daily' %}
+                                                    <span class="badge bg-info">Ежедневно</span>
+                                                {% elseif board.periodType.value == 'weekly' %}
+                                                    <span class="badge bg-primary">Еженедельно</span>
+                                                {% elseif board.periodType.value == 'monthly' %}
+                                                    <span class="badge bg-warning text-dark">Ежемесячно</span>
+                                                {% endif %}
+                                            </td>
                                             <td>{{ board.description|default('—') }}</td>
                                             <td>
                                                 {% for version in board.boardVersions %}
@@ -77,7 +87,7 @@
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">Доски пока не созданы</td>
+                                        <td colspan="7" class="text-center text-muted py-4">Доски пока не созданы</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>

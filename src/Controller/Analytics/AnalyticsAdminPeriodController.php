@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\Analytics;
 
+use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Service\Analytics\PeriodService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -38,21 +39,15 @@ final class AnalyticsAdminPeriodController extends AbstractController
             return $this->redirectToRoute('app_analytics_admin_period');
         }
 
-        $isoYear = $request->request->getInt('iso_year');
-        $isoWeek = $request->request->getInt('iso_week');
-
-        if ($isoYear < 2020 || $isoYear > 2099) {
-            $this->addFlash('error', 'Некорректный год.');
-            return $this->redirectToRoute('app_analytics_admin_period');
-        }
-        if ($isoWeek < 1 || $isoWeek > 53) {
-            $this->addFlash('error', 'Некорректный номер недели (1-53).');
-            return $this->redirectToRoute('app_analytics_admin_period');
-        }
+        $typeRaw = $request->request->getString('period_type', 'weekly');
+        $type = AnalyticsPeriodType::tryFrom($typeRaw) ?? AnalyticsPeriodType::Weekly;
 
         try {
-            $periodService->createByIsoWeek($isoYear, $isoWeek);
-            $this->addFlash('success', 'Период создан: ' . $isoYear . '-W' . str_pad((string) $isoWeek, 2, '0', STR_PAD_LEFT));
+            match ($type) {
+                AnalyticsPeriodType::Daily => $this->createDailyPeriod($request, $periodService),
+                AnalyticsPeriodType::Weekly => $this->createWeeklyPeriod($request, $periodService),
+                AnalyticsPeriodType::Monthly => $this->createMonthlyPeriod($request, $periodService),
+            };
         } catch (\Throwable $e) {
             $this->addFlash('error', $e->getMessage());
         }
@@ -71,9 +66,13 @@ final class AnalyticsAdminPeriodController extends AbstractController
             return $this->redirectToRoute('app_analytics_admin_period');
         }
 
+        $typeRaw = $request->request->getString('period_type', 'weekly');
+        $type = AnalyticsPeriodType::tryFrom($typeRaw) ?? AnalyticsPeriodType::Weekly;
+        $count = max(1, min(52, $request->request->getInt('count', 4)));
+
         try {
-            $count = $periodService->generateUpcomingWeeks();
-            $this->addFlash('success', 'Создано периодов: ' . $count);
+            $generated = $periodService->generateUpcomingPeriods($type, $count);
+            $this->addFlash('success', 'Создано периодов: ' . $generated);
         } catch (\Throwable $e) {
             $this->addFlash('error', $e->getMessage());
         }
@@ -123,5 +122,49 @@ final class AnalyticsAdminPeriodController extends AbstractController
         }
 
         return $this->redirectToRoute('app_analytics_admin_period');
+    }
+
+    private function createDailyPeriod(Request $request, PeriodService $periodService): void
+    {
+        $dateStr = $request->request->getString('period_date');
+        if ($dateStr === '') {
+            throw new \RuntimeException('Укажите дату.');
+        }
+        $date = new \DateTimeImmutable($dateStr);
+        $periodService->createByDate($date);
+        $this->addFlash('success', 'Период создан: ' . $date->format('d.m.Y'));
+    }
+
+    private function createWeeklyPeriod(Request $request, PeriodService $periodService): void
+    {
+        $isoYear = $request->request->getInt('iso_year');
+        $isoWeek = $request->request->getInt('iso_week');
+
+        if ($isoYear < 2020 || $isoYear > 2099) {
+            throw new \RuntimeException('Некорректный год.');
+        }
+        if ($isoWeek < 1 || $isoWeek > 53) {
+            throw new \RuntimeException('Некорректный номер недели (1-53).');
+        }
+
+        $periodService->createByIsoWeek($isoYear, $isoWeek);
+        $this->addFlash('success', 'Период создан: ' . $isoYear . '-W' . str_pad((string) $isoWeek, 2, '0', STR_PAD_LEFT));
+    }
+
+    private function createMonthlyPeriod(Request $request, PeriodService $periodService): void
+    {
+        $year = $request->request->getInt('year');
+        $month = $request->request->getInt('month');
+
+        if ($year < 2020 || $year > 2099) {
+            throw new \RuntimeException('Некорректный год.');
+        }
+        if ($month < 1 || $month > 12) {
+            throw new \RuntimeException('Некорректный месяц (1-12).');
+        }
+
+        $periodService->createByMonth($year, $month);
+        $monthNames = [1 => 'Январь', 2 => 'Февраль', 3 => 'Март', 4 => 'Апрель', 5 => 'Май', 6 => 'Июнь', 7 => 'Июль', 8 => 'Август', 9 => 'Сентябрь', 10 => 'Октябрь', 11 => 'Ноябрь', 12 => 'Декабрь'];
+        $this->addFlash('success', 'Период создан: ' . $monthNames[$month] . ' ' . $year);
     }
 }

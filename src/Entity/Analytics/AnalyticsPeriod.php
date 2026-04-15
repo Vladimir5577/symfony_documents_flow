@@ -4,19 +4,26 @@ declare(strict_types=1);
 
 namespace App\Entity\Analytics;
 
+use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsPeriodRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
 
 /**
- * Недельный период в смысле ISO 8601: пара (iso_year, iso_week) — «год недели» и номер недели 1…53.
- * Не путать с календарным годом дат внутри недели (на стыке декабрь/январь неделя может относиться к другому iso_year).
+ * Период аналитики: daily (конкретная дата), weekly (ISO-неделя), monthly (месяц).
+ * Для weekly: iso_year/iso_week — год и номер недели по ISO 8601.
+ * Для monthly: year/month — календарный год и месяц.
+ * Для daily: period_date — конкретная дата.
+ * start_date/end_date заполнены всегда (границы периода).
  */
 #[ORM\Entity(repositoryClass: AnalyticsPeriodRepository::class)]
 #[ORM\Table(name: 'analytics_periods')]
-#[ORM\UniqueConstraint(name: 'uniq_analytics_periods_iso_year_week', columns: ['iso_year', 'iso_week'])]
+#[ORM\UniqueConstraint(name: 'uniq_analytics_periods_daily', columns: ['period_date'])]
+#[ORM\UniqueConstraint(name: 'uniq_analytics_periods_weekly', columns: ['iso_year', 'iso_week'])]
+#[ORM\UniqueConstraint(name: 'uniq_analytics_periods_monthly', columns: ['year', 'month'])]
 #[ORM\Index(name: 'idx_analytics_periods_start_date', columns: ['start_date'])]
+#[ORM\Index(name: 'idx_analytics_periods_type', columns: ['type'])]
 class AnalyticsPeriod
 {
     #[ORM\Id]
@@ -24,11 +31,23 @@ class AnalyticsPeriod
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(name: 'iso_year')]
+    #[ORM\Column(length: 16, enumType: AnalyticsPeriodType::class)]
+    private AnalyticsPeriodType $type = AnalyticsPeriodType::Weekly;
+
+    #[ORM\Column(name: 'iso_year', nullable: true)]
     private ?int $isoYear = null;
 
-    #[ORM\Column(name: 'iso_week')]
+    #[ORM\Column(name: 'iso_week', nullable: true)]
     private ?int $isoWeek = null;
+
+    #[ORM\Column(name: 'period_date', type: Types::DATE_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $periodDate = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $year = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $month = null;
 
     #[ORM\Column(name: 'start_date', type: Types::DATE_IMMUTABLE)]
     private ?\DateTimeImmutable $startDate = null;
@@ -50,6 +69,8 @@ class AnalyticsPeriod
     #[Gedmo\Timestampable]
     private ?\DateTimeImmutable $updatedAt = null;
 
+    // ─── Factories ───
+
     public static function forIsoWeek(int $isoYear, int $isoWeek): self
     {
         if ($isoWeek < 1 || $isoWeek > 53) {
@@ -64,6 +85,7 @@ class AnalyticsPeriod
         }
 
         $self = new self();
+        $self->type = AnalyticsPeriodType::Weekly;
         $self->isoYear = $isoYear;
         $self->isoWeek = $isoWeek;
         $self->startDate = $monday;
@@ -73,9 +95,60 @@ class AnalyticsPeriod
         return $self;
     }
 
+    public static function forDate(\DateTimeImmutable $date): self
+    {
+        $self = new self();
+        $self->type = AnalyticsPeriodType::Daily;
+        $self->periodDate = $date;
+        $self->startDate = $date;
+        $self->endDate = $date;
+        $self->description = $date->format('d.m.Y');
+
+        return $self;
+    }
+
+    public static function forMonth(int $year, int $month): self
+    {
+        if ($month < 1 || $month > 12) {
+            throw new \InvalidArgumentException('month must be between 1 and 12.');
+        }
+
+        $firstDay = new \DateTimeImmutable(sprintf('%d-%02d-01', $year, $month));
+        $lastDay = $firstDay->modify('last day of this month');
+
+        $self = new self();
+        $self->type = AnalyticsPeriodType::Monthly;
+        $self->year = $year;
+        $self->month = $month;
+        $self->startDate = $firstDay;
+        $self->endDate = $lastDay;
+        $monthNames = [
+            1 => 'Январь', 2 => 'Февраль', 3 => 'Март', 4 => 'Апрель',
+            5 => 'Май', 6 => 'Июнь', 7 => 'Июль', 8 => 'Август',
+            9 => 'Сентябрь', 10 => 'Октябрь', 11 => 'Ноябрь', 12 => 'Декабрь',
+        ];
+        $self->description = sprintf('%s %d', $monthNames[$month], $year);
+
+        return $self;
+    }
+
+    // ─── Getters / Setters ───
+
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getType(): AnalyticsPeriodType
+    {
+        return $this->type;
+    }
+
+    public function setType(AnalyticsPeriodType $type): static
+    {
+        $this->type = $type;
+
+        return $this;
     }
 
     public function getIsoYear(): ?int
@@ -83,7 +156,7 @@ class AnalyticsPeriod
         return $this->isoYear;
     }
 
-    public function setIsoYear(int $isoYear): static
+    public function setIsoYear(?int $isoYear): static
     {
         $this->isoYear = $isoYear;
 
@@ -95,9 +168,45 @@ class AnalyticsPeriod
         return $this->isoWeek;
     }
 
-    public function setIsoWeek(int $isoWeek): static
+    public function setIsoWeek(?int $isoWeek): static
     {
         $this->isoWeek = $isoWeek;
+
+        return $this;
+    }
+
+    public function getPeriodDate(): ?\DateTimeImmutable
+    {
+        return $this->periodDate;
+    }
+
+    public function setPeriodDate(?\DateTimeImmutable $periodDate): static
+    {
+        $this->periodDate = $periodDate;
+
+        return $this;
+    }
+
+    public function getYear(): ?int
+    {
+        return $this->year;
+    }
+
+    public function setYear(?int $year): static
+    {
+        $this->year = $year;
+
+        return $this;
+    }
+
+    public function getMonth(): ?int
+    {
+        return $this->month;
+    }
+
+    public function setMonth(?int $month): static
+    {
+        $this->month = $month;
 
         return $this;
     }
@@ -151,6 +260,15 @@ class AnalyticsPeriod
     }
 
     public function getDisplayLabel(): string
+    {
+        return match ($this->type) {
+            AnalyticsPeriodType::Daily => $this->periodDate?->format('d.m.Y') ?? $this->getDescription() ?? '—',
+            AnalyticsPeriodType::Weekly => $this->getWeeklyLabel(),
+            AnalyticsPeriodType::Monthly => $this->description ?? '—',
+        };
+    }
+
+    private function getWeeklyLabel(): string
     {
         $isoYear = $this->getIsoYear();
         $isoWeek = $this->getIsoWeek();

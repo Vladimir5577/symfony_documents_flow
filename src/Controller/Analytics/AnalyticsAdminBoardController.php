@@ -6,6 +6,7 @@ namespace App\Controller\Analytics;
 
 use App\Entity\Analytics\AnalyticsBoardVersionMetric;
 use App\Enum\Analytics\AnalyticsBoardVersionStatus;
+use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsMetricRepository;
 use App\Service\Analytics\BoardService;
 use App\Service\Analytics\CloneBoardVersionService;
@@ -42,9 +43,13 @@ final class AnalyticsAdminBoardController extends AbstractController
             }
 
             try {
+                $periodTypeRaw = $request->request->getString('period_type', 'weekly');
+                $periodType = AnalyticsPeriodType::tryFrom($periodTypeRaw) ?? AnalyticsPeriodType::Weekly;
+
                 $boardService->create(
                     name: $request->request->getString('name'),
                     description: $request->request->getString('description') ?: null,
+                    periodType: $periodType,
                 );
                 $this->addFlash('success', 'Доска создана. Первая draft-версия создана автоматически.');
                 return $this->redirectToRoute('app_analytics_admin_board');
