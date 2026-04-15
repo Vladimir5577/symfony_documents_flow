@@ -10,6 +10,7 @@ use App\Entity\Document\File;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\Organization\Department;
 use App\Entity\User\User;
+use App\Enum\DocumentRecipientRole;
 use App\Enum\DocumentStatus;
 use App\Repository\Document\DocumentHistoryRepository;
 use App\Repository\Document\DocumentRepository;
@@ -103,10 +104,15 @@ final class DocumentController extends AbstractController
 
         // Пользователей для мультиселекта не грузим — выбор только через модалку по организациям.
         // При повторном отображении формы (ошибка валидации) подгружаем только выбранных по id.
-        $renderForm = function (array $data = [], array $users = []) use ($documentType, $organizationsWithChildren, $initialFormData, $userRepository, $isAdmin, $userOrganization): Response {
+        $renderForm = function (array $data = [], array $executorUsers = [], array $recipientUsers = []) use ($documentType, $organizationsWithChildren, $initialFormData, $userRepository, $isAdmin, $userOrganization): Response {
             $formData = $data !== [] ? $data : $initialFormData;
-            if ($users === [] && !empty($formData['user_ids'])) {
-                $users = $userRepository->findByIds((array) $formData['user_ids']);
+            if ($executorUsers === [] && !empty($formData['executor_user_ids'])) {
+                $executorUsers = $userRepository->findByIds((array) $formData['executor_user_ids']);
+            } elseif ($executorUsers === [] && !empty($formData['user_ids'])) {
+                $executorUsers = $userRepository->findByIds((array) $formData['user_ids']);
+            }
+            if ($recipientUsers === [] && !empty($formData['recipient_user_ids'])) {
+                $recipientUsers = $userRepository->findByIds((array) $formData['recipient_user_ids']);
             }
             return $this->render('document/create_document.html.twig', [
                 'active_tab' => 'new_document',
@@ -114,7 +120,8 @@ final class DocumentController extends AbstractController
                 'organizations' => $organizationsWithChildren,
                 'form_data' => $formData,
                 'document_statuses' => DocumentStatus::getCreationChoices(),
-                'users' => $users,
+                'executor_users' => $executorUsers,
+                'recipient_users' => $recipientUsers,
                 'is_admin' => $isAdmin,
                 'user_organization' => $userOrganization,
             ]);
@@ -200,8 +207,22 @@ final class DocumentController extends AbstractController
                 $this->addFlash('error', 'Документ нельзя опубликовать в статусе черновик.');
                 return $renderForm($formData);
             }
-            $userIds = $formData['user_ids'] ?? [];
-            if (!is_array($userIds) || empty(array_filter(array_map('intval', $userIds)))) {
+            $executorUserIds = $formData['executor_user_ids'] ?? [];
+            $recipientUserIds = $formData['recipient_user_ids'] ?? [];
+            $legacyUserIds = $formData['user_ids'] ?? [];
+
+            if (!is_array($executorUserIds)) {
+                $executorUserIds = [];
+            }
+            if (!is_array($recipientUserIds)) {
+                $recipientUserIds = [];
+            }
+            if (!is_array($legacyUserIds)) {
+                $legacyUserIds = [];
+            }
+
+            $allRecipientIds = array_merge($executorUserIds, $recipientUserIds, $legacyUserIds);
+            if (empty(array_filter(array_map('intval', $allRecipientIds)))) {
                 $this->addFlash('error', 'Документ нельзя опубликовать без получателей.');
                 return $renderForm($formData);
             }
@@ -248,10 +269,25 @@ final class DocumentController extends AbstractController
         $entityManager->persist($document);
 
         // Присваиваем документ выбранным пользователям
-        $userIds = $formData['user_ids'] ?? [];
-        if (is_array($userIds) && !empty($userIds)) {
+        $executorUserIds = $formData['executor_user_ids'] ?? [];
+        $recipientUserIds = $formData['recipient_user_ids'] ?? [];
+        $legacyUserIds = $formData['user_ids'] ?? [];
+        if (!is_array($executorUserIds)) {
+            $executorUserIds = [];
+        }
+        if (!is_array($recipientUserIds)) {
+            $recipientUserIds = [];
+        }
+        if (!is_array($legacyUserIds)) {
+            $legacyUserIds = [];
+        }
+
+        $executorUserIds = array_values(array_unique(array_filter(array_map('intval', array_merge($executorUserIds, $legacyUserIds)), fn($id) => $id > 0)));
+        $recipientUserIds = array_values(array_unique(array_filter(array_map('intval', $recipientUserIds), fn($id) => $id > 0)));
+
+        if (!empty($executorUserIds) || !empty($recipientUserIds)) {
             $now = new \DateTimeImmutable();
-            foreach ($userIds as $userId) {
+            foreach ($executorUserIds as $userId) {
                 $userId = (int)$userId;
                 if ($userId <= 0) {
                     continue;
@@ -264,10 +300,34 @@ final class DocumentController extends AbstractController
                 $recipient = new DocumentUserRecipient();
                 $recipient->setDocument($document);
                 $recipient->setUser($recipientUser);
+                $recipient->setRole(DocumentRecipientRole::EXECUTOR);
                 $recipient->setStatus(DocumentStatus::NEW);
                 $recipient->setCreatedAt($now);
                 $recipient->setUpdatedAt($now);
 
+                $document->addUserRecipient($recipient);
+                $entityManager->persist($recipient);
+            }
+
+            foreach ($recipientUserIds as $userId) {
+                $userId = (int)$userId;
+                if ($userId <= 0) {
+                    continue;
+                }
+                $recipientUser = $userRepository->findActive($userId);
+                if (!$recipientUser) {
+                    continue;
+                }
+
+                $recipient = new DocumentUserRecipient();
+                $recipient->setDocument($document);
+                $recipient->setUser($recipientUser);
+                $recipient->setRole(DocumentRecipientRole::RECIPIENT);
+                $recipient->setStatus(DocumentStatus::NEW);
+                $recipient->setCreatedAt($now);
+                $recipient->setUpdatedAt($now);
+
+                $document->addUserRecipient($recipient);
                 $entityManager->persist($recipient);
             }
         }
@@ -300,13 +360,14 @@ final class DocumentController extends AbstractController
         }
 
         if ($wantsPublish) {
-            $recipients = [];
+            $recipientsById = [];
             foreach ($document->getUserRecipients() as $recipient) {
                 $user = $recipient->getUser();
                 if ($user !== null) {
-                    $recipients[] = $user;
+                    $recipientsById[$user->getId()] = $user;
                 }
             }
+            $recipients = array_values($recipientsById);
             if ($recipients !== []) {
                 $link = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]);
                 $notificationService->notifyNewIncomingDocumentToRecipients($recipients, $document->getName(), $link);
@@ -408,10 +469,19 @@ final class DocumentController extends AbstractController
         $limit = 10;
 
         $pagination = $recipientRepository->findPaginatedByUser($currentUser, $page, $limit);
+        $organizationPaths = [];
+        foreach ($pagination['recipients'] as $recipient) {
+            $document = $recipient->getDocument();
+            if (!$document || !$document->getId()) {
+                continue;
+            }
+            $organizationPaths[$document->getId()] = $this->buildOrganizationPath($document->getOrganizationCreator());
+        }
 
         return $this->render('document/incoming_documents.html.twig', [
             'active_tab' => 'incoming_documents',
             'recipients' => $pagination['recipients'],
+            'organization_paths' => $organizationPaths,
             'pagination' => [
                 'current_page' => $pagination['page'],
                 'total_pages' => $pagination['totalPages'],
@@ -500,11 +570,17 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_incoming_documents');
         }
 
+        [$executorRecipients, $recipientRecipients] = $this->splitRecipientsByRole($document->getUserRecipients()->toArray());
+        $organizationPath = $this->buildOrganizationPath($document->getOrganizationCreator());
+
         return $this->render('document/view_incoming_document.html.twig', [
             'active_tab' => 'incoming_documents',
             'document' => $document,
             'isRecipient' => $isRecipient,
             'userRecipient' => $userRecipient,
+            'executorRecipients' => $executorRecipients,
+            'recipientRecipients' => $recipientRecipients,
+            'organizationPath' => $organizationPath,
         ]);
     }
 
@@ -538,9 +614,15 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_incoming_documents');
         }
 
+        [$executorRecipients, $recipientRecipients] = $this->splitRecipientsByRole($document->getUserRecipients()->toArray());
+        $organizationPath = $this->buildOrganizationPath($document->getOrganizationCreator());
+
         return $this->render('document/view_outgoing_document.html.twig', [
             'active_tab' => 'outgoing_documents',
             'document' => $document,
+            'executorRecipients' => $executorRecipients,
+            'recipientRecipients' => $recipientRecipients,
+            'organizationPath' => $organizationPath,
         ]);
     }
 
@@ -702,35 +784,52 @@ final class DocumentController extends AbstractController
         }
 
         // Обновление получателей — только если форма их передаёт (страница редактирования получателей отдельно)
-        if (array_key_exists('user_ids', $formData)) {
-            $userIds = $formData['user_ids'] ?? [];
-            if (!is_array($userIds)) {
-                $userIds = [];
-            }
-            $userIds = array_map('intval', $userIds);
-            $userIds = array_values(array_filter($userIds, fn($id) => $id > 0));
-            sort($userIds);
+        if (array_key_exists('executor_user_ids', $formData) || array_key_exists('recipient_user_ids', $formData) || array_key_exists('user_ids', $formData)) {
+            $executorUserIds = $formData['executor_user_ids'] ?? [];
+            $recipientUserIds = $formData['recipient_user_ids'] ?? [];
+            $legacyUserIds = $formData['user_ids'] ?? [];
 
-            $currentRecipientIds = [];
+            if (!is_array($executorUserIds)) {
+                $executorUserIds = [];
+            }
+            if (!is_array($recipientUserIds)) {
+                $recipientUserIds = [];
+            }
+            if (!is_array($legacyUserIds)) {
+                $legacyUserIds = [];
+            }
+
+            $executorUserIds = array_values(array_unique(array_filter(array_map('intval', array_merge($executorUserIds, $legacyUserIds)), fn($id) => $id > 0)));
+            $recipientUserIds = array_values(array_unique(array_filter(array_map('intval', $recipientUserIds), fn($id) => $id > 0)));
+
+            $newRecipientKeys = [];
+            foreach ($executorUserIds as $userId) {
+                $newRecipientKeys[] = $userId . '|' . DocumentRecipientRole::EXECUTOR->value;
+            }
+            foreach ($recipientUserIds as $userId) {
+                $newRecipientKeys[] = $userId . '|' . DocumentRecipientRole::RECIPIENT->value;
+            }
+            sort($newRecipientKeys);
+
+            $currentRecipientKeys = [];
             foreach ($document->getUserRecipients() as $recipient) {
-                if ($recipient->getUser()) {
-                    $currentRecipientIds[] = $recipient->getUser()->getId();
+                $user = $recipient->getUser();
+                if ($user) {
+                    $currentRecipientKeys[] = $user->getId() . '|' . $recipient->getRole()->value;
                 }
             }
-            sort($currentRecipientIds);
+            sort($currentRecipientKeys);
 
-            $recipientsChanged = ($userIds !== $currentRecipientIds);
+            $recipientsChanged = ($newRecipientKeys !== $currentRecipientKeys);
 
             if ($recipientsChanged) {
-                // Удаляем все текущие записи и сразу выполняем
                 foreach ($document->getUserRecipients()->toArray() as $recipient) {
                     $entityManager->remove($recipient);
                 }
                 $document->getUserRecipients()->clear();
                 $entityManager->flush();
 
-                // Создаём новые записи
-                foreach ($userIds as $userId) {
+                foreach ($executorUserIds as $userId) {
                     $user = $userRepository->find($userId);
                     if (!$user) {
                         continue;
@@ -739,6 +838,22 @@ final class DocumentController extends AbstractController
                     $recipient = new DocumentUserRecipient();
                     $recipient->setDocument($document);
                     $recipient->setUser($user);
+                    $recipient->setRole(DocumentRecipientRole::EXECUTOR);
+                    $recipient->setStatus(DocumentStatus::NEW);
+                    $document->addUserRecipient($recipient);
+                    $entityManager->persist($recipient);
+                }
+
+                foreach ($recipientUserIds as $userId) {
+                    $user = $userRepository->find($userId);
+                    if (!$user) {
+                        continue;
+                    }
+
+                    $recipient = new DocumentUserRecipient();
+                    $recipient->setDocument($document);
+                    $recipient->setUser($user);
+                    $recipient->setRole(DocumentRecipientRole::RECIPIENT);
                     $recipient->setStatus(DocumentStatus::NEW);
                     $document->addUserRecipient($recipient);
                     $entityManager->persist($recipient);
@@ -749,13 +864,14 @@ final class DocumentController extends AbstractController
         $entityManager->flush();
 
         if (!$wasAlreadyPublished && $wantsPublish) {
-            $recipients = [];
+            $recipientsById = [];
             foreach ($document->getUserRecipients() as $recipient) {
                 $user = $recipient->getUser();
                 if ($user !== null) {
-                    $recipients[] = $user;
+                    $recipientsById[$user->getId()] = $user;
                 }
             }
+            $recipients = array_values($recipientsById);
             if ($recipients !== []) {
                 $link = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]);
                 $notificationService->notifyNewIncomingDocumentToRecipients($recipients, $document->getName(), $link);
@@ -815,13 +931,14 @@ final class DocumentController extends AbstractController
         $document->setIsPublished(true);
         $entityManager->flush();
 
-        $recipients = [];
+        $recipientsById = [];
         foreach ($document->getUserRecipients() as $recipient) {
             $user = $recipient->getUser();
             if ($user !== null) {
-                $recipients[] = $user;
+                $recipientsById[$user->getId()] = $user;
             }
         }
+        $recipients = array_values($recipientsById);
         if ($recipients !== []) {
             $link = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]);
             $notificationService->notifyNewIncomingDocumentToRecipients($recipients, $document->getName(), $link);
@@ -878,31 +995,46 @@ final class DocumentController extends AbstractController
             }
         }
 
-        $currentRecipientIds = [];
+        $currentExecutorRecipientIds = [];
+        $currentRecipientRecipientIds = [];
         foreach ($document->getUserRecipients() as $recipient) {
             if ($recipient->getUser()) {
-                $currentRecipientIds[] = $recipient->getUser()->getId();
+                if ($recipient->getRole() === DocumentRecipientRole::RECIPIENT) {
+                    $currentRecipientRecipientIds[] = $recipient->getUser()->getId();
+                    continue;
+                }
+                $currentExecutorRecipientIds[] = $recipient->getUser()->getId();
             }
         }
-        $initialFormData = ['user_ids' => $currentRecipientIds];
-        $initialUsers = $userRepository->findByIds($currentRecipientIds);
+        $initialFormData = [
+            'executor_user_ids' => $currentExecutorRecipientIds,
+            'recipient_user_ids' => $currentRecipientRecipientIds,
+        ];
+        $initialExecutorUsers = $userRepository->findByIds($currentExecutorRecipientIds);
+        $initialRecipientUsers = $userRepository->findByIds($currentRecipientRecipientIds);
 
-        $renderForm = function (array $data = [], array $users = []) use ($document, $organizationsWithChildren, $initialFormData, $userRepository): Response {
+        $renderForm = function (array $data = [], array $executorUsers = [], array $recipientUsers = []) use ($document, $organizationsWithChildren, $initialFormData, $userRepository): Response {
             $formData = $data !== [] ? $data : $initialFormData;
-            if ($users === [] && !empty($formData['user_ids'])) {
-                $users = $userRepository->findByIds((array) $formData['user_ids']);
+            if ($executorUsers === [] && !empty($formData['executor_user_ids'])) {
+                $executorUsers = $userRepository->findByIds((array) $formData['executor_user_ids']);
+            } elseif ($executorUsers === [] && !empty($formData['user_ids'])) {
+                $executorUsers = $userRepository->findByIds((array) $formData['user_ids']);
+            }
+            if ($recipientUsers === [] && !empty($formData['recipient_user_ids'])) {
+                $recipientUsers = $userRepository->findByIds((array) $formData['recipient_user_ids']);
             }
             return $this->render('document/edit_recipients_outgoing_document.html.twig', [
                 'active_tab' => 'outgoing_documents',
                 'document' => $document,
                 'organizations' => $organizationsWithChildren,
                 'form_data' => $formData,
-                'users' => $users,
+                'executor_users' => $executorUsers,
+                'recipient_users' => $recipientUsers,
             ]);
         };
 
         if (!$request->isMethod('POST')) {
-            return $renderForm([], $initialUsers);
+            return $renderForm([], $initialExecutorUsers, $initialRecipientUsers);
         }
 
         $formData = $request->request->all();
@@ -911,17 +1043,39 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_edit_recipients_outgoing_document', ['id' => $id]);
         }
 
-        $userIds = $formData['user_ids'] ?? [];
-        if (!is_array($userIds)) {
-            $userIds = [];
+        $executorUserIds = $formData['executor_user_ids'] ?? [];
+        $recipientUserIds = $formData['recipient_user_ids'] ?? [];
+        $legacyUserIds = $formData['user_ids'] ?? [];
+        if (!is_array($executorUserIds)) {
+            $executorUserIds = [];
         }
-        $userIds = array_map('intval', $userIds);
-        $userIds = array_values(array_filter($userIds, fn($id) => $id > 0));
-        sort($userIds);
+        if (!is_array($recipientUserIds)) {
+            $recipientUserIds = [];
+        }
+        if (!is_array($legacyUserIds)) {
+            $legacyUserIds = [];
+        }
+        $executorUserIds = array_values(array_unique(array_filter(array_map('intval', array_merge($executorUserIds, $legacyUserIds)), fn($id) => $id > 0)));
+        $recipientUserIds = array_values(array_unique(array_filter(array_map('intval', $recipientUserIds), fn($id) => $id > 0)));
 
-        $currentRecipientIdsSorted = $currentRecipientIds;
-        sort($currentRecipientIdsSorted);
-        $recipientsChanged = ($userIds !== $currentRecipientIdsSorted);
+        $newRecipientKeys = [];
+        foreach ($executorUserIds as $userId) {
+            $newRecipientKeys[] = $userId . '|' . DocumentRecipientRole::EXECUTOR->value;
+        }
+        foreach ($recipientUserIds as $userId) {
+            $newRecipientKeys[] = $userId . '|' . DocumentRecipientRole::RECIPIENT->value;
+        }
+        sort($newRecipientKeys);
+
+        $currentRecipientKeys = [];
+        foreach ($document->getUserRecipients() as $recipient) {
+            $user = $recipient->getUser();
+            if ($user) {
+                $currentRecipientKeys[] = $user->getId() . '|' . $recipient->getRole()->value;
+            }
+        }
+        sort($currentRecipientKeys);
+        $recipientsChanged = ($newRecipientKeys !== $currentRecipientKeys);
 
         if ($recipientsChanged) {
             foreach ($document->getUserRecipients()->toArray() as $recipient) {
@@ -930,7 +1084,7 @@ final class DocumentController extends AbstractController
             $document->getUserRecipients()->clear();
             $entityManager->flush();
 
-            foreach ($userIds as $userId) {
+            foreach ($executorUserIds as $userId) {
                 $user = $userRepository->find($userId);
                 if (!$user) {
                     continue;
@@ -938,6 +1092,21 @@ final class DocumentController extends AbstractController
                 $recipient = new DocumentUserRecipient();
                 $recipient->setDocument($document);
                 $recipient->setUser($user);
+                $recipient->setRole(DocumentRecipientRole::EXECUTOR);
+                $recipient->setStatus(DocumentStatus::NEW);
+                $document->addUserRecipient($recipient);
+                $entityManager->persist($recipient);
+            }
+
+            foreach ($recipientUserIds as $userId) {
+                $user = $userRepository->find($userId);
+                if (!$user) {
+                    continue;
+                }
+                $recipient = new DocumentUserRecipient();
+                $recipient->setDocument($document);
+                $recipient->setUser($user);
+                $recipient->setRole(DocumentRecipientRole::RECIPIENT);
                 $recipient->setStatus(DocumentStatus::NEW);
                 $document->addUserRecipient($recipient);
                 $entityManager->persist($recipient);
@@ -1012,7 +1181,8 @@ final class DocumentController extends AbstractController
         int                    $id,
         Request                $request,
         DocumentRepository     $documentRepository,
-        EntityManagerInterface $entityManager
+        EntityManagerInterface $entityManager,
+        NotificationService    $notificationService,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -1092,6 +1262,44 @@ final class DocumentController extends AbstractController
 
         $entityManager->persist($history);
         $entityManager->flush();
+
+        $authorFullName = trim(sprintf(
+            '%s %s %s',
+            (string) $currentUser->getLastname(),
+            (string) $currentUser->getFirstname(),
+            (string) ($currentUser->getPatronymic() ?? '')
+        ));
+        if ($authorFullName === '') {
+            $authorFullName = 'Пользователь';
+        }
+        $notificationTitle = sprintf(
+            '%s изменил статус документа «%s» на «%s».',
+            $authorFullName,
+            $document->getName(),
+            $status->getLabel()
+        );
+
+        $recipientsById = [];
+        $creator = $document->getCreatedBy();
+        if ($creator && $creator->getId() !== $currentUser->getId()) {
+            $recipientsById[$creator->getId()] = [
+                'user' => $creator,
+                'link' => $this->generateUrl('app_view_outgoing_document', ['id' => $document->getId()]),
+            ];
+        }
+        foreach ($document->getUserRecipients() as $recipient) {
+            $participant = $recipient->getUser();
+            if (!$participant || $participant->getId() === $currentUser->getId()) {
+                continue;
+            }
+            $recipientsById[$participant->getId()] = [
+                'user' => $participant,
+                'link' => $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]),
+            ];
+        }
+        foreach ($recipientsById as $item) {
+            $notificationService->notifyGeneric($item['user'], $notificationTitle, $item['link']);
+        }
 
         $this->addFlash('success', sprintf('Статус документа изменен на "%s".', $status->getLabel()));
         return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
@@ -1216,5 +1424,73 @@ final class DocumentController extends AbstractController
         return $this->render('document/history_outgoing_document.html.twig', [
             'active_tab' => 'outgoing_documents',
         ]);
+    }
+
+    /**
+     * @param DocumentUserRecipient[] $recipients
+     * @return array{0: DocumentUserRecipient[], 1: DocumentUserRecipient[]}
+     */
+    private function splitRecipientsByRole(array $recipients): array
+    {
+        $executorRecipients = [];
+        $recipientRecipients = [];
+
+        foreach ($recipients as $recipient) {
+            if ($recipient->getRole() === DocumentRecipientRole::RECIPIENT) {
+                $recipientRecipients[] = $recipient;
+                continue;
+            }
+
+            $executorRecipients[] = $recipient;
+        }
+
+        $sortByFullName = static function (DocumentUserRecipient $left, DocumentUserRecipient $right): int {
+            $leftUser = $left->getUser();
+            $rightUser = $right->getUser();
+
+            $leftName = trim(sprintf(
+                '%s %s %s',
+                (string) ($leftUser?->getLastname() ?? ''),
+                (string) ($leftUser?->getFirstname() ?? ''),
+                (string) ($leftUser?->getPatronymic() ?? '')
+            ));
+            $rightName = trim(sprintf(
+                '%s %s %s',
+                (string) ($rightUser?->getLastname() ?? ''),
+                (string) ($rightUser?->getFirstname() ?? ''),
+                (string) ($rightUser?->getPatronymic() ?? '')
+            ));
+
+            return strcasecmp($leftName, $rightName);
+        };
+
+        usort($executorRecipients, $sortByFullName);
+        usort($recipientRecipients, $sortByFullName);
+
+        return [$executorRecipients, $recipientRecipients];
+    }
+
+    private function buildOrganizationPath(?AbstractOrganization $organization): string
+    {
+        if ($organization === null) {
+            return '—';
+        }
+
+        $parts = [];
+        $current = $organization;
+
+        while ($current !== null) {
+            $name = trim((string) $current->getName());
+            if ($name !== '') {
+                $parts[] = $name;
+            }
+            $current = $current->getParent();
+        }
+
+        if ($parts === []) {
+            return '—';
+        }
+
+        return implode(' / ', array_reverse($parts));
     }
 }

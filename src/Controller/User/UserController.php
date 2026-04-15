@@ -467,13 +467,28 @@ final class UserController extends AbstractController
 
         $roles = $roleRepository->findAllExceptAdmin();
 
-        // Получаем выбранную роль пользователя (первую, если их несколько)
+        // Получаем выбранную роль пользователя (первая не-админская из user_roles).
+        // Если записей нет, в форме показываем ROLE_USER по умолчанию (как в getRoles() при пустой связи).
         $selectedRoleId = null;
         foreach ($user->getRolesRel() as $userRole) {
             $role = $userRole->getRole();
             if ($role && $role->getRole() !== UserRole::ROLE_ADMIN) {
                 $selectedRoleId = $role->getId();
                 break;
+            }
+        }
+
+        if ($selectedRoleId === null) {
+            $hasAdminOnlyAssignment = false;
+            foreach ($user->getRolesRel() as $userRole) {
+                $role = $userRole->getRole();
+                if ($role && $role->getRole() === UserRole::ROLE_ADMIN) {
+                    $hasAdminOnlyAssignment = true;
+                    break;
+                }
+            }
+            if (!$hasAdminOnlyAssignment) {
+                $selectedRoleId = $roleRepository->findOneByName(UserRole::ROLE_USER)?->getId();
             }
         }
 

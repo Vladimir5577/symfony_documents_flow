@@ -160,4 +160,15 @@ class NotificationService
         );
         $this->em->flush();
     }
+
+    public function notifyGeneric(User $recipient, string $title, string $link): void
+    {
+        $this->create(
+            $recipient,
+            NotificationType::GENERIC,
+            $title,
+            link: $link,
+        );
+        $this->em->flush();
+    }
 }

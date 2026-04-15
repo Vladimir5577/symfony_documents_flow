@@ -906,6 +906,19 @@ var KanbanApp = (function () {
         return colors[Math.abs(hash) % colors.length];
     }
 
+    function isCommentEdited(comment) {
+        if (!comment || !comment.updatedAt) return false;
+        if (!comment.createdAt) return true;
+
+        var createdTs = Date.parse(comment.createdAt);
+        var updatedTs = Date.parse(comment.updatedAt);
+        if (!Number.isNaN(createdTs) && !Number.isNaN(updatedTs)) {
+            return updatedTs !== createdTs;
+        }
+
+        return String(comment.updatedAt) !== String(comment.createdAt);
+    }
+
     function appendCommentBubble(c) {
         var container = document.getElementById("chat-messages");
         if (!container) return;
@@ -922,7 +935,7 @@ var KanbanApp = (function () {
                 '<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-1 chat-msg-delete-btn" data-comment-id="' + c.id + '" title="Удалить"><i class="bi bi-trash"></i></button>';
         }
 
-        var editedMark = c.updatedAt ? ' <span class="text-muted fst-italic" style="font-size:0.75rem">(ред.)</span>' : '';
+        var editedMark = isCommentEdited(c) ? ' <span class="text-muted fst-italic" style="font-size:0.75rem">(ред.)</span>' : '';
         var authorColor = getAvatarColor(c.authorName);
         var bgOpacity = isOwn ? '0.18' : '0.10';
 
