@@ -153,18 +153,22 @@ Snapshot метрики в отчёте
 4) Пример: если метрика позже изменилась с `км` на `мили`, старые отчёты продолжают показываться в `км`.
 5) Для расчёта `aggregation_type = last` используется `effective_at` (а не технические `created_at/updated_at`).
 
-11. analytics_aggregated_data (optional)
+11. analytics_aggregated_data
     - id
     - metric_id	FK → analytics_metrics.id	Ссылка на метрику (целостность, защита от удаления строки метрики при наличии агрегатов)
+    - period_id	FK → analytics_periods.id	Ссылка на период
+    - organization_id	FK → organization.id	Ссылка на организацию
     - business_key	string	Денормализация `analytics_metrics.business_key` для фильтров графиков без JOIN; при записи должна совпадать с метрикой
-    - period_id
-    - organization_id
-    - aggregated_value_number
-    - source_count
-    - calculated_at
+    - metric_name_snapshot	string	Снимок названия метрики на момент расчёта
+    - metric_unit_snapshot	string	Снимок единицы измерения
+    - metric_type_snapshot	string	Снимок типа метрики
+    - aggregation_type	string	Правило агрегации: sum | avg | min | max | last
+    - effective_at	timestamp	Время, к которому относится значение (для last)
+    - value	DECIMAL(20,4)	Агрегированное значение
+    - source_count	int	Количество raw-записей, участвовавших в расчёте
+    - calculated_at	timestamp	Время последнего пересчёта
     - UNIQUE(metric_id, period_id, organization_id)		Один агрегат на метрику / период / организацию
-    Примечание: агрегаты логически привязаны к метрике (`metric_id`), а не к версии доски. `business_key` дублируется для удобства чтения и длинной истории по стабильному ключу.
-    `source_count` = количество raw-записей (`analytics_report_values`), участвовавших в расчёте агрегата.
+    Примечание: агрегаты привязаны к метрике, периоду и организации. При утверждении отчёта значения агрегируются по правилу `aggregation_type` метрики (sum/avg/min/max/last).
 
 --------------------------
 Консистентность агрегатов (выбранный подход для MVP)

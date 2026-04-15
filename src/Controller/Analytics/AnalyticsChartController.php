@@ -38,16 +38,17 @@ final class AnalyticsChartController extends AbstractController
         $trendData = [];      // [metric_name][organization_name][period_desc] => value
 
         if ($board) {
-            // Забираем все агрегаты для доски
+            // Забираем агрегаты через JOIN period → reports → board
             $qb = $em->getRepository(AnalyticsAggregatedData::class)->createQueryBuilder('a')
-                ->andWhere('a.board = :boardId')
+                ->join('a.period', 'p')
+                ->join('p.boardReports', 'r')
+                ->andWhere('r.board = :boardId')
                 ->setParameter('boardId', $selectedBoardId)
-                ->orderBy('a.effectiveAt', 'DESC');
+                ->orderBy('p.startDate', 'DESC');
 
             $aggregated = $qb->getQuery()->getResult();
 
             if ($selectedPeriodId) {
-                // Если выбран период — используем только его
                 $aggregated = array_filter($aggregated, fn($item) => $item->getPeriod() && $item->getPeriod()->getId() === $selectedPeriodId);
             }
 

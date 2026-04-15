@@ -9,14 +9,16 @@ use App\Repository\Analytics\AnalyticsAggregatedDataRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
+/**
+ * Агрегированные данные: одно значение на (метрика, период, организация).
+ * Вычисляется при утверждении отчёта по правилу aggregation_type метрики.
+ */
 #[ORM\Entity(repositoryClass: AnalyticsAggregatedDataRepository::class)]
 #[ORM\Table(name: 'analytics_aggregated_data')]
-#[ORM\UniqueConstraint(name: 'uniq_analytics_agg', columns: ['metric_id', 'period_id', 'organization_id', 'board_id', 'report_id'])]
+#[ORM\UniqueConstraint(name: 'uniq_analytics_agg', columns: ['metric_id', 'period_id', 'organization_id'])]
 #[ORM\Index(name: 'idx_analytics_agg_period_org', columns: ['period_id', 'organization_id'])]
 #[ORM\Index(name: 'idx_analytics_agg_business_key_org', columns: ['business_key', 'organization_id'])]
 #[ORM\Index(name: 'idx_analytics_agg_metric_org', columns: ['metric_id', 'organization_id'])]
-#[ORM\Index(name: 'idx_analytics_agg_board', columns: ['board_id'])]
-#[ORM\Index(name: 'idx_analytics_agg_report', columns: ['report_id'])]
 #[ORM\Index(name: 'idx_analytics_agg_effective_at', columns: ['effective_at'])]
 class AnalyticsAggregatedData
 {
@@ -28,14 +30,6 @@ class AnalyticsAggregatedData
     #[ORM\ManyToOne(targetEntity: AnalyticsMetric::class)]
     #[ORM\JoinColumn(name: 'metric_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?AnalyticsMetric $metric = null;
-
-    #[ORM\ManyToOne(targetEntity: AnalyticsBoard::class)]
-    #[ORM\JoinColumn(name: 'board_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
-    private ?AnalyticsBoard $board = null;
-
-    #[ORM\ManyToOne(targetEntity: AnalyticsReport::class)]
-    #[ORM\JoinColumn(name: 'report_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
-    private ?AnalyticsReport $report = null;
 
     #[ORM\ManyToOne(targetEntity: AnalyticsPeriod::class)]
     #[ORM\JoinColumn(name: 'period_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
@@ -66,12 +60,6 @@ class AnalyticsAggregatedData
     #[ORM\Column(name: 'value', type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $value = null;
 
-    #[ORM\Column(name: 'value_int', nullable: true)]
-    private ?int $valueInt = null;
-
-    #[ORM\Column(name: 'aggregated_value_number', type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
-    private ?string $aggregatedValueNumber = null;
-
     #[ORM\Column(name: 'source_count')]
     private int $sourceCount = 0;
 
@@ -94,28 +82,6 @@ class AnalyticsAggregatedData
         if ($metric !== null) {
             $this->businessKey = $metric->getBusinessKey();
         }
-        return $this;
-    }
-
-    public function getBoard(): ?AnalyticsBoard
-    {
-        return $this->board;
-    }
-
-    public function setBoard(?AnalyticsBoard $board): static
-    {
-        $this->board = $board;
-        return $this;
-    }
-
-    public function getReport(): ?AnalyticsReport
-    {
-        return $this->report;
-    }
-
-    public function setReport(?AnalyticsReport $report): static
-    {
-        $this->report = $report;
         return $this;
     }
 
@@ -218,17 +184,6 @@ class AnalyticsAggregatedData
         return $this;
     }
 
-    public function getValueInt(): ?int
-    {
-        return $this->valueInt;
-    }
-
-    public function setValueInt(?int $valueInt): static
-    {
-        $this->valueInt = $valueInt;
-        return $this;
-    }
-
     public function getSourceCount(): int
     {
         return $this->sourceCount;
@@ -248,18 +203,6 @@ class AnalyticsAggregatedData
     public function setCalculatedAt(?\DateTimeImmutable $calculatedAt): static
     {
         $this->calculatedAt = $calculatedAt;
-        return $this;
-    }
-
-    // Legacy alias
-    public function getAggregatedValueNumber(): ?string
-    {
-        return $this->value ?? $this->aggregatedValueNumber;
-    }
-
-    public function setAggregatedValueNumber(string $aggregatedValueNumber): static
-    {
-        $this->aggregatedValueNumber = $aggregatedValueNumber;
         return $this;
     }
 }

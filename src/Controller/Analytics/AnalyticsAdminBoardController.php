@@ -206,19 +206,8 @@ final class AnalyticsAdminBoardController extends AbstractController
         BoardService $boardService,
         PublishBoardVersionService $publishService,
     ): Response {
-        $version = null;
-        $boards = $boardService->findAll();
-        foreach ($boards as $board) {
-            foreach ($board->getBoardVersions() as $v) {
-                if ($v->getId() === $versionId) {
-                    $version = $v;
-                    break;
-                }
-            }
-            if ($version) {
-                break;
-            }
-        }
+        $versionRepo = $this->container->get('doctrine')->getRepository(\App\Entity\Analytics\AnalyticsBoardVersion::class);
+        $version = $versionRepo->find($versionId);
 
         if (!$version) {
             throw $this->createNotFoundException('Версия не найдена.');

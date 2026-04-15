@@ -371,7 +371,6 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
                 foreach ([$firstMetric, $secondMetric, $thirdMetric] as $aggMetricIdx => $aggMetric) {
                     $agg = new AnalyticsAggregatedData();
                     $agg->setMetric($aggMetric);
-                    $agg->setBoard($board);
                     $agg->setPeriod($period);
                     $agg->setOrganization($org);
                     $agg->setMetricNameSnapshot($aggMetric->getName());
@@ -384,18 +383,6 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
                     $agg->setSourceCount(1);
                     $agg->setEffectiveAt($period->getStartDate());
                     $agg->setCalculatedAt(new \DateTimeImmutable());
-
-                    // report — первый approved отчёт этой org/периода
-                    // Находим его: org × period, approved
-                    /** @var AnalyticsReport|null $foundReport */
-                    $foundReport = $manager->getRepository(AnalyticsReport::class)->findOneBy([
-                        'organization' => $org,
-                        'period' => $period,
-                        'status' => AnalyticsReportStatus::Approved,
-                    ]);
-                    if ($foundReport) {
-                        $agg->setReport($foundReport);
-                    }
 
                     $manager->persist($agg);
                     $aggCount++;
