@@ -3,6 +3,7 @@
 namespace App\Entity\Document;
 
 use App\Entity\User\User;
+use App\Enum\DocumentRecipientRole;
 use App\Enum\DocumentStatus;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use Doctrine\DBAL\Types\Types;
@@ -10,7 +11,7 @@ use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
 
 #[ORM\Entity(repositoryClass: DocumentUserRecipientRepository::class)]
-#[ORM\UniqueConstraint(name: 'uniq_document_user', columns: ['document_id', 'user_id'])]
+#[ORM\UniqueConstraint(name: 'uniq_document_user_role', columns: ['document_id', 'user_id', 'role'])]
 class DocumentUserRecipient
 {
     #[ORM\Id]
@@ -25,6 +26,9 @@ class DocumentUserRecipient
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private ?User $user = null;
+
+    #[ORM\Column(type: Types::STRING, length: 32, enumType: DocumentRecipientRole::class, options: ['default' => 'executor'])]
+    private DocumentRecipientRole $role = DocumentRecipientRole::EXECUTOR;
 
     #[ORM\Column(enumType: DocumentStatus::class)]
     private ?DocumentStatus $status = null;
@@ -62,6 +66,18 @@ class DocumentUserRecipient
     public function setUser(?User $user): static
     {
         $this->user = $user;
+
+        return $this;
+    }
+
+    public function getRole(): DocumentRecipientRole
+    {
+        return $this->role;
+    }
+
+    public function setRole(DocumentRecipientRole $role): static
+    {
+        $this->role = $role;
 
         return $this;
     }

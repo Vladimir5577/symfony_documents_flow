@@ -41,11 +41,51 @@
                                 <div class="row">
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label for="document_users">Пользователи (получатели)</label>
-                                            <div id="document_users_trigger" style="cursor: pointer;" title="Нажмите, чтобы выбрать по организациям">
-                                                <select id="document_users" class="form-control" name="user_ids[]" multiple>
-                                                    {% if users is defined and users|length > 0 %}
+                                            <label for="document_executor_users">Пользователи исполнители</label>
+                                            <div id="document_executor_users_trigger"
+                                                 class="document-users-trigger"
+                                                 data-target-select="document_executor_users"
+                                                 style="cursor: pointer;"
+                                                 title="Нажмите, чтобы выбрать по организациям">
+                                                <select id="document_executor_users" class="form-control" name="executor_user_ids[]" multiple>
+                                                    {% if executor_users is defined and executor_users|length > 0 %}
+                                                        {% for user in executor_users %}
+                                                            <option value="{{ user.id }}" selected>
+                                                                {{ user.lastname }} {{ user.firstname }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
+                                                            </option>
+                                                        {% endfor %}
+                                                    {% elseif users is defined and users|length > 0 %}
                                                         {% for user in users %}
+                                                            <option value="{{ user.id }}" selected>
+                                                                {{ user.lastname }} {{ user.firstname }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
+                                                            </option>
+                                                        {% endfor %}
+                                                    {% endif %}
+                                                </select>
+                                            </div>
+                                            <small class="text-muted">Нажмите на поле или кнопку ниже, чтобы выбрать исполнителей по организациям</small>
+                                            <div class="mt-1">
+                                                <button type="button"
+                                                        class="btn btn-outline-secondary btn-sm"
+                                                        data-target-select="document_executor_users"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#organizationUserModal">
+                                                    Выбрать по организациям
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="document_recipient_users">Пользователи получатели</label>
+                                            <div id="document_recipient_users_trigger"
+                                                 class="document-users-trigger"
+                                                 data-target-select="document_recipient_users"
+                                                 style="cursor: pointer;"
+                                                 title="Нажмите, чтобы выбрать по организациям">
+                                                <select id="document_recipient_users" class="form-control" name="recipient_user_ids[]" multiple>
+                                                    {% if recipient_users is defined and recipient_users|length > 0 %}
+                                                        {% for user in recipient_users %}
                                                             <option value="{{ user.id }}" selected>
                                                                 {{ user.lastname }} {{ user.firstname }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
                                                             </option>
@@ -57,6 +97,7 @@
                                             <div class="mt-1">
                                                 <button type="button"
                                                         class="btn btn-outline-secondary btn-sm"
+                                                        data-target-select="document_recipient_users"
                                                         data-bs-toggle="modal"
                                                         data-bs-target="#organizationUserModal">
                                                     Выбрать по организациям
@@ -91,34 +132,53 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const usersSelect = document.getElementById('document_users');
-            const usersTrigger = document.getElementById('document_users_trigger');
-            let choicesInstance = null;
+            const userSelectIds = ['document_executor_users', 'document_recipient_users'];
+            const choicesMap = {};
 
-            if (usersSelect && window.Choices) {
-                choicesInstance = new Choices(usersSelect, {
+            userSelectIds.forEach(function (selectId) {
+                const selectEl = document.getElementById(selectId);
+                if (!selectEl || !window.Choices) {
+                    return;
+                }
+                choicesMap[selectId] = new Choices(selectEl, {
                     removeItemButton: true,
                     searchEnabled: false,
                     itemSelectText: '',
                     noChoicesText: 'Нажмите на поле или «Выбрать по организациям»',
                 });
+            });
+
+            function setModalTargetSelect(targetSelectId) {
+                if (!targetSelectId) {
+                    return;
+                }
+                window.__documentFlowOrgUserModalTargetSelect = targetSelectId;
+                window.__documentFlowOrgUserModalChoices = choicesMap[targetSelectId] || null;
             }
 
-            if (usersTrigger) {
-                usersTrigger.addEventListener('click', function (e) {
+            document.querySelectorAll('.document-users-trigger').forEach(function (triggerEl) {
+                triggerEl.addEventListener('click', function (e) {
                     if (e.target.closest('.choices__button') || e.target.closest('.choices__item')) {
                         return;
                     }
                     e.preventDefault();
+                    const targetSelectId = triggerEl.getAttribute('data-target-select');
+                    setModalTargetSelect(targetSelectId);
                     var modalEl = document.getElementById('organizationUserModal');
                     if (modalEl) {
                         var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
                         modal.show();
                     }
                 });
-            }
+            });
 
-            window.__documentFlowOrgUserModalChoices = choicesInstance;
+            document.querySelectorAll('button[data-bs-target="#organizationUserModal"]').forEach(function (buttonEl) {
+                buttonEl.addEventListener('click', function () {
+                    setModalTargetSelect(buttonEl.getAttribute('data-target-select'));
+                });
+            });
+
+            setModalTargetSelect('document_executor_users');
         });
     </script>
     {% include 'document/partials/_organization_user_modal_script.html.twig' %}

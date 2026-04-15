@@ -3,8 +3,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var orgDataContainer = document.getElementById('org-tree-data');
     if (!orgDataContainer) return;
 
-    var usersSelect = document.getElementById('document_users');
-    var choicesInstance = window.__documentFlowOrgUserModalChoices || null;
+    function getCurrentUsersSelect() {
+        var targetSelectId = window.__documentFlowOrgUserModalTargetSelect || 'document_executor_users';
+        return document.getElementById(targetSelectId);
+    }
+
+    function getCurrentChoicesInstance() {
+        return window.__documentFlowOrgUserModalChoices || null;
+    }
 
     var nodes = Array.from(orgDataContainer.querySelectorAll('.org-node'))
         .map(function (el) {
@@ -196,6 +202,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     addSelectedBtn.addEventListener('click', function () {
         if (modalSelectedUsers.length === 0) return;
+        var usersSelect = getCurrentUsersSelect();
+        var choicesInstance = getCurrentChoicesInstance();
         if (choicesInstance) {
             modalSelectedUsers.forEach(function (u) {
                 var exists = choicesInstance.getValue(true).indexOf(String(u.id)) !== -1;

@@ -35,7 +35,7 @@
                     </div>
                 {% else %}
                     <div class="d-flex justify-content-between align-items-center gap-2 mb-4 p-3 rounded bg-success bg-opacity-10 border border-success border-2">
-                        <h2 class="h5 mb-0 text-success fw-bold">Документ отпрввлен</h2>
+                        <h2 class="h5 mb-0 text-success fw-bold">Документ отправлен</h2>
                     </div>
                 {% endif %}
                 <h4 class="card-title mb-0">{{ document.name }}</h4>
@@ -46,7 +46,7 @@
                     <dd class="col-sm-9">{{ document.documentType ? document.documentType.name : '—' }}</dd>
 
                     <dt class="col-sm-3 text-muted">Организация</dt>
-                    <dd class="col-sm-9">{{ document.organizationCreator ? document.organizationCreator.name : '—' }}</dd>
+                    <dd class="col-sm-9">{{ organizationPath|default('—') }}</dd>
 
                     <dt class="col-sm-3 text-muted">Статус</dt>
                     <dd class="col-sm-9">
@@ -160,21 +160,22 @@
 
         <div class="card mt-4">
             <div class="card-header">
-                <h4 class="card-title mb-0">Получатели</h4>
+                <h4 class="card-title mb-0">Участники документа</h4>
             </div>
             <div class="card-body">
-                {% if document.userRecipients is defined and document.userRecipients|length > 0 %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-borderless table-hover mb-0">
-                        <thead>
+                <h5 class="mb-2">Пользователи исполнители</h5>
+                {% if executorRecipients|length > 0 %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-borderless table-hover mb-0">
+                            <thead>
                             <tr>
                                 <th>ФИО</th>
                                 <th>Статус</th>
                                 <th></th>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {% for recipient in document.userRecipients %}
+                            </thead>
+                            <tbody>
+                            {% for recipient in executorRecipients %}
                                 <tr{% if recipient.user %} data-user-id="{{ recipient.user.id }}" role="button" tabindex="0"{% endif %}>
                                     <td>
                                         {% if recipient.user %}
@@ -212,19 +213,90 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <a href="{{ path('app_history_outgoing_document', {'id': document.id, 'userId': recipient.user.id}) }}" class="btn btn-sm btn-outline-primary">Посмотреть историю</a>
+                                        {% if recipient.user %}
+                                            <a href="{{ path('app_history_outgoing_document', {'id': document.id, 'userId': recipient.user.id}) }}" class="btn btn-sm btn-outline-primary">Посмотреть историю</a>
+                                        {% else %}
+                                            —
+                                        {% endif %}
                                     </td>
                                 </tr>
                             {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                            </tbody>
+                        </table>
+                    </div>
                 {% else %}
-                <p class="text-muted mb-0">Данный документ не имеет получателей.</p>
+                    <p class="text-muted mb-0">Исполнители не назначены.</p>
+                {% endif %}
+
+                <hr class="my-4">
+
+                <h5 class="mb-2">Пользователи получатели</h5>
+                {% if recipientRecipients|length > 0 %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-borderless table-hover mb-0">
+                            <thead>
+                            <tr>
+                                <th>ФИО</th>
+                                <th>Статус</th>
+                                <th></th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for recipient in recipientRecipients %}
+                                <tr{% if recipient.user %} data-user-id="{{ recipient.user.id }}" role="button" tabindex="0"{% endif %}>
+                                    <td>
+                                        {% if recipient.user %}
+                                            {{ recipient.user.lastname }} {{ recipient.user.firstname }}{% if recipient.user.patronymic %} {{ recipient.user.patronymic }}{% endif %}
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if recipient.status %}
+                                            {% set status = recipient.status %}
+                                            {% if status.value == 'DRAFT' %}
+                                                <span class="badge bg-secondary">{{ status.label }}</span>
+                                            {% elseif status.value == 'NEW' %}
+                                                <span class="badge bg-primary">{{ status.label }}</span>
+                                            {% elseif status.value == 'IN_REVIEW' %}
+                                                <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                            {% elseif status.value == 'PENDING_APPROVAL' %}
+                                                <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                                            {% elseif status.value == 'APPROVED' %}
+                                                <span class="badge bg-success">{{ status.label }}</span>
+                                            {% elseif status.value == 'REJECTED' %}
+                                                <span class="badge bg-danger">{{ status.label }}</span>
+                                            {% elseif status.value == 'IN_PROGRESS' %}
+                                                <span class="badge bg-info text-dark">{{ status.label }}</span>
+                                            {% elseif status.value == 'COMPLETED' %}
+                                                <span class="badge bg-success">{{ status.label }}</span>
+                                            {% elseif status.value == 'CANCELLED' %}
+                                                <span class="badge bg-dark">{{ status.label }}</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ status.label }}</span>
+                                            {% endif %}
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if recipient.user %}
+                                            <a href="{{ path('app_history_outgoing_document', {'id': document.id, 'userId': recipient.user.id}) }}" class="btn btn-sm btn-outline-primary">Посмотреть историю</a>
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">Получатели не назначены.</p>
                 {% endif %}
             </div>
             <div class="card-footer text-end">
-                <a href="{{ path('app_edit_recipients_outgoing_document', {id: document.id}) }}" class="btn btn-warning"><i class="bi bi-people me-1"></i>Редактировать получателей</a>
+                <a href="{{ path('app_edit_recipients_outgoing_document', {id: document.id}) }}" class="btn btn-warning"><i class="bi bi-people me-1"></i>Редактировать участников</a>
             </div>
         </div>
 
@@ -254,6 +326,24 @@
                         {% set fileDisplayName = file.filePath ? ((file.title ?: file.filePath|split('.')|first) ~ '.' ~ (file.filePath|split('.')|last)) : (file.title ?: '—') %}
                         <span class="flex-grow-1">{{ fileDisplayName }}</span>
                         {% if file.filePath %}
+                        {% set ext = file.filePath|split('.')|last|lower %}
+                        {% if ext in ['pdf'] %}
+                        <a href="{{ path('document_file_download', {id: file.id, inline: 1}) }}"
+                           class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                           target="_blank"
+                           rel="noopener">
+                            Просмотр
+                        </a>
+                        {% endif %}
+                        {% if ext in ['jpeg', 'jpg', 'png', 'gif', 'webp', 'bmp'] %}
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                                data-bs-toggle="modal"
+                                data-bs-target="#imagePreviewModal"
+                                data-image-url="{{ path('document_file_download', {id: file.id, inline: 1}) }}">
+                            Просмотр
+                        </button>
+                        {% endif %}
                         <a href="{{ path('document_file_download', {id: file.id}) }}" class="btn btn-sm btn-outline-primary flex-shrink-0" download target="_blank" rel="noopener">Скачать</a>
                         {% endif %}
                         <form action="{{ path('document_file_delete', {id: file.id}) }}" method="post" class="d-inline flex-shrink-0 document-file-delete-form" data-filename="{{ fileDisplayName|e('html_attr') }}">
@@ -273,7 +363,9 @@
 
 
     {% include 'document/partials/_modal_view_user_document.html.twig' %}
-    <style>.table tbody tr[data-user-id] { cursor: pointer; }</style>
+    <style>
+        .table tbody tr[data-user-id] { cursor: pointer; }
+    </style>
     <script>
         document.querySelectorAll('tr[data-user-id]').forEach(function (row) {
             row.addEventListener('keydown', function (e) {
