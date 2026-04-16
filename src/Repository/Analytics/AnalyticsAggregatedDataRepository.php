@@ -69,4 +69,44 @@ class AnalyticsAggregatedDataRepository extends ServiceEntityRepository
 
         return $conn->executeQuery($sql, $params)->fetchAllAssociative();
     }
+
+    /**
+     * Агрегированные данные по ISO-неделям.
+     *
+     * @param int[] $organizationIds
+     * @param string[] $businessKeys
+     *
+     * @return array<int, array{business_key: string, yr: int, wk: int, total_value: string|null, avg_value: string|null}>
+     */
+    public function findWeeklyAggregated(array $organizationIds, array $businessKeys): array
+    {
+        if (empty($organizationIds) || empty($businessKeys)) {
+            return [];
+        }
+
+        $conn = $this->getEntityManager()->getConnection();
+
+        $orgPlaceholders = implode(',', array_fill(0, count($organizationIds), '?'));
+        $keyPlaceholders = implode(',', array_fill(0, count($businessKeys), '?'));
+
+        $sql = <<<SQL
+            SELECT a.business_key,
+                   p.iso_year AS yr,
+                   p.iso_week AS wk,
+                   SUM(a.value) AS total_value,
+                   AVG(a.value) AS avg_value
+            FROM analytics_aggregated_data a
+            JOIN analytics_periods p ON a.period_id = p.id
+            WHERE a.business_key IN ({$keyPlaceholders})
+              AND a.organization_id IN ({$orgPlaceholders})
+              AND p.iso_year IS NOT NULL
+              AND p.iso_week IS NOT NULL
+            GROUP BY a.business_key, p.iso_year, p.iso_week
+            ORDER BY p.iso_year, p.iso_week
+        SQL;
+
+        $params = array_merge($businessKeys, $organizationIds);
+
+        return $conn->executeQuery($sql, $params)->fetchAllAssociative();
+    }
 }

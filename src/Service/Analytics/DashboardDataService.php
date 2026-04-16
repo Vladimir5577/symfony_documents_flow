@@ -13,6 +13,9 @@ use App\Repository\Organization\OrganizationRepository;
  */
 final class DashboardDataService
 {
+    public const SCALE_MONTH = 'month';
+    public const SCALE_WEEK = 'week';
+
     private const MONTH_LABELS_RU = [
         1 => 'Янв', 2 => 'Фев', 3 => 'Мар', 4 => 'Апр',
         5 => 'Май', 6 => 'Июн', 7 => 'Июл', 8 => 'Авг',
@@ -59,17 +62,19 @@ final class DashboardDataService
      * @param int $organizationId ID организации (0 = все родительские)
      * @return array<string, mixed>
      */
-    public function getData(int $organizationId): array
+    public function getData(int $organizationId, string $scale = self::SCALE_MONTH): array
     {
         $orgIds = $this->resolveOrganizationIds($organizationId);
 
         if (empty($orgIds)) {
-            return $this->emptyData();
+            return $this->emptyData($scale);
         }
 
-        $rows = $this->aggregatedDataRepo->findMonthlyAggregated($orgIds, self::ALL_KEYS);
+        $rows = $scale === self::SCALE_WEEK
+            ? $this->aggregatedDataRepo->findWeeklyAggregated($orgIds, self::ALL_KEYS)
+            : $this->aggregatedDataRepo->findMonthlyAggregated($orgIds, self::ALL_KEYS);
 
-        return $this->buildResponse($rows);
+        return $this->buildResponse($rows, $scale);
     }
 
     /**
@@ -100,43 +105,57 @@ final class DashboardDataService
     /**
      * Собрать ответ из сырых SQL-строк.
      *
-     * @param array<int, array{business_key: string, yr: int, mo: int, total_value: string|null, avg_value: string|null}> $rows
+     * @param array<int, array<string, int|string|null>> $rows
      * @return array<string, mixed>
      */
-    private function buildResponse(array $rows): array
+    private function buildResponse(array $rows, string $scale): array
     {
-        // Собираем уникальные месяцы (yr-mo) для оси X
-        $monthKeys = [];
+        // Собираем уникальные ключи периодов для оси X
+        $periodKeys = [];
         foreach ($rows as $row) {
-            $key = $row['yr'] . '-' . str_pad((string) $row['mo'], 2, '0', STR_PAD_LEFT);
-            $monthKeys[$key] = (int) $row['mo'];
-        }
-        ksort($monthKeys); // хронологический порядок
+            if ($scale === self::SCALE_WEEK) {
+                $key = $row['yr'] . '-W' . str_pad((string) $row['wk'], 2, '0', STR_PAD_LEFT);
+                $periodKeys[$key] = (int) $row['wk'];
+                continue;
+            }
 
-        $monthLabels = [];
-        $monthOrder = []; // 'YYYY-MM' => index
+            $key = $row['yr'] . '-' . str_pad((string) $row['mo'], 2, '0', STR_PAD_LEFT);
+            $periodKeys[$key] = (int) $row['mo'];
+        }
+        ksort($periodKeys); // хронологический порядок
+
+        $labels = [];
+        $periodOrder = []; // key => index
         $idx = 0;
 
-        // Проверяем, есть ли данные за несколько лет — тогда добавляем год к меткам
-        $years = array_unique(array_map(static fn(string $k) => substr($k, 0, 4), array_keys($monthKeys)));
+        $years = array_unique(array_map(static fn(string $k) => substr($k, 0, 4), array_keys($periodKeys)));
         $multiYear = count($years) > 1;
 
-        foreach ($monthKeys as $key => $mo) {
+        foreach ($periodKeys as $key => $value) {
             $yr = (int) substr($key, 0, 4);
-            $label = self::MONTH_LABELS_RU[$mo];
-            if ($multiYear) {
-                $label .= " '" . substr((string) $yr, 2);
+            if ($scale === self::SCALE_WEEK) {
+                $label = 'W' . str_pad((string) $value, 2, '0', STR_PAD_LEFT);
+                if ($multiYear) {
+                    $label .= " '" . substr((string) $yr, 2);
+                }
+            } else {
+                $label = self::MONTH_LABELS_RU[$value];
+                if ($multiYear) {
+                    $label .= " '" . substr((string) $yr, 2);
+                }
             }
-            $monthLabels[] = $label;
-            $monthOrder[$key] = $idx++;
+            $labels[] = $label;
+            $periodOrder[$key] = $idx++;
         }
 
-        $totalMonths = count($monthLabels);
+        $totalPoints = count($labels);
 
-        // Индексируем данные: [businessKey][YYYY-MM] => value
+        // Индексируем данные: [businessKey][periodKey] => value
         $indexed = [];
         foreach ($rows as $row) {
-            $key = $row['yr'] . '-' . str_pad((string) $row['mo'], 2, '0', STR_PAD_LEFT);
+            $key = $scale === self::SCALE_WEEK
+                ? $row['yr'] . '-W' . str_pad((string) $row['wk'], 2, '0', STR_PAD_LEFT)
+                : $row['yr'] . '-' . str_pad((string) $row['mo'], 2, '0', STR_PAD_LEFT);
             $bk = $row['business_key'];
 
             if (in_array($bk, self::SUM_KEYS, true)) {
@@ -146,14 +165,14 @@ final class DashboardDataService
             }
         }
 
-        // Заполняем массивы для каждой метрики (с нулями для пропущенных месяцев)
+        // Заполняем массивы для каждой метрики (с нулями для пропущенных периодов)
         $series = [];
         foreach (self::ALL_KEYS as $bk) {
-            $arr = array_fill(0, $totalMonths, 0.0);
+            $arr = array_fill(0, $totalPoints, 0.0);
             if (isset($indexed[$bk])) {
-                foreach ($indexed[$bk] as $monthKey => $val) {
-                    if (isset($monthOrder[$monthKey])) {
-                        $arr[$monthOrder[$monthKey]] = $val;
+                foreach ($indexed[$bk] as $periodKey => $val) {
+                    if (isset($periodOrder[$periodKey])) {
+                        $arr[$periodOrder[$periodKey]] = $val;
                     }
                 }
             }
@@ -178,13 +197,15 @@ final class DashboardDataService
         $series['tko_export'] = array_map(static fn(float $v): int => (int) round($v), $series['tko_export']);
 
         return [
-            'monthLabels' => $monthLabels,
+            'scale' => $scale,
+            'labels' => $labels,
             'finance' => [
                 'cashInflow' => $series['cash_inflow'],
                 'cashOutflow' => $series['cash_outflow'],
             ],
             'tko' => [
                 'tkoExport' => $series['tko_export'],
+                'fuelConsumption' => $series['fuel_consumption'],
             ],
             'hr' => [
                 'hired' => $series['employees_hired'],
@@ -210,16 +231,18 @@ final class DashboardDataService
     /**
      * @return array<string, mixed>
      */
-    private function emptyData(): array
+    private function emptyData(string $scale): array
     {
         return [
-            'monthLabels' => [],
+            'scale' => $scale,
+            'labels' => [],
             'finance' => [
                 'cashInflow' => [],
                 'cashOutflow' => [],
             ],
             'tko' => [
                 'tkoExport' => [],
+                'fuelConsumption' => [],
             ],
             'hr' => [
                 'hired' => [],

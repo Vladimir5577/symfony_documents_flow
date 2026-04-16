@@ -17,6 +17,7 @@ use App\Entity\User\User;
 use App\Enum\Analytics\AnalyticsMetricAggregationType;
 use App\Enum\Analytics\AnalyticsBoardVersionStatus;
 use App\Enum\Analytics\AnalyticsReportStatus;
+use App\Service\Analytics\RecalculateAggregatesService;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Persistence\ObjectManager;
@@ -28,6 +29,11 @@ use Doctrine\Persistence\ObjectManager;
  */
 class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
 {
+    public function __construct(
+        private readonly RecalculateAggregatesService $recalculateAggregatesService,
+    ) {
+    }
+
     public static function getGroups(): array
     {
         return ['analytics'];
@@ -74,6 +80,7 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
     ];
 
     private const YEAR = 2026;
+    private const WEEKS_IN_YEAR = 52;
 
     /**
      * Количество недель для фикстур.
@@ -354,6 +361,9 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
         }
         $manager->flush();
         echo "  Отчёты: {$totalReports} (значений: {$totalValues})\n";
+
+        $recalculatedReports = $this->recalculateAggregatesService->recalculateAll();
+        echo "  Агрегаты пересчитаны по отчётам: {$recalculatedReports}\n";
 
         echo "=== AnalyticsFixtures готово ===\n\n";
     }

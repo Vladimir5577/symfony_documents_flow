@@ -47,6 +47,10 @@
 {#        <button class="tab-btn" onclick="switchTab('complaints')"><span class="ico">📞</span> Жалобы</button>#}
         <button class="tab-btn" onclick="switchTab('compare')"><span class="ico">📊</span> Сравнение</button>
     </div>
+    <div class="tabs-nav" style="margin-top:8px;">
+        <button id="scaleMonthBtn" class="tab-btn {{ initialScale == 'month' ? 'active' : '' }}" onclick="setScale('month')">По месяцам</button>
+        <button id="scaleWeekBtn" class="tab-btn {{ initialScale == 'week' ? 'active' : '' }}" onclick="setScale('week')">По неделям</button>
+    </div>
 
     <!-- ═══════════════════════ FINANCE ═══════════════════════ -->
     <div class="tab-panel active" id="tab-finance">
@@ -120,6 +124,10 @@
             <div class="card">
                 <div class="card-title">Динамика вывоза ТКО (тонн)</div>
                 <div class="chart-wrap"><canvas id="chartTko"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Расход топлива (литры)</div>
+                <div class="chart-wrap"><canvas id="chartFuelConsumption"></canvas></div>
             </div>
 {#            <div class="card">#}
 {#                <div class="card-title">Выход техники по филиалам</div>#}
@@ -562,6 +570,7 @@
     /* ── DATA ── */
     let dashboardData = {{ dashboardDataJson|raw }};
     let currentTab = 'finance';
+    let currentScale = '{{ initialScale|default('month') }}';
 
     /* ── TABS ── */
     function switchTab(id) {
@@ -588,13 +597,29 @@
 
     /* ── AJAX LOAD ── */
     function loadDashboardData(orgId) {
-        fetch('/analytics/dashboard/data?org_id=' + orgId)
+        fetch('/analytics/dashboard/data?org_id=' + orgId + '&scale=' + currentScale)
             .then(r => r.json())
             .then(data => {
                 dashboardData = data;
                 renderAllTabs();
                 updateHrStats();
             });
+    }
+
+    function getSelectedOrgId() {
+        const selected = document.querySelector('.filial-card.selected');
+        if (!selected) return 0;
+        const raw = selected.getAttribute('data-org-id');
+        return raw ? parseInt(raw, 10) : 0;
+    }
+
+    function setScale(scale) {
+        currentScale = (scale === 'week') ? 'week' : 'month';
+        const monthBtn = document.getElementById('scaleMonthBtn');
+        const weekBtn = document.getElementById('scaleWeekBtn');
+        if (monthBtn) monthBtn.classList.toggle('active', currentScale === 'month');
+        if (weekBtn) weekBtn.classList.toggle('active', currentScale === 'week');
+        loadDashboardData(getSelectedOrgId());
     }
 
     /* ── CHART.JS DEFAULTS ── */
@@ -633,9 +658,13 @@
         if (chartRenderers[id]) chartRenderers[id]();
     }
 
+    function xLabels() {
+        return dashboardData.labels || dashboardData.monthLabels || [];
+    }
+
     const chartRenderers = {
         finance: () => {
-            const labels = dashboardData.monthLabels || [];
+            const labels = xLabels();
             const fin = dashboardData.finance || {};
             mkChart('chartCashflow', {
                 type: 'bar',
@@ -650,7 +679,7 @@
             });
         },
         tko: () => {
-            const labels = dashboardData.monthLabels || [];
+            const labels = xLabels();
             const tko = dashboardData.tko || {};
             mkChart('chartTko', {
                 type: 'line',
@@ -662,9 +691,19 @@
                 },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
             });
+            mkChart('chartFuelConsumption', {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Расход топлива, л', data: tko.fuelConsumption || [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.12)', fill: true, tension: 0.35, pointRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
         },
         hr: () => {
-            const labels = dashboardData.monthLabels || [];
+            const labels = xLabels();
             const hr = dashboardData.hr || {};
             mkChart('chartHiringFiring', {
                 type: 'bar',
@@ -679,7 +718,7 @@
             });
         },
         clients: () => {
-            const labels = dashboardData.monthLabels || [];
+            const labels = xLabels();
             mkChart('chartBilling', {
                 type: 'bar',
                 data: {
@@ -712,7 +751,7 @@
             });
         },
         complaints: () => {
-            const labels = dashboardData.monthLabels || [];
+            const labels = xLabels();
             mkChart('chartComplaints', {
                 type: 'line',
                 data: {

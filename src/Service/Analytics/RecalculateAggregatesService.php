@@ -33,7 +33,8 @@ final class RecalculateAggregatesService
             return;
         }
 
-        // Группируем значения отчёта по метрике
+        // Группируем значения отчёта по метрике.
+        // Берём самое свежее значение метрики, чтобы не использовать устаревшее при наличии дублей.
         $valuesByMetric = [];
         foreach ($report->getValues() as $reportValue) {
             $boardMetric = $reportValue->getBoardVersionMetric();
@@ -45,7 +46,31 @@ final class RecalculateAggregatesService
                 continue;
             }
             $mId = $metric->getId();
-            $valuesByMetric[$mId] ??= ['metric' => $metric, 'reportValue' => $reportValue];
+            if (!isset($valuesByMetric[$mId])) {
+                $valuesByMetric[$mId] = ['metric' => $metric, 'reportValue' => $reportValue];
+                continue;
+            }
+
+            /** @var AnalyticsReportValue $existingReportValue */
+            $existingReportValue = $valuesByMetric[$mId]['reportValue'];
+            $existingEffectiveAt = $existingReportValue->getEffectiveAt();
+            $candidateEffectiveAt = $reportValue->getEffectiveAt();
+
+            $shouldReplace = false;
+            if ($existingEffectiveAt === null && $candidateEffectiveAt !== null) {
+                $shouldReplace = true;
+            } elseif ($existingEffectiveAt !== null && $candidateEffectiveAt !== null && $candidateEffectiveAt > $existingEffectiveAt) {
+                $shouldReplace = true;
+            } elseif (
+                $existingEffectiveAt == $candidateEffectiveAt
+                && ($existingReportValue->getId() ?? 0) < ($reportValue->getId() ?? 0)
+            ) {
+                $shouldReplace = true;
+            }
+
+            if ($shouldReplace) {
+                $valuesByMetric[$mId] = ['metric' => $metric, 'reportValue' => $reportValue];
+            }
         }
 
         foreach ($valuesByMetric as $data) {
