@@ -171,28 +171,29 @@ class OrganizationRepository extends ServiceEntityRepository
         return true;
     }
 
-    //    /**
-    //     * @return Organization[] Returns an array of Organization objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('o')
-    //            ->andWhere('o.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('o.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
+    /**
+     * Получить ID организации и всех её дочерних (рекурсивно).
+     *
+     * @return int[]
+     */
+    public function findOrganizationWithChildrenIds(int $orgId): array
+    {
+        $org = $this->findWithChildren($orgId);
+        if ($org === null) {
+            return [];
+        }
 
-    //    public function findOneBySomeField($value): ?Organization
-    //    {
-    //        return $this->createQueryBuilder('o')
-    //            ->andWhere('o.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
+        $ids = [];
+        $this->collectIds($org, $ids);
+
+        return $ids;
+    }
+
+    private function collectIds(AbstractOrganization $org, array &$ids): void
+    {
+        $ids[] = $org->getId();
+        foreach ($org->getChildOrganizations() as $child) {
+            $this->collectIds($child, $ids);
+        }
+    }
 }

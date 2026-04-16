@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\DataFixtures;
 
-use App\Entity\Analytics\AnalyticsAggregatedData;
 use App\Entity\Analytics\AnalyticsBoard;
 use App\Entity\Analytics\AnalyticsBoardVersion;
 use App\Entity\Analytics\AnalyticsBoardVersionMetric;
@@ -14,12 +13,10 @@ use App\Entity\Analytics\AnalyticsPeriod;
 use App\Entity\Analytics\AnalyticsReport;
 use App\Entity\Analytics\AnalyticsReportValue;
 use App\Entity\Organization\Organization;
-use App\Entity\User\Role;
 use App\Entity\User\User;
 use App\Enum\Analytics\AnalyticsMetricAggregationType;
 use App\Enum\Analytics\AnalyticsBoardVersionStatus;
 use App\Enum\Analytics\AnalyticsReportStatus;
-use App\Enum\UserRole;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Persistence\ObjectManager;
@@ -40,63 +37,50 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
      * Каждая: [businessKey, name, type, unit, aggregationType, inputType]
      */
     private const METRICS = [
-        ['fuel_consumption',   'Расход топлива',     'number',   'л',       AnalyticsMetricAggregationType::Sum,      'number'],
-        ['spare_parts_cost',   'Расход запчастей',   'currency', 'руб.',    AnalyticsMetricAggregationType::Sum,      'number'],
-        ['profit',             'Прибыль',            'currency', 'руб.',    AnalyticsMetricAggregationType::Sum,      'number'],
-        ['expense',            'Расход общий',       'currency', 'руб.',    AnalyticsMetricAggregationType::Sum,      'number'],
-        ['revenue',            'Выручка',            'currency', 'руб.',    AnalyticsMetricAggregationType::Sum,      'number'],
-        ['downtime_hours',     'Простой техники',    'number',  'ч',        AnalyticsMetricAggregationType::Sum,      'number'],
-        ['employee_count',     'Кол-во сотрудников', 'count',    'чел.',    AnalyticsMetricAggregationType::Last,     'number'],
-        ['work_output',        'Выработка',          'number',   'м³',      AnalyticsMetricAggregationType::Sum,      'number'],
-        ['transport_cost',     'Расход на транспорт','currency', 'руб.',    AnalyticsMetricAggregationType::Sum,      'number'],
-        ['material_cost',      'Расход материалов',  'currency', 'руб.',    AnalyticsMetricAggregationType::Sum,      'number'],
-        ['overhead_cost',      'Накладные расходы',  'currency', 'руб.',    AnalyticsMetricAggregationType::Sum,      'number'],
-        ['salary_fund',        'Фонд оплаты труда',  'currency', 'руб.',    AnalyticsMetricAggregationType::Sum,      'number'],
+        ['cash_inflow',            'Поступление',             'currency', 'руб.', AnalyticsMetricAggregationType::Sum,  'number'],
+        ['cash_outflow',           'Списание',                'currency', 'руб.', AnalyticsMetricAggregationType::Sum,  'number'],
+        ['account_balance',        'Остаток на счетах',       'currency', 'руб.', AnalyticsMetricAggregationType::Last, 'number'],
+        ['fuel_consumption',       'Расход топлива',          'number',   'л',    AnalyticsMetricAggregationType::Sum,  'number'],
+        ['tko_export',             'Вывоз ТКО',               'number',   'т',    AnalyticsMetricAggregationType::Sum,  'number'],
+        ['employees_hired',        'Прийнято сотрудников',    'count',    'чел.', AnalyticsMetricAggregationType::Sum,  'number'],
+        ['employees_terminated',   'Уволено сотрудников',     'count',    'чел.', AnalyticsMetricAggregationType::Sum,  'number'],
+        ['staff_planned_count',    'Штатная численность',     'count',    'чел.', AnalyticsMetricAggregationType::Last, 'number'],
+        ['staff_actual_count',     'Фактическая численность', 'count',    'чел.', AnalyticsMetricAggregationType::Last, 'number'],
     ];
 
-    private const BOARD_NAME = 'Операционная аналитика';
-
-    /** ISO-недели для данных */
-    private const WEEKS = [
-        [2025, 1],
-        [2025, 2],
-        [2025, 3],
-        [2025, 4],
-        [2025, 5],
-        [2025, 6],
-        [2025, 7],
-        [2025, 8],
-        [2025, 9],
-        [2025, 10],
+    /**
+     * Определение досок и набора метрик для каждой.
+     * Каждая: [name, description, metricBusinessKeys[]]
+     */
+    private const BOARDS = [
+        [
+            'key' => 'finance',
+            'name' => 'Доска финансистов',
+            'description' => 'Финансовые показатели организации за неделю',
+            'metrics' => ['cash_inflow', 'cash_outflow', 'account_balance'],
+        ],
+        [
+            'key' => 'mechanics',
+            'name' => 'Доска механиков',
+            'description' => 'Операционные показатели транспорта и вывоза ТКО',
+            'metrics' => ['fuel_consumption', 'tko_export'],
+        ],
+        [
+            'key' => 'hr',
+            'name' => 'Доска отдела кадров',
+            'description' => 'Кадровые показатели организации',
+            'metrics' => ['employees_hired', 'employees_terminated', 'staff_planned_count', 'staff_actual_count'],
+        ],
     ];
 
-    /** Отчёты, которые будут approved (индекс организации => список недель-индексов) */
-    private const APPROVED = [
-        0 => [0, 1, 2, 3],
-        1 => [0, 1, 2, 3, 4],
-        2 => [0, 1, 2, 3, 4, 5],
-        3 => [0, 1, 2, 3, 4, 5, 6],
-        4 => [0, 1, 2, 3, 4, 5, 6, 7],
-        5 => [0, 1, 2],
-        6 => [0, 1],
-    ];
+    private const YEAR = 2026;
 
-    /** Отчёты, которые будут submitted */
-    private const SUBMITTED = [
-        0 => [4],
-        2 => [6],
-        4 => [8],
-        5 => [3],
-        6 => [2, 3],
-    ];
-
-    /** Остальное — draft */
-    private const DRAFT = [
-        1 => [5, 6, 7, 8, 9],
-        3 => [7, 8, 9],
-        5 => [4, 5, 6, 7, 8, 9],
-        6 => [4, 5, 6, 7, 8, 9],
-    ];
+    /**
+     * Количество недель для фикстур.
+     * Генерируем с 1-й по (CURRENT_WEEK - 1), текущую неделю пользователь создаёт вручную.
+     * ISO-неделя 16 апреля 2026 = 16, значит генерируем 1–15.
+     */
+    private const WEEKS_COUNT = 15;
 
     /**
      * Генератор значений для каждой метрики.
@@ -106,47 +90,48 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
     private function valueFor(int $metricIdx, int $orgIdx, int $weekIdx): ?string
     {
         $baseValues = match ($metricIdx) {
-            0  => 150.0,   // fuel_consumption, л
-            1  => 45000.0, // spare_parts_cost
-            2  => 500000.0,// profit
-            3  => 300000.0,// expense
-            4  => 800000.0,// revenue
-            5  => 24.0,    // downtime_hours
-            6  => 45.0,    // employee_count
-            7  => 200.0,   // work_output (m³)
-            8  => 80000.0, // transport_cost
-            9  => 120000.0,// material_cost
-            10 => 50000.0, // overhead_cost
-            11 => 250000.0,// salary_fund
+            0 => 900000.0, // cash_inflow
+            1 => 620000.0, // cash_outflow
+            2 => 1500000.0,// account_balance
+            3 => 150.0,    // fuel_consumption, л
+            4 => 4800.0,   // tko_export, т
+            5 => 9.0,      // employees_hired
+            6 => 7.0,      // employees_terminated
+            7 => 320.0,    // staff_planned_count
+            8 => 295.0,    // staff_actual_count
             default => 100.0,
         };
 
-        $orgScale = [0.78, 0.92, 1.05, 1.18, 1.32, 0.88, 1.24][$orgIdx] ?? (1.0 + $orgIdx * 0.07);
-        $phase = ($metricIdx * 0.33) + ($orgIdx * 0.57);
+        $orgScale = [0.74, 0.89, 1.03, 1.16, 1.31, 0.92, 1.27][$orgIdx] ?? (1.0 + $orgIdx * 0.09);
+        $phase = ($metricIdx * 0.41) + ($orgIdx * 0.67);
         $x = (float) $weekIdx;
 
-        // Для каждой организации — свой характер линии:
-        // 0: почти прямая нисходящая; 1: синус с ростом; 2: пила; 3: U-образная;
-        // 4: резкая волна; 5: ступени; 6: волна + локальные пики.
-        $shapeFactor = match ($orgIdx) {
-            0 => 1.18 - 0.038 * $x,
-            1 => 0.90 + 0.030 * $x + 0.16 * sin($x * 0.80 + $phase),
-            2 => 0.86 + 0.020 * $x + (((($weekIdx + $metricIdx) % 4) / 4.0) * 0.18 - 0.04),
-            3 => 0.82 + 0.010 * (($x - 5.0) ** 2),
-            4 => 0.95 + 0.028 * $x + 0.24 * sin($x * 1.05 + $phase),
-            5 => 0.88 + 0.045 * floor(($x + 1.0) / 2.0) / 5.0,
-            6 => 0.92 + 0.024 * $x + 0.14 * sin($x * 0.65 + $phase) + (($weekIdx % 5 === 0) ? 0.11 : 0.0),
-            default => 1.0 + 0.018 * $x,
+        // Сильно различающиеся паттерны по филиалам.
+        $branchPattern = match ($orgIdx % 7) {
+            0 => 1.0 + 0.32 * sin($x * 0.95 + $phase) - 0.18 * cos($x * 0.31),
+            1 => 0.92 + 0.42 * sin($x * 0.58 + $phase) + 0.07 * $x / self::WEEKS_IN_YEAR,
+            2 => 0.84 + ((($weekIdx + $metricIdx) % 6) / 6.0) * 0.62 - 0.18,
+            3 => 1.08 - 0.20 * sin($x * 0.22) + 0.33 * cos($x * 1.18 + $phase),
+            4 => 0.86 + 0.024 * $x + 0.48 * sin($x * 0.74 + $phase),
+            5 => 0.90 + 0.14 * floor(($x + 2.0) / 3.0) / 4.0 + 0.20 * sin($x * 1.5 + $phase),
+            6 => 0.98 + 0.29 * sin($x * 0.41 + $phase) - 0.24 * sin($x * 1.33 + $phase * 0.5),
+            default => 1.0,
         };
 
-        // Метрика тоже добавляет свой ритм, чтобы линии разных метрик не были одинаковыми.
-        $metricRhythm = 1.0 + 0.04 * sin($x * (0.45 + ($metricIdx % 4) * 0.12) + $metricIdx * 0.2);
+        // Сезонность и резкие шоки, чтобы волатильность была заметной.
+        $seasonality = 1.0 + 0.22 * sin(($x / 52.0) * 2.0 * M_PI + $metricIdx * 0.35);
+        $shock = 1.0;
+        if ((($weekIdx + $orgIdx + $metricIdx) % 9) === 0) {
+            $shock += 0.55;
+        } elseif ((($weekIdx + 2 * $orgIdx + $metricIdx) % 11) === 0) {
+            $shock -= 0.38;
+        }
 
-        // Детерминированный небольшой шум.
-        $seed = ($metricIdx + 1) * 193 + ($orgIdx + 2) * 71 + ($weekIdx + 3) * 29;
-        $noise = (($seed % 17) - 8) / 100.0;
+        // Более крупный детерминированный шум.
+        $seed = ($metricIdx + 1) * 211 + ($orgIdx + 2) * 83 + ($weekIdx + 3) * 37;
+        $noise = (($seed % 31) - 15) / 100.0;
 
-        $value = $baseValues * $orgScale * $shapeFactor * $metricRhythm * (1.0 + $noise);
+        $value = $baseValues * $orgScale * $branchPattern * $seasonality * $shock * (1.0 + $noise);
         $value = max($baseValues * 0.20, $value);
 
         return number_format(round($value, 2), 2, '.', '');
@@ -156,9 +141,9 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
     {
         echo "\n=== AnalyticsFixtures ===\n";
 
-        // --- Организации (из БД, первые 7) ---
+        // --- Организации верхнего уровня (parent IS NULL), первые 7 ---
         $orgRepo = $manager->getRepository(Organization::class);
-        $organizations = $orgRepo->findBy([], orderBy: ['id' => 'ASC'], limit: 7);
+        $organizations = $orgRepo->findBy(['parent' => null], orderBy: ['id' => 'ASC'], limit: 7);
         $orgCount = count($organizations);
 
         if ($orgCount < 7) {
@@ -196,6 +181,7 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
 
         // === 1. Метрики ===
         $metrics = [];
+        $metricByBusinessKey = [];
         foreach (self::METRICS as [$businessKey, $name, $type, $unit, $aggregationType, $inputType]) {
             $metric = new AnalyticsMetric();
             $metric->setBusinessKey($businessKey);
@@ -206,44 +192,57 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
             $metric->setInputType($inputType);
             $manager->persist($metric);
             $metrics[] = $metric;
+            $metricByBusinessKey[$businessKey] = $metric;
         }
         $manager->flush();
         echo "  Метрики: " . count($metrics) . "\n";
 
-        // === 2. Доска + published версия ===
-        $board = new AnalyticsBoard();
-        $board->setName(self::BOARD_NAME);
-        $board->setDescription('Основные операционные показатели организации за неделю');
-        $manager->persist($board);
-        $manager->flush();
+        // === 2. Доски + published версии ===
+        $boardVersions = [];
+        $allBoardKeys = [];
+        foreach (self::BOARDS as $boardConfig) {
+            $board = new AnalyticsBoard();
+            $board->setName($boardConfig['name']);
+            $board->setDescription($boardConfig['description']);
+            $manager->persist($board);
+            $manager->flush();
 
-        // Создаём published версию
-        $version = new AnalyticsBoardVersion();
-        $version->setBoard($board);
-        $version->setVersionNumber(1);
-        $version->setStatus(AnalyticsBoardVersionStatus::Published);
-        $manager->persist($version);
-        $manager->flush();
+            $version = new AnalyticsBoardVersion();
+            $version->setBoard($board);
+            $version->setVersionNumber(1);
+            $version->setStatus(AnalyticsBoardVersionStatus::Published);
+            $manager->persist($version);
+            $manager->flush();
 
-        // Добавляем метрики в версию доски
-        foreach ($metrics as $idx => $metric) {
-            $bvm = new AnalyticsBoardVersionMetric();
-            $bvm->setBoardVersion($version);
-            $bvm->setMetric($metric);
-            $bvm->setPosition($idx + 1);
-            // Первые 6 метрик — required
-            $bvm->setIsRequired($idx < 6);
-            $manager->persist($bvm);
+            $position = 1;
+            foreach ($boardConfig['metrics'] as $metricBusinessKey) {
+                $metric = $metricByBusinessKey[$metricBusinessKey] ?? null;
+                if ($metric === null) {
+                    continue;
+                }
+
+                $bvm = new AnalyticsBoardVersionMetric();
+                $bvm->setBoardVersion($version);
+                $bvm->setMetric($metric);
+                $bvm->setPosition($position++);
+                // Для отдельных профильных досок делаем метрики обязательными.
+                $bvm->setIsRequired(true);
+                $manager->persist($bvm);
+            }
+
+            $manager->flush();
+            // Обновляем коллекцию versionMetrics в памяти
+            $manager->refresh($version);
+            $boardVersions[$boardConfig['key']] = $version;
+            $allBoardKeys[] = $boardConfig['key'];
+            echo "  Доска: \"{$board->getName()}\", версия v1 (published), метрик: " . count($boardConfig['metrics']) . "\n";
         }
-        $manager->flush();
-        echo "  Доска: \"{$board->getName()}\", версия v1 (published), метрик: " . count($metrics) . "\n";
 
-        // === 3. Периоды ===
+        // === 3. Периоды (с начала года до текущей недели, не включая текущую) ===
         $periods = [];
-        foreach (self::WEEKS as [$year, $week]) {
-            $period = AnalyticsPeriod::forIsoWeek($year, $week);
-            // Закрываем ранние периоды (индексы 0-6)
-            $period->setIsClosed($period->getIsoWeek() <= 7);
+        for ($week = 1; $week <= self::WEEKS_COUNT; $week++) {
+            $period = AnalyticsPeriod::forIsoWeek(self::YEAR, $week);
+            $period->setIsClosed(true);
             $manager->persist($period);
             $periods[] = $period;
         }
@@ -252,27 +251,28 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
 
         // === 4. Связи org -> board ---
         foreach ($organizations as $orgIdx => $org) {
-            $orgBoard = new AnalyticsOrganizationBoard();
-            $orgBoard->setOrganization($org);
-            $orgBoard->setBoard($board);
-            // Первые 3 — required, остальные — нет
-            $orgBoard->setIsRequired($orgIdx < 3);
-            $manager->persist($orgBoard);
+            foreach ($allBoardKeys as $boardKey) {
+                $boardVersion = $boardVersions[$boardKey] ?? null;
+                if ($boardVersion === null) {
+                    continue;
+                }
+                $orgBoard = new AnalyticsOrganizationBoard();
+                $orgBoard->setOrganization($org);
+                $orgBoard->setBoard($boardVersion->getBoard());
+                // Первые 3 организации — обязательно, остальные — опционально.
+                $orgBoard->setIsRequired($orgIdx < 3);
+                $manager->persist($orgBoard);
+            }
         }
         $manager->flush();
-        echo "  Связи организация↔доска: {$orgCount}\n";
+        echo "  Связи организация↔доска: " . ($orgCount * count($boardVersions)) . "\n";
 
         // === 5. Отчёты и значения ===
         $totalValues = 0;
         $totalReports = 0;
 
         foreach ($organizations as $orgIdx => $org) {
-            $approvedWeekIndices = self::APPROVED[$orgIdx] ?? [];
-            $submittedWeekIndices = self::SUBMITTED[$orgIdx] ?? [];
-            $draftWeekIndices = self::DRAFT[$orgIdx] ?? [];
-
-            /** @var int[] $allWeekIndices */
-            $allWeekIndices = [...$approvedWeekIndices, ...$submittedWeekIndices, ...$draftWeekIndices];
+            $allWeekIndices = range(0, count($periods) - 1);
 
             foreach ($allWeekIndices as $weekIdx) {
                 if ($weekIdx >= count($periods)) {
@@ -280,117 +280,81 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
                 }
                 $period = $periods[$weekIdx];
 
-                if (in_array($weekIdx, $approvedWeekIndices, true)) {
-                    $status = AnalyticsReportStatus::Approved;
-                } elseif (in_array($weekIdx, $submittedWeekIndices, true)) {
-                    $status = AnalyticsReportStatus::Submitted;
-                } else {
-                    $status = AnalyticsReportStatus::Draft;
-                }
+                // Все периоды закрыты — все отчёты утверждены
+                $status = AnalyticsReportStatus::Approved;
 
-                $report = new AnalyticsReport();
-                $report->setOrganization($org);
-                $report->setBoardVersion($version);
-                $report->setPeriod($period);
-                $report->setCreatedBy($orgUsers[$orgIdx] ?? $orgUsers[0]);
-                $report->setStatus($status);
-
-                if ($status === AnalyticsReportStatus::Submitted || $status === AnalyticsReportStatus::Approved) {
-                    $report->setIsComplete(true);
-                }
-
-                $weekStartDate = $period->getStartDate();
-                $createdAt = clone $weekStartDate;
-                $report->setCreatedAt($createdAt->modify('monday this week 09:00:00'));
-
-                if ($status === AnalyticsReportStatus::Approved) {
-                    $submittedAt = clone $weekStartDate;
-                    $report->setSubmittedAt($submittedAt->modify('saturday this week 14:00:00'));
-                    $approvedAt = clone $weekStartDate;
-                    $report->setApprovedAt($approvedAt->modify('sunday this week 18:00:00'));
-                    $report->setApprovedBy($orgUsers[$orgIdx] ?? $orgUsers[0]);
-                } elseif ($status === AnalyticsReportStatus::Submitted) {
-                    $submittedAt = clone $weekStartDate;
-                    $report->setSubmittedAt($submittedAt->modify('saturday this week 14:00:00'));
-                }
-
-                $effectiveAt = $report->getSubmittedAt() ?: $report->getCreatedAt();
-                $boardVersionMetrics = $version->getVersionMetrics();
-                $metricsToFill = $status === AnalyticsReportStatus::Draft
-                    ? $this->randomMetricsForDraft($boardVersionMetrics, $orgIdx, $weekIdx)
-                    : $boardVersionMetrics;
-
-                foreach ($metricsToFill as $bvm) {
-                    $metric = $bvm->getMetric();
-                    $mIdx = $this->findMetricIndex($metrics, $metric);
-                    if ($mIdx === null) {
+                foreach ($allBoardKeys as $boardKey) {
+                    $boardVersion = $boardVersions[$boardKey] ?? null;
+                    if ($boardVersion === null) {
                         continue;
                     }
+                    $report = new AnalyticsReport();
+                    $report->setOrganization($org);
+                    $report->setBoardVersion($boardVersion);
+                    $report->setPeriod($period);
+                    $report->setCreatedBy($orgUsers[$orgIdx] ?? $orgUsers[0]);
+                    $report->setStatus($status);
 
-                    $value = $this->valueFor($mIdx, $orgIdx, $weekIdx);
-                    if ($value === null) {
-                        continue;
+                    if ($status === AnalyticsReportStatus::Submitted || $status === AnalyticsReportStatus::Approved) {
+                        $report->setIsComplete(true);
                     }
 
-                    $reportValue = new AnalyticsReportValue();
-                    $reportValue->setBoardVersionMetric($bvm);
-                    $reportValue->setMetricNameSnapshot($metric->getName());
-                    $reportValue->setMetricUnitSnapshot($metric->getUnit());
-                    $reportValue->setMetricTypeSnapshot($metric->getType());
-                    $reportValue->setValueNumber($value);
-                    $reportValue->setCreatedBy($orgUsers[$orgIdx] ?? $orgUsers[0]);
-                    $reportValue->setEffectiveAt(clone $effectiveAt);
+                    $weekStartDate = $period->getStartDate();
+                    $createdAt = clone $weekStartDate;
+                    $report->setCreatedAt($createdAt->modify('monday this week 09:00:00'));
 
-                    $report->addValue($reportValue);
-                    $totalValues++;
+                    if ($status === AnalyticsReportStatus::Approved) {
+                        $submittedAt = clone $weekStartDate;
+                        $report->setSubmittedAt($submittedAt->modify('saturday this week 14:00:00'));
+                        $approvedAt = clone $weekStartDate;
+                        $report->setApprovedAt($approvedAt->modify('sunday this week 18:00:00'));
+                        $report->setApprovedBy($orgUsers[$orgIdx] ?? $orgUsers[0]);
+                    } elseif ($status === AnalyticsReportStatus::Submitted) {
+                        $submittedAt = clone $weekStartDate;
+                        $report->setSubmittedAt($submittedAt->modify('saturday this week 14:00:00'));
+                    }
 
-                    $manager->persist($reportValue);
+                    $effectiveAt = $report->getSubmittedAt() ?: $report->getCreatedAt();
+                    $boardVersionMetrics = $boardVersion->getVersionMetrics();
+                    $metricsToFill = $status === AnalyticsReportStatus::Draft
+                        ? $this->randomMetricsForDraft($boardVersionMetrics, $orgIdx, $weekIdx)
+                        : $boardVersionMetrics;
+
+                    foreach ($metricsToFill as $bvm) {
+                        $metric = $bvm->getMetric();
+                        $mIdx = $this->findMetricIndex($metrics, $metric);
+                        if ($mIdx === null) {
+                            continue;
+                        }
+
+                        $value = $this->valueFor($mIdx, $orgIdx, $weekIdx);
+                        if ($value === null) {
+                            continue;
+                        }
+
+                        $reportValue = new AnalyticsReportValue();
+                        $reportValue->setBoardVersionMetric($bvm);
+                        $reportValue->setMetricNameSnapshot($metric->getName());
+                        $reportValue->setMetricUnitSnapshot($metric->getUnit());
+                        $reportValue->setMetricTypeSnapshot($metric->getType());
+                        $reportValue->setValueNumber($value);
+                        $reportValue->setCreatedBy($orgUsers[$orgIdx] ?? $orgUsers[0]);
+                        $reportValue->setEffectiveAt(clone $effectiveAt);
+
+                        $report->addValue($reportValue);
+                        $totalValues++;
+
+                        $manager->persist($reportValue);
+                    }
+
+                    $manager->persist($report);
+                    $totalReports++;
                 }
-
-                $manager->persist($report);
-                $totalReports++;
             }
         }
         $manager->flush();
         echo "  Отчёты: {$totalReports} (значений: {$totalValues})\n";
 
-        // === 6. Агрегированные данные (хардкод, для тестирования фронта) ===
-        $aggCount = 0;
-        $firstMetric = $metrics[0];  // fuel_consumption
-        $secondMetric = $metrics[1]; // spare_parts_cost
-        $thirdMetric = $metrics[2];  // profit
-
-        foreach ($organizations as $orgIdx => $org) {
-            $approvedWeekIndices = self::APPROVED[$orgIdx] ?? [];
-            foreach ($approvedWeekIndices as $weekIdx) {
-                if ($weekIdx >= count($periods)) {
-                    continue;
-                }
-                $period = $periods[$weekIdx];
-
-                foreach ([$firstMetric, $secondMetric, $thirdMetric] as $aggMetricIdx => $aggMetric) {
-                    $agg = new AnalyticsAggregatedData();
-                    $agg->setMetric($aggMetric);
-                    $agg->setPeriod($period);
-                    $agg->setOrganization($org);
-                    $agg->setMetricNameSnapshot($aggMetric->getName());
-                    $agg->setMetricUnitSnapshot($aggMetric->getUnit());
-                    $agg->setMetricTypeSnapshot($aggMetric->getType());
-                    $agg->setAggregationType($aggMetric->getAggregationType()->value);
-
-                    $rawValue = $this->valueFor($aggMetricIdx, $orgIdx, $weekIdx);
-                    $agg->setValue($rawValue);
-                    $agg->setSourceCount(1);
-                    $agg->setEffectiveAt($period->getStartDate());
-                    $agg->setCalculatedAt(new \DateTimeImmutable());
-
-                    $manager->persist($agg);
-                    $aggCount++;
-                }
-            }
-        }
-        $manager->flush();
-        echo "  Агрегаты: {$aggCount} записей (3 метрики × approved-недели)\n";
         echo "=== AnalyticsFixtures готово ===\n\n";
     }
 
