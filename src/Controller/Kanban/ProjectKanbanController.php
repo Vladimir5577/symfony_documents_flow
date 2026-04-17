@@ -559,20 +559,10 @@ final class ProjectKanbanController extends AbstractController
     ): Response {
         /** @var User $user */
         $user = $this->getUser();
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
-        $userOrganization = $user->getOrganization();
-        $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
-
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree();
         $organizationsWithChildren = [];
         foreach ($organizationTree as $org) {
             $loadedOrg = $organizationRepository->findWithChildren($org->getId());
-            if ($loadedOrg) {
-                $organizationsWithChildren[] = $loadedOrg;
-            }
-        }
-        if ($organizationsWithChildren === [] && $userOrganization) {
-            $loadedOrg = $organizationRepository->findWithChildren($userOrganization->getId());
             if ($loadedOrg) {
                 $organizationsWithChildren[] = $loadedOrg;
             }
@@ -594,19 +584,10 @@ final class ProjectKanbanController extends AbstractController
     ): Response {
         /** @var User $user */
         $user = $this->getUser();
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
-        $userOrganization = $user->getOrganization();
-        $rootOrganization = $userOrganization && !$isAdmin ? $userOrganization->getRootOrganization() : null;
-        $organizationTree = $organizationRepository->getOrganizationTree($isAdmin ? null : $rootOrganization);
+        $organizationTree = $organizationRepository->getOrganizationTree();
         $organizationsWithChildren = [];
         foreach ($organizationTree as $org) {
             $loadedOrg = $organizationRepository->findWithChildren($org->getId());
-            if ($loadedOrg) {
-                $organizationsWithChildren[] = $loadedOrg;
-            }
-        }
-        if ($organizationsWithChildren === [] && $userOrganization) {
-            $loadedOrg = $organizationRepository->findWithChildren($userOrganization->getId());
             if ($loadedOrg) {
                 $organizationsWithChildren[] = $loadedOrg;
             }

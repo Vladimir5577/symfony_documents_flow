@@ -498,128 +498,128 @@
     </style>
 
     <!-- Приветствие + Поиск -->
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-5 dash-animate dash-animate-d1">
-        <div>
-            <span class="dash-greeting">Добрый день, {{ user_display_name }}!</span>
-        </div>
-        <div class="dash-search position-relative">
-            <span class="search-icon"><i class="bi bi-search"></i></span>
-            <input type="text" class="form-control" placeholder="Поиск...">
-        </div>
-    </div>
+{#    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-5 dash-animate dash-animate-d1">#}
+{#        <div>#}
+{#            <span class="dash-greeting">Добрый день, {{ user_display_name }}!</span>#}
+{#        </div>#}
+{#        <div class="dash-search position-relative">#}
+{#            <span class="search-icon"><i class="bi bi-search"></i></span>#}
+{#            <input type="text" class="form-control" placeholder="Поиск...">#}
+{#        </div>#}
+{#    </div>#}
 
     <!-- Новости компании -->
-    <div class="mb-4 dash-animate dash-animate-d2">
-        <div class="news-header-bar">
-            <div class="d-flex justify-content-between align-items-center">
-                <h2 class="dash-section-title mb-0">Новости компании</h2>
-                <div class="d-flex flex-column align-items-end gap-2">
-                    <div class="d-flex gap-2 align-items-center">
-                        {% if is_granted('ROLE_MANAGER') %}
-                            <a href="{{ path('app_create_post') }}" class="btn btn-sm btn-primary btn-add-post">
-                                <i class="bi bi-plus-lg"></i> Добавить пост
-                            </a>
-                        {% endif %}
-                        <a href="{{ path('app_all_posts') }}" class="btn btn-sm btn-outline-secondary">
-                            Все новости
-                        </a>
-                    </div>
-                    <div class="d-flex gap-2 align-items-center">
-                        <button type="button" class="news-nav-btn" id="newsScrollLeft" aria-label="Назад">
-                            <i class="bi bi-chevron-left"></i>
-                        </button>
-                        <button type="button" class="news-nav-btn" id="newsScrollRight" aria-label="Вперёд">
-                            <i class="bi bi-chevron-right"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-            <div class="news-carousel-wrap">
-            <div class="news-carousel" id="newsCarousel">
+{#    <div class="mb-4 dash-animate dash-animate-d2">#}
+{#        <div class="news-header-bar">#}
+{#            <div class="d-flex justify-content-between align-items-center">#}
+{#                <h2 class="dash-section-title mb-0">Новости компании</h2>#}
+{#                <div class="d-flex flex-column align-items-end gap-2">#}
+{#                    <div class="d-flex gap-2 align-items-center">#}
+{#                        {% if is_granted('ROLE_MANAGER') %}#}
+{#                            <a href="{{ path('app_create_post') }}" class="btn btn-sm btn-primary btn-add-post">#}
+{#                                <i class="bi bi-plus-lg"></i> Добавить пост#}
+{#                            </a>#}
+{#                        {% endif %}#}
+{#                        <a href="{{ path('app_all_posts') }}" class="btn btn-sm btn-outline-secondary">#}
+{#                            Все новости#}
+{#                        </a>#}
+{#                    </div>#}
+{#                    <div class="d-flex gap-2 align-items-center">#}
+{#                        <button type="button" class="news-nav-btn" id="newsScrollLeft" aria-label="Назад">#}
+{#                            <i class="bi bi-chevron-left"></i>#}
+{#                        </button>#}
+{#                        <button type="button" class="news-nav-btn" id="newsScrollRight" aria-label="Вперёд">#}
+{#                            <i class="bi bi-chevron-right"></i>#}
+{#                        </button>#}
+{#                    </div>#}
+{#                </div>#}
+{#            </div>#}
+{#        </div>#}
+{#            <div class="news-carousel-wrap">#}
+{#            <div class="news-carousel" id="newsCarousel">#}
 
-                {% if posts is defined and posts|length > 0 %}
-                    {% for post in posts %}
-                        <div class="news-card">
-                            <div class="news-card-img-wrap">
-                                {% if post.coverImageName %}
-                                    <img class="news-card-img" src="/uploads/posts/{{ post.id }}/{{ post.coverImageName }}" alt="">
-                                {% else %}
-                                    <div class="news-card-img d-flex align-items-center justify-content-center">
-                                        <i class="bi bi-image text-muted" style="font-size:2rem"></i>
-                                    </div>
-                                {% endif %}
-                                {% if post.type %}
-                                    {% set badge_class = 'news-card-badge--news' %}
-                                    {% if post.type.value == 'order' %}{% set badge_class = 'news-card-badge--order' %}
-                                    {% elseif post.type.value == 'instruction' %}{% set badge_class = 'news-card-badge--instruction' %}
-                                    {% elseif post.type.value == 'regulation' %}{% set badge_class = 'news-card-badge--regulation' %}
-                                    {% elseif post.type.value == 'disposition' %}{% set badge_class = 'news-card-badge--disposition' %}
-                                    {% endif %}
-                                    <span class="news-card-badge {{ badge_class }}">{{ post.type.label() }}</span>
-                                {% endif %}
-                            </div>
-                            <div class="news-card-body">
-                                <div class="news-card-title">{{ post.title }}</div>
-                                <div class="news-card-date">{{ post.createdAt|date('d.m.Y') }}</div>
-                            </div>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    {# Заглушки пока нет данных #}
-                    <div class="news-card">
-                        <div class="news-card-img-wrap">
-                            <div class="news-card-img d-flex align-items-center justify-content-center">
-                                <i class="bi bi-megaphone text-muted" style="font-size:2rem"></i>
-                            </div>
-                            <span class="news-card-badge news-card-badge--news">Новость</span>
-                        </div>
-                        <div class="news-card-body">
-                            <div class="news-card-title">Запущент новый модели электронного архива</div>
-                            <div class="news-card-date">24.04.2024</div>
-                        </div>
-                    </div>
-                    <div class="news-card">
-                        <div class="news-card-img-wrap">
-                            <div class="news-card-img d-flex align-items-center justify-content-center">
-                                <i class="bi bi-calendar-event text-muted" style="font-size:2rem"></i>
-                            </div>
-                            <span class="news-card-badge news-card-badge--event">Событие</span>
-                        </div>
-                        <div class="news-card-body">
-                            <div class="news-card-title">Семинар по работе с документами — 26 апреля</div>
-                            <div class="news-card-date">22.04.2024</div>
-                        </div>
-                    </div>
-                    <div class="news-card">
-                        <div class="news-card-img-wrap">
-                            <div class="news-card-img d-flex align-items-center justify-content-center">
-                                <i class="bi bi-file-earmark-text text-muted" style="font-size:2rem"></i>
-                            </div>
-                            <span class="news-card-badge news-card-badge--order">Приказ</span>
-                        </div>
-                        <div class="news-card-body">
-                            <div class="news-card-title">Обновлены внутренние регламенты</div>
-                            <div class="news-card-date">19.04.2024</div>
-                        </div>
-                    </div>
-                    <div class="news-card">
-                        <div class="news-card-img-wrap">
-                            <div class="news-card-img d-flex align-items-center justify-content-center">
-                                <i class="bi bi-exclamation-triangle text-muted" style="font-size:2rem"></i>
-                            </div>
-                            <span class="news-card-badge news-card-badge--important">Важно</span>
-                        </div>
-                        <div class="news-card-body">
-                            <div class="news-card-title">Плановые работы на сервере — 30 апреля</div>
-                            <div class="news-card-date">18.04.2024</div>
-                        </div>
-                    </div>
-                {% endif %}
+{#                {% if posts is defined and posts|length > 0 %}#}
+{#                    {% for post in posts %}#}
+{#                        <div class="news-card">#}
+{#                            <div class="news-card-img-wrap">#}
+{#                                {% if post.coverImageName %}#}
+{#                                    <img class="news-card-img" src="/uploads/posts/{{ post.id }}/{{ post.coverImageName }}" alt="">#}
+{#                                {% else %}#}
+{#                                    <div class="news-card-img d-flex align-items-center justify-content-center">#}
+{#                                        <i class="bi bi-image text-muted" style="font-size:2rem"></i>#}
+{#                                    </div>#}
+{#                                {% endif %}#}
+{#                                {% if post.type %}#}
+{#                                    {% set badge_class = 'news-card-badge--news' %}#}
+{#                                    {% if post.type.value == 'order' %}{% set badge_class = 'news-card-badge--order' %}#}
+{#                                    {% elseif post.type.value == 'instruction' %}{% set badge_class = 'news-card-badge--instruction' %}#}
+{#                                    {% elseif post.type.value == 'regulation' %}{% set badge_class = 'news-card-badge--regulation' %}#}
+{#                                    {% elseif post.type.value == 'disposition' %}{% set badge_class = 'news-card-badge--disposition' %}#}
+{#                                    {% endif %}#}
+{#                                    <span class="news-card-badge {{ badge_class }}">{{ post.type.label() }}</span>#}
+{#                                {% endif %}#}
+{#                            </div>#}
+{#                            <div class="news-card-body">#}
+{#                                <div class="news-card-title">{{ post.title }}</div>#}
+{#                                <div class="news-card-date">{{ post.createdAt|date('d.m.Y') }}</div>#}
+{#                            </div>#}
+{#                        </div>#}
+{#                    {% endfor %}#}
+{#                {% else %}#}
+{#                    #}{# Заглушки пока нет данных #}
+{#                    <div class="news-card">#}
+{#                        <div class="news-card-img-wrap">#}
+{#                            <div class="news-card-img d-flex align-items-center justify-content-center">#}
+{#                                <i class="bi bi-megaphone text-muted" style="font-size:2rem"></i>#}
+{#                            </div>#}
+{#                            <span class="news-card-badge news-card-badge--news">Новость</span>#}
+{#                        </div>#}
+{#                        <div class="news-card-body">#}
+{#                            <div class="news-card-title">Запущент новый модели электронного архива</div>#}
+{#                            <div class="news-card-date">24.04.2024</div>#}
+{#                        </div>#}
+{#                    </div>#}
+{#                    <div class="news-card">#}
+{#                        <div class="news-card-img-wrap">#}
+{#                            <div class="news-card-img d-flex align-items-center justify-content-center">#}
+{#                                <i class="bi bi-calendar-event text-muted" style="font-size:2rem"></i>#}
+{#                            </div>#}
+{#                            <span class="news-card-badge news-card-badge--event">Событие</span>#}
+{#                        </div>#}
+{#                        <div class="news-card-body">#}
+{#                            <div class="news-card-title">Семинар по работе с документами — 26 апреля</div>#}
+{#                            <div class="news-card-date">22.04.2024</div>#}
+{#                        </div>#}
+{#                    </div>#}
+{#                    <div class="news-card">#}
+{#                        <div class="news-card-img-wrap">#}
+{#                            <div class="news-card-img d-flex align-items-center justify-content-center">#}
+{#                                <i class="bi bi-file-earmark-text text-muted" style="font-size:2rem"></i>#}
+{#                            </div>#}
+{#                            <span class="news-card-badge news-card-badge--order">Приказ</span>#}
+{#                        </div>#}
+{#                        <div class="news-card-body">#}
+{#                            <div class="news-card-title">Обновлены внутренние регламенты</div>#}
+{#                            <div class="news-card-date">19.04.2024</div>#}
+{#                        </div>#}
+{#                    </div>#}
+{#                    <div class="news-card">#}
+{#                        <div class="news-card-img-wrap">#}
+{#                            <div class="news-card-img d-flex align-items-center justify-content-center">#}
+{#                                <i class="bi bi-exclamation-triangle text-muted" style="font-size:2rem"></i>#}
+{#                            </div>#}
+{#                            <span class="news-card-badge news-card-badge--important">Важно</span>#}
+{#                        </div>#}
+{#                        <div class="news-card-body">#}
+{#                            <div class="news-card-title">Плановые работы на сервере — 30 апреля</div>#}
+{#                            <div class="news-card-date">18.04.2024</div>#}
+{#                        </div>#}
+{#                    </div>#}
+{#                {% endif %}#}
 
-            </div>
-        </div>
-    </div>
+{#            </div>#}
+{#        </div>#}
+{#    </div>#}
 
     <!-- Чат (Telegram-style) -->
     <div class="dash-animate dash-animate-d3">
