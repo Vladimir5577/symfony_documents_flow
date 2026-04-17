@@ -175,7 +175,7 @@
     {% endif %}
 
     {% if is_granted('ROLE_ADMIN') %}
-        <li class="sidebar-item has-sub {% if active_tab in ['analytics_metrics', 'analytics_boards', 'analytics_periods', 'analytics_org_boards'] %}active{% endif %}">
+        <li class="sidebar-item has-sub {% if active_tab in ['analytics_metrics', 'analytics_boards', 'analytics_periods', 'analytics_organizations', 'analytics_org_boards'] %}active{% endif %}">
             <a href="#" class="sidebar-link">
                 <i class="bi bi-sliders"></i>
                 <span>Настройки аналитики</span>
@@ -192,6 +192,10 @@
 
                 <li class="submenu-item {% if active_tab == 'analytics_periods' %}active{% endif %}">
                     <a href="{{ path('app_analytics_admin_period') }}" class="submenu-link"><i class="bi bi-calendar3"></i> Периоды</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_organizations' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_admin_organization_index') }}" class="submenu-link"><i class="bi bi-building"></i> Организации</a>
                 </li>
 
                 <li class="submenu-item {% if active_tab == 'analytics_org_boards' %}active{% endif %}">
