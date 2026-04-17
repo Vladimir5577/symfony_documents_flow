@@ -13,6 +13,7 @@ use App\Repository\Analytics\AnalyticsBoardRepository;
 use App\Service\Analytics\CreateReportService;
 use App\Service\Analytics\FillReportValueService;
 use App\Service\Analytics\ApproveReportService;
+use App\Service\Analytics\RecalculateAggregatesService;
 use App\Service\Analytics\SubmitReportService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -295,6 +296,7 @@ final class AnalyticsReportController extends AbstractController
         CsrfTokenManagerInterface $csrf,
         CreateReportService $reportService,
         FillReportValueService $fillService,
+        RecalculateAggregatesService $recalculateService,
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
@@ -328,7 +330,14 @@ final class AnalyticsReportController extends AbstractController
             $values = $request->request->all('values') ?? [];
 
             try {
-                $fillService->fillValues($report, $values, $user);
+                $wasApproved = $report->getStatus() === AnalyticsReportStatus::Approved;
+                $fillService->fillValues($report, $values, $user, $isAdmin);
+
+                if ($isAdmin && $wasApproved) {
+                    $recalculateService->recalculateForScope($report->getPeriod(), $report->getOrganization());
+                    $this->addFlash('success', 'Агрегированная аналитика пересчитана.');
+                }
+
                 $this->addFlash('success', 'Значения сохранены.');
             } catch (\Throwable $e) {
                 $this->addFlash('error', $e->getMessage());
@@ -399,6 +408,7 @@ final class AnalyticsReportController extends AbstractController
         CsrfTokenManagerInterface $csrf,
         CreateReportService $reportService,
         SubmitReportService $submitService,
+        ApproveReportService $approveService,
     ): Response {
         $user = $this->getUser();
         if (!$user) {
@@ -415,9 +425,21 @@ final class AnalyticsReportController extends AbstractController
             return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
         }
 
+        $submitAction = $request->request->getString('submit_action', 'submit');
+
         try {
-            $submitService->submit($report);
-            $this->addFlash('success', 'Отчёт отправлен на утверждение.');
+            if ($submitAction === 'approve') {
+                if (!$this->isGranted('ROLE_MANAGER')) {
+                    throw new \RuntimeException('Недостаточно прав для утверждения отчёта.');
+                }
+
+                $submitService->submit($report);
+                $approveService->approve($report, $user);
+                $this->addFlash('success', 'Отчёт отправлен и утверждён.');
+            } else {
+                $submitService->submit($report);
+                $this->addFlash('success', 'Отчёт отправлен на утверждение.');
+            }
         } catch (\Throwable $e) {
             $this->addFlash('error', $e->getMessage());
         }
@@ -430,6 +452,7 @@ final class AnalyticsReportController extends AbstractController
         int $id,
         Request $request,
         CsrfTokenManagerInterface $csrf,
+        RecalculateAggregatesService $recalculateService,
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
@@ -451,8 +474,16 @@ final class AnalyticsReportController extends AbstractController
         $isManager = $this->isGranted('ROLE_MANAGER');
 
         if ($isAdmin) {
+            $wasApproved = $report->getStatus() === AnalyticsReportStatus::Approved;
+            $reportPeriod = $report->getPeriod();
+            $reportOrganization = $report->getOrganization();
             $em->remove($report);
             $em->flush();
+
+            if ($wasApproved) {
+                $recalculateService->recalculateForScope($reportPeriod, $reportOrganization);
+                $this->addFlash('success', 'Агрегированная аналитика пересчитана.');
+            }
 
             $this->addFlash('success', 'Отчёт удалён.');
             return $this->redirectToRoute('app_analytics_report');

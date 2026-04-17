@@ -24,9 +24,9 @@ final class FillReportValueService
      *
      * @param array<int, mixed> $values Массив [boardVersionMetricId => scalarValue]
      */
-    public function fillValues(AnalyticsReport $report, array $values, User $user): void
+    public function fillValues(AnalyticsReport $report, array $values, User $user, bool $forceEdit = false): void
     {
-        if ($report->getStatus()->value !== 'draft') {
+        if (!$forceEdit && $report->getStatus()->value !== 'draft') {
             throw new \RuntimeException('Редактировать можно только черновик.');
         }
 

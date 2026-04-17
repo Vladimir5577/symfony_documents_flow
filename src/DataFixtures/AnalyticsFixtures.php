@@ -8,6 +8,7 @@ use App\Entity\Analytics\AnalyticsBoard;
 use App\Entity\Analytics\AnalyticsBoardVersion;
 use App\Entity\Analytics\AnalyticsBoardVersionMetric;
 use App\Entity\Analytics\AnalyticsMetric;
+use App\Entity\Analytics\AnalyticsOrganization;
 use App\Entity\Analytics\AnalyticsOrganizationBoard;
 use App\Entity\Analytics\AnalyticsPeriod;
 use App\Entity\Analytics\AnalyticsReport;
@@ -161,6 +162,17 @@ class AnalyticsFixtures extends Fixture implements FixtureGroupInterface
             }
         }
         echo "  Организации: {$orgCount}\n";
+
+        // === 0. Настройки дашборда: какие организации показывать в сравнении ===
+        foreach ($organizations as $idx => $org) {
+            $ao = new AnalyticsOrganization();
+            $ao->setOrganization($org);
+            $ao->setSortOrder($idx + 1);
+            $ao->setIsVisible(true);
+            $manager->persist($ao);
+        }
+        $manager->flush();
+        echo "  Настройки дашборда (analytics_organization): {$orgCount}\n";
 
         // --- Пользователи на организацию (директор/менеджер) ---
         $userRepo = $manager->getRepository(User::class);

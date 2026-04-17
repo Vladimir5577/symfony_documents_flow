@@ -111,10 +111,33 @@
                                     <span class="text-muted">Просмотр без редактирования</span>
                                 {% endif %}
 
-                                {% if canEdit and report.complete and report.status.value == 'draft' %}
-                                    <form action="{{ path('app_analytics_report_submit', {id: report.id}) }}" method="post" onsubmit="return confirm('Отправить отчёт на утверждение? После отправки редактирование будет невозможно.');">
-                                        <input type="hidden" name="_token" value="{{ csrf_token('report_submit_' ~ report.id) }}">
-                                        <button type="submit" class="btn btn-success">Отправить на утверждение</button>
+                                <div class="d-flex gap-2">
+                                    {% if canEdit and report.status.value == 'draft' %}
+{#                                        <form action="{{ path('app_analytics_report_submit', {id: report.id}) }}" method="post" onsubmit="return confirm('Отправить отчёт на утверждение? После отправки редактирование будет невозможно.');">#}
+{#                                            <input type="hidden" name="_token" value="{{ csrf_token('report_submit_' ~ report.id) }}">#}
+{#                                            <button type="submit" class="btn btn-success" {% if not report.complete %}disabled title="Заполните все обязательные метрики"{% endif %}>#}
+{#                                                Отправить на утверждение#}
+{#                                            </button>#}
+{#                                        </form>#}
+                                    {% endif %}
+
+                                    {% if canEdit and report.status.value == 'draft' and is_granted('ROLE_MANAGER') %}
+                                        <form action="{{ path('app_analytics_report_submit', {id: report.id}) }}" method="post" onsubmit="return confirm('Утвердить отчёт #{{ report.id }}? Отчёт будет отправлен и сразу утверждён.');">
+                                            <input type="hidden" name="_token" value="{{ csrf_token('report_submit_' ~ report.id) }}">
+                                            <input type="hidden" name="submit_action" value="approve">
+                                            <button type="submit" class="btn btn-outline-success" {% if not report.complete %}disabled title="Заполните все обязательные метрики"{% endif %}>
+                                                <i class="bi bi-check-circle me-1"></i>Утвердить
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+
+                                {% if report.status.value == 'submitted' and is_granted('ROLE_MANAGER') %}
+                                    <form action="{{ path('app_analytics_approval_approve', {id: report.id}) }}" method="post" onsubmit="return confirm('Утвердить отчёт #{{ report.id }}?');">
+                                        <input type="hidden" name="_token" value="{{ csrf_token('report_approve_' ~ report.id) }}">
+                                        <button type="submit" class="btn btn-success">
+                                            <i class="bi bi-check-circle me-1"></i>Утвердить
+                                        </button>
                                     </form>
                                 {% endif %}
                             </div>

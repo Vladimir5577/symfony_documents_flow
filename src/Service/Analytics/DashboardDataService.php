@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Analytics;
 
 use App\Repository\Analytics\AnalyticsAggregatedDataRepository;
+use App\Repository\Analytics\AnalyticsOrganizationRepository;
 use App\Repository\Organization\OrganizationRepository;
 
 /**
@@ -17,6 +18,12 @@ final class DashboardDataService
     public const SCALE_WEEK = 'week';
 
     private const MONTH_LABELS_RU = [
+        1 => 'Янв', 2 => 'Фев', 3 => 'Мар', 4 => 'Апр',
+        5 => 'Май', 6 => 'Июн', 7 => 'Июл', 8 => 'Авг',
+        9 => 'Сен', 10 => 'Окт', 11 => 'Ноя', 12 => 'Дек',
+    ];
+
+    private const MONTH_LABELS_RU_FULL = [
         1 => 'Янв', 2 => 'Фев', 3 => 'Мар', 4 => 'Апр',
         5 => 'Май', 6 => 'Июн', 7 => 'Июл', 8 => 'Авг',
         9 => 'Сен', 10 => 'Окт', 11 => 'Ноя', 12 => 'Дек',
@@ -52,6 +59,7 @@ final class DashboardDataService
 
     public function __construct(
         private readonly AnalyticsAggregatedDataRepository $aggregatedDataRepo,
+        private readonly AnalyticsOrganizationRepository $analyticsOrgRepo,
         private readonly OrganizationRepository $organizationRepo,
     ) {
     }
@@ -75,6 +83,162 @@ final class DashboardDataService
             : $this->aggregatedDataRepo->findMonthlyAggregated($orgIds, self::ALL_KEYS);
 
         return $this->buildResponse($rows, $scale);
+    }
+
+    /**
+     * Данные для таблицы сравнения организаций за конкретный период.
+     * Всегда показывает все родительские организации (те же что карточки сверху).
+     * Параметр $organizationId игнорируется — таб сравнения независим от выбора.
+     *
+     * @return array{scale: string, selectedYear: int, selectedPeriod: int, availablePeriods: array, rows: array}
+     */
+    public function getCompareData(int $organizationId, string $scale = self::SCALE_MONTH, ?int $year = null, ?int $period = null): array
+    {
+        // Берём организации из таблицы настроек дашборда
+        $analyticsOrgs = $this->analyticsOrgRepo->findVisibleOrdered();
+
+        if (empty($analyticsOrgs)) {
+            return $this->emptyCompareData($scale);
+        }
+
+        // Для каждой организации собираем все её ID (с дочерними)
+        // и строим маппинг descendantId => parentOrgId
+        $orgMap = []; // parentOrgId => ['name' => ..., 'allIds' => [...]]
+        $descendantToParent = []; // anyDescendantId => parentOrgId
+        $allOrgIds = [];
+
+        foreach ($analyticsOrgs as $ao) {
+            $org = $ao->getOrganization();
+            $parentId = $org->getId();
+            $descIds = $this->organizationRepo->findOrganizationWithChildrenIds($parentId);
+            $orgMap[$parentId] = [
+                'name' => $org->getFullName() ?: $org->getName(),
+                'allIds' => $descIds,
+            ];
+            foreach ($descIds as $dId) {
+                $descendantToParent[$dId] = $parentId;
+            }
+            $allOrgIds = array_merge($allOrgIds, $descIds);
+        }
+
+        $allOrgIds = array_values(array_unique($allOrgIds));
+
+        // Доступные периоды
+        $availablePeriods = $scale === self::SCALE_WEEK
+            ? $this->aggregatedDataRepo->findAvailableWeeks($allOrgIds)
+            : $this->aggregatedDataRepo->findAvailableMonths($allOrgIds);
+
+        if (empty($availablePeriods)) {
+            return $this->emptyCompareData($scale);
+        }
+
+        // Если период не задан — последний доступный
+        if ($year === null || $period === null) {
+            $latest = $availablePeriods[0];
+            $year = (int) $latest['yr'];
+            $period = (int) ($scale === self::SCALE_WEEK ? $latest['wk'] : $latest['mo']);
+        }
+
+        // Метки для селектора
+        $periodsForSelect = [];
+        foreach ($availablePeriods as $ap) {
+            if ($scale === self::SCALE_WEEK) {
+                $periodsForSelect[] = [
+                    'year' => (int) $ap['yr'],
+                    'period' => (int) $ap['wk'],
+                    'label' => 'W' . str_pad((string) $ap['wk'], 2, '0', STR_PAD_LEFT) . ' ' . $ap['yr'],
+                ];
+            } else {
+                $periodsForSelect[] = [
+                    'year' => (int) $ap['yr'],
+                    'period' => (int) $ap['mo'],
+                    'label' => self::MONTH_LABELS_RU_FULL[(int) $ap['mo']] . ' ' . $ap['yr'],
+                ];
+            }
+        }
+
+        // Данные с разбивкой по organization_id
+        $rows = $scale === self::SCALE_WEEK
+            ? $this->aggregatedDataRepo->findCompareWeekly($allOrgIds, self::ALL_KEYS, $year, $period)
+            : $this->aggregatedDataRepo->findCompareMonthly($allOrgIds, self::ALL_KEYS, $year, $period);
+
+        // Агрегируем по родительским организациям
+        $orgData = []; // parentOrgId => [businessKey => value]
+        foreach ($rows as $row) {
+            $oid = (int) $row['organization_id'];
+            $parentId = $descendantToParent[$oid] ?? null;
+            if ($parentId === null) {
+                continue;
+            }
+            $bk = $row['business_key'];
+            $val = in_array($bk, self::SUM_KEYS, true)
+                ? (float) ($row['total_value'] ?? 0)
+                : (float) ($row['avg_value'] ?? 0);
+
+            if (!isset($orgData[$parentId][$bk])) {
+                $orgData[$parentId][$bk] = 0.0;
+            }
+            $orgData[$parentId][$bk] += $val;
+        }
+
+        // Формируем строки
+        $resultRows = [];
+        $totals = array_fill_keys(self::ALL_KEYS, 0.0);
+
+        foreach ($orgMap as $parentId => $info) {
+            $data = $orgData[$parentId] ?? [];
+            $resultRows[] = $this->buildCompareRow($info['name'], $data, false);
+
+            foreach (self::ALL_KEYS as $k) {
+                $totals[$k] += $data[$k] ?? 0.0;
+            }
+        }
+
+        // Строка итого — первая
+        $totalRow = $this->buildCompareRow('Итого', $totals, true);
+        array_unshift($resultRows, $totalRow);
+
+        return [
+            'scale' => $scale,
+            'selectedYear' => $year,
+            'selectedPeriod' => $period,
+            'availablePeriods' => $periodsForSelect,
+            'rows' => $resultRows,
+        ];
+    }
+
+    /**
+     * @param array<string, float> $data
+     * @return array<string, mixed>
+     */
+    private function buildCompareRow(string $name, array $data, bool $isTotal): array
+    {
+        return [
+            'name' => $name,
+            'isTotal' => $isTotal,
+            'cashInflow' => round(($data['cash_inflow'] ?? 0) / 1_000_000, 1),
+            'cashOutflow' => round(($data['cash_outflow'] ?? 0) / 1_000_000, 1),
+            'tkoExport' => (int) round($data['tko_export'] ?? 0),
+            'fuelConsumption' => round(($data['fuel_consumption'] ?? 0) / 1_000_000, 1),
+            'staffPlanned' => (int) round($data['staff_planned_count'] ?? 0),
+            'staffActual' => (int) round($data['staff_actual_count'] ?? 0),
+            'hired' => (int) round($data['employees_hired'] ?? 0),
+            'terminated' => (int) round($data['employees_terminated'] ?? 0),
+        ];
+    }
+
+    /**
+     * @return array{scale: string, selectedYear: int, selectedPeriod: int, availablePeriods: array, rows: array}
+     */
+    private function emptyCompareData(string $scale): array
+    {
+        return [
+            'scale' => $scale,
+            'selectedYear' => 0,
+            'selectedPeriod' => 0,
+            'availablePeriods' => [],
+            'rows' => [],
+        ];
     }
 
     /**

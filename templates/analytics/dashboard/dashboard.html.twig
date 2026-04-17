@@ -422,122 +422,34 @@
 {#            </div>#}
 {#        </div>#}
         <div class="card" style="margin-bottom:12px">
-            <div class="card-title">Сводная таблица сравнения филиалов</div>
+            <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                <span>Сводная таблица сравнения филиалов</span>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div class="scale-toggle-compare" style="display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+                        <button class="scale-btn-cmp active" data-scale="month" onclick="setCompareScale('month')">Месяц</button>
+                        <button class="scale-btn-cmp" data-scale="week" onclick="setCompareScale('week')">Неделя</button>
+                    </div>
+                    <select id="comparePeriodSelect" onchange="loadCompareData()" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;cursor:pointer"></select>
+                </div>
+            </div>
             <div class="branch-table-wrap">
                 <table class="branch-table">
                     <thead>
                     <tr>
                         <th>Филиал</th>
                         <th>Выручка, М₽</th>
-                        <th>% плана</th>
+                        <th>Расходы, М₽</th>
                         <th>ТКО, т</th>
-                        <th>Рейсы</th>
-                        <th>Выход техн.</th>
-                        <th>Собир-ть</th>
-                        <th>Дебиторка</th>
-                        <th>ФОТ, М₽</th>
                         <th>ГСМ, М₽</th>
-                        <th>Жалобы</th>
-                        <th>% отраб.</th>
-                        <th>Текучесть</th>
-                        <th>Результат</th>
+                        <th>Штат план</th>
+                        <th>Штат факт</th>
+                        <th>Принято</th>
+                        <th>Уволено</th>
                     </tr>
                     </thead>
-                    <tbody>
-                    <tr class="hq">
-                        <td>🏢 Предприятие</td>
-                        <td>42.6</td><td class="badge-ok">103.9%</td>
-                        <td>4 820</td><td>2 841</td><td class="badge-warn">87.3%</td>
-                        <td class="badge-warn">81.4%</td><td class="badge-warn">19.4М</td>
-                        <td>14.2</td><td class="badge-bad">5.8</td>
-                        <td>148</td><td class="badge-ok">89.2%</td>
-                        <td class="badge-warn">3.8%</td><td class="badge-ok">+4.1М</td>
-                    </tr>
-                    <tr>
-                        <td>Ф-1 Донецк</td>
-                        <td>9.8</td><td class="badge-ok">105%</td>
-                        <td>1 140</td><td>672</td><td class="badge-ok">93.2%</td>
-                        <td class="badge-ok">84.1%</td><td>3.1М</td>
-                        <td>3.2</td><td>1.1</td>
-                        <td>24</td><td class="badge-ok">97.3%</td>
-                        <td class="badge-ok">2.8%</td><td class="badge-ok">+1.2М</td>
-                    </tr>
-                    <tr>
-                        <td>Ф-2 Макеевка</td>
-                        <td>7.4</td><td class="badge-warn">98%</td>
-                        <td>890</td><td>524</td><td class="badge-ok">91.0%</td>
-                        <td class="badge-ok">83.0%</td><td>2.8М</td>
-                        <td>2.4</td><td>0.9</td>
-                        <td>18</td><td class="badge-ok">91.4%</td>
-                        <td class="badge-ok">3.1%</td><td class="badge-ok">+0.7М</td>
-                    </tr>
-                    <tr>
-                        <td>Ф-3 Горловка</td>
-                        <td>6.1</td><td class="badge-bad">91%</td>
-                        <td>720</td><td>420</td><td class="badge-warn">84.2%</td>
-                        <td class="badge-bad">74.2%</td><td class="badge-bad">5.4М</td>
-                        <td>2.1</td><td>1.0</td>
-                        <td>38</td><td class="badge-bad">82.1%</td>
-                        <td class="badge-bad">5.1%</td><td class="badge-bad">−0.3М</td>
-                    </tr>
-                    <tr>
-                        <td>Ф-4 Енакиево</td>
-                        <td>8.2</td><td class="badge-ok">104%</td>
-                        <td>980</td><td>580</td><td class="badge-ok">90.5%</td>
-                        <td class="badge-ok">85.2%</td><td>3.4М</td>
-                        <td>2.7</td><td>1.1</td>
-                        <td>21</td><td class="badge-ok">93.4%</td>
-                        <td class="badge-ok">2.9%</td><td class="badge-ok">+1.0М</td>
-                    </tr>
-                    <tr>
-                        <td>Ф-5 Харцызск</td>
-                        <td>5.9</td><td class="badge-warn">97%</td>
-                        <td>640</td><td>372</td><td class="badge-bad">82.1%</td>
-                        <td class="badge-warn">79.4%</td><td>3.1М</td>
-                        <td>2.0</td><td class="badge-bad">1.4</td>
-                        <td>29</td><td class="badge-warn">88.0%</td>
-                        <td class="badge-bad">4.8%</td><td class="badge-warn">+0.1М</td>
-                    </tr>
-                    <tr>
-                        <td>Ф-6 Ясиноватая</td>
-                        <td>5.2</td><td class="badge-bad">88%</td>
-                        <td>450</td><td>273</td><td class="badge-bad">81.4%</td>
-                        <td class="badge-bad">76.1%</td><td class="badge-bad">4.2М</td>
-                        <td>1.8</td><td>0.9</td>
-                        <td>18</td><td class="badge-warn">86.8%</td>
-                        <td class="badge-bad">4.2%</td><td class="badge-bad">−0.6М</td>
-                    </tr>
+                    <tbody id="compareTableBody">
                     </tbody>
                 </table>
-            </div>
-        </div>
-        <div class="card">
-            <div class="card-title">Итоговый рейтинг филиалов <span style="color:var(--text-muted);font-weight:400;font-size:11px">по сводному индексу</span></div>
-            <div style="padding-top:4px">
-                <div class="prog-row">
-                    <div class="prog-label"><span>🥇 Ф-1 Донецк</span><span class="val" style="color:var(--accent-teal)">82 / 100</span></div>
-                    <div class="prog-track"><div class="prog-fill" style="width:82%;background:var(--accent-teal)"></div></div>
-                </div>
-                <div class="prog-row">
-                    <div class="prog-label"><span>🥈 Ф-4 Енакиево</span><span class="val" style="color:var(--accent-teal)">79 / 100</span></div>
-                    <div class="prog-track"><div class="prog-fill" style="width:79%;background:var(--accent-teal)"></div></div>
-                </div>
-                <div class="prog-row">
-                    <div class="prog-label"><span>🥉 Ф-2 Макеевка</span><span class="val" style="color:var(--accent-blue)">71 / 100</span></div>
-                    <div class="prog-track"><div class="prog-fill" style="width:71%;background:var(--accent-blue)"></div></div>
-                </div>
-                <div class="prog-row">
-                    <div class="prog-label"><span>4️⃣ Ф-5 Харцызск</span><span class="val" style="color:var(--accent-amber)">62 / 100</span></div>
-                    <div class="prog-track"><div class="prog-fill" style="width:62%;background:var(--accent-amber)"></div></div>
-                </div>
-                <div class="prog-row">
-                    <div class="prog-label"><span>5️⃣ Ф-3 Горловка</span><span class="val" style="color:var(--accent-red)">51 / 100</span></div>
-                    <div class="prog-track"><div class="prog-fill" style="width:51%;background:var(--accent-red)"></div></div>
-                </div>
-                <div class="prog-row">
-                    <div class="prog-label"><span>6️⃣ Ф-6 Ясиноватая</span><span class="val" style="color:var(--accent-red)">47 / 100</span></div>
-                    <div class="prog-track"><div class="prog-fill" style="width:47%;background:var(--accent-red)"></div></div>
-                </div>
             </div>
         </div>
     </div>
@@ -652,6 +564,7 @@
         renderTab('finance');
         renderTab('tko');
         renderTab('hr');
+        renderTab('compare');
     }
 
     function renderTab(id) {
@@ -776,37 +689,75 @@
             });
         },
         compare: () => {
-            mkChart('chartRatingRev', {
-                type: 'bar',
-                data: {
-                    labels: FILIALS,
-                    datasets: [
-                        { label: 'Факт, млн ₽', data: [9.8,7.4,6.1,8.2,5.9,5.2], backgroundColor: FILIALS.map((_,i) => i===2||i===5?'rgba(248,81,73,0.7)':i===4?'rgba(210,153,34,0.7)':'rgba(88,166,255,0.7)'), borderRadius: 5 },
-                        { label: 'План', data: [9.3,7.6,6.7,7.9,6.1,5.9], type: 'line', borderColor: 'rgba(255,255,255,0.3)', borderDash: [4,4], fill: false, pointRadius: 0 }
-                    ]
-                },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-            });
-            mkChart('chartCollDebt', {
-                type: 'bar',
-                data: {
-                    labels: FILIALS,
-                    datasets: [
-                        { label: 'Собираемость, %', data: [84.1,83.0,74.2,85.2,79.4,76.1], backgroundColor: 'rgba(57,197,207,0.7)', borderRadius: 4, yAxisID: 'y' },
-                        { label: 'Дебиторка, М₽', data: [3.1,2.8,5.4,3.4,3.1,4.2], backgroundColor: 'rgba(210,153,34,0.6)', borderRadius: 4, yAxisID: 'y2' }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom' } },
-                    scales: {
-                        y: { position: 'left', min: 60, max: 100, ticks: { callback: v => v+'%' } },
-                        y2: { position: 'right', grid: { drawOnChartArea: false } }
-                    }
-                }
-            });
+            renderCompareTable(dashboardData.compare || {});
         }
     };
+
+    /* ── COMPARE TAB ── */
+    let compareScale = '{{ initialScale }}';
+
+    function setCompareScale(scale) {
+        compareScale = scale;
+        document.querySelectorAll('.scale-btn-cmp').forEach(b => b.classList.toggle('active', b.dataset.scale === scale));
+        loadCompareData();
+    }
+
+    function loadCompareData() {
+        const orgId = getSelectedOrgId();
+        const sel = document.getElementById('comparePeriodSelect');
+        let url = '/analytics/dashboard/compare-data?org_id=' + orgId + '&scale=' + compareScale;
+        if (sel && sel.value) {
+            const parts = sel.value.split('-');
+            url += '&year=' + parts[0] + '&period=' + parts[1];
+        }
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                dashboardData.compare = data;
+                renderCompareTable(data);
+            });
+    }
+
+    function renderCompareTable(data) {
+        const sel = document.getElementById('comparePeriodSelect');
+        const tbody = document.getElementById('compareTableBody');
+        if (!sel || !tbody) return;
+
+        // Update period selector
+        const periods = data.availablePeriods || [];
+        const currentVal = sel.value || (data.selectedYear + '-' + data.selectedPeriod);
+        sel.innerHTML = '';
+        periods.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.year + '-' + p.period;
+            opt.textContent = p.label;
+            if (opt.value === String(data.selectedYear) + '-' + String(data.selectedPeriod)) opt.selected = true;
+            sel.appendChild(opt);
+        });
+
+        // Update table rows
+        const rows = data.rows || [];
+        tbody.innerHTML = '';
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Нет данных за выбранный период</td></tr>';
+            return;
+        }
+        rows.forEach(row => {
+            const tr = document.createElement('tr');
+            if (row.isTotal) tr.classList.add('hq');
+            tr.innerHTML =
+                '<td>' + (row.isTotal ? '\uD83C\uDFE2 ' : '') + row.name + '</td>' +
+                '<td>' + row.cashInflow + '</td>' +
+                '<td>' + row.cashOutflow + '</td>' +
+                '<td>' + row.tkoExport.toLocaleString('ru-RU') + '</td>' +
+                '<td>' + row.fuelConsumption + '</td>' +
+                '<td>' + row.staffPlanned + '</td>' +
+                '<td>' + row.staffActual + '</td>' +
+                '<td>' + row.hired + '</td>' +
+                '<td>' + row.terminated + '</td>';
+            tbody.appendChild(tr);
+        });
+    }
 
     /* ── INIT ── */
     window.addEventListener('load', () => {

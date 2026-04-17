@@ -232,6 +232,10 @@ table.branch-table td:first-child {
     position: sticky;
     left: 0;
     background: var(--bg-1);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 11px;
 }
 table.branch-table tr:hover td { background: var(--bg-2); }
 table.branch-table tr:hover td:first-child { background: var(--bg-2); }
@@ -390,6 +394,22 @@ table.branch-table tr.hq td:first-child { color: var(--accent-blue); }
 .sparkline-wrap canvas { display: block; }
 
 /* scrollbar */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 2px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-2); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── COMPARE SCALE TOGGLE ── */
+.scale-btn-cmp {
+    background: transparent;
+    border: none;
+    padding: 4px 12px;
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.scale-btn-cmp:hover { color: var(--text-primary); }
+.scale-btn-cmp.active { background: var(--bg-3); color: var(--text-primary); }

@@ -33,6 +33,7 @@ final class AnalyticsDashboardController extends AbstractController
         $firstOrgId = !empty($organizations) ? $organizations[0]->getId() : 0;
         $scale = $this->normalizeScale($request->query->getString('scale', 'month'));
         $dashboardData = $dashboardDataService->getData($firstOrgId, $scale);
+        $dashboardData['compare'] = $dashboardDataService->getCompareData($firstOrgId, $scale);
 
         return $this->render('analytics/dashboard/dashboard.html.twig', [
             'organizations' => $organizations,
@@ -49,6 +50,22 @@ final class AnalyticsDashboardController extends AbstractController
         $orgId = $request->query->getInt('org_id', 0);
         $scale = $this->normalizeScale($request->query->getString('scale', 'month'));
 
-        return $this->json($dashboardDataService->getData($orgId, $scale));
+        $data = $dashboardDataService->getData($orgId, $scale);
+        $data['compare'] = $dashboardDataService->getCompareData($orgId, $scale);
+
+        return $this->json($data);
+    }
+
+    #[Route('/analytics/dashboard/compare-data', name: 'app_analytics_dashboard_compare_data', methods: ['GET'])]
+    public function compareData(
+        Request $request,
+        DashboardDataService $dashboardDataService,
+    ): JsonResponse {
+        $orgId = $request->query->getInt('org_id', 0);
+        $scale = $this->normalizeScale($request->query->getString('scale', 'month'));
+        $year = $request->query->getInt('year') ?: null;
+        $period = $request->query->getInt('period') ?: null;
+
+        return $this->json($dashboardDataService->getCompareData($orgId, $scale, $year, $period));
     }
 }

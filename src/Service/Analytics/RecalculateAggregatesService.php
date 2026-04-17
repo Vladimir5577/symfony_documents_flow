@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Analytics;
 
 use App\Entity\Analytics\AnalyticsAggregatedData;
+use App\Entity\Analytics\AnalyticsPeriod;
 use App\Entity\Analytics\AnalyticsReport;
 use App\Entity\Analytics\AnalyticsReportValue;
+use App\Entity\Organization\AbstractOrganization;
 use App\Enum\Analytics\AnalyticsMetricAggregationType;
+use App\Enum\Analytics\AnalyticsReportStatus;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -25,7 +28,7 @@ final class RecalculateAggregatesService
      * Пересчитать агрегаты для одного утверждённого отчёта.
      * Агрегирует по связке (metric_id, period_id, organization_id).
      */
-    public function recalculateForReport(AnalyticsReport $report): void
+    public function recalculateForReport(AnalyticsReport $report, bool $flush = true): void
     {
         $period = $report->getPeriod();
         $organization = $report->getOrganization();
@@ -80,7 +83,50 @@ final class RecalculateAggregatesService
             $this->upsertAggregatedValue($metric, $reportValue, $period, $organization, $report);
         }
 
+        if ($flush) {
+            $this->em->flush();
+        }
+    }
+
+    /**
+     * Пересчитать агрегаты в пределах одной организации и периода.
+     * Используется после изменения/удаления одного утверждённого отчёта.
+     */
+    public function recalculateForScope(?AnalyticsPeriod $period, ?AbstractOrganization $organization): int
+    {
+        if (!$period || !$organization) {
+            return 0;
+        }
+
+        $this->em->createQueryBuilder()
+            ->delete(AnalyticsAggregatedData::class, 'a')
+            ->andWhere('a.period = :period')
+            ->andWhere('a.organization = :organization')
+            ->setParameter('period', $period)
+            ->setParameter('organization', $organization)
+            ->getQuery()
+            ->execute();
+
+        $approvedReports = $this->em->getRepository(AnalyticsReport::class)
+            ->createQueryBuilder('r')
+            ->andWhere('r.status = :status')
+            ->andWhere('r.period = :period')
+            ->andWhere('r.organization = :organization')
+            ->setParameter('status', AnalyticsReportStatus::Approved)
+            ->setParameter('period', $period)
+            ->setParameter('organization', $organization)
+            ->getQuery()
+            ->getResult();
+
+        $count = 0;
+        foreach ($approvedReports as $report) {
+            $this->recalculateForReport($report, false);
+            $count++;
+        }
+
         $this->em->flush();
+
+        return $count;
     }
 
     /**
@@ -175,7 +221,7 @@ final class RecalculateAggregatesService
         $reportRepo = $this->em->getRepository(AnalyticsReport::class);
         $approvedReports = $reportRepo->createQueryBuilder('r')
             ->andWhere('r.status = :status')
-            ->setParameter('status', \App\Enum\Analytics\AnalyticsReportStatus::Approved)
+            ->setParameter('status', AnalyticsReportStatus::Approved)
             ->getQuery()
             ->getResult();
 
@@ -184,9 +230,11 @@ final class RecalculateAggregatesService
 
         $count = 0;
         foreach ($approvedReports as $report) {
-            $this->recalculateForReport($report);
+            $this->recalculateForReport($report, false);
             $count++;
         }
+
+        $this->em->flush();
 
         return $count;
     }
