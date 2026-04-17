@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\Analytics;
 
-use App\Repository\Organization\OrganizationRepository;
+use App\Repository\Analytics\AnalyticsOrganizationRepository;
 use App\Service\Analytics\DashboardDataService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -24,10 +24,14 @@ final class AnalyticsDashboardController extends AbstractController
     #[Route('/analytics/dashboard', name: 'app_analytics_dashboard')]
     public function index(
         Request $request,
-        OrganizationRepository $organizationRepository,
+        AnalyticsOrganizationRepository $analyticsOrganizationRepository,
         DashboardDataService $dashboardDataService,
     ): Response {
-        $organizations = $organizationRepository->findAllParentOrganizations();
+        $analyticsOrganizations = $analyticsOrganizationRepository->findVisibleOrdered();
+        $organizations = array_map(
+            static fn ($analyticsOrganization) => $analyticsOrganization->getOrganization(),
+            $analyticsOrganizations,
+        );
 
         // Начальные данные: первая организация или все
         $firstOrgId = !empty($organizations) ? $organizations[0]->getId() : 0;

@@ -146,7 +146,7 @@ final class DashboardDataService
                 $periodsForSelect[] = [
                     'year' => (int) $ap['yr'],
                     'period' => (int) $ap['wk'],
-                    'label' => 'W' . str_pad((string) $ap['wk'], 2, '0', STR_PAD_LEFT) . ' ' . $ap['yr'],
+                    'label' => self::weekRangeLabel((int) $ap['yr'], (int) $ap['wk'], true),
                 ];
             } else {
                 $periodsForSelect[] = [
@@ -298,10 +298,7 @@ final class DashboardDataService
         foreach ($periodKeys as $key => $value) {
             $yr = (int) substr($key, 0, 4);
             if ($scale === self::SCALE_WEEK) {
-                $label = 'W' . str_pad((string) $value, 2, '0', STR_PAD_LEFT);
-                if ($multiYear) {
-                    $label .= " '" . substr((string) $yr, 2);
-                }
+                $label = self::weekRangeLabel($yr, $value, $multiYear);
             } else {
                 $label = self::MONTH_LABELS_RU[$value];
                 if ($multiYear) {
@@ -379,6 +376,24 @@ final class DashboardDataService
                 'vacancies' => $vacancies,
             ],
         ];
+    }
+
+    /**
+     * Метка недели в формате диапазона дат: "07.04–13.04" или "07.04–13.04'26" (для мультигода).
+     */
+    private static function weekRangeLabel(int $year, int $week, bool $multiYear): string
+    {
+        $monday = new \DateTime();
+        $monday->setISODate($year, $week, 1); // понедельник
+        $sunday = clone $monday;
+        $sunday->modify('+6 days'); // воскресенье
+
+        $label = $monday->format('d.m') . '–' . $sunday->format('d.m');
+        if ($multiYear) {
+            $label .= "'" . substr((string) $year, 2);
+        }
+
+        return $label;
     }
 
     private function lastNonZero(array $arr): float

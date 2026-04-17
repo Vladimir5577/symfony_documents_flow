@@ -37,9 +37,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    position: sticky;
-    top: 0;
-    z-index: 100;
 }
 .header-logo {
     display: flex;
@@ -142,6 +139,10 @@ body {
     scrollbar-width: none;
 }
 .tabs-nav::-webkit-scrollbar { display:none; }
+.tabs-nav-main { display: flex; }
+@media (max-width: 767.98px) {
+    .tabs-nav-main { display: none; }
+}
 .tab-btn {
     flex: 0 0 auto;
     background: transparent;
@@ -244,6 +245,13 @@ table.branch-table tr.hq td:first-child { color: var(--accent-blue); }
 .badge-ok { color: var(--accent-teal); }
 .badge-warn { color: var(--accent-amber); }
 .badge-bad { color: var(--accent-red); }
+@media (max-width: 767.98px) {
+    table.branch-table th:first-child,
+    table.branch-table td:first-child {
+        position: static;
+        left: auto;
+    }
+}
 
 /* ── PROGRESS BAR ── */
 .prog-row { margin-bottom: 14px; }
