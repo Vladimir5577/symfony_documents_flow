@@ -19,6 +19,32 @@ class KanbanCardRepository extends ServiceEntityRepository
         parent::__construct($registry, KanbanCard::class);
     }
 
+    /**
+     * Количество карточек по колонкам для всех досок проекта.
+     * Возвращает [columnId => count].
+     *
+     * @return array<int, int>
+     */
+    public function countByColumnForProject(KanbanProject $project): array
+    {
+        $rows = $this->getEntityManager()->createQuery(
+            'SELECT col.id as colId, COUNT(c.id) as cnt
+             FROM App\Entity\Kanban\KanbanCard c
+             JOIN c.column col
+             JOIN col.board b
+             WHERE b.project = :project
+             GROUP BY col.id'
+        )
+            ->setParameter('project', $project)
+            ->getResult();
+
+        $result = [];
+        foreach ($rows as $row) {
+            $result[(int) $row['colId']] = (int) $row['cnt'];
+        }
+        return $result;
+    }
+
     public function getMaxPosition(KanbanColumn $column): float
     {
         $result = $this->createQueryBuilder('c')

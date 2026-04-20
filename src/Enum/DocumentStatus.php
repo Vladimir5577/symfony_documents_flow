@@ -14,7 +14,7 @@ enum DocumentStatus: string
     case APPROVED = 'APPROVED';              // Утвержден
     case REJECTED = 'REJECTED';              // Отклонен
     case IN_PROGRESS = 'IN_PROGRESS';        // В работе
-    case COMPLETED = 'COMPLETED';            // Завершен
+    case DONE = 'DONE';                      // Выполнен
     case CANCELLED = 'CANCELLED';            // Отменен
 
     public function getLabel(): string
@@ -28,7 +28,7 @@ enum DocumentStatus: string
             self::APPROVED => 'Утвержден',
             self::REJECTED => 'Отклонен',
             self::IN_PROGRESS => 'В работе',
-            self::COMPLETED => 'Завершен',
+            self::DONE => 'Выполнен',
             self::CANCELLED => 'Отменен',
         };
     }
@@ -69,6 +69,7 @@ enum DocumentStatus: string
             self::IN_REVIEW,
             self::APPROVED,
             self::REJECTED,
+            self::DONE,
         ];
     }
 }

@@ -11,6 +11,7 @@
     var list = document.getElementById('notification-list');
     var markAllBtn = document.getElementById('mark-all-read-btn');
     var toastStack = document.getElementById('toastStack');
+    var docsBadge = document.getElementById('incoming-docs-badge');
 
     if (!badge || !list) return;
 
@@ -183,11 +184,22 @@
         });
     }
 
+    function updateDocsBadge(count) {
+        if (!docsBadge) return;
+        if (count > 0) {
+            docsBadge.textContent = count >= 100 ? '99+' : count;
+            docsBadge.style.display = '';
+        } else {
+            docsBadge.style.display = 'none';
+        }
+    }
+
     function fetchNotifications(showNewToasts) {
         fetch('/api/notifications/latest')
             .then(function (res) { return res.json(); })
             .then(function (data) {
                 updateBadge(data.unreadCount);
+                updateDocsBadge(data.unreadDocumentsCount || 0);
                 renderNotifications(data.notifications);
 
                 if (showNewToasts && data.notifications) {
@@ -222,7 +234,7 @@
     }
 
     // Initial fetch
-    fetchNotifications(true);
+    setTimeout(function () { fetchNotifications(true); }, 7000);
 
     // Poll every 5 minutes
     setInterval(function () { fetchNotifications(true); }, POLL_INTERVAL);

@@ -25,7 +25,6 @@
                             <tr>
                                 <th>Название</th>
                                 <th>Создан</th>
-                                <th>Обновлён</th>
                                 <th class="text-end" style="width: 1%"></th>
                             </tr>
                             </thead>
@@ -37,9 +36,11 @@
                                         {{ project.name }}
                                     </td>
                                     <td class="text-muted">{{ project.createdAt ? project.createdAt|date('d.m.Y H:i') : '—' }}</td>
-                                    <td class="text-muted">{{ project.updatedAt ? project.updatedAt|date('d.m.Y H:i') : '—' }}</td>
-                                    <td class="text-end">
+                                    <td class="text-end text-nowrap">
                                         {% if projectAdminIds[project.id] is defined %}
+                                        <a href="{{ path('app_kanban_project_statistics', {id: project.id}) }}" class="btn btn-sm btn-info text-dark rounded-3 project-edit-btn d-inline-flex align-items-center flex-nowrap me-1" title="Статистика">
+                                            <i class="bi bi-bar-chart-line me-1"></i><span>Статистика</span>
+                                        </a>
                                         <a href="{{ path('app_kanban_project', {id: project.id}) }}" class="btn btn-sm btn-warning text-dark rounded-3 project-edit-btn d-inline-flex align-items-center flex-nowrap" title="Редактировать">
                                             <i class="bi bi-pencil-square me-1"></i><span>Редактировать</span>
                                         </a>

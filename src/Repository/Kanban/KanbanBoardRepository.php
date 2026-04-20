@@ -147,6 +147,23 @@ class KanbanBoardRepository extends ServiceEntityRepository
     }
 
     /**
+     * Все доски проекта с eager-загрузкой колонок.
+     *
+     * @return KanbanBoard[]
+     */
+    public function findByProjectWithColumns(KanbanProject $project): array
+    {
+        return $this->createQueryBuilder('b')
+            ->leftJoin('b.columns', 'col')->addSelect('col')
+            ->where('b.project = :project')
+            ->setParameter('project', $project)
+            ->orderBy('b.id', 'ASC')
+            ->addOrderBy('col.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Доска со всеми связями (колонки, карточки, чеклист, метки).
      */
     public function findOneWithRelations(int $id): ?KanbanBoard

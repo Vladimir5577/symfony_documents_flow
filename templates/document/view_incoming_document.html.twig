@@ -62,7 +62,7 @@
                                 <span class="badge bg-danger">{{ status.label }}</span>
                             {% elseif status.value == 'IN_PROGRESS' %}
                                 <span class="badge bg-info text-dark">{{ status.label }}</span>
-                            {% elseif status.value == 'COMPLETED' %}
+                            {% elseif status.value == 'DONE' %}
                                 <span class="badge bg-success">{{ status.label }}</span>
                             {% elseif status.value == 'CANCELLED' %}
                                 <span class="badge bg-dark">{{ status.label }}</span>
@@ -177,7 +177,7 @@
                                                 <span class="badge bg-danger">{{ status.label }}</span>
                                             {% elseif status.value == 'IN_PROGRESS' %}
                                                 <span class="badge bg-info text-dark">{{ status.label }}</span>
-                                            {% elseif status.value == 'COMPLETED' %}
+                                            {% elseif status.value == 'DONE' %}
                                                 <span class="badge bg-success">{{ status.label }}</span>
                                             {% elseif status.value == 'CANCELLED' %}
                                                 <span class="badge bg-dark">{{ status.label }}</span>
@@ -244,7 +244,7 @@
                                                 <span class="badge bg-danger">{{ status.label }}</span>
                                             {% elseif status.value == 'IN_PROGRESS' %}
                                                 <span class="badge bg-info text-dark">{{ status.label }}</span>
-                                            {% elseif status.value == 'COMPLETED' %}
+                                            {% elseif status.value == 'DONE' %}
                                                 <span class="badge bg-success">{{ status.label }}</span>
                                             {% elseif status.value == 'CANCELLED' %}
                                                 <span class="badge bg-dark">{{ status.label }}</span>
@@ -346,6 +346,11 @@
                 <input type="hidden" name="_token" value="{{ csrf_token('document_status_' ~ document.id) }}">
                 <input type="hidden" name="status" value="REJECTED">
                 <button type="submit" class="btn btn-danger">Отклонен</button>
+            </form>
+            <form method="post" action="{{ path('app_document_status_update', {'id': document.id}) }}" class="d-inline">
+                <input type="hidden" name="_token" value="{{ csrf_token('document_status_' ~ document.id) }}">
+                <input type="hidden" name="status" value="DONE">
+                <button type="submit" class="btn btn-secondary">Выполнен</button>
             </form>
         </div>
     {% endif %}

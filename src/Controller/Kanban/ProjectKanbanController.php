@@ -663,6 +663,75 @@ final class ProjectKanbanController extends AbstractController
         return $result;
     }
 
+    #[Route('/kanban_project/{id}/statistics', name: 'app_kanban_project_statistics', requirements: ['id' => '\d+'])]
+    public function projectStatistics(int $id): Response
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $project = $this->projectRepo->find($id);
+        if (!$project) {
+            throw $this->createNotFoundException('Проект не найден.');
+        }
+
+        $firstBoard = $project->getBoards()->first() ?: null;
+        if ($firstBoard) {
+            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
+        } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
+            throw $this->createAccessDeniedException('Нет доступа к проекту.');
+        }
+
+        return $this->render('kanban/project_statistics.html.twig', [
+            'active_tab' => 'kanban_boards',
+            'project' => $project,
+        ]);
+    }
+
+    #[Route('/kanban_project/{id}/statistics/data', name: 'app_kanban_project_statistics_data', requirements: ['id' => '\d+'])]
+    public function projectStatisticsData(int $id): JsonResponse
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $project = $this->projectRepo->find($id);
+        if (!$project) {
+            return $this->json(['error' => 'Проект не найден.'], 404);
+        }
+
+        $firstBoard = $project->getBoards()->first() ?: null;
+        if ($firstBoard) {
+            try {
+                $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
+            } catch (\Exception) {
+                return $this->json(['error' => 'Недостаточно прав.'], 403);
+            }
+        } elseif ($project->getOwner() !== $user && !$this->projectUserRepo->findByProjectAndUser($project, $user)) {
+            return $this->json(['error' => 'Нет доступа к проекту.'], 403);
+        }
+
+        $boards = $this->boardRepo->findByProjectWithColumns($project);
+        $cardCounts = $this->cardRepo->countByColumnForProject($project);
+        $data = [];
+        foreach ($boards as $board) {
+            $columns = [];
+            foreach ($board->getColumns() as $column) {
+                $columns[] = [
+                    'id' => $column->getId(),
+                    'title' => $column->getTitle(),
+                    'cardCount' => $cardCounts[$column->getId()] ?? 0,
+                ];
+            }
+            $data[] = [
+                'id' => $board->getId(),
+                'title' => $board->getTitle(),
+                'url' => $this->generateUrl('app_kanban_board', ['id' => $board->getId()]),
+                'columns' => $columns,
+            ];
+        }
+
+        return $this->json(['boards' => $data]);
+    }
+
     #[Route('/kanban/board/{id}/rename', name: 'app_kanban_board_rename', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function renameBoard(int $id, Request $request, EntityManagerInterface $entityManager): JsonResponse
     {

@@ -1186,6 +1186,8 @@ var KanbanApp = (function () {
                 if (!fileInput.files.length || !currentCardId) return;
 
                 var file = fileInput.files[0];
+                // [KANBAN: валидация расширения — ВРЕМЕННО ОТКЛЮЧЕНА]
+                /*
                 var ext = file.name.split(".").pop().toLowerCase();
                 var allowed = ["pdf", "png", "jpg", "jpeg", "webp", "docx", "xlsx"];
                 if (allowed.indexOf(ext) === -1) {
@@ -1193,6 +1195,7 @@ var KanbanApp = (function () {
                     fileInput.value = "";
                     return;
                 }
+                */
 
                 var formData = new FormData();
                 formData.append("file", file);
@@ -1236,7 +1239,7 @@ var KanbanApp = (function () {
                     });
                 })
                 .catch(function () { /* silent */ });
-        }, 30000);
+        }, 180000);
     }
 
     function stopCommentPolling() {
@@ -1857,6 +1860,8 @@ select.addEventListener("change", function () {
 
             var file = input.files[0];
             if (fileNameEl) fileNameEl.textContent = file.name || "Файл не выбран";
+            // [KANBAN: валидация расширения — ВРЕМЕННО ОТКЛЮЧЕНА]
+            /*
             var ext = file.name.split(".").pop().toLowerCase();
             var allowed = ["pdf", "png", "jpg", "jpeg", "webp", "docx", "xlsx"];
             if (allowed.indexOf(ext) === -1) {
@@ -1865,6 +1870,7 @@ select.addEventListener("change", function () {
                 if (fileNameEl) fileNameEl.textContent = "Файл не выбран";
                 return;
             }
+            */
 
             var formData = new FormData();
             formData.append("file", file);

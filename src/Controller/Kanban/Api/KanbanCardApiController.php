@@ -58,6 +58,22 @@ final class KanbanCardApiController extends AbstractController
 
         $card = $this->kanbanService->createCard($column, $title);
 
+        $board = $column->getBoard();
+        $project = $board->getProject();
+        if ($project) {
+            $admins = $this->projectUserRepo->findAdminUsersByProject($project);
+            $admins = array_filter($admins, fn(User $u) => $u->getId() !== $user->getId());
+            if ($admins) {
+                $boardLink = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]);
+                $this->notificationService->notifyKanbanCardCreated(
+                    array_values($admins),
+                    $card->getTitle(),
+                    $board->getTitle(),
+                    $boardLink,
+                );
+            }
+        }
+
         return $this->json([
             'id' => $card->getId(),
             'title' => $card->getTitle(),

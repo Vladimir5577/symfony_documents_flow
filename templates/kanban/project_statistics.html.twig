@@ -1,0 +1,110 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Статистика проекта — {{ project.name }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="{{ path('app_kanban_personal_projects') }}" class="text-muted text-decoration-none small">
+                <i class="bi bi-arrow-left me-1"></i>Мои проекты
+            </a>
+            <h1 class="mb-0 mt-1">Статистика: {{ project.name }}</h1>
+        </div>
+        <span id="last-updated" class="text-muted small"></span>
+    </div>
+
+    <section class="section">
+        <div id="statistics-content">
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        const dataUrl = '{{ path('app_kanban_project_statistics_data', {id: project.id}) }}';
+        const POLL_INTERVAL = 5 * 60 * 1000;
+
+        function renderStatistics(data) {
+            const container = document.getElementById('statistics-content');
+            const boards = data.boards || [];
+
+            if (boards.length === 0) {
+                container.innerHTML = '<div class="card"><div class="card-body text-center py-5"><i class="bi bi-clipboard-x fs-1 text-muted"></i><p class="text-muted mt-3 mb-0">В проекте нет досок.</p></div></div>';
+                return;
+            }
+
+            const allColumns = [];
+            const seenColumns = new Set();
+            boards.forEach(function(board) {
+                (board.columns || []).forEach(function(col) {
+                    if (!seenColumns.has(col.title)) {
+                        seenColumns.add(col.title);
+                        allColumns.push(col.title);
+                    }
+                });
+            });
+
+            let html = '<div class="card"><div class="table-responsive"><table class="table table-hover mb-0">';
+            html += '<thead><tr><th>Доска</th>';
+            allColumns.forEach(function(title) {
+                html += '<th class="text-end">' + escapeHtml(title) + '</th>';
+            });
+            html += '</tr></thead><tbody>';
+
+            boards.forEach(function(board) {
+                const countByTitle = {};
+                (board.columns || []).forEach(function(col) {
+                    countByTitle[col.title] = col.cardCount;
+                });
+
+                html += '<tr style="cursor:pointer;" onclick="window.location.href=\'' + board.url + '\'">';
+                html += '<td><i class="bi bi-kanban me-2 text-primary"></i>' + escapeHtml(board.title) + '</td>';
+                allColumns.forEach(function(title) {
+                    if (title in countByTitle) {
+                        html += '<td class="text-end"><span class="badge bg-primary rounded-pill">' + countByTitle[title] + '</span></td>';
+                    } else {
+                        html += '<td class="text-end text-muted">—</td>';
+                    }
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div></div>';
+            container.innerHTML = html;
+
+            const now = new Date();
+            document.getElementById('last-updated').textContent = 'Обновлено: ' + now.toLocaleTimeString('ru-RU');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+
+        function loadStatistics() {
+            fetch(dataUrl)
+                .then(function(response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(function(data) {
+                    renderStatistics(data);
+                })
+                .catch(function(err) {
+                    console.error('Ошибка загрузки статистики:', err);
+                    document.getElementById('last-updated').textContent = 'Ошибка обновления';
+                });
+        }
+
+        loadStatistics();
+        setInterval(loadStatistics, POLL_INTERVAL);
+    </script>
+{% endblock %}

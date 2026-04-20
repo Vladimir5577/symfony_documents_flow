@@ -1553,7 +1553,8 @@
                     </div>
                     {% if memberRole.value != 'VIEWER' %}
                     <div class="task-chat-input-wrap">
-                        <input type="file" id="task-chat-file-input" style="display:none" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx">
+                        {# [KANBAN: фильтр accept — ВРЕМЕННО ОТКЛЮЧЁН] было: accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx" #}
+                        <input type="file" id="task-chat-file-input" style="display:none">
                         <textarea class="task-chat-input form-control" id="task-chat-input" placeholder="Написать сообщение..." autocomplete="off" rows="4"></textarea>
                         <button type="button" class="task-chat-attach btn btn-outline-secondary" id="task-chat-attach-btn" title="Прикрепить файл"><i class="bi bi-paperclip"></i></button>
                         <button type="button" class="task-chat-send btn btn-primary" id="task-chat-send" title="Отправить"><i class="bi bi-send"></i></button>
@@ -1568,7 +1569,8 @@
                         {% if memberRole.value != 'VIEWER' %}
                         <div class="mt-3">
                             <div class="mb-2 d-flex align-items-center gap-2 flex-wrap">
-                                <input type="file" id="description-attachment-input" class="d-none" accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx">
+                                {# [KANBAN: фильтр accept — ВРЕМЕННО ОТКЛЮЧЁН] было: accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx" #}
+                                <input type="file" id="description-attachment-input" class="d-none">
                                 <button type="button" class="btn btn-outline-secondary btn-sm" id="description-attachment-trigger">
                                     Выбрать файл
                                 </button>

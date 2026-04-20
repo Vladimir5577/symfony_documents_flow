@@ -108,6 +108,22 @@ class NotificationService
         $this->em->flush();
     }
 
+    /**
+     * @param User[] $recipients
+     */
+    public function notifyKanbanCardCreated(array $recipients, string $cardTitle, string $boardTitle, string $link): void
+    {
+        foreach ($recipients as $recipient) {
+            $this->create(
+                $recipient,
+                NotificationType::KANBAN_CARD_CREATED,
+                'Новая задача «' . $cardTitle . '» на доске «' . $boardTitle . '»',
+                link: $link,
+            );
+        }
+        $this->em->flush();
+    }
+
     public function notifyTaskMoved(
         User $recipient,
         string $taskTitle,

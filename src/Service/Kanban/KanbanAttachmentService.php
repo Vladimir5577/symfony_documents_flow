@@ -6,12 +6,15 @@ use App\Entity\Kanban\KanbanAttachment;
 use App\Entity\Kanban\KanbanCard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
-use Symfony\Component\HttpKernel\Exception\UnsupportedMediaTypeHttpException;
+// [KANBAN: валидация типов файла отключена] Раскомментируйте вместе с блоками ниже.
+// use Symfony\Component\HttpKernel\Exception\UnsupportedMediaTypeHttpException;
 
 class KanbanAttachmentService
 {
+    /** Используются вместе с раскомментированной проверкой (validateMagicBytes ниже). */
     private const ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx', 'xlsx'];
 
+    /** Используются вместе с раскомментированной проверкой (validateMagicBytes ниже). */
     private const MAGIC_BYTES = [
         'pdf' => '%PDF',
         'png' => "\x89PNG",
@@ -31,6 +34,8 @@ class KanbanAttachmentService
     public function upload(UploadedFile $file, KanbanCard $card): KanbanAttachment
     {
         $ext = strtolower($file->getClientOriginalExtension());
+        // --- [KANBAN: валидация типов файла — ВРЕМЕННО ОТКЛЮЧЕНА] (раскомментировать use UnsupportedMediaTypeHttpException сверху) ---
+        /*
         if (!in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
             throw new UnsupportedMediaTypeHttpException(
                 sprintf('Тип файла .%s не поддерживается. Разрешены: %s', $ext, implode(', ', self::ALLOWED_EXTENSIONS))
@@ -38,6 +43,11 @@ class KanbanAttachmentService
         }
 
         $this->validateMagicBytes($file, $ext);
+        */
+        // Раньше пустое расширение не доходило сюда; для ключа хранения нужна непустая «метка».
+        if ($ext === '') {
+            $ext = strtolower((string) pathinfo($file->getClientOriginalName(), PATHINFO_EXTENSION)) ?: 'bin';
+        }
 
         // Capture metadata before move() invalidates the temp file
         $originalName = $file->getClientOriginalName();
@@ -87,6 +97,8 @@ class KanbanAttachmentService
         $this->em->flush();
     }
 
+    // --- [KANBAN: валидация magic bytes — ВРЕМЕННО ОТКЛЮЧЕНА] (вместе с вызовом в upload()) ---
+    /*
     private function validateMagicBytes(UploadedFile $file, string $ext): void
     {
         $expected = self::MAGIC_BYTES[$ext] ?? null;
@@ -108,4 +120,5 @@ class KanbanAttachmentService
             );
         }
     }
+    */
 }

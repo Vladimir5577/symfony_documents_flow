@@ -4,6 +4,7 @@ namespace App\Repository\Document;
 
 use App\Entity\Document\DocumentUserRecipient;
 use App\Entity\User\User;
+use App\Enum\DocumentStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -36,14 +37,21 @@ class DocumentUserRecipientRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    /**
-     * Пагинированный список входящих документов пользователя.
-     *
-     * @param User $user
-     * @param int $page Номер страницы (начиная с 1)
-     * @param int $limit Количество элементов на странице
-     * @return array{recipients: array, total: int, page: int, limit: int, totalPages: int}
-     */
+    public function countNewIncomingForUser(User $user): int
+    {
+        return (int) $this->createQueryBuilder('r')
+            ->select('COUNT(r.id)')
+            ->innerJoin('r.document', 'd')
+            ->where('r.user = :user')
+            ->andWhere('r.status = :status')
+            ->andWhere('d.isPublished = :published')
+            ->setParameter('user', $user)
+            ->setParameter('status', DocumentStatus::NEW)
+            ->setParameter('published', true)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     public function findPaginatedByUser(User $user, int $page = 1, int $limit = 10): array
     {
         $offset = ($page - 1) * $limit;

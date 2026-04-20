@@ -3,6 +3,7 @@
 namespace App\Controller\Notification;
 
 use App\Entity\User\User;
+use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Repository\Notification\NotificationRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -14,6 +15,7 @@ final class NotificationController extends AbstractController
 {
     public function __construct(
         private readonly NotificationRepository $notificationRepo,
+        private readonly DocumentUserRecipientRepository $recipientRepo,
     ) {}
 
     #[Route('/notifications', name: 'app_notifications')]
@@ -45,6 +47,7 @@ final class NotificationController extends AbstractController
 
         $notifications = $this->notificationRepo->findLatestForUser($user, 15);
         $unreadCount = $this->notificationRepo->countUnreadForUser($user, 100);
+        $unreadDocumentsCount = $this->recipientRepo->countNewIncomingForUser($user);
 
         $items = [];
         foreach ($notifications as $notification) {
@@ -61,6 +64,7 @@ final class NotificationController extends AbstractController
 
         return $this->json([
             'unreadCount' => $unreadCount,
+            'unreadDocumentsCount' => $unreadDocumentsCount,
             'notifications' => $items,
         ]);
     }

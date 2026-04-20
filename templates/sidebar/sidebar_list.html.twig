@@ -91,9 +91,12 @@
     </li>
 
     <li class="sidebar-item {% if active_tab == 'incoming_documents' %}active{% endif %}">
-        <a href="{{ path('app_incoming_documents') }}" class="sidebar-link">
-            <i class="bi bi-file-earmark-arrow-down"></i>
-            <span>Входящие документы</span>
+        <a href="{{ path('app_incoming_documents') }}" class="sidebar-link d-flex justify-content-between align-items-center">
+            <span class="d-flex align-items-center gap-2">
+                <i class="bi bi-file-earmark-arrow-down"></i>
+                <span>Входящие документы</span>
+            </span>
+            <span id="incoming-docs-badge" class="badge rounded-pill bg-danger" style="display:none; font-size: 0.7rem;"></span>
         </a>
     </li>
 
