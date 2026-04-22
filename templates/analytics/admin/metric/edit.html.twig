@@ -1,0 +1,117 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Редактирование метрики{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Редактирование метрики</h1>
+        <a href="{{ path('app_analytics_admin_metric_index') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Назад к списку
+        </a>
+    </div>
+
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Форма редактирования метрики</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('app_analytics_admin_metric_edit', {id: metric.id}) }}" method="post" class="form">
+                                <input type="hidden" name="_token" value="{{ csrf_token('metric_edit_' ~ metric.id) }}">
+
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success">{{ message }}</div>
+                                {% endfor %}
+
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger">{{ message }}</div>
+                                {% endfor %}
+
+                                <div class="row">
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="business_key">Бизнес-ключ <span class="text-danger">*</span></label>
+                                            <input type="text" id="business_key" class="form-control" placeholder="fuel_consumption" name="business_key" value="{{ metric.businessKey }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="name">Название <span class="text-danger">*</span></label>
+                                            <input type="text" id="name" class="form-control" placeholder="Расход топлива" name="name" value="{{ metric.name }}" required>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="type">Тип значения <span class="text-danger">*</span></label>
+                                            <select id="type" class="form-control" name="type" required>
+                                                <option value="">— Выберите тип —</option>
+                                                <option value="number" {{ metric.type == 'number' ? 'selected' : '' }}>Число (number)</option>
+                                                <option value="currency" {{ metric.type == 'currency' ? 'selected' : '' }}>Валюта (currency)</option>
+                                                <option value="distance" {{ metric.type == 'distance' ? 'selected' : '' }}>Расстояние (distance)</option>
+                                                <option value="liters" {{ metric.type == 'liters' ? 'selected' : '' }}>Литры (liters)</option>
+                                                <option value="count" {{ metric.type == 'count' ? 'selected' : '' }}>Количество (count)</option>
+                                                <option value="text" {{ metric.type == 'text' ? 'selected' : '' }}>Текст (text)</option>
+                                                <option value="bool" {{ metric.type == 'bool' ? 'selected' : '' }}>Да/Нет (bool)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="unit">Единица измерения <span class="text-danger">*</span></label>
+                                            <input type="text" id="unit" class="form-control" placeholder="л" name="unit" value="{{ metric.unit }}" required>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="aggregation_type">Тип агрегации <span class="text-danger">*</span></label>
+                                            <select id="aggregation_type" class="form-control" name="aggregation_type" required>
+                                                <option value="">— Выберите агрегацию —</option>
+                                                {% for aggr in aggregationTypes %}
+                                                    <option value="{{ aggr.value }}" {{ metric.aggregationType.value == aggr.value ? 'selected' : '' }}>{{ aggr.value }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="input_type">Тип поля ввода</label>
+                                            <select id="input_type" class="form-control" name="input_type">
+                                                <option value="">— Не указан —</option>
+                                                {% for inp in inputTypes %}
+                                                    <option value="{{ inp }}" {{ metric.inputType == inp ? 'selected' : '' }}>{{ inp }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" {{ metric.isActive ? 'checked' : '' }}>
+                                            <label class="form-check-label" for="is_active">Активна</label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-12 d-flex justify-content-end">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Сохранить изменения</button>
+                                        <a href="{{ path('app_analytics_admin_metric_index') }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

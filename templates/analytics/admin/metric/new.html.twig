@@ -1,0 +1,119 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Новая метрика{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Создание метрики</h1>
+        <a href="{{ path('app_analytics_admin_metric_index') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Назад к списку
+        </a>
+    </div>
+
+    <section id="multiple-column-form">
+        <div class="row match-height">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Форма создания метрики</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="card-body">
+                            <form action="{{ path('app_analytics_admin_metric_new') }}" method="post" class="form">
+                                <input type="hidden" name="_token" value="{{ csrf_token('metric_new') }}">
+
+                                {% for message in app.flashes('success') %}
+                                    <div class="alert alert-success">{{ message }}</div>
+                                {% endfor %}
+
+                                {% for message in app.flashes('error') %}
+                                    <div class="alert alert-danger">{{ message }}</div>
+                                {% endfor %}
+
+                                <div class="row">
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="business_key">Бизнес-ключ <span class="text-danger">*</span></label>
+                                            <input type="text" id="business_key" class="form-control" placeholder="fuel_consumption" name="business_key" required>
+                                            <small class="form-text text-muted">Стабильный идентификатор на латинице, например fuel_consumption</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="name">Название <span class="text-danger">*</span></label>
+                                            <input type="text" id="name" class="form-control" placeholder="Расход топлива" name="name" required>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="type">Тип значения <span class="text-danger">*</span></label>
+                                            <select id="type" class="form-control" name="type" required>
+                                                <option value="">— Выберите тип —</option>
+                                                <option value="number">Число (number)</option>
+                                                <option value="currency">Валюта (currency)</option>
+                                                <option value="distance">Расстояние (distance)</option>
+                                                <option value="liters">Литры (liters)</option>
+                                                <option value="count">Количество (count)</option>
+                                                <option value="text">Текст (text)</option>
+                                                <option value="bool">Да/Нет (bool)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="unit">Единица измерения <span class="text-danger">*</span></label>
+                                            <input type="text" id="unit" class="form-control" placeholder="л" name="unit" required>
+                                            <small class="form-text text-muted">Сокращение: л, км, руб., шт.</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="aggregation_type">Тип агрегации <span class="text-danger">*</span></label>
+                                            <select id="aggregation_type" class="form-control" name="aggregation_type" required>
+                                                <option value="">— Выберите агрегацию —</option>
+                                                {% for aggr in aggregationTypes %}
+                                                    <option value="{{ aggr.value }}">{{ aggr.value }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="input_type">Тип поля ввода</label>
+                                            <select id="input_type" class="form-control" name="input_type">
+                                                <option value="">— Не указан —</option>
+                                                {% for inp in inputTypes %}
+                                                    <option value="{{ inp }}">{{ inp }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" checked>
+                                            <label class="form-check-label" for="is_active">Активна</label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-12 d-flex justify-content-end">
+                                        <button type="submit" class="btn btn-primary me-1 mb-1">Создать метрику</button>
+                                        <a href="{{ path('app_analytics_admin_metric_index') }}" class="btn btn-secondary me-1 mb-1">Отмена</a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

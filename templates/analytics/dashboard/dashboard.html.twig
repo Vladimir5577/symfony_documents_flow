@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>ГУП ДНР «Донснабкомплект» — Дашборд</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ asset('styles/anaytics_dashboard_style.css') }}">
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+    <a class="header-logo" href="/dashboard">
+        <span class="org">ГУП ДНР</span>
+        <span class="name">Донснабкомплект</span>
+    </a>
+    <div class="header-meta">
+{#        <span class="badge-period">Апрель 2025</span>#}
+    </div>
+</header>
+
+<div class="content">
+
+    <!-- FILIAL CARDS -->
+    <div class="section-title">Филиалы</div>
+    <div class="filial-grid" id="filialGrid">
+        {% for organization in organizations %}
+            <div class="filial-card {{ loop.first ? 'selected filial-hq' : '' }}" data-fil="{{ loop.index0 }}" data-org-id="{{ organization.id }}" onclick="selectFilial({{ loop.index0 }}, {{ organization.id }})">
+                <div class="filial-name">{{ organization.name }}</div>
+            </div>
+        {% else %}
+            <div class="filial-card selected filial-hq" data-fil="0">
+                <div class="filial-name">Нет организаций верхнего уровня</div>
+            </div>
+        {% endfor %}
+    </div>
+
+    <!-- TAB NAVIGATION -->
+    <div class="tabs-nav tabs-nav-main" id="tabsNav">
+        <button class="tab-btn active" onclick="switchTab('finance')"><span class="ico">💰</span> Финансы</button>
+        <button class="tab-btn" onclick="switchTab('tko')"><span class="ico">🚛</span> ТКО</button>
+{#        <button class="tab-btn" onclick="switchTab('clients')"><span class="ico">👤</span> Клиенты</button>#}
+        <button class="tab-btn" onclick="switchTab('hr')"><span class="ico">👥</span> Кадры</button>
+{#        <button class="tab-btn" onclick="switchTab('complaints')"><span class="ico">📞</span> Жалобы</button>#}
+        <button class="tab-btn" onclick="switchTab('compare')"><span class="ico">📊</span> Сравнение</button>
+    </div>
+    <div class="tabs-nav" style="margin-top:8px;">
+        <button id="scaleMonthBtn" class="tab-btn {{ initialScale == 'month' ? 'active' : '' }}" onclick="setScale('month')">По месяцам</button>
+        <button id="scaleWeekBtn" class="tab-btn {{ initialScale == 'week' ? 'active' : '' }}" onclick="setScale('week')">По неделям</button>
+    </div>
+
+    <!-- ═══════════════════════ FINANCE ═══════════════════════ -->
+    <div class="tab-panel active" id="tab-finance">
+        <div class="grid-3" style="margin-bottom:12px">
+{#            <div class="card">#}
+{#                <div class="card-title">Выручка по месяцам</div>#}
+{#                <div class="chart-wrap"><canvas id="chartRevenue"></canvas></div>#}
+{#            </div>#}
+            <div class="card">
+                <div class="card-title">Поступления и списания</div>
+                <div class="chart-wrap"><canvas id="chartCashflow"></canvas></div>
+            </div>
+{#            <div class="card">#}
+{#                <div class="card-title">Структура расходов</div>#}
+{#                <div class="chart-wrap"><canvas id="chartExpenses"></canvas></div>#}
+{#            </div>#}
+        </div>
+{#        <div class="grid-2" style="margin-bottom:12px">#}
+{#            <div class="card">#}
+{#                <div class="card-title">Дебиторка по филиалам <span style="color:var(--accent-amber);font-size:10px">млн руб.</span></div>#}
+{#                <div class="chart-wrap"><canvas id="chartDebt"></canvas></div>#}
+{#            </div>#}
+{#            <div class="card">#}
+{#                <div class="card-title">Финансовые показатели</div>#}
+{#                <div class="stat-row"><span class="label">Выручка за месяц</span><span class="value" style="color:var(--accent-blue)">42 620 000 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">Выручка с начала года</span><span class="value">156 400 000 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">План выручки на апрель</span><span class="value">41 000 000 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">% выполнения плана</span><span class="value" style="color:var(--accent-teal)">103.9%</span></div>#}
+{#                <div class="stat-row"><span class="label">Поступило денежных средств</span><span class="value">38 100 000 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">Чистый денежный поток</span><span class="value" style="color:var(--accent-teal)">+6 300 000 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">Остаток на счетах</span><span class="value">11 450 000 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">Дебиторка просроченная</span><span class="value" style="color:var(--accent-red)">7 800 000 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">Кредиторская задолженность</span><span class="value" style="color:var(--accent-amber)">3 200 000 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">Финансовый результат</span><span class="value" style="color:var(--accent-teal)">+4 100 000 ₽</span></div>#}
+{#            </div>#}
+{#        </div>#}
+{#        <div class="card">#}
+{#            <div class="card-title">Расходы по статьям — план / факт</div>#}
+{#            <div style="padding-top:4px">#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>ФОТ</span><span class="val">14.2М / 14.0М</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:101%;background:var(--accent-amber)"></div></div>#}
+{#                </div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>ГСМ</span><span class="val">5.8М / 5.2М</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:112%;background:var(--accent-red)"></div></div>#}
+{#                </div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>Ремонт и ТО</span><span class="val">3.1М / 3.4М</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:91%;background:var(--accent-teal)"></div></div>#}
+{#                </div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>Полигонные услуги</span><span class="val">4.2М / 4.2М</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:100%;background:var(--accent-blue)"></div></div>#}
+{#                </div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>Административные расходы</span><span class="val">2.8М / 3.0М</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:93%;background:var(--accent-cyan)"></div></div>#}
+{#                </div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>Прочие расходы</span><span class="val">1.4М / 1.5М</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:93%;background:var(--accent-purple)"></div></div>#}
+{#                </div>#}
+{#            </div>#}
+{#        </div>#}
+    </div>
+
+    <!-- ═══════════════════════ TKO ═══════════════════════ -->
+    <div class="tab-panel" id="tab-tko">
+        <div class="grid-3" style="margin-bottom:12px">
+            <div class="card">
+                <div class="card-title">Динамика вывоза ТКО (тонн)</div>
+                <div class="chart-wrap"><canvas id="chartTko"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Расход топлива (литры)</div>
+                <div class="chart-wrap"><canvas id="chartFuelConsumption"></canvas></div>
+            </div>
+{#            <div class="card">#}
+{#                <div class="card-title">Выход техники по филиалам</div>#}
+{#                <div class="chart-wrap"><canvas id="chartTechOut"></canvas></div>#}
+{#            </div>#}
+{#            <div class="card">#}
+{#                <div class="card-title">Причины невыходов техники</div>#}
+{#                <div class="chart-wrap"><canvas id="chartDowntime"></canvas></div>#}
+{#            </div>#}
+        </div>
+        <div class="grid-2" style="margin-bottom:12px">
+{#            <div class="card">#}
+{#                <div class="card-title">Производственные показатели</div>#}
+{#                <div class="stat-row"><span class="label">Вывезено ТКО, тонн</span><span class="value" style="color:var(--accent-cyan)">4 820 т</span></div>#}
+{#                <div class="stat-row"><span class="label">Вывезено ТКО, м³</span><span class="value">36 150 м³</span></div>#}
+{#                <div class="stat-row"><span class="label">Захоронено на полигонах</span><span class="value">4 690 т</span></div>#}
+{#                <div class="stat-row"><span class="label">Количество рейсов</span><span class="value">2 841</span></div>#}
+{#                <div class="stat-row"><span class="label">Машин на маршруте в среднем</span><span class="value">76 / 87</span></div>#}
+{#                <div class="stat-row"><span class="label">Невыходы за месяц</span><span class="value" style="color:var(--accent-amber)">248 случаев</span></div>#}
+{#                <div class="stat-row"><span class="label">Сорвано маршрутов</span><span class="value" style="color:var(--accent-red)">31</span></div>#}
+{#                <div class="stat-row"><span class="label">Выработка 1 машины / день</span><span class="value">2.4 рейса</span></div>#}
+{#                <div class="stat-row"><span class="label">Тонн на 1 рейс</span><span class="value">1.70 т</span></div>#}
+{#                <div class="stat-row"><span class="label">Расход топлива на 1 рейс</span><span class="value">18.4 л</span></div>#}
+{#            </div>#}
+{#            <div class="card">#}
+{#                <div class="card-title">KPI производительности</div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>Выход техники на линию</span><span class="val">87.3%</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:87%;background:var(--accent-amber)"></div></div>#}
+{#                </div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>Выполнение маршрутов</span><span class="val">98.9%</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:99%;background:var(--accent-teal)"></div></div>#}
+{#                </div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>Загрузка машины (от норм.)</span><span class="val">92.4%</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:92%;background:var(--accent-blue)"></div></div>#}
+{#                </div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>Себестоимость 1 тонны</span><span class="val">6 820 ₽</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:78%;background:var(--accent-cyan)"></div></div>#}
+{#                </div>#}
+{#                <div class="prog-row">#}
+{#                    <div class="prog-label"><span>Исполнение плана вывоза</span><span class="val">103.1%</span></div>#}
+{#                    <div class="prog-track"><div class="prog-fill" style="width:100%;background:var(--accent-teal)"></div></div>#}
+{#                </div>#}
+{#                <div style="margin-top:14px">#}
+{#                    <div class="section-title" style="margin-bottom:10px">Топ причин невыходов</div>#}
+{#                    <div class="risk-list">#}
+{#                        <div class="risk-item" style="--item-color:var(--accent-red)">#}
+{#                            <div class="risk-dot"></div>#}
+{#                            <div class="risk-text">Технические неисправности — 98 случаев</div>#}
+{#                        </div>#}
+{#                        <div class="risk-item" style="--item-color:var(--accent-amber)">#}
+{#                            <div class="risk-dot"></div>#}
+{#                            <div class="risk-text">Плановый ремонт — 72 случая</div>#}
+{#                        </div>#}
+{#                        <div class="risk-item" style="--item-color:var(--accent-blue)">#}
+{#                            <div class="risk-dot"></div>#}
+{#                            <div class="risk-text">Отсутствие водителя — 44 случая</div>#}
+{#                        </div>#}
+{#                        <div class="risk-item" style="--item-color:var(--accent-cyan)">#}
+{#                            <div class="risk-dot"></div>#}
+{#                            <div class="risk-text">Нехватка топлива — 22 случая</div>#}
+{#                        </div>#}
+{#                        <div class="risk-item" style="--item-color:var(--text-muted)">#}
+{#                            <div class="risk-dot"></div>#}
+{#                            <div class="risk-text">Иные причины — 12 случаев</div>#}
+{#                        </div>#}
+{#                    </div>#}
+{#                </div>#}
+{#            </div>#}
+        </div>
+    </div>
+
+    <!-- ═══════════════════════ CLIENTS ═══════════════════════ -->
+    <div class="tab-panel" id="tab-clients">
+        <div class="grid-3" style="margin-bottom:12px">
+            <div class="card">
+                <div class="card-title">Начислено / Оплачено по месяцам</div>
+                <div class="chart-wrap"><canvas id="chartBilling"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Собираемость по филиалам, %</div>
+                <div class="chart-wrap"><canvas id="chartCollection"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Структура задолженности по срокам</div>
+                <div class="chart-wrap"><canvas id="chartDebtAge"></canvas></div>
+            </div>
+        </div>
+        <div class="grid-2" style="margin-bottom:12px">
+            <div class="card">
+                <div class="card-title">Показатели — Население</div>
+                <div class="stat-row"><span class="label">Начислено населению</span><span class="value">26 400 000 ₽</span></div>
+                <div class="stat-row"><span class="label">Оплачено населением</span><span class="value">21 120 000 ₽</span></div>
+                <div class="stat-row"><span class="label">Собираемость население</span><span class="value" style="color:var(--accent-amber)">80.0%</span></div>
+                <div class="stat-row"><span class="label">Задолженность население</span><span class="value" style="color:var(--accent-amber)">14 200 000 ₽</span></div>
+                <div class="stat-row"><span class="label">Просроченная задолженность</span><span class="value" style="color:var(--accent-red)">5 900 000 ₽</span></div>
+                <div class="stat-row"><span class="label">Активных лицевых счетов</span><span class="value">84 200</span></div>
+                <div class="stat-row"><span class="label">Лицевых счетов с долгом</span><span class="value" style="color:var(--accent-amber)">21 050</span></div>
+                <div class="stat-row"><span class="label">Долг > 90 дней (счетов)</span><span class="value" style="color:var(--accent-red)">4 810</span></div>
+                <div class="stat-row"><span class="label">Средняя задолженность/счет</span><span class="value">169 ₽</span></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Показатели — Юридические лица</div>
+                <div class="stat-row"><span class="label">Начислено юрлицам</span><span class="value">16 220 000 ₽</span></div>
+                <div class="stat-row"><span class="label">Оплачено юрлицами</span><span class="value">13 940 000 ₽</span></div>
+                <div class="stat-row"><span class="label">Собираемость юрлица</span><span class="value" style="color:var(--accent-teal)">85.9%</span></div>
+                <div class="stat-row"><span class="label">Задолженность юрлица</span><span class="value" style="color:var(--accent-amber)">5 200 000 ₽</span></div>
+                <div class="stat-row"><span class="label">Просроченная задолженность</span><span class="value" style="color:var(--accent-red)">1 900 000 ₽</span></div>
+                <div class="stat-row"><span class="label">Действующих договоров</span><span class="value">1 247</span></div>
+                <div class="stat-row"><span class="label">Новые договоры (апрель)</span><span class="value" style="color:var(--accent-teal)">+12</span></div>
+                <div class="stat-row"><span class="label">Расторгнутые договоры</span><span class="value" style="color:var(--accent-amber)">-3</span></div>
+                <div class="stat-row"><span class="label">Долг на 1 договор (средн.)</span><span class="value">4 169 ₽</span></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">ТОП-5 крупнейших должников — юридические лица</div>
+            <div class="branch-table-wrap">
+                <table class="branch-table">
+                    <thead><tr><th>Организация</th><th>Филиал</th><th>Долг, руб.</th><th>Просрочка</th><th>Статус</th></tr></thead>
+                    <tbody>
+                    <tr><td>ООО «Металл-Сервис»</td><td>Ф-3</td><td>420 000</td><td>90+ дней</td><td class="badge-bad">Критично</td></tr>
+                    <tr><td>АО «Горпромстрой»</td><td>Ф-1</td><td>318 000</td><td>60 дней</td><td class="badge-warn">Внимание</td></tr>
+                    <tr><td>МУП «Горкомхоз»</td><td>Ф-2</td><td>271 000</td><td>45 дней</td><td class="badge-warn">Внимание</td></tr>
+                    <tr><td>ООО «Транс Плюс»</td><td>Ф-5</td><td>198 000</td><td>30 дней</td><td class="badge-warn">Умеренно</td></tr>
+                    <tr><td>ИП Сидоренко А.В.</td><td>Ф-6</td><td>142 000</td><td>25 дней</td><td class="badge-ok">Активен</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════ HR ═══════════════════════ -->
+    <div class="tab-panel" id="tab-hr">
+        <div class="grid-3" style="margin-bottom:12px">
+            <div class="card">
+                <div class="card-title">Принятые / Уволенные по месяцам</div>
+                <div class="chart-wrap"><canvas id="chartHiringFiring"></canvas></div>
+            </div>
+{#            <div class="card">#}
+{#                <div class="card-title">ФОТ по филиалам</div>#}
+{#                <div class="chart-wrap"><canvas id="chartFot"></canvas></div>#}
+{#            </div>#}
+{#            <div class="card">#}
+{#                <div class="card-title">Структура персонала</div>#}
+{#                <div class="chart-wrap"><canvas id="chartPersonnel"></canvas></div>#}
+{#            </div>#}
+        </div>
+        <div class="grid-2" style="margin-bottom:12px">
+            <div class="card">
+                <div class="card-title">Кадровые показатели</div>
+                <div class="stat-row"><span class="label">Штатная численность</span><span class="value" id="statStaffPlanned">--</span></div>
+                <div class="stat-row"><span class="label">Фактическая численность</span><span class="value" id="statStaffActual" style="color:var(--accent-amber)">--</span></div>
+                <div class="stat-row"><span class="label">Открытых вакансий</span><span class="value" id="statVacancies" style="color:var(--accent-red)">--</span></div>
+{#                <div class="stat-row"><span class="label">Укомплектованность штата</span><span class="value" style="color:var(--accent-amber)">91.9%</span></div>#}
+{#                <div class="stat-row"><span class="label">Принято за апрель</span><span class="value" style="color:var(--accent-teal)">+8</span></div>#}
+{#                <div class="stat-row"><span class="label">Уволено за апрель</span><span class="value" style="color:var(--accent-amber)">-11</span></div>#}
+{#                <div class="stat-row"><span class="label">Текучесть кадров</span><span class="value" style="color:var(--accent-amber)">3.8%</span></div>#}
+{#                <div class="stat-row"><span class="label">ФОТ за месяц</span><span class="value">14 200 000 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">Средняя зарплата</span><span class="value">49 478 ₽</span></div>#}
+{#                <div class="stat-row"><span class="label">ФОТ / выручка</span><span class="value" style="color:var(--accent-amber)">33.3%</span></div>#}
+            </div>
+{#            <div class="card">#}
+{#                <div class="card-title">Сигналы по кадрам</div>#}
+{#                <div class="risk-list">#}
+{#                    <div class="risk-item" style="--item-color:var(--accent-red)">#}
+{#                        <div class="risk-dot"></div>#}
+{#                        <div class="risk-text">Критичный дефицит водителей — 9 вакансий</div>#}
+{#                        <span class="risk-branch">Ф-3, Ф-6</span>#}
+{#                    </div>#}
+{#                    <div class="risk-item" style="--item-color:var(--accent-amber)">#}
+{#                        <div class="risk-dot"></div>#}
+{#                        <div class="risk-text">Текучесть выше нормы — 3.8% за месяц</div>#}
+{#                        <span class="risk-branch">Ф-5</span>#}
+{#                    </div>#}
+{#                    <div class="risk-item" style="--item-color:var(--accent-amber)">#}
+{#                        <div class="risk-dot"></div>#}
+{#                        <div class="risk-text">ФОТ на 1 сотр. превышает норму</div>#}
+{#                        <span class="risk-branch">Ф-1</span>#}
+{#                    </div>#}
+{#                    <div class="risk-item" style="--item-color:var(--accent-blue)">#}
+{#                        <div class="risk-dot"></div>#}
+{#                        <div class="risk-text">8 сотрудников на больничном листе</div>#}
+{#                        <span class="risk-branch">Все ф.</span>#}
+{#                    </div>#}
+{#                    <div class="risk-item" style="--item-color:var(--accent-teal)">#}
+{#                        <div class="risk-dot"></div>#}
+{#                        <div class="risk-text">Укомплектованность ремонтного цеха — норма</div>#}
+{#                        <span class="risk-branch">Ф-2, Ф-4</span>#}
+{#                    </div>#}
+{#                </div>#}
+{#                <div style="margin-top:14px">#}
+{#                    <div class="prog-row">#}
+{#                        <div class="prog-label"><span>ФОТ производственного персонала</span><span class="val">67%</span></div>#}
+{#                        <div class="prog-track"><div class="prog-fill" style="width:67%;background:var(--accent-blue)"></div></div>#}
+{#                    </div>#}
+{#                    <div class="prog-row">#}
+{#                        <div class="prog-label"><span>ФОТ административного персонала</span><span class="val">21%</span></div>#}
+{#                        <div class="prog-track"><div class="prog-fill" style="width:21%;background:var(--accent-purple)"></div></div>#}
+{#                    </div>#}
+{#                    <div class="prog-row">#}
+{#                        <div class="prog-label"><span>ФОТ управленческого персонала</span><span class="val">12%</span></div>#}
+{#                        <div class="prog-track"><div class="prog-fill" style="width:12%;background:var(--accent-cyan)"></div></div>#}
+{#                    </div>#}
+{#                </div>#}
+{#            </div>#}
+        </div>
+    </div>
+
+    <!-- ═══════════════════════ COMPLAINTS ═══════════════════════ -->
+    <div class="tab-panel" id="tab-complaints">
+        <div class="grid-3" style="margin-bottom:12px">
+            <div class="card">
+                <div class="card-title">Динамика жалоб</div>
+                <div class="chart-wrap"><canvas id="chartComplaints"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Жалобы по филиалам</div>
+                <div class="chart-wrap"><canvas id="chartComplFilial"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Категории жалоб</div>
+                <div style="padding-top:6px" class="cat-bars">
+                    <div class="cat-bar-row"><span class="cat-bar-label">Невывоз ТКО</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:82%;background:var(--accent-red)"></div></div><span class="cat-bar-val">48</span></div>
+                    <div class="cat-bar-row"><span class="cat-bar-label">Переполн. контейнер</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:54%;background:var(--accent-amber)"></div></div><span class="cat-bar-val">32</span></div>
+                    <div class="cat-bar-row"><span class="cat-bar-label">Нарушение графика</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:42%;background:var(--accent-amber)"></div></div><span class="cat-bar-val">25</span></div>
+                    <div class="cat-bar-row"><span class="cat-bar-label">Начисления / квит.</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:32%;background:var(--accent-blue)"></div></div><span class="cat-bar-val">19</span></div>
+                    <div class="cat-bar-row"><span class="cat-bar-label">КГО</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:22%;background:var(--accent-cyan)"></div></div><span class="cat-bar-val">13</span></div>
+                    <div class="cat-bar-row"><span class="cat-bar-label">Работа водителя</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:15%;background:var(--accent-purple)"></div></div><span class="cat-bar-val">9</span></div>
+                    <div class="cat-bar-row"><span class="cat-bar-label">Сост. контейн. площ.</span><div class="cat-bar-track"><div class="cat-bar-fill" style="width:10%;background:var(--text-muted)"></div></div><span class="cat-bar-val">2</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="grid-2" style="margin-bottom:12px">
+            <div class="card">
+                <div class="card-title">Показатели обращений</div>
+                <div class="stat-row"><span class="label">Поступило жалоб (апрель)</span><span class="value">148</span></div>
+                <div class="stat-row"><span class="label">Отработано жалоб</span><span class="value" style="color:var(--accent-teal)">132</span></div>
+                <div class="stat-row"><span class="label">Не отработано</span><span class="value" style="color:var(--accent-red)">16</span></div>
+                <div class="stat-row"><span class="label">% отработки</span><span class="value" style="color:var(--accent-teal)">89.2%</span></div>
+                <div class="stat-row"><span class="label">Просроченные жалобы</span><span class="value" style="color:var(--accent-amber)">11</span></div>
+                <div class="stat-row"><span class="label">Среднее время закрытия</span><span class="value">1.8 дня</span></div>
+                <div class="stat-row"><span class="label">Повторные жалобы</span><span class="value" style="color:var(--accent-amber)">22 (14.9%)</span></div>
+                <div class="stat-row"><span class="label">Жалоб на 1000 абонентов</span><span class="value">1.76</span></div>
+                <div class="stat-row"><span class="label">Жалоб на 100 рейсов</span><span class="value">5.21</span></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Проблемные зоны</div>
+                <div class="risk-list">
+                    <div class="risk-item" style="--item-color:var(--accent-red)">
+                        <div class="risk-dot"></div>
+                        <div class="risk-text">16 жалоб не отработаны — нарушение регламента</div>
+                        <span class="risk-branch">Ф-3</span>
+                    </div>
+                    <div class="risk-item" style="--item-color:var(--accent-red)">
+                        <div class="risk-dot"></div>
+                        <div class="risk-text">48 жалоб на невывоз — системная проблема</div>
+                        <span class="risk-branch">Ф-5, Ф-6</span>
+                    </div>
+                    <div class="risk-item" style="--item-color:var(--accent-amber)">
+                        <div class="risk-dot"></div>
+                        <div class="risk-text">Повторные жалобы растут (+4 к прош. месяцу)</div>
+                        <span class="risk-branch">Ф-3</span>
+                    </div>
+                    <div class="risk-item" style="--item-color:var(--accent-amber)">
+                        <div class="risk-dot"></div>
+                        <div class="risk-text">Среднее время закрытия превысило норму</div>
+                        <span class="risk-branch">Ф-6</span>
+                    </div>
+                    <div class="risk-item" style="--item-color:var(--accent-teal)">
+                        <div class="risk-dot"></div>
+                        <div class="risk-text">Ф-1 Донецк — лучший % отработки 97.3%</div>
+                        <span class="risk-branch">Ф-1</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════ COMPARE ═══════════════════════ -->
+    <div class="tab-panel" id="tab-compare">
+{#        <div class="grid-2" style="margin-bottom:12px">#}
+{#            <div class="card">#}
+{#                <div class="card-title">Рейтинг филиалов — выручка</div>#}
+{#                <div class="chart-wrap"><canvas id="chartRatingRev"></canvas></div>#}
+{#            </div>#}
+{#            <div class="card">#}
+{#                <div class="card-title">Собираемость vs Задолженность</div>#}
+{#                <div class="chart-wrap"><canvas id="chartCollDebt"></canvas></div>#}
+{#            </div>#}
+{#        </div>#}
+        <div class="card" style="margin-bottom:12px">
+            <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                <span>Сводная таблица сравнения филиалов</span>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div class="scale-toggle-compare" style="display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+                        <button class="scale-btn-cmp active" data-scale="month" onclick="setCompareScale('month')">Месяц</button>
+                        <button class="scale-btn-cmp" data-scale="week" onclick="setCompareScale('week')">Неделя</button>
+                    </div>
+                    <select id="comparePeriodSelect" onchange="loadCompareData()" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;cursor:pointer"></select>
+                </div>
+            </div>
+            <div class="branch-table-wrap">
+                <table class="branch-table">
+                    <thead>
+                    <tr>
+                        <th>Филиал</th>
+                        <th>Выручка, М₽</th>
+                        <th>Расходы, М₽</th>
+                        <th>ТКО, т</th>
+                        <th>ГСМ, М₽</th>
+                        <th>Штат план</th>
+                        <th>Штат факт</th>
+                        <th>Принято</th>
+                        <th>Уволено</th>
+                    </tr>
+                    </thead>
+                    <tbody id="compareTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /content -->
+
+<!-- BOTTOM NAV (mobile) -->
+<nav class="bottom-nav">
+    <button class="bnav-btn active" onclick="switchTab('finance');setActiveNav(this)">
+        <span class="ico">💰</span>Финансы
+    </button>
+    <button class="bnav-btn" onclick="switchTab('tko');setActiveNav(this)">
+        <span class="ico">🚛</span>ТКО
+    </button>
+{#    <button class="bnav-btn" onclick="switchTab('clients');setActiveNav(this)">#}
+{#        <span class="ico">👤</span>Клиенты#}
+{#    </button>#}
+    <button class="bnav-btn" onclick="switchTab('hr');setActiveNav(this)">
+        <span class="ico">👥</span>Кадры
+    </button>
+{#    <button class="bnav-btn" onclick="switchTab('complaints');setActiveNav(this)">#}
+{#        <span class="ico">📞</span>Жалобы#}
+{#    </button>#}
+    <button class="bnav-btn" onclick="switchTab('compare');setActiveNav(this)">
+        <span class="ico">📊</span>Свод
+    </button>
+</nav>
+
+<script>
+    /* ── DATA ── */
+    let dashboardData = {{ dashboardDataJson|raw }};
+    let currentTab = 'finance';
+    let currentScale = '{{ initialScale|default('month') }}';
+
+    /* ── TABS ── */
+    function switchTab(id) {
+        currentTab = id;
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab-' + id).classList.add('active');
+        const btns = document.querySelectorAll('.tab-btn');
+        const map = { finance:0, tko:1, hr:2, compare:3 };
+        if (btns[map[id]]) btns[map[id]].classList.add('active');
+        renderTab(id);
+    }
+
+    function setActiveNav(el) {
+        document.querySelectorAll('.bnav-btn').forEach(b => b.classList.remove('active'));
+        el.classList.add('active');
+    }
+
+    function selectFilial(idx, orgId) {
+        document.querySelectorAll('.filial-card').forEach(c => c.classList.remove('selected'));
+        document.querySelector(`[data-fil="${idx}"]`).classList.add('selected');
+        loadDashboardData(orgId);
+    }
+
+    /* ── AJAX LOAD ── */
+    function loadDashboardData(orgId) {
+        fetch('/analytics/dashboard/data?org_id=' + orgId + '&scale=' + currentScale)
+            .then(r => r.json())
+            .then(data => {
+                dashboardData = data;
+                renderAllTabs();
+                updateHrStats();
+            });
+    }
+
+    function getSelectedOrgId() {
+        const selected = document.querySelector('.filial-card.selected');
+        if (!selected) return 0;
+        const raw = selected.getAttribute('data-org-id');
+        return raw ? parseInt(raw, 10) : 0;
+    }
+
+    function setScale(scale) {
+        currentScale = (scale === 'week') ? 'week' : 'month';
+        const monthBtn = document.getElementById('scaleMonthBtn');
+        const weekBtn = document.getElementById('scaleWeekBtn');
+        if (monthBtn) monthBtn.classList.toggle('active', currentScale === 'month');
+        if (weekBtn) weekBtn.classList.toggle('active', currentScale === 'week');
+        loadDashboardData(getSelectedOrgId());
+    }
+
+    /* ── CHART.JS DEFAULTS ── */
+    Chart.defaults.color = '#8b949e';
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+    Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+    Chart.defaults.font.size = 11;
+    const FILIALS = ['Ф-1','Ф-2','Ф-3','Ф-4','Ф-5','Ф-6'];
+
+    function mkChart(id, cfg) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el._chart) { el._chart.destroy(); el._chart = null; }
+        el._chart = new Chart(el, cfg);
+    }
+
+    /* ── UPDATE HR STATS ── */
+    function updateHrStats() {
+        const hr = dashboardData.hr || {};
+        const sp = document.getElementById('statStaffPlanned');
+        const sa = document.getElementById('statStaffActual');
+        const sv = document.getElementById('statVacancies');
+        if (sp) sp.textContent = hr.staffPlanned || '--';
+        if (sa) sa.textContent = hr.staffActual || '--';
+        if (sv) sv.textContent = hr.vacancies || '--';
+    }
+
+    /* ── RENDER ── */
+    function renderAllTabs() {
+        renderTab('finance');
+        renderTab('tko');
+        renderTab('hr');
+        renderTab('compare');
+    }
+
+    function renderTab(id) {
+        if (chartRenderers[id]) chartRenderers[id]();
+    }
+
+    function xLabels() {
+        return dashboardData.labels || dashboardData.monthLabels || [];
+    }
+
+    const chartRenderers = {
+        finance: () => {
+            const labels = xLabels();
+            const fin = dashboardData.finance || {};
+            mkChart('chartCashflow', {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Поступления', data: fin.cashInflow || [], backgroundColor: 'rgba(63,185,80,0.7)', borderRadius: 4 },
+                        { label: 'Списания', data: fin.cashOutflow || [], backgroundColor: 'rgba(248,81,73,0.5)', borderRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => v+'М' } }, x: { stacked: false } } }
+            });
+        },
+        tko: () => {
+            const labels = xLabels();
+            const tko = dashboardData.tko || {};
+            mkChart('chartTko', {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Вывезено, т', data: tko.tkoExport || [], borderColor: '#39c5cf', backgroundColor: 'rgba(57,197,207,0.1)', fill: true, tension: 0.4, pointRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+            mkChart('chartFuelConsumption', {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Расход топлива, л', data: tko.fuelConsumption || [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.12)', fill: true, tension: 0.35, pointRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+        },
+        hr: () => {
+            const labels = xLabels();
+            const hr = dashboardData.hr || {};
+            mkChart('chartHiringFiring', {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Принято', data: hr.hired || [], backgroundColor: 'rgba(63,185,80,0.7)', borderRadius: 4 },
+                        { label: 'Уволено', data: hr.terminated || [], backgroundColor: 'rgba(248,81,73,0.6)', borderRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+        },
+        clients: () => {
+            const labels = xLabels();
+            mkChart('chartBilling', {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Начислено', data: [], backgroundColor: 'rgba(88,166,255,0.6)', borderRadius: 4 },
+                        { label: 'Оплачено', data: [], backgroundColor: 'rgba(63,185,80,0.7)', borderRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+            mkChart('chartCollection', {
+                type: 'bar',
+                data: {
+                    labels: FILIALS,
+                    datasets: [
+                        { label: 'Население, %', data: [], backgroundColor: 'rgba(88,166,255,0.7)', borderRadius: 4 },
+                        { label: 'Юрлица, %', data: [], backgroundColor: 'rgba(57,197,207,0.7)', borderRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { min: 60, max: 100, ticks: { callback: v => v+'%' } } } }
+            });
+            mkChart('chartDebtAge', {
+                type: 'doughnut',
+                data: {
+                    labels: ['До 30 дней','31–60 дней','61–90 дней','Более 90 дней'],
+                    datasets: [{ data: [38,22,14,26], backgroundColor: ['#3fb950','#d29922','#f0883e','#f85149'], borderWidth: 0 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } }, cutout: '60%' }
+            });
+        },
+        complaints: () => {
+            const labels = xLabels();
+            mkChart('chartComplaints', {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Поступило', data: [], borderColor: '#f85149', backgroundColor: 'rgba(248,81,73,0.1)', fill: true, tension: 0.4, pointRadius: 4 },
+                        { label: 'Отработано', data: [], borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,0.05)', fill: true, tension: 0.4, pointRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+            mkChart('chartComplFilial', {
+                type: 'bar',
+                data: {
+                    labels: FILIALS,
+                    datasets: [
+                        { label: 'Поступило', data: [], backgroundColor: 'rgba(248,81,73,0.6)', borderRadius: 4 },
+                        { label: 'Закрыто', data: [], backgroundColor: 'rgba(63,185,80,0.7)', borderRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+        },
+        compare: () => {
+            renderCompareTable(dashboardData.compare || {});
+        }
+    };
+
+    /* ── COMPARE TAB ── */
+    let compareScale = '{{ initialScale }}';
+
+    function setCompareScale(scale) {
+        compareScale = scale;
+        document.querySelectorAll('.scale-btn-cmp').forEach(b => b.classList.toggle('active', b.dataset.scale === scale));
+        loadCompareData();
+    }
+
+    function loadCompareData() {
+        const orgId = getSelectedOrgId();
+        const sel = document.getElementById('comparePeriodSelect');
+        let url = '/analytics/dashboard/compare-data?org_id=' + orgId + '&scale=' + compareScale;
+        if (sel && sel.value) {
+            const parts = sel.value.split('-');
+            url += '&year=' + parts[0] + '&period=' + parts[1];
+        }
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                dashboardData.compare = data;
+                renderCompareTable(data);
+            });
+    }
+
+    function renderCompareTable(data) {
+        const sel = document.getElementById('comparePeriodSelect');
+        const tbody = document.getElementById('compareTableBody');
+        if (!sel || !tbody) return;
+
+        // Update period selector
+        const periods = data.availablePeriods || [];
+        const currentVal = sel.value || (data.selectedYear + '-' + data.selectedPeriod);
+        sel.innerHTML = '';
+        periods.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.year + '-' + p.period;
+            opt.textContent = p.label;
+            if (opt.value === String(data.selectedYear) + '-' + String(data.selectedPeriod)) opt.selected = true;
+            sel.appendChild(opt);
+        });
+
+        // Update table rows
+        const rows = data.rows || [];
+        tbody.innerHTML = '';
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px">Нет данных за выбранный период</td></tr>';
+            return;
+        }
+        rows.forEach(row => {
+            const tr = document.createElement('tr');
+            if (row.isTotal) tr.classList.add('hq');
+            tr.innerHTML =
+                '<td>' + (row.isTotal ? '\uD83C\uDFE2 ' : '') + row.name + '</td>' +
+                '<td>' + row.cashInflow + '</td>' +
+                '<td>' + row.cashOutflow + '</td>' +
+                '<td>' + row.tkoExport.toLocaleString('ru-RU') + '</td>' +
+                '<td>' + row.fuelConsumption + '</td>' +
+                '<td>' + row.staffPlanned + '</td>' +
+                '<td>' + row.staffActual + '</td>' +
+                '<td>' + row.hired + '</td>' +
+                '<td>' + row.terminated + '</td>';
+            tbody.appendChild(tr);
+        });
+    }
+
+    /* ── INIT ── */
+    window.addEventListener('load', () => {
+        updateHrStats();
+        renderTab('finance');
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Мои отчёты{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">Мои отчёты</h1>
+    </div>
+
+    <section class="section">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h5 class="mb-2">Учётная запись не привязана к организации</h5>
+                                <p class="text-muted mb-0">Для работы с отчётами вам необходимо быть привязанным к организации. Обратитесь к администратору для назначения организации.</p>
+                            </div>
+                            <i class="bi bi-building" style="font-size: 3rem; color: var(--bs-secondary);"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

@@ -1,0 +1,75 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controller\Analytics;
+
+use App\Repository\Analytics\AnalyticsOrganizationRepository;
+use App\Service\Analytics\DashboardDataService;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
+
+final class AnalyticsDashboardController extends AbstractController
+{
+    private const ALLOWED_SCALES = ['month', 'week'];
+
+    private function normalizeScale(string $scale): string
+    {
+        return in_array($scale, self::ALLOWED_SCALES, true) ? $scale : 'month';
+    }
+
+    #[Route('/analytics/dashboard', name: 'app_analytics_dashboard')]
+    public function index(
+        Request $request,
+        AnalyticsOrganizationRepository $analyticsOrganizationRepository,
+        DashboardDataService $dashboardDataService,
+    ): Response {
+        $analyticsOrganizations = $analyticsOrganizationRepository->findVisibleOrdered();
+        $organizations = array_map(
+            static fn ($analyticsOrganization) => $analyticsOrganization->getOrganization(),
+            $analyticsOrganizations,
+        );
+
+        // Начальные данные: первая организация или все
+        $firstOrgId = !empty($organizations) ? $organizations[0]->getId() : 0;
+        $scale = $this->normalizeScale($request->query->getString('scale', 'month'));
+        $dashboardData = $dashboardDataService->getData($firstOrgId, $scale);
+        $dashboardData['compare'] = $dashboardDataService->getCompareData($firstOrgId, $scale);
+
+        return $this->render('analytics/dashboard/dashboard.html.twig', [
+            'organizations' => $organizations,
+            'initialScale' => $scale,
+            'dashboardDataJson' => json_encode($dashboardData, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        ]);
+    }
+
+    #[Route('/analytics/dashboard/data', name: 'app_analytics_dashboard_data', methods: ['GET'])]
+    public function data(
+        Request $request,
+        DashboardDataService $dashboardDataService,
+    ): JsonResponse {
+        $orgId = $request->query->getInt('org_id', 0);
+        $scale = $this->normalizeScale($request->query->getString('scale', 'month'));
+
+        $data = $dashboardDataService->getData($orgId, $scale);
+        $data['compare'] = $dashboardDataService->getCompareData($orgId, $scale);
+
+        return $this->json($data);
+    }
+
+    #[Route('/analytics/dashboard/compare-data', name: 'app_analytics_dashboard_compare_data', methods: ['GET'])]
+    public function compareData(
+        Request $request,
+        DashboardDataService $dashboardDataService,
+    ): JsonResponse {
+        $orgId = $request->query->getInt('org_id', 0);
+        $scale = $this->normalizeScale($request->query->getString('scale', 'month'));
+        $year = $request->query->getInt('year') ?: null;
+        $period = $request->query->getInt('period') ?: null;
+
+        return $this->json($dashboardDataService->getCompareData($orgId, $scale, $year, $period));
+    }
+}
