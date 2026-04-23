@@ -7,6 +7,7 @@ namespace App\Controller\Analytics;
 use App\Entity\Analytics\AnalyticsBoardVersionMetric;
 use App\Enum\Analytics\AnalyticsBoardVersionStatus;
 use App\Enum\Analytics\AnalyticsPeriodType;
+use App\Repository\Analytics\AnalyticsBoardVersionRepository;
 use App\Repository\Analytics\AnalyticsMetricRepository;
 use App\Service\Analytics\BoardService;
 use App\Service\Analytics\CloneBoardVersionService;
@@ -205,9 +206,9 @@ final class AnalyticsAdminBoardController extends AbstractController
         CsrfTokenManagerInterface $csrf,
         BoardService $boardService,
         PublishBoardVersionService $publishService,
+        AnalyticsBoardVersionRepository $versionRepository,
     ): Response {
-        $versionRepo = $this->container->get('doctrine')->getRepository(\App\Entity\Analytics\AnalyticsBoardVersion::class);
-        $version = $versionRepo->find($versionId);
+        $version = $versionRepository->find($versionId);
 
         if (!$version) {
             throw $this->createNotFoundException('Версия не найдена.');

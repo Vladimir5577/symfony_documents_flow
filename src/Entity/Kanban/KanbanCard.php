@@ -42,6 +42,10 @@ class KanbanCard
     #[ORM\JoinColumn(name: 'column_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private KanbanColumn $column;
 
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'created_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $createdBy = null;
+
     /** @var Collection<int, KanbanCardSubtask> */
     #[ORM\OneToMany(mappedBy: 'card', targetEntity: KanbanCardSubtask::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['position' => 'ASC'])]
@@ -167,6 +171,17 @@ class KanbanCard
     public function setColumn(KanbanColumn $column): static
     {
         $this->column = $column;
+        return $this;
+    }
+
+    public function getCreatedBy(): ?User
+    {
+        return $this->createdBy;
+    }
+
+    public function setCreatedBy(?User $createdBy): static
+    {
+        $this->createdBy = $createdBy;
         return $this;
     }
 

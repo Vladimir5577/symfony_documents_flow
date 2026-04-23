@@ -204,7 +204,7 @@ class KanbanService
     /**
      * Создать карточку (позиция = max + 1).
      */
-    public function createCard(KanbanColumn $column, string $title): KanbanCard
+    public function createCard(KanbanColumn $column, string $title, User $creator): KanbanCard
     {
         $maxPos = $this->cardRepo->getMaxPosition($column);
 
@@ -212,6 +212,7 @@ class KanbanService
         $card->setTitle($title);
         $card->setPosition($maxPos + 1.0);
         $card->setColumn($column);
+        $card->setCreatedBy($creator);
 
         $this->em->persist($card);
         $this->em->flush();

@@ -56,7 +56,7 @@ final class KanbanCardApiController extends AbstractController
 
         $this->kanbanService->requireRole($column->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
 
-        $card = $this->kanbanService->createCard($column, $title);
+        $card = $this->kanbanService->createCard($column, $title, $user);
 
         $board = $column->getBoard();
         $project = $board->getProject();
@@ -175,6 +175,11 @@ final class KanbanCardApiController extends AbstractController
             'borderColor' => $card->getBorderColor(),
             'createdAt' => $card->getCreatedAt()?->format('c'),
             'updatedAt' => $card->getUpdatedAt()?->format('c'),
+            'createdBy' => $card->getCreatedBy() ? [
+                'id' => $card->getCreatedBy()->getId(),
+                'firstname' => $card->getCreatedBy()->getFirstname(),
+                'lastname' => $card->getCreatedBy()->getLastname(),
+            ] : null,
         ]);
     }
 

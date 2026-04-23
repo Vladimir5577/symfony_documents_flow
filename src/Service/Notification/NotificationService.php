@@ -177,6 +177,18 @@ class NotificationService
         $this->em->flush();
     }
 
+    public function notifyDocumentCommentAdded(User $recipient, string $authorName, string $documentTitle, string $link): void
+    {
+        $title = trim($authorName) . ' оставил комментарий к документу ' . $documentTitle;
+        $this->create(
+            $recipient,
+            NotificationType::DOCUMENT_COMMENT_ADDED,
+            $title,
+            link: $link,
+        );
+        $this->em->flush();
+    }
+
     public function notifyGeneric(User $recipient, string $title, string $link): void
     {
         $this->create(

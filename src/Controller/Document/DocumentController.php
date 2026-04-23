@@ -457,8 +457,11 @@ final class DocumentController extends AbstractController
     }
 
     #[Route('/incoming_documents', name: 'app_incoming_documents')]
-    public function getIncomingDocuments(Request $request, DocumentUserRecipientRepository $recipientRepository): Response
-    {
+    public function getIncomingDocuments(
+        Request $request,
+        DocumentUserRecipientRepository $recipientRepository,
+        DocumentTypeRepository $documentTypeRepository,
+    ): Response {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
             $this->addFlash('error', 'Необходимо войти в систему.');
@@ -468,7 +471,34 @@ final class DocumentController extends AbstractController
         $page = max(1, (int) $request->query->get('page', 1));
         $limit = 10;
 
-        $pagination = $recipientRepository->findPaginatedByUser($currentUser, $page, $limit);
+        $statusParam = trim((string) $request->query->get('status', ''));
+        $status = $statusParam !== '' ? (DocumentStatus::tryFrom($statusParam)) : null;
+
+        $typeIdParam = trim((string) $request->query->get('type_id', ''));
+        $typeId = $typeIdParam !== '' ? (int) $typeIdParam : null;
+
+        $creator = trim((string) $request->query->get('creator', '')) ?: null;
+        $name = trim((string) $request->query->get('name', '')) ?: null;
+
+        $createdFromRaw = trim((string) $request->query->get('created_from', ''));
+        $createdToRaw = trim((string) $request->query->get('created_to', ''));
+        $createdFrom = $createdFromRaw !== '' ? \DateTimeImmutable::createFromFormat('!Y-m-d', $createdFromRaw) : null;
+        $createdTo = $createdToRaw !== '' ? \DateTimeImmutable::createFromFormat('!Y-m-d', $createdToRaw) : null;
+        if ($createdFrom === false) { $createdFrom = null; }
+        if ($createdTo === false) { $createdTo = null; } elseif ($createdTo !== null) {
+            $createdTo = $createdTo->setTime(23, 59, 59);
+        }
+
+        $filters = [
+            'status' => $status,
+            'typeId' => $typeId,
+            'creator' => $creator,
+            'createdFrom' => $createdFrom,
+            'createdTo' => $createdTo,
+            'name' => $name,
+        ];
+
+        $pagination = $recipientRepository->findPaginatedByUser($currentUser, $page, $limit, $filters);
         $organizationPaths = [];
         foreach ($pagination['recipients'] as $recipient) {
             $document = $recipient->getDocument();
@@ -477,6 +507,15 @@ final class DocumentController extends AbstractController
             }
             $organizationPaths[$document->getId()] = $this->buildOrganizationPath($document->getOrganizationCreator());
         }
+
+        $activeFilters = [
+            'status' => $statusParam !== '' ? $statusParam : '',
+            'type_id' => $typeId !== null ? (string) $typeId : '',
+            'creator' => $creator ?? '',
+            'created_from' => $createdFromRaw,
+            'created_to' => $createdToRaw,
+            'name' => $name ?? '',
+        ];
 
         return $this->render('document/incoming_documents.html.twig', [
             'active_tab' => 'incoming_documents',
@@ -488,12 +527,18 @@ final class DocumentController extends AbstractController
                 'total_items' => $pagination['total'],
                 'items_per_page' => $pagination['limit'],
             ],
+            'document_types' => $documentTypeRepository->findBy([], ['name' => 'ASC']),
+            'document_statuses' => DocumentStatus::cases(),
+            'filters' => $activeFilters,
         ]);
     }
 
     #[Route('/outgoing_documents', name: 'app_outgoing_documents')]
-    public function getOutgoingDocuments(Request $request, DocumentRepository $documentRepository): Response
-    {
+    public function getOutgoingDocuments(
+        Request $request,
+        DocumentRepository $documentRepository,
+        DocumentTypeRepository $documentTypeRepository,
+    ): Response {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
             $this->addFlash('error', 'Необходимо войти в систему.');
@@ -503,7 +548,21 @@ final class DocumentController extends AbstractController
         $page = max(1, (int) $request->query->get('page', 1));
         $limit = 10;
 
-        $pagination = $documentRepository->findPaginatedByCreatedBy($currentUser, $page, $limit);
+        $typeIdParam = trim((string) $request->query->get('type_id', ''));
+        $typeId = $typeIdParam !== '' ? (int) $typeIdParam : null;
+        $name = trim((string) $request->query->get('name', '')) ?: null;
+
+        $filters = [
+            'typeId' => $typeId,
+            'name' => $name,
+        ];
+
+        $pagination = $documentRepository->findPaginatedByCreatedBy($currentUser, $page, $limit, $filters);
+
+        $activeFilters = [
+            'type_id' => $typeId !== null ? (string) $typeId : '',
+            'name' => $name ?? '',
+        ];
 
         return $this->render('document/outgoing_documents.html.twig', [
             'active_tab' => 'outgoing_documents',
@@ -514,6 +573,8 @@ final class DocumentController extends AbstractController
                 'total_items' => $pagination['total'],
                 'items_per_page' => $pagination['limit'],
             ],
+            'document_types' => $documentTypeRepository->findBy([], ['name' => 'ASC']),
+            'filters' => $activeFilters,
         ]);
     }
 

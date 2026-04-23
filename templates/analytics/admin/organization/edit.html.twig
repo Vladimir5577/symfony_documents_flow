@@ -37,13 +37,17 @@
                                 <div class="row">
                                     <div class="col-md-6 col-12">
                                         <div class="form-group">
-                                            <label for="organization_id">Организация <span class="text-danger">*</span></label>
-                                            <select id="organization_id" class="form-control" name="organization_id" required>
-                                                <option value="">— Выберите организацию —</option>
-                                                {% for org in allOrganizations %}
-                                                    <option value="{{ org.id }}" {{ analyticsOrg.organization.id == org.id ? 'selected' : '' }}>{{ org.name }}</option>
-                                                {% endfor %}
-                                            </select>
+                                            <label for="analytics-org-display">Организация <span class="text-danger">*</span></label>
+                                            <input type="hidden" id="analytics_organization_id" name="organization_id" value="{{ analyticsOrg.organization.id }}" required>
+                                            <div class="input-group">
+                                                <input type="text" id="analytics-org-display" class="form-control" readonly placeholder="— Выберите организацию —" value="{{ analyticsOrg.organization.name }}" style="cursor:pointer" data-bs-toggle="modal" data-bs-target="#analyticsOrgPickerModal">
+                                                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#analyticsOrgPickerModal">
+                                                    <i class="bi bi-building"></i> Выбрать
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary" id="analytics-org-clear-btn" style="display:none;">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="col-md-6 col-12">
@@ -75,4 +79,51 @@
             </div>
         </div>
     </section>
+
+    <div id="analytics-org-tree-data" class="d-none">
+        {% for org in allOrganizations %}
+            <div class="org-node"
+                 data-org-id="{{ org.id }}"
+                 data-parent-id="{{ org.parent ? org.parent.id : '' }}"
+                 data-name="{{ org.name }}"></div>
+        {% endfor %}
+    </div>
+
+    {% include 'analytics/admin/organization/partials/_org_tree_modal.html.twig' %}
+    {% include 'analytics/admin/organization/partials/_org_tree_modal_script.html.twig' %}
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var clearBtn = document.getElementById('analytics-org-clear-btn');
+            var hiddenInput = document.getElementById('analytics_organization_id');
+            var displayInput = document.getElementById('analytics-org-display');
+            if (!clearBtn || !hiddenInput || !displayInput) return;
+
+            function updateClearBtn() {
+                clearBtn.style.display = hiddenInput.value ? '' : 'none';
+            }
+
+            clearBtn.addEventListener('click', function () {
+                hiddenInput.value = '';
+                displayInput.value = '';
+                updateClearBtn();
+                var tree = document.getElementById('analytics-org-tree');
+                if (tree) {
+                    var sel = tree.querySelector('.org-tree-item.selected');
+                    if (sel) sel.classList.remove('selected');
+                }
+                var selectBtn = document.getElementById('analytics-org-select-btn');
+                if (selectBtn) selectBtn.disabled = true;
+            });
+
+            var modal = document.getElementById('analyticsOrgPickerModal');
+            if (modal) {
+                modal.addEventListener('hidden.bs.modal', function () {
+                    updateClearBtn();
+                });
+            }
+
+            updateClearBtn();
+        });
+    </script>
 {% endblock %}

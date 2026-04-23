@@ -90,10 +90,16 @@ class Document
     #[ORM\OneToMany(mappedBy: 'document', targetEntity: File::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $files;
 
+    /** @var Collection<int, DocumentComment> */
+    #[ORM\OneToMany(mappedBy: 'document', targetEntity: DocumentComment::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[ORM\OrderBy(['createdAt' => 'ASC'])]
+    private Collection $comments;
+
     public function __construct()
     {
         $this->userRecipients = new ArrayCollection();
         $this->files = new ArrayCollection();
+        $this->comments = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -313,6 +319,31 @@ class Document
     public function removeFile(File $file): static
     {
         $this->files->removeElement($file);
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, DocumentComment>
+     */
+    public function getComments(): Collection
+    {
+        return $this->comments;
+    }
+
+    public function addComment(DocumentComment $comment): static
+    {
+        if (!$this->comments->contains($comment)) {
+            $this->comments->add($comment);
+            $comment->setDocument($this);
+        }
+
+        return $this;
+    }
+
+    public function removeComment(DocumentComment $comment): static
+    {
+        $this->comments->removeElement($comment);
 
         return $this;
     }

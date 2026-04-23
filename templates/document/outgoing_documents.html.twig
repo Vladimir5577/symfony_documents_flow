@@ -13,7 +13,37 @@
 {% block main %}
     <h1>Исходящие документы</h1>
 
+    {% set filter_query = filters|filter(v => v is not null and v != '') %}
+
     <section class="section">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Фильтры</h5>
+            </div>
+            <div class="card-body">
+                <form method="get" action="{{ path('app_outgoing_documents') }}" class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="filter-name" class="form-label mb-1">Название документа</label>
+                        <input type="text" id="filter-name" name="name" class="form-control form-control-sm"
+                               value="{{ filters.name }}" placeholder="Подстрока названия">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="filter-type" class="form-label mb-1">Тип</label>
+                        <select id="filter-type" name="type_id" class="form-select form-select-sm">
+                            <option value="">— Все —</option>
+                            {% for type in document_types %}
+                                <option value="{{ type.id }}" {% if filters.type_id == type.id %}selected{% endif %}>{{ type.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex gap-2 justify-content-end">
+                        <a href="{{ path('app_outgoing_documents') }}" class="btn btn-outline-secondary btn-sm">Сбросить</a>
+                        <button type="submit" class="btn btn-primary btn-sm">Применить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <p class="text-muted mb-0">Всего документов: {{ pagination.total_items }}</p>
@@ -89,7 +119,7 @@
                                 <ul class="pagination justify-content-center mb-0">
                                     {# Предыдущая страница #}
                                     <li class="page-item {% if pagination.current_page == 1 %}disabled{% endif %}">
-                                        <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_outgoing_documents', {page: pagination.current_page - 1}) }}{% else %}#{% endif %}" aria-label="Предыдущая">
+                                        <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_outgoing_documents', filter_query|merge({page: pagination.current_page - 1})) }}{% else %}#{% endif %}" aria-label="Предыдущая">
                                             <span aria-hidden="true">&laquo;</span>
                                         </a>
                                     </li>
@@ -100,7 +130,7 @@
 
                                     {% if start_page > 1 %}
                                         <li class="page-item">
-                                            <a class="page-link" href="{{ path('app_outgoing_documents', {page: 1}) }}">1</a>
+                                            <a class="page-link" href="{{ path('app_outgoing_documents', filter_query|merge({page: 1})) }}">1</a>
                                         </li>
                                         {% if start_page > 2 %}
                                             <li class="page-item disabled">
@@ -111,7 +141,7 @@
 
                                     {% for page in start_page..end_page %}
                                         <li class="page-item {% if page == pagination.current_page %}active{% endif %}">
-                                            <a class="page-link" href="{{ path('app_outgoing_documents', {page: page}) }}">{{ page }}</a>
+                                            <a class="page-link" href="{{ path('app_outgoing_documents', filter_query|merge({page: page})) }}">{{ page }}</a>
                                         </li>
                                     {% endfor %}
 
@@ -122,13 +152,13 @@
                                             </li>
                                         {% endif %}
                                         <li class="page-item">
-                                            <a class="page-link" href="{{ path('app_outgoing_documents', {page: pagination.total_pages}) }}">{{ pagination.total_pages }}</a>
+                                            <a class="page-link" href="{{ path('app_outgoing_documents', filter_query|merge({page: pagination.total_pages})) }}">{{ pagination.total_pages }}</a>
                                         </li>
                                     {% endif %}
 
                                     {# Следующая страница #}
                                     <li class="page-item {% if pagination.current_page == pagination.total_pages %}disabled{% endif %}">
-                                        <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_outgoing_documents', {page: pagination.current_page + 1}) }}{% else %}#{% endif %}" aria-label="Следующая">
+                                        <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_outgoing_documents', filter_query|merge({page: pagination.current_page + 1})) }}{% else %}#{% endif %}" aria-label="Следующая">
                                             <span aria-hidden="true">&raquo;</span>
                                         </a>
                                     </li>

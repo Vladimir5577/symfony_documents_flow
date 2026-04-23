@@ -60,18 +60,22 @@ class DocumentRepository extends ServiceEntityRepository
      * @param int $limit Количество элементов на странице
      * @return array{documents: array, total: int, page: int, limit: int, totalPages: int}
      */
-    public function findPaginatedByCreatedBy(User $user, int $page = 1, int $limit = 10): array
+    /**
+     * @param array{
+     *     typeId?: ?int,
+     *     name?: ?string,
+     * } $filters
+     */
+    public function findPaginatedByCreatedBy(User $user, int $page = 1, int $limit = 10, array $filters = []): array
     {
         $offset = ($page - 1) * $limit;
 
-        $total = (int) $this->createQueryBuilder('d')
+        $countQb = $this->createQueryBuilder('d')
             ->select('COUNT(d.id)')
             ->where('d.createdBy = :user')
-            ->setParameter('user', $user)
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('user', $user);
 
-        $documents = $this->createQueryBuilder('d')
+        $listQb = $this->createQueryBuilder('d')
             ->leftJoin('d.documentType', 'dt')->addSelect('dt')
             ->leftJoin('d.organizationCreator', 'o')->addSelect('o')
             ->leftJoin('d.createdBy', 'cb')->addSelect('cb')
@@ -79,9 +83,20 @@ class DocumentRepository extends ServiceEntityRepository
             ->setParameter('user', $user)
             ->orderBy('d.createdAt', 'DESC')
             ->setFirstResult($offset)
-            ->setMaxResults($limit)
-            ->getQuery()
-            ->getResult();
+            ->setMaxResults($limit);
+
+        foreach ([$countQb, $listQb] as $qb) {
+            if (!empty($filters['typeId'])) {
+                $qb->andWhere('d.documentType = :typeId')->setParameter('typeId', $filters['typeId']);
+            }
+            if (!empty($filters['name'])) {
+                $qb->andWhere('LOWER(d.name) LIKE :name')
+                    ->setParameter('name', '%' . mb_strtolower(trim($filters['name'])) . '%');
+            }
+        }
+
+        $total = (int) $countQb->getQuery()->getSingleScalarResult();
+        $documents = $listQb->getQuery()->getResult();
 
         $totalPages = (int) ceil($total / $limit);
 

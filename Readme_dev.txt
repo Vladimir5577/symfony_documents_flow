@@ -4,6 +4,17 @@ $ php -m | grep grpc
 
 // =============================================
 
+    Database
+    --------
+$ php bin/console doctrine:database:drop --force
+$ php bin/console doctrine:database:create
+
+
+    Cache
+    -----
+$ php bin/console cache:clear --env=prod
+$ php bin/console cache:warmup --env=prod
+
 
     Install GRPC to docker
     -----------------------

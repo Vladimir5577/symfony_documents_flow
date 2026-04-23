@@ -16,6 +16,7 @@ enum NotificationType: string
     case TASK_ASSIGNED = 'TASK_ASSIGNED';
     case TASK_MOVED = 'TASK_MOVED';
     case TASK_COMMENT_ADDED = 'TASK_COMMENT_ADDED';
+    case DOCUMENT_COMMENT_ADDED = 'DOCUMENT_COMMENT_ADDED';
     case GENERIC = 'GENERIC';
 
     public function getLabel(): string
@@ -30,6 +31,7 @@ enum NotificationType: string
             self::TASK_ASSIGNED => 'Назначена задача',
             self::TASK_MOVED => 'Задача перемещена',
             self::TASK_COMMENT_ADDED => 'Новый комментарий в задаче',
+            self::DOCUMENT_COMMENT_ADDED => 'Новый комментарий к документу',
             self::GENERIC => 'Уведомление',
         };
     }

@@ -52,21 +52,30 @@ class DocumentUserRecipientRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
-    public function findPaginatedByUser(User $user, int $page = 1, int $limit = 10): array
+    /**
+     * @param array{
+     *     status?: ?DocumentStatus,
+     *     typeId?: ?int,
+     *     creator?: ?string,
+     *     createdFrom?: ?\DateTimeInterface,
+     *     createdTo?: ?\DateTimeInterface,
+     *     name?: ?string,
+     * } $filters
+     */
+    public function findPaginatedByUser(User $user, int $page = 1, int $limit = 10, array $filters = []): array
     {
         $offset = ($page - 1) * $limit;
 
-        $total = (int) $this->createQueryBuilder('r')
+        $countQb = $this->createQueryBuilder('r')
             ->select('COUNT(r.id)')
             ->innerJoin('r.document', 'd')
+            ->leftJoin('d.createdBy', 'cb')
             ->where('r.user = :user')
             ->andWhere('d.isPublished = :published')
             ->setParameter('user', $user)
-            ->setParameter('published', true)
-            ->getQuery()
-            ->getSingleScalarResult();
+            ->setParameter('published', true);
 
-        $recipients = $this->createQueryBuilder('r')
+        $listQb = $this->createQueryBuilder('r')
             ->innerJoin('r.document', 'd')->addSelect('d')
             ->leftJoin('d.documentType', 'dt')->addSelect('dt')
             ->leftJoin('d.organizationCreator', 'o')->addSelect('o')
@@ -77,9 +86,34 @@ class DocumentUserRecipientRepository extends ServiceEntityRepository
             ->setParameter('published', true)
             ->orderBy('d.createdAt', 'DESC')
             ->setFirstResult($offset)
-            ->setMaxResults($limit)
-            ->getQuery()
-            ->getResult();
+            ->setMaxResults($limit);
+
+        foreach ([$countQb, $listQb] as $qb) {
+            if (!empty($filters['status']) && $filters['status'] instanceof DocumentStatus) {
+                $qb->andWhere('r.status = :status')->setParameter('status', $filters['status']);
+            }
+            if (!empty($filters['typeId'])) {
+                $qb->andWhere('d.documentType = :typeId')->setParameter('typeId', $filters['typeId']);
+            }
+            if (!empty($filters['creator'])) {
+                $qb->andWhere(
+                    "LOWER(CONCAT(COALESCE(cb.lastname, ''), CONCAT(' ', CONCAT(COALESCE(cb.firstname, ''), CONCAT(' ', COALESCE(cb.patronymic, '')))))) LIKE :creator"
+                )->setParameter('creator', '%' . mb_strtolower(trim($filters['creator'])) . '%');
+            }
+            if (!empty($filters['createdFrom']) && $filters['createdFrom'] instanceof \DateTimeInterface) {
+                $qb->andWhere('d.createdAt >= :createdFrom')->setParameter('createdFrom', $filters['createdFrom']);
+            }
+            if (!empty($filters['createdTo']) && $filters['createdTo'] instanceof \DateTimeInterface) {
+                $qb->andWhere('d.createdAt <= :createdTo')->setParameter('createdTo', $filters['createdTo']);
+            }
+            if (!empty($filters['name'])) {
+                $qb->andWhere('LOWER(d.name) LIKE :name')
+                    ->setParameter('name', '%' . mb_strtolower(trim($filters['name'])) . '%');
+            }
+        }
+
+        $total = (int) $countQb->getQuery()->getSingleScalarResult();
+        $recipients = $listQb->getQuery()->getResult();
 
         $totalPages = (int) ceil($total / $limit);
 

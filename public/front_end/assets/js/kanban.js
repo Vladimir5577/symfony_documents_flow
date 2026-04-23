@@ -783,6 +783,14 @@ var KanbanApp = (function () {
             var dueInput = document.getElementById("task-due-at");
             if (dueInput) dueInput.value = data.dueDate ? data.dueDate.substring(0, 16) : "";
 
+            // Author
+            var authorEl = document.getElementById("task-author");
+            if (authorEl) {
+                authorEl.textContent = data.createdBy
+                    ? ((data.createdBy.lastname || '') + ' ' + (data.createdBy.firstname || '')).trim() || '—'
+                    : '—';
+            }
+
             // Timestamps
             var createdEl = document.getElementById("task-created-at");
             if (createdEl) createdEl.textContent = formatDate(data.createdAt);
