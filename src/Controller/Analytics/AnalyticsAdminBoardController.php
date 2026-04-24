@@ -118,6 +118,7 @@ final class AnalyticsAdminBoardController extends AbstractController
             foreach ($version->getVersionMetrics()->toArray() as $vm) {
                 $boardService->removeVersionMetric($vm);
             }
+            $boardService->flush();
 
             // Добавляем выбранные метрики из request
             $selectedMetrics = $request->request->all('metrics') ?? [];

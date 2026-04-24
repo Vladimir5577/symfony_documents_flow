@@ -49,7 +49,8 @@
                                     <table class="table table-bordered mb-0">
                                         <thead>
                                         <tr>
-                                            <th style="width:40px">Порядок</th>
+                                            <th style="width:40px"></th>
+                                            <th style="width:60px">№</th>
                                             <th>Бизнес-ключ</th>
                                             <th>Название</th>
                                             <th>Тип</th>
@@ -59,10 +60,12 @@
                                         </tr>
                                         </thead>
                                         <tbody id="metrics-sortable">
+                                        {% set selected_metrics = [] %}
+                                        {% set unselected_metrics = [] %}
                                         {% for item in allMetrics %}
                                             {% set is_selected = false %}
                                             {% set is_required = false %}
-                                            {% set item_pos = loop.index %}
+                                            {% set item_pos = 999 %}
                                             {% for vm in version.versionMetrics %}
                                                 {% if vm.metric.id == item.id %}
                                                     {% set is_selected = true %}
@@ -70,14 +73,50 @@
                                                     {% set item_pos = vm.position %}
                                                 {% endif %}
                                             {% endfor %}
+                                            {% if is_selected %}
+                                                {% set selected_metrics = selected_metrics|merge([{metric: item, is_required: is_required, position: item_pos}]) %}
+                                            {% else %}
+                                                {% set unselected_metrics = unselected_metrics|merge([item]) %}
+                                            {% endif %}
+                                        {% endfor %}
 
-                                            <tr class="{{ is_selected ? '' : 'text-muted' }}">
+                                        {% for entry in selected_metrics|sort((a, b) => a.position <=> b.position) %}
+                                            <tr data-metric-id="{{ entry.metric.id }}">
+                                                <td class="drag-handle" style="cursor: grab; text-align: center; vertical-align: middle;">
+                                                    <i class="bi bi-grip-vertical" style="font-size: 1.2rem; color: #999;"></i>
+                                                </td>
                                                 <td>
-                                                    <input type="number" name="metrics[{{ item.id }}][position]" class="form-control form-control-sm" value="{{ item_pos }}" min="1" style="width:70px" {{ not is_selected ? 'disabled' : '' }}>
+                                                    <input type="hidden" name="metrics[{{ entry.metric.id }}][position]" class="position-input" value="{{ entry.position }}">
+                                                    <span class="position-label">{{ entry.position }}</span>
                                                 </td>
                                                 <td>
                                                     <div class="form-check">
-                                                        <input class="form-check-input" type="checkbox" name="metrics[{{ item.id }}][enabled]" id="metric_{{ item.id }}" value="1" {{ is_selected ? 'checked' : '' }}>
+                                                        <input class="form-check-input metric-toggle" type="checkbox" name="metrics[{{ entry.metric.id }}][enabled]" id="metric_{{ entry.metric.id }}" value="1" checked>
+                                                        <label class="form-check-label" for="metric_{{ entry.metric.id }}">
+                                                            <code>{{ entry.metric.businessKey }}</code>
+                                                        </label>
+                                                    </div>
+                                                </td>
+                                                <td>{{ entry.metric.name }}</td>
+                                                <td>{{ entry.metric.type }}</td>
+                                                <td>{{ entry.metric.unit }}</td>
+                                                <td><span class="badge bg-primary">{{ entry.metric.aggregationType.value }}</span></td>
+                                                <td class="text-center">
+                                                    <input class="form-check-input" type="checkbox" name="metrics[{{ entry.metric.id }}][is_required]" value="1" {{ entry.is_required ? 'checked' : '' }}>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+
+                                        {% for item in unselected_metrics %}
+                                            <tr class="text-muted" data-metric-id="{{ item.id }}">
+                                                <td></td>
+                                                <td>
+                                                    <input type="hidden" name="metrics[{{ item.id }}][position]" class="position-input" value="0" disabled>
+                                                    <span class="position-label">—</span>
+                                                </td>
+                                                <td>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input metric-toggle" type="checkbox" name="metrics[{{ item.id }}][enabled]" id="metric_{{ item.id }}" value="1">
                                                         <label class="form-check-label" for="metric_{{ item.id }}">
                                                             <code>{{ item.businessKey }}</code>
                                                         </label>
@@ -88,7 +127,7 @@
                                                 <td>{{ item.unit }}</td>
                                                 <td><span class="badge bg-primary">{{ item.aggregationType.value }}</span></td>
                                                 <td class="text-center">
-                                                    <input class="form-check-input" type="checkbox" name="metrics[{{ item.id }}][is_required]" value="1" {{ is_required ? 'checked' : '' }} {{ not is_selected ? 'disabled' : '' }}>
+                                                    <input class="form-check-input" type="checkbox" name="metrics[{{ item.id }}][is_required]" value="1" disabled>
                                                 </td>
                                             </tr>
                                         {% endfor %}
@@ -109,19 +148,55 @@
         </div>
     </section>
 
+    <script src="/front_end/assets/extensions/sortablejs/Sortable.min.js"></script>
     <script>
-        document.querySelectorAll('#metrics-sortable input[type="checkbox"][id^="metric_"]').forEach(function(cb) {
-            cb.addEventListener('change', function() {
-                var row = cb.closest('tr');
-                var inputs = row.querySelectorAll('input[type="number"], input:not([type="checkbox"])');
-                inputs.forEach(function(input) {
-                    input.disabled = !cb.checked;
+        (function() {
+            var tbody = document.getElementById('metrics-sortable');
+
+            function updatePositions() {
+                var rows = tbody.querySelectorAll('tr');
+                var pos = 1;
+                rows.forEach(function(row) {
+                    var cb = row.querySelector('.metric-toggle');
+                    var posInput = row.querySelector('.position-input');
+                    var posLabel = row.querySelector('.position-label');
+                    if (cb && cb.checked) {
+                        posInput.value = pos;
+                        posInput.disabled = false;
+                        posLabel.textContent = pos;
+                        pos++;
+                    } else if (posInput) {
+                        posInput.value = 0;
+                        posInput.disabled = true;
+                        posLabel.textContent = '—';
+                    }
                 });
-                // Required checkbox
-                var reqCb = row.querySelector('input[name*="is_required"]');
-                if (reqCb) reqCb.disabled = !cb.checked;
-                row.classList.toggle('text-muted', !cb.checked);
+            }
+
+            Sortable.create(tbody, {
+                handle: '.drag-handle',
+                animation: 150,
+                ghostClass: 'table-active',
+                onEnd: updatePositions
             });
-        });
+
+            tbody.querySelectorAll('.metric-toggle').forEach(function(cb) {
+                cb.addEventListener('change', function() {
+                    var row = cb.closest('tr');
+                    var reqCb = row.querySelector('input[name*="is_required"]');
+                    var handle = row.querySelector('.drag-handle');
+                    if (cb.checked) {
+                        row.classList.remove('text-muted');
+                        if (reqCb) reqCb.disabled = false;
+                        if (handle) handle.style.cursor = 'grab';
+                    } else {
+                        row.classList.add('text-muted');
+                        if (reqCb) { reqCb.disabled = true; reqCb.checked = false; }
+                        if (handle) handle.style.cursor = 'default';
+                    }
+                    updatePositions();
+                });
+            });
+        })();
     </script>
 {% endblock %}
