@@ -41,11 +41,11 @@
     <!-- TAB NAVIGATION -->
     <div class="tabs-nav tabs-nav-main" id="tabsNav">
         <button class="tab-btn active" onclick="switchTab('finance')"><span class="ico">💰</span> Финансы</button>
-        <button class="tab-btn" onclick="switchTab('tko')"><span class="ico">🚛</span> ТКО</button>
+{#        <button class="tab-btn" onclick="switchTab('tko')"><span class="ico">🚛</span> ТКО</button>#}
 {#        <button class="tab-btn" onclick="switchTab('clients')"><span class="ico">👤</span> Клиенты</button>#}
-        <button class="tab-btn" onclick="switchTab('hr')"><span class="ico">👥</span> Кадры</button>
+{#        <button class="tab-btn" onclick="switchTab('hr')"><span class="ico">👥</span> Кадры</button>#}
 {#        <button class="tab-btn" onclick="switchTab('complaints')"><span class="ico">📞</span> Жалобы</button>#}
-        <button class="tab-btn" onclick="switchTab('compare')"><span class="ico">📊</span> Сравнение</button>
+{#        <button class="tab-btn" onclick="switchTab('compare')"><span class="ico">📊</span> Сравнение</button>#}
     </div>
     <div class="tabs-nav" style="margin-top:8px;">
         <button id="scaleMonthBtn" class="tab-btn {{ initialScale == 'month' ? 'active' : '' }}" onclick="setScale('month')">По месяцам</button>
@@ -54,19 +54,75 @@
 
     <!-- ═══════════════════════ FINANCE ═══════════════════════ -->
     <div class="tab-panel active" id="tab-finance">
+        <div class="card" style="margin-bottom:12px">
+            <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                <span>Динамика финансовых показателей</span>
+                <span id="finSelectedPeriodLabel" style="font-size:11px;color:var(--text-muted)">Период: --</span>
+            </div>
+            <div class="chart-wrap"><canvas id="chartFinanceTrend"></canvas></div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Нажмите на точку периода, чтобы обновить snapshot ниже.</div>
+        </div>
+        <div
+            id="finSnapshotTitle"
+            style="
+                margin: 10px 0 14px;
+                padding: 12px 14px;
+                border: 1px solid rgba(88,166,255,0.45);
+                border-left: 4px solid #58a6ff;
+                border-radius: 8px;
+                background: linear-gradient(180deg, rgba(88,166,255,0.16), rgba(88,166,255,0.08));
+                color: #dbe9ff;
+                font-size: 16px;
+                font-weight: 700;
+                letter-spacing: 0.2px;
+                line-height: 1.3;
+            "
+        >
+            Срез за период: --
+        </div>
         <div class="grid-3" style="margin-bottom:12px">
 {#            <div class="card">#}
 {#                <div class="card-title">Выручка по месяцам</div>#}
 {#                <div class="chart-wrap"><canvas id="chartRevenue"></canvas></div>#}
 {#            </div>#}
             <div class="card">
-                <div class="card-title">Поступления и списания</div>
-                <div class="chart-wrap"><canvas id="chartCashflow"></canvas></div>
+                <div class="card-title">Дебиторская задолженность</div>
+                <div class="stat-row"><span class="label">Итого</span><span class="value" id="finReceivableTotal">0 ₽</span></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Кредиторская задолженность</div>
+                <div class="stat-row"><span class="label">Итого</span><span class="value" id="finPayableTotal">0 ₽</span></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Остатки на счетах</div>
+                <div class="stat-row"><span class="label">Итого</span><span class="value" id="finBalanceTotal">0 ₽</span></div>
             </div>
 {#            <div class="card">#}
 {#                <div class="card-title">Структура расходов</div>#}
 {#                <div class="chart-wrap"><canvas id="chartExpenses"></canvas></div>#}
 {#            </div>#}
+        </div>
+        <div class="grid-3" style="margin-bottom:12px">
+            <div class="card">
+                <div class="card-title">Структура дебиторки</div>
+                <div class="chart-wrap"><canvas id="chartFinanceReceivables"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Структура кредиторки</div>
+                <div class="chart-wrap"><canvas id="chartFinancePayables"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Остатки по филиалам</div>
+                <div class="chart-wrap"><canvas id="chartFinanceBranches"></canvas></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Финансовые индикаторы</div>
+            <div class="grid-3">
+                <div class="stat-row"><span class="label">Дебиторка / Кредиторка</span><span class="value" id="finDebtorCreditorRatio">0</span></div>
+                <div class="stat-row"><span class="label">Покрытие кредиторки остатками</span><span class="value" id="finBalanceCoverage">0%</span></div>
+                <div class="stat-row"><span class="label">Чистая позиция (остатки - кредиторка)</span><span class="value" id="finNetPosition">0 ₽</span></div>
+            </div>
         </div>
 {#        <div class="grid-2" style="margin-bottom:12px">#}
 {#            <div class="card">#}
@@ -461,15 +517,15 @@
     <button class="bnav-btn active" onclick="switchTab('finance');setActiveNav(this)">
         <span class="ico">💰</span>Финансы
     </button>
-    <button class="bnav-btn" onclick="switchTab('tko');setActiveNav(this)">
-        <span class="ico">🚛</span>ТКО
-    </button>
+{#    <button class="bnav-btn" onclick="switchTab('tko');setActiveNav(this)">#}
+{#        <span class="ico">🚛</span>ТКО#}
+{#    </button>#}
 {#    <button class="bnav-btn" onclick="switchTab('clients');setActiveNav(this)">#}
 {#        <span class="ico">👤</span>Клиенты#}
 {#    </button>#}
-    <button class="bnav-btn" onclick="switchTab('hr');setActiveNav(this)">
-        <span class="ico">👥</span>Кадры
-    </button>
+{#    <button class="bnav-btn" onclick="switchTab('hr');setActiveNav(this)">#}
+{#        <span class="ico">👥</span>Кадры#}
+{#    </button>#}
 {#    <button class="bnav-btn" onclick="switchTab('complaints');setActiveNav(this)">#}
 {#        <span class="ico">📞</span>Жалобы#}
 {#    </button>#}
@@ -540,6 +596,11 @@
     Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
     Chart.defaults.font.size = 11;
     const FILIALS = ['Ф-1','Ф-2','Ф-3','Ф-4','Ф-5','Ф-6'];
+    const moneyFmt = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 2 });
+
+    function formatMoney(v) {
+        return moneyFmt.format(Number(v || 0));
+    }
 
     function mkChart(id, cfg) {
         const el = document.getElementById(id);
@@ -579,17 +640,133 @@
         finance: () => {
             const labels = xLabels();
             const fin = dashboardData.finance || {};
-            mkChart('chartCashflow', {
-                type: 'bar',
+            const trends = fin.trends || {};
+            const recSeries = fin.receivablesBreakdownSeries || {};
+            const paySeries = fin.payablesBreakdownSeries || {};
+            const branchesSeries = fin.branchesBreakdownSeries || [];
+
+            const receivableTotalEl = document.getElementById('finReceivableTotal');
+            const payableTotalEl = document.getElementById('finPayableTotal');
+            const balanceTotalEl = document.getElementById('finBalanceTotal');
+            const ratioEl = document.getElementById('finDebtorCreditorRatio');
+            const coverageEl = document.getElementById('finBalanceCoverage');
+            const netPositionEl = document.getElementById('finNetPosition');
+            const periodLabelEl = document.getElementById('finSelectedPeriodLabel');
+            const snapshotTitleEl = document.getElementById('finSnapshotTitle');
+
+            const pick = (arr, idx) => Number((arr && arr[idx] != null) ? arr[idx] : 0);
+            let selectedIdx = Math.max(0, labels.length - 1);
+
+            const renderSnapshotByIndex = (idx) => {
+                selectedIdx = idx;
+                const receivableTotal = pick(trends.receivableTotal, idx);
+                const payableTotal = pick(trends.payableTotal, idx);
+                const balanceTotal = pick(trends.balanceTotal, idx);
+                const ratio = payableTotal > 0 ? (receivableTotal / payableTotal) : 0;
+                const coverage = payableTotal > 0 ? ((balanceTotal / payableTotal) * 100) : 0;
+                const netPosition = balanceTotal - payableTotal;
+
+                if (receivableTotalEl) receivableTotalEl.textContent = formatMoney(receivableTotal);
+                if (payableTotalEl) payableTotalEl.textContent = formatMoney(payableTotal);
+                if (balanceTotalEl) balanceTotalEl.textContent = formatMoney(balanceTotal);
+                if (ratioEl) ratioEl.textContent = ratio.toFixed(2);
+                if (coverageEl) coverageEl.textContent = coverage.toFixed(1) + '%';
+                if (netPositionEl) netPositionEl.textContent = formatMoney(netPosition);
+                const periodLabel = labels[idx] || '--';
+                if (periodLabelEl) periodLabelEl.textContent = 'Период: ' + periodLabel;
+                if (snapshotTitleEl) {
+                    snapshotTitleEl.textContent = currentScale === 'month'
+                        ? ('Срез: среднее за месяц ' + periodLabel)
+                        : ('Срез за период: ' + periodLabel);
+                }
+
+                mkChart('chartFinanceReceivables', {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Население (ТКО)', 'Юридические лица (ТКО)'],
+                        datasets: [{
+                            data: [pick(recSeries.populationTkoExport, idx), pick(recSeries.legalEntitiesTko, idx)],
+                            backgroundColor: ['#58a6ff', '#39c5cf'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, cutout: '62%' }
+                });
+
+                mkChart('chartFinancePayables', {
+                    type: 'bar',
+                    data: {
+                        labels: ['Подрядчики ТКО', 'Полигоны', 'ГСМ', 'Прочее'],
+                        datasets: [{
+                            label: 'Сумма, ₽',
+                            data: [
+                                pick(paySeries.contractorsTkoExport, idx),
+                                pick(paySeries.landfillsMaintenance, idx),
+                                pick(paySeries.fuel, idx),
+                                pick(paySeries.otherGoodsServices, idx),
+                            ],
+                            backgroundColor: ['#f85149', '#d29922', '#f59e0b', '#8b949e'],
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { ticks: { callback: v => Math.round(v / 1_000_000) + 'М' } } }
+                    }
+                });
+
+                mkChart('chartFinanceBranches', {
+                    type: 'bar',
+                    data: {
+                        labels: branchesSeries.map(b => b.name),
+                        datasets: [{
+                            label: 'Остаток, ₽',
+                            data: branchesSeries.map(b => pick(b.values || [], idx)),
+                            backgroundColor: 'rgba(88,166,255,0.75)',
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { ticks: { callback: v => Math.round(v / 1_000_000) + 'М' } } }
+                    }
+                });
+            };
+
+            const trendCanvas = document.getElementById('chartFinanceTrend');
+            mkChart('chartFinanceTrend', {
+                type: 'line',
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Поступления', data: fin.cashInflow || [], backgroundColor: 'rgba(63,185,80,0.7)', borderRadius: 4 },
-                        { label: 'Списания', data: fin.cashOutflow || [], backgroundColor: 'rgba(248,81,73,0.5)', borderRadius: 4 }
+                        { label: 'Дебиторка', data: trends.receivableTotal || [], borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,0.1)', fill: false, tension: 0.3, pointRadius: 4 },
+                        { label: 'Кредиторка', data: trends.payableTotal || [], borderColor: '#f85149', backgroundColor: 'rgba(248,81,73,0.08)', fill: false, tension: 0.3, pointRadius: 4 },
+                        { label: 'Остатки', data: trends.balanceTotal || [], borderColor: '#39c5cf', backgroundColor: 'rgba(57,197,207,0.08)', fill: false, tension: 0.3, pointRadius: 4 },
                     ]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => v+'М' } }, x: { stacked: false } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { ticks: { callback: v => Math.round(v / 1_000_000) + 'М' } } },
+                }
             });
+
+            if (trendCanvas && trendCanvas._chart) {
+                trendCanvas.onclick = (evt) => {
+                    const points = trendCanvas._chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+                    if (points.length > 0) {
+                        renderSnapshotByIndex(points[0].index);
+                    }
+                };
+            }
+
+            renderSnapshotByIndex(selectedIdx);
         },
         tko: () => {
             const labels = xLabels();
