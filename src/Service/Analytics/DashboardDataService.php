@@ -44,6 +44,29 @@ final class DashboardDataService
         'account_balance',
         'staff_planned_count',
         'staff_actual_count',
+        'accounts_receivable_total',
+        'accounts_receivable_population_tko_export',
+        'accounts_receivable_legal_entities_tko',
+        'accounts_payable_total',
+        'accounts_payable_contractors_tko_export',
+        'accounts_payable_landfills_maintenance',
+        'accounts_payable_fuel',
+        'accounts_payable_other_goods_services',
+        'bank_balance_total',
+        'bank_balance_main_account',
+        'bank_balance_yasinovataya_unit',
+        'bank_balance_card_account',
+        'bank_balance_head_opened_for_branches',
+        'bank_balance_landfills',
+        'bank_balance_road_service',
+        'bank_balance_branch_opened_accounts_total',
+        'bank_balance_donetsk_branch',
+        'bank_balance_mariupol_branch',
+        'bank_balance_makeevka_branch',
+        'bank_balance_shakhtyorsk_branch',
+        'bank_balance_gorlovka_branch',
+        'bank_balance_yenakiieve_branch',
+        'bank_balance_amvrosiivka_branch',
     ];
 
     /** Все бизнес-ключи */
@@ -52,6 +75,29 @@ final class DashboardDataService
         'fuel_consumption', 'tko_export',
         'employees_hired', 'employees_terminated',
         'staff_planned_count', 'staff_actual_count',
+        'accounts_receivable_total',
+        'accounts_receivable_population_tko_export',
+        'accounts_receivable_legal_entities_tko',
+        'accounts_payable_total',
+        'accounts_payable_contractors_tko_export',
+        'accounts_payable_landfills_maintenance',
+        'accounts_payable_fuel',
+        'accounts_payable_other_goods_services',
+        'bank_balance_total',
+        'bank_balance_main_account',
+        'bank_balance_yasinovataya_unit',
+        'bank_balance_card_account',
+        'bank_balance_head_opened_for_branches',
+        'bank_balance_landfills',
+        'bank_balance_road_service',
+        'bank_balance_branch_opened_accounts_total',
+        'bank_balance_donetsk_branch',
+        'bank_balance_mariupol_branch',
+        'bank_balance_makeevka_branch',
+        'bank_balance_shakhtyorsk_branch',
+        'bank_balance_gorlovka_branch',
+        'bank_balance_yenakiieve_branch',
+        'bank_balance_amvrosiivka_branch',
     ];
 
     /** Финансовые ключи, значения которых нужно перевести в миллионы */
@@ -357,12 +403,80 @@ final class DashboardDataService
         // TKO — округляем до целых
         $series['tko_export'] = array_map(static fn(float $v): int => (int) round($v), $series['tko_export']);
 
+        // Финансовый snapshot по последнему периоду
+        $receivableTotal = $this->lastValue($series['accounts_receivable_total']);
+        $payableTotal = $this->lastValue($series['accounts_payable_total']);
+        $balanceTotal = $this->lastValue($series['bank_balance_total']);
+        $balanceCoveragePct = $payableTotal > 0 ? round(($balanceTotal / $payableTotal) * 100, 1) : 0.0;
+        $debtorCreditorRatio = $payableTotal > 0 ? round($receivableTotal / $payableTotal, 2) : 0.0;
+        $netPosition = round($balanceTotal - $payableTotal, 2);
+
         return [
             'scale' => $scale,
             'labels' => $labels,
             'finance' => [
                 'cashInflow' => $series['cash_inflow'],
                 'cashOutflow' => $series['cash_outflow'],
+                'trends' => [
+                    'receivableTotal' => $series['accounts_receivable_total'],
+                    'payableTotal' => $series['accounts_payable_total'],
+                    'balanceTotal' => $series['bank_balance_total'],
+                ],
+                'kpis' => [
+                    'receivableTotal' => round($receivableTotal, 2),
+                    'payableTotal' => round($payableTotal, 2),
+                    'balanceTotal' => round($balanceTotal, 2),
+                    'debtorCreditorRatio' => $debtorCreditorRatio,
+                    'balanceCoveragePct' => $balanceCoveragePct,
+                    'netPosition' => $netPosition,
+                ],
+                'receivablesBreakdown' => [
+                    'populationTkoExport' => round($this->lastValue($series['accounts_receivable_population_tko_export']), 2),
+                    'legalEntitiesTko' => round($this->lastValue($series['accounts_receivable_legal_entities_tko']), 2),
+                ],
+                'receivablesBreakdownSeries' => [
+                    'populationTkoExport' => $series['accounts_receivable_population_tko_export'],
+                    'legalEntitiesTko' => $series['accounts_receivable_legal_entities_tko'],
+                ],
+                'payablesBreakdown' => [
+                    'contractorsTkoExport' => round($this->lastValue($series['accounts_payable_contractors_tko_export']), 2),
+                    'landfillsMaintenance' => round($this->lastValue($series['accounts_payable_landfills_maintenance']), 2),
+                    'fuel' => round($this->lastValue($series['accounts_payable_fuel']), 2),
+                    'otherGoodsServices' => round($this->lastValue($series['accounts_payable_other_goods_services']), 2),
+                ],
+                'payablesBreakdownSeries' => [
+                    'contractorsTkoExport' => $series['accounts_payable_contractors_tko_export'],
+                    'landfillsMaintenance' => $series['accounts_payable_landfills_maintenance'],
+                    'fuel' => $series['accounts_payable_fuel'],
+                    'otherGoodsServices' => $series['accounts_payable_other_goods_services'],
+                ],
+                'balancesBreakdown' => [
+                    'mainAccount' => round($this->lastValue($series['bank_balance_main_account']), 2),
+                    'yasinovatayaUnit' => round($this->lastValue($series['bank_balance_yasinovataya_unit']), 2),
+                    'cardAccount' => round($this->lastValue($series['bank_balance_card_account']), 2),
+                    'headOpenedForBranches' => round($this->lastValue($series['bank_balance_head_opened_for_branches']), 2),
+                    'landfills' => round($this->lastValue($series['bank_balance_landfills']), 2),
+                    'roadService' => round($this->lastValue($series['bank_balance_road_service']), 2),
+                    'branchOpenedAccountsTotal' => round($this->lastValue($series['bank_balance_branch_opened_accounts_total']), 2),
+                ],
+                'branchesBreakdown' => [
+                    ['name' => 'Донецкий филиал', 'value' => round($this->lastValue($series['bank_balance_donetsk_branch']), 2)],
+                    ['name' => 'Мариупольский филиал', 'value' => round($this->lastValue($series['bank_balance_mariupol_branch']), 2)],
+                    ['name' => 'Макеевский филиал', 'value' => round($this->lastValue($series['bank_balance_makeevka_branch']), 2)],
+                    ['name' => 'Шахтерский филиал', 'value' => round($this->lastValue($series['bank_balance_shakhtyorsk_branch']), 2)],
+                    ['name' => 'Горловский филиал', 'value' => round($this->lastValue($series['bank_balance_gorlovka_branch']), 2)],
+                    ['name' => 'Енакиевский филиал', 'value' => round($this->lastValue($series['bank_balance_yenakiieve_branch']), 2)],
+                    ['name' => 'Амвросиевский филиал', 'value' => round($this->lastValue($series['bank_balance_amvrosiivka_branch']), 2)],
+                ],
+                'branchesBreakdownSeries' => [
+                    ['name' => 'Донецкий филиал', 'values' => $series['bank_balance_donetsk_branch']],
+                    ['name' => 'Мариупольский филиал', 'values' => $series['bank_balance_mariupol_branch']],
+                    ['name' => 'Макеевский филиал', 'values' => $series['bank_balance_makeevka_branch']],
+                    ['name' => 'Шахтерский филиал', 'values' => $series['bank_balance_shakhtyorsk_branch']],
+                    ['name' => 'Горловский филиал', 'values' => $series['bank_balance_gorlovka_branch']],
+                    ['name' => 'Енакиевский филиал', 'values' => $series['bank_balance_yenakiieve_branch']],
+                    ['name' => 'Амвросиевский филиал', 'values' => $series['bank_balance_amvrosiivka_branch']],
+                ],
             ],
             'tko' => [
                 'tkoExport' => $series['tko_export'],
@@ -407,6 +521,15 @@ final class DashboardDataService
         return 0.0;
     }
 
+    private function lastValue(array $arr): float
+    {
+        if (empty($arr)) {
+            return 0.0;
+        }
+
+        return (float) ($arr[array_key_last($arr)] ?? 0.0);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -418,6 +541,50 @@ final class DashboardDataService
             'finance' => [
                 'cashInflow' => [],
                 'cashOutflow' => [],
+                'trends' => [
+                    'receivableTotal' => [],
+                    'payableTotal' => [],
+                    'balanceTotal' => [],
+                ],
+                'kpis' => [
+                    'receivableTotal' => 0,
+                    'payableTotal' => 0,
+                    'balanceTotal' => 0,
+                    'debtorCreditorRatio' => 0,
+                    'balanceCoveragePct' => 0,
+                    'netPosition' => 0,
+                ],
+                'receivablesBreakdown' => [
+                    'populationTkoExport' => 0,
+                    'legalEntitiesTko' => 0,
+                ],
+                'receivablesBreakdownSeries' => [
+                    'populationTkoExport' => [],
+                    'legalEntitiesTko' => [],
+                ],
+                'payablesBreakdown' => [
+                    'contractorsTkoExport' => 0,
+                    'landfillsMaintenance' => 0,
+                    'fuel' => 0,
+                    'otherGoodsServices' => 0,
+                ],
+                'payablesBreakdownSeries' => [
+                    'contractorsTkoExport' => [],
+                    'landfillsMaintenance' => [],
+                    'fuel' => [],
+                    'otherGoodsServices' => [],
+                ],
+                'balancesBreakdown' => [
+                    'mainAccount' => 0,
+                    'yasinovatayaUnit' => 0,
+                    'cardAccount' => 0,
+                    'headOpenedForBranches' => 0,
+                    'landfills' => 0,
+                    'roadService' => 0,
+                    'branchOpenedAccountsTotal' => 0,
+                ],
+                'branchesBreakdown' => [],
+                'branchesBreakdownSeries' => [],
             ],
             'tko' => [
                 'tkoExport' => [],
