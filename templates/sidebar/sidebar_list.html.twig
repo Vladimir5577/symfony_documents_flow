@@ -152,21 +152,18 @@
 
     {# Аналитика: отчёты — ROLE_MANAGER и выше; дашборд/графики — только ROLE_ADMIN #}
     {% if is_granted('ROLE_ADMIN') or is_granted('ROLE_MANAGER') %}
-        <li class="sidebar-item has-sub {% if active_tab in ['analytics_dashboard', 'analytics_chart', 'analytics_reports'] %}active{% endif %}">
+        <li class="sidebar-item has-sub {% if active_tab in ['analytics_dashboard', 'analytics_reports'] %}active{% endif %}">
             <a href="#" class="sidebar-link">
                 <i class="bi bi-bar-chart-line"></i>
                 <span>Аналитика</span>
             </a>
 
             <ul class="submenu">
-                {% if is_granted('ROLE_ADMIN') %}
+                {% if is_granted('ROLE_MANAGER_ANALYTIC') %}
                     <li class="submenu-item {% if active_tab == 'analytics_dashboard' %}active{% endif %}">
                         <a href="{{ path('app_analytics_dashboard') }}" class="submenu-link"><i class="bi bi-speedometer2"></i> Дашборд</a>
                     </li>
 
-                    <li class="submenu-item {% if active_tab == 'analytics_chart' %}active{% endif %}">
-                        <a href="{{ path('app_analytics_chart_show') }}" class="submenu-link"><i class="bi bi-graph-up"></i> Сравнительная аналитика</a>
-                    </li>
                 {% endif %}
 
                 <li class="submenu-item {% if active_tab == 'analytics_reports' %}active{% endif %}">
