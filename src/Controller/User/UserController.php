@@ -175,7 +175,7 @@ final class UserController extends AbstractController
 
         if ($selectedRoleId !== null && $selectedRoleId > 0) {
             $role = $roleRepository->find($selectedRoleId);
-            if ($role && $role->getRole() !== UserRole::ROLE_ADMIN) {
+            if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
                 $user->addRoleEntity($role);
             }
         }
@@ -472,7 +472,7 @@ final class UserController extends AbstractController
         $selectedRoleId = null;
         foreach ($user->getRolesRel() as $userRole) {
             $role = $userRole->getRole();
-            if ($role && $role->getRole() !== UserRole::ROLE_ADMIN) {
+            if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
                 $selectedRoleId = $role->getId();
                 break;
             }
@@ -482,7 +482,7 @@ final class UserController extends AbstractController
             $hasAdminOnlyAssignment = false;
             foreach ($user->getRolesRel() as $userRole) {
                 $role = $userRole->getRole();
-                if ($role && $role->getRole() === UserRole::ROLE_ADMIN) {
+                if ($role && $role->getName() === UserRole::ROLE_ADMIN->value) {
                     $hasAdminOnlyAssignment = true;
                     break;
                 }
@@ -742,7 +742,7 @@ final class UserController extends AbstractController
             $currentRoleId = null;
             foreach ($user->getRolesRel() as $userRole) {
                 $role = $userRole->getRole();
-                if ($role && $role->getRole() !== UserRole::ROLE_ADMIN) {
+                if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
                     $currentRoleId = $role->getId();
                     break;
                 }
@@ -754,7 +754,7 @@ final class UserController extends AbstractController
                 $rolesToRemove = [];
                 foreach ($user->getRolesRel() as $userRole) {
                     $role = $userRole->getRole();
-                    if ($role && $role->getRole() !== UserRole::ROLE_ADMIN) {
+                    if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
                         $rolesToRemove[] = $userRole;
                     }
                 }
@@ -766,7 +766,7 @@ final class UserController extends AbstractController
                 // Добавляем новую роль, если она выбрана
                 if ($selectedRoleId !== null && $selectedRoleId > 0) {
                     $role = $roleRepository->find($selectedRoleId);
-                    if ($role && $role->getRole() !== UserRole::ROLE_ADMIN) {
+                    if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
                         $user->addRoleEntity($role);
                     }
                 } else {

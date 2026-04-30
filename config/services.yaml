@@ -25,6 +25,10 @@ parameters:
     # onlyoffice url
     onlyoffice_document_server_url: '%env(resolve:ONLYOFFICE_DOCUMENT_SERVER_URL)%'
 
+    # don snab api
+    don_snab_api_url: '%env(resolve:DON_SNAB_API_URL)%'
+    don_snab_api_key: '%env(resolve:DON_SNAB_API_KEY)%'
+
 services:
     # default configuration for services in *this* file
     _defaults:
@@ -43,6 +47,11 @@ services:
     App\Service\Kanban\KanbanAttachmentService:
         arguments:
             $kanbanUploadDir: '%private_upload_kanban_dir%'
+
+    App\Service\ApiExternal\CitizenAppeal\CitizenAppealApiService:
+        arguments:
+            $apiUrl: '%don_snab_api_url%'
+            $apiKey: '%don_snab_api_key%'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

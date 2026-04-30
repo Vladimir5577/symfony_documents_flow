@@ -141,6 +141,9 @@
         </a>
     </li>
 
+    <!-- ###############################################################
+     ################################################################## -->
+
     <li class="sidebar-group-label">Инструкции</li>
 
     <li class="sidebar-item {% if active_tab == 'info' %}active{% endif %}">
@@ -150,8 +153,25 @@
         </a>
     </li>
 
+    <!-- ###############################################################
+     ################################################################## -->
+
+    <li class="sidebar-group-label">Обращения граждан</li>
+
+    <li class="sidebar-item {% if active_tab == 'citizen_appeal' %}active{% endif %}">
+        <a href="{{ path('app_citizen_appeal') }}" class="sidebar-link">
+            <i class="bi bi-kanban"></i>
+            <span>Обращения граждан</span>
+        </a>
+    </li>
+
+    <!-- ###############################################################
+     ################################################################## -->
+
     {# Аналитика: отчёты — ROLE_MANAGER и выше; дашборд/графики — только ROLE_ADMIN #}
     {% if is_granted('ROLE_ADMIN') or is_granted('ROLE_MANAGER') %}
+        <li class="sidebar-group-label">Аналитика</li>
+
         <li class="sidebar-item has-sub {% if active_tab in ['analytics_dashboard', 'analytics_reports'] %}active{% endif %}">
             <a href="#" class="sidebar-link">
                 <i class="bi bi-bar-chart-line"></i>

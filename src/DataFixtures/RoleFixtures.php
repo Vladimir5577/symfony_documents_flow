@@ -19,12 +19,13 @@ class RoleFixtures extends Fixture implements FixtureGroupInterface
     {
         $repo = $manager->getRepository(Role::class);
 
-        foreach (UserRole::cases() as $userRole) {
-            if ($repo->findOneBy(['name' => $userRole])) {
+        foreach (UserRole::cases() as $index => $userRole) {
+            if ($repo->findOneBy(['name' => $userRole->value])) {
                 continue;
             }
             $role = new Role($userRole);
             $role->setLabel($userRole->getLabel());
+            $role->setSortOrder($index);
             $manager->persist($role);
         }
 

@@ -28,9 +28,10 @@ class AdminStartFixtures extends Fixture implements FixtureGroupInterface
     {
         // Создаем все роли из enum
         $adminRole = null;
-        foreach (UserRole::cases() as $userRole) {
+        foreach (UserRole::cases() as $index => $userRole) {
             $role = new Role($userRole);
             $role->setLabel($userRole->getLabel());
+            $role->setSortOrder($index);
             $manager->persist($role);
 
             // Сохраняем ссылку на роль админа

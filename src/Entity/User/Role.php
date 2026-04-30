@@ -15,15 +15,18 @@ class Role
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(length: 50, enumType: UserRole::class)]
-    private UserRole $name;
+    #[ORM\Column(length: 50)]
+    private string $name;
 
     #[ORM\Column(length: 128, nullable: true)]
     private ?string $label = null;
 
+    #[ORM\Column(options: ['default' => 0])]
+    private int $sortOrder = 0;
+
     public function __construct(UserRole|string $name = UserRole::ROLE_USER)
     {
-        $this->name = \is_string($name) ? UserRole::from($name) : $name;
+        $this->name = $name instanceof UserRole ? $name->value : $name;
     }
 
     public function getId(): ?int
@@ -33,24 +36,24 @@ class Role
 
     public function getName(): string
     {
-        return $this->name->value;
+        return $this->name;
     }
 
     public function setName(UserRole|string $name): self
     {
-        $this->name = \is_string($name) ? UserRole::from($name) : $name;
+        $this->name = $name instanceof UserRole ? $name->value : $name;
 
         return $this;
     }
 
-    public function getRole(): UserRole
+    public function getRole(): ?UserRole
     {
-        return $this->name;
+        return UserRole::tryFrom($this->name);
     }
 
     public function setRole(UserRole $name): self
     {
-        $this->name = $name;
+        $this->name = $name->value;
 
         return $this;
     }
@@ -63,6 +66,18 @@ class Role
     public function setLabel(?string $label): self
     {
         $this->label = $label;
+
+        return $this;
+    }
+
+    public function getSortOrder(): int
+    {
+        return $this->sortOrder;
+    }
+
+    public function setSortOrder(int $sortOrder): self
+    {
+        $this->sortOrder = $sortOrder;
 
         return $this;
     }
