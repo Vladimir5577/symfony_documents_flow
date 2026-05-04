@@ -87,6 +87,10 @@ $ php bin/console doctrine:database:drop --force
 $ php bin/console doctrine:database:create
 
 
+    sync roles if new role was added
+$ php bin/console app:roles:sync    
+
+
     Create
     ------
 $ php bin/console make:controller PageController

@@ -124,6 +124,13 @@
             </a>
         </li>
 
+        <li class="sidebar-item {% if active_tab in ['roles'] %}active{% endif %}">
+            <a href="{{ path('app_roles') }}" class="sidebar-link">
+                <i class="bi bi-people"></i>
+                <span>Роли</span>
+            </a>
+        </li>
+
         <li class="sidebar-item {% if active_tab in ['create_organization', 'all_organizations', 'view_organization'] %}active{% endif %}">
             <a href="{{ path('app_all_organizations') }}" class="sidebar-link">
                 <i class="bi bi-building"></i>

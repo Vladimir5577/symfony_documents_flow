@@ -1,0 +1,134 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Роли!{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">Роли</h1>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <section class="section">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Список ролей</h4>
+                        <p class="text-muted mb-0">Перетаскивайте строки за иконку <i class="bi bi-grip-vertical"></i>, чтобы изменить порядок. Сохранение происходит автоматически.</p>
+                    </div>
+                    <div class="card-content">
+                        <div id="roles-reorder-alert" class="alert alert-danger m-3" style="display:none;"></div>
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0" id="roles-table"
+                                   data-reorder-url="{{ path('app_roles_reorder') }}"
+                                   data-csrf-token="{{ csrf_token('roles_reorder') }}">
+                                <thead>
+                                <tr>
+                                    <th style="width:40px"></th>
+                                    <th style="width:60px">№</th>
+                                    <th>Системное имя</th>
+                                    <th>Название</th>
+                                </tr>
+                                </thead>
+                                <tbody id="roles-sortable">
+                                {% for role in roles %}
+                                    <tr data-role-id="{{ role.id }}">
+                                        <td class="drag-handle" style="cursor: grab; text-align: center; vertical-align: middle;">
+                                            <i class="bi bi-grip-vertical" style="font-size: 1.2rem; color: #999;"></i>
+                                        </td>
+                                        <td><span class="position-label">{{ loop.index }}</span></td>
+                                        <td><code>{{ role.name }}</code></td>
+                                        <td>{{ role.label ?? role.role.label ?? '—' }}</td>
+                                    </tr>
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted py-4">Роли не найдены</td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script src="/front_end/assets/extensions/sortablejs/Sortable.min.js"></script>
+    <script>
+        (function() {
+            var table = document.getElementById('roles-table');
+            var tbody = document.getElementById('roles-sortable');
+            if (!table || !tbody) return;
+
+            var url = table.dataset.reorderUrl;
+            var token = table.dataset.csrfToken;
+            var alertBox = document.getElementById('roles-reorder-alert');
+
+            function showError(message) {
+                if (!alertBox) return;
+                alertBox.textContent = message;
+                alertBox.style.display = 'block';
+                setTimeout(function() { alertBox.style.display = 'none'; }, 4000);
+            }
+
+            function relabel() {
+                tbody.querySelectorAll('tr').forEach(function(row, idx) {
+                    var label = row.querySelector('.position-label');
+                    if (label) label.textContent = idx + 1;
+                });
+            }
+
+            function collectOrder() {
+                var rows = tbody.querySelectorAll('tr[data-role-id]');
+                var order = [];
+                rows.forEach(function(row, idx) {
+                    order.push({ id: parseInt(row.dataset.roleId, 10), position: idx + 1 });
+                });
+                return order;
+            }
+
+            Sortable.create(tbody, {
+                handle: '.drag-handle',
+                animation: 150,
+                ghostClass: 'table-active',
+                onStart: function(evt) {
+                    evt.item.dataset.prevIndex = evt.oldIndex;
+                },
+                onEnd: function(evt) {
+                    if (evt.oldIndex === evt.newIndex) return;
+
+                    relabel();
+                    var order = collectOrder();
+
+                    fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: JSON.stringify({ _token: token, order: order })
+                    })
+                    .then(function(response) {
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        return response.json();
+                    })
+                    .then(function(data) {
+                        if (!data.ok) throw new Error(data.error || 'unknown');
+                    })
+                    .catch(function(err) {
+                        showError('Не удалось сохранить порядок: ' + err.message + '. Перезагрузите страницу.');
+                    });
+                }
+            });
+        })();
+    </script>
+{% endblock %}
