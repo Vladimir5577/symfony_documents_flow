@@ -26,23 +26,22 @@ final class CreateReportService
     }
 
     /**
-     * Получить все отчёты пользователя (по его организации).
+     * Отчёты, созданные этим пользователем (для списка «мои отчёты»).
+     *
      * @return AnalyticsReport[]
      */
     public function findByUser(object $user): array
     {
-        $org = $user->getOrganization();
-        if (!$org) {
-            return [];
-        }
-        return $this->reportRepository->findBy(
-            ['organization' => $org],
-            ['createdAt' => 'DESC']
-        );
+        return $this->reportRepository->createQueryBuilder('r')
+            ->andWhere('r.createdBy = :user')
+            ->setParameter('user', $user)
+            ->orderBy('r.createdAt', 'DESC')
+            ->getQuery()
+            ->getResult();
     }
 
     /**
-     * Получить отчёт по id, проверить доступ пользователя.
+     * Получить отчёт по id с проверкой доступа: админ — любой отчёт, иначе только если текущий пользователь автор.
      */
     public function findByIdForUser(int $id, object $user): ?AnalyticsReport
     {
@@ -55,24 +54,13 @@ final class CreateReportService
             return $report;
         }
 
-        $userOrg = $user->getOrganization();
-        if ($userOrg && $report->getOrganization() && $this->isOrganizationInHierarchy($userOrg, $report->getOrganization())) {
-            return $report;
-        }
-        return null;
-    }
-
-    private function isOrganizationInHierarchy(AbstractOrganization $userOrganization, AbstractOrganization $reportOrganization): bool
-    {
-        $current = $userOrganization;
-        while ($current !== null) {
-            if ($current->getId() !== null && $current->getId() === $reportOrganization->getId()) {
-                return true;
-            }
-            $current = $current->getParent();
+        $creator = $report->getCreatedBy();
+        $userId = method_exists($user, 'getId') ? $user->getId() : null;
+        if ($userId === null || $creator?->getId() === null || $creator->getId() !== $userId) {
+            return null;
         }
 
-        return false;
+        return $report;
     }
 
     public function findById(int $id): ?AnalyticsReport

@@ -143,13 +143,7 @@ final class AnalyticsReportController extends AbstractController
                 ->orderBy('ob.id', 'DESC')
                 ->getQuery()
                 ->getResult();
-            $reports = $em->getRepository(AnalyticsReport::class)->createQueryBuilder('r')
-                ->join('r.organization', 'o')
-                ->andWhere('o.id IN (:orgIds)')
-                ->setParameter('orgIds', $orgIds)
-                ->orderBy('r.createdAt', 'DESC')
-                ->getQuery()
-                ->getResult();
+            $reports = $reportService->findByUser($user);
         }
 
         return $this->render('analytics/report/index.html.twig', [
@@ -489,8 +483,10 @@ final class AnalyticsReportController extends AbstractController
             return $this->redirectToRoute('app_analytics_report');
         }
 
+        $isAuthor = $report->getCreatedBy()?->getId() === $user->getId();
         $canDeleteNotApproved = $report->getStatus() !== AnalyticsReportStatus::Approved
             && $isManager
+            && $isAuthor
             && $user->getOrganization()
             && $this->isOrganizationInHierarchy($user->getOrganization(), $report->getOrganization());
 

@@ -14,7 +14,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(
     name: 'app:roles:sync',
-    description: 'Синхронизирует таблицу role с enum UserRole: создаёт недостающие записи и заполняет пустые label.',
+    description: 'Синхронизирует таблицу role с enum UserRole: создаёт недостающие записи и подписи (label), если они отличаются от enum.',
 )]
 class SyncRolesCommand extends Command
 {
@@ -50,8 +50,9 @@ class SyncRolesCommand extends Command
                 continue;
             }
 
-            if ($role->getLabel() === null || $role->getLabel() === '') {
-                $role->setLabel($case->getLabel());
+            $enumLabel = $case->getLabel();
+            if (($role->getLabel() ?? '') !== $enumLabel) {
+                $role->setLabel($enumLabel);
                 $relabeled[] = $case->value;
             }
         }
@@ -70,7 +71,7 @@ class SyncRolesCommand extends Command
         }
 
         if ($relabeled) {
-            $io->writeln(sprintf('Заполнен label у %d ролей: %s', count($relabeled), implode(', ', $relabeled)));
+            $io->writeln(sprintf('Обновлён label у %d ролей (по enum): %s', count($relabeled), implode(', ', $relabeled)));
         }
 
         if ($orphans) {
