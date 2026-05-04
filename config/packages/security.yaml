@@ -40,8 +40,9 @@ security:
     # ROLE_ADMIN автоматически имеет все права ROLE_HR и ROLE_USER
     # ROLE_HR автоматически имеет все права ROLE_USER
     role_hierarchy:
-        ROLE_ADMIN: [ROLE_MANAGER_ANALYTIC, ROLE_MANAGER, ROLE_MODERATOR, ROLE_USER]
+        ROLE_ADMIN: [ROLE_MANAGER_ANALYTIC, ROLE_WORK_CITIZEN_APPEAL, ROLE_MANAGER, ROLE_MODERATOR, ROLE_USER]
         ROLE_MANAGER_ANALYTIC: [ROLE_MANAGER, ROLE_MODERATOR, ROLE_USER]
+        ROLE_WORK_CITIZEN_APPEAL: [ROLE_MANAGER, ROLE_MODERATOR, ROLE_USER]
         ROLE_MANAGER: [ROLE_MODERATOR, ROLE_USER]
         ROLE_MODERATOR: ROLE_USER  # Если нужна отдельная роль редактора
 
@@ -55,6 +56,9 @@ security:
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/save_docx, roles: PUBLIC_ACCESS }
         - { path: ^/$, roles: PUBLIC_ACCESS } # корневой путь - редирект на /login
+
+        # Обращения граждан: только профильная роль (и ROLE_ADMIN через role_hierarchy)
+        - { path: ^/citizen-appeal, roles: ROLE_WORK_CITIZEN_APPEAL }
 
 
         # Все остальные роуты требуют аутентификации

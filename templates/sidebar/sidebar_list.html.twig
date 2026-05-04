@@ -156,14 +156,16 @@
     <!-- ###############################################################
      ################################################################## -->
 
-    <li class="sidebar-group-label">Обращения граждан</li>
+    {% if is_granted('ROLE_WORK_CITIZEN_APPEAL') %}
+        <li class="sidebar-group-label">Обращения граждан</li>
 
-    <li class="sidebar-item {% if active_tab == 'citizen_appeal' %}active{% endif %}">
-        <a href="{{ path('app_citizen_appeal') }}" class="sidebar-link">
-            <i class="bi bi-kanban"></i>
-            <span>Обращения граждан</span>
-        </a>
-    </li>
+        <li class="sidebar-item {% if active_tab == 'citizen_appeal' %}active{% endif %}">
+            <a href="{{ path('app_citizen_appeal') }}" class="sidebar-link">
+                <i class="bi bi-kanban"></i>
+                <span>Обращения граждан</span>
+            </a>
+        </li>
+    {% endif %}
 
     <!-- ###############################################################
      ################################################################## -->
