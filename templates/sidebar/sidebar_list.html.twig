@@ -177,6 +177,20 @@
     <!-- ###############################################################
      ################################################################## -->
 
+    {% if is_granted('ROLE_HR') %}
+        <li class="sidebar-group-label">Вакансии</li>
+
+        <li class="sidebar-item {% if active_tab == 'hr_vacancies' %}active{% endif %}">
+            <a href="{{ path('app_hr_vacancies') }}" class="sidebar-link">
+                <i class="bi bi-kanban"></i>
+                <span>Вакансии</span>
+            </a>
+        </li>
+    {% endif %}
+
+    <!-- ###############################################################
+     ################################################################## -->
+
     {# Аналитика: отчёты — ROLE_MANAGER и выше; дашборд/графики — только ROLE_ADMIN #}
     {% if is_granted('ROLE_ADMIN') or is_granted('ROLE_MANAGER') %}
         <li class="sidebar-group-label">Аналитика</li>
