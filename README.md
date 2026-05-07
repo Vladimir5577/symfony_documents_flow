@@ -31,9 +31,20 @@ $  docker exec -it php_container bash
 $ composer install
 ```
 
-6. Go to database - in browser and make sure database created
+Generate key for auth spa
+```bash
+$ php bin/console lexik:jwt:generate-keypair
+```
+
+6. Go to database - in browser and make sure database created (for local development)
 ```web
 http://localhost:8087/
+```
+
+Or better create or drop with command
+```bash
+$ php bin/console doctrine:database:drop --force
+$ php bin/console doctrine:database:create
 ```
 
 7. Run migrations (make sure that database exist)
@@ -81,14 +92,9 @@ $ docker compose -f docker-compose.dbgate.yml down -v
 
 ## Develop docks
 
-    Database
-    --------
-$ php bin/console doctrine:database:drop --force
-$ php bin/console doctrine:database:create
-
 
     sync roles if new role was added
-$ php bin/console app:roles:sync    
+$ php bin/console app:roles:sync
 
 
     Create

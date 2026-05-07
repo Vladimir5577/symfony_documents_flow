@@ -16,6 +16,28 @@ security:
             # Ensure dev tools and static assets are always allowed
             pattern: ^/(_profiler|_wdt|assets|build)/
             security: false
+        refresh_jwt:
+            pattern: ^/spa/api/(token/refresh|logout)
+            stateless: true
+            refresh_jwt:
+                check_path: /spa/api/token/refresh
+                invalidate_token_on_logout: true
+            logout:
+                path: /spa/api/logout
+        spa_api:
+            pattern: ^/spa/api
+            stateless: true
+            provider: app_user_provider
+            json_login:
+                check_path: /spa/api/login_check
+                username_path: login
+                password_path: password
+                success_handler: lexik_jwt_authentication.handler.authentication_success
+                failure_handler: lexik_jwt_authentication.handler.authentication_failure
+            jwt: ~
+            login_throttling:
+                max_attempts: 5
+                interval: '15 minutes'
         main:
             lazy: true
             provider: app_user_provider
@@ -60,6 +82,13 @@ security:
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/save_docx, roles: PUBLIC_ACCESS }
         - { path: ^/$, roles: PUBLIC_ACCESS } # корневой путь - редирект на /login
+
+        # SPA API: выдача и обновление JWT — публичные эндпоинты
+        - { path: ^/spa/api/login_check, roles: PUBLIC_ACCESS }
+        - { path: ^/spa/api/token/refresh, roles: PUBLIC_ACCESS }
+        - { path: ^/spa/api/logout, roles: PUBLIC_ACCESS }
+        # Все остальные роуты SPA API требуют валидный JWT
+        - { path: ^/spa/api, roles: ROLE_USER }
 
         # Обращения граждан: только профильная роль (и ROLE_ADMIN через role_hierarchy)
         - { path: ^/citizen-appeal, roles: ROLE_WORK_CITIZEN_APPEAL }

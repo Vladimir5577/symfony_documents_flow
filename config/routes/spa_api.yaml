@@ -1,0 +1,7 @@
+spa_api_login_check:
+    path: /spa/api/login_check
+    methods: [POST]
+
+spa_api_logout:
+    path: /spa/api/logout
+    methods: [POST]
