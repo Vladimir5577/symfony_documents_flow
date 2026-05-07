@@ -62,6 +62,36 @@ final class CitizenAppealApiService
     }
 
     /**
+     * @return array{content: string, contentType: string, disposition: string|null}
+     * @throws \RuntimeException
+     */
+    public function getFileContent(int $fileId, bool $download = false): array
+    {
+        $response = $this->httpClient->request('GET', $this->apiUrl . '/api/citizen-appeals/files/' . $fileId, [
+            'headers' => ['X-API-Key' => $this->apiKey],
+            'query'   => $download ? ['download' => '1'] : [],
+        ]);
+
+        $statusCode = $response->getStatusCode();
+
+        if ($statusCode === 404) {
+            throw new \RuntimeException('Файл не найден', 404);
+        }
+
+        if ($statusCode !== 200) {
+            throw new \RuntimeException('Ошибка получения файла (код ' . $statusCode . ')');
+        }
+
+        $headers = $response->getHeaders();
+
+        return [
+            'content'     => $response->getContent(),
+            'contentType' => $headers['content-type'][0] ?? 'application/octet-stream',
+            'disposition' => $headers['content-disposition'][0] ?? null,
+        ];
+    }
+
+    /**
      * @throws \RuntimeException
      */
     public function update(int $id, ?string $status, ?string $adminComment): void
