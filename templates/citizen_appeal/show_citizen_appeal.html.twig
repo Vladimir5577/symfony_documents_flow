@@ -23,10 +23,23 @@
 
 <h1>Обращение {{ appeal.publicId }}</h1>
 
-<div class="mb-3">
+<div class="mb-3 d-flex gap-2 flex-wrap">
     <a href="{{ path('app_citizen_appeal') }}" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left"></i> Назад к списку
     </a>
+    <button type="button" class="btn btn-sm btn-outline-primary" id="copyAppealForKanbanBtn"
+            data-appeal-text="{{ ('Обращение ' ~ appeal.publicId ~ "\n----------------\n"
+                ~ 'ФИО: ' ~ appeal.fio ~ "\n"
+                ~ 'Телефон: ' ~ (appeal.phone ?? '—') ~ "\n"
+                ~ 'Email: ' ~ (appeal.email ?? '—') ~ "\n"
+                ~ 'Тип: ' ~ appeal.appealTypeLabel ~ "\n"
+                ~ 'Город: ' ~ appeal.cityLabel ~ "\n"
+                ~ 'Адрес: ' ~ appeal.address ~ "\n"
+                ~ 'Дата подачи: ' ~ appeal.createdAt|date('d.m.Y H:i') ~ "\n"
+                ~ (appeal.message ? "\nТекст обращения:\n------------------ \n" ~ appeal.message ~ "\n" : '')
+            )|e('html_attr') }}">
+        <i class="bi bi-clipboard"></i> Скопировать содержимое обращения
+    </button>
 </div>
 
 <section class="section">
@@ -46,14 +59,14 @@
                 <dt class="col-sm-3 text-muted">Email</dt>
                 <dd class="col-sm-9">{{ appeal.email ?? '—' }}</dd>
 
-                <dt class="col-sm-3 text-muted">Способ ответа</dt>
-                <dd class="col-sm-9">
-                    {% if appeal.replyTo == 'any' %}Любой
-                    {% elseif appeal.replyTo == 'phone' %}По телефону
-                    {% elseif appeal.replyTo == 'email' %}По email
-                    {% else %}Ответ не нужен
-                    {% endif %}
-                </dd>
+{#                <dt class="col-sm-3 text-muted">Способ ответа</dt>#}
+{#                <dd class="col-sm-9">#}
+{#                    {% if appeal.replyTo == 'any' %}Любой#}
+{#                    {% elseif appeal.replyTo == 'phone' %}По телефону#}
+{#                    {% elseif appeal.replyTo == 'email' %}По email#}
+{#                    {% else %}Ответ не нужен#}
+{#                    {% endif %}#}
+{#                </dd>#}
             </dl>
         </div>
     </div>
@@ -86,9 +99,6 @@
 
                 <dt class="col-sm-3 text-muted">Дата подачи</dt>
                 <dd class="col-sm-9">{{ appeal.createdAt|date('d.m.Y H:i') }}</dd>
-
-                <dt class="col-sm-3 text-muted">Дата обновления</dt>
-                <dd class="col-sm-9">{{ appeal.updatedAt|date('d.m.Y H:i') }}</dd>
 
                 {% if appeal.message %}
                     <dt class="col-sm-3 text-muted">Текст обращения</dt>
@@ -214,6 +224,59 @@
     document.getElementById('imagePreviewModal')?.addEventListener('hidden.bs.modal', function () {
         var img = document.getElementById('imagePreviewModalImg');
         if (img) { img.src = ''; }
+    });
+
+    document.getElementById('copyAppealForKanbanBtn')?.addEventListener('click', function () {
+        var btn = this;
+        var text = btn.getAttribute('data-appeal-text') || '';
+        var original = btn.innerHTML;
+        var done = function () {
+            btn.innerHTML = '<i class="bi bi-check2"></i> Скопировано';
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-success');
+            setTimeout(function () {
+                btn.innerHTML = original;
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-primary');
+            }, 1500);
+        };
+        var fail = function () {
+            btn.innerHTML = '<i class="bi bi-x"></i> Не удалось скопировать';
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-danger');
+            setTimeout(function () {
+                btn.innerHTML = original;
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-outline-primary');
+            }, 1500);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(function () {
+                try {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    done();
+                } catch (e) { fail(); }
+            });
+        } else {
+            try {
+                var ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                done();
+            } catch (e) { fail(); }
+        }
     });
 </script>
 
