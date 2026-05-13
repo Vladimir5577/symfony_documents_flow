@@ -29,6 +29,7 @@ $  docker exec -it php_container bash
 5. Inside container install dependancies
 ```bash
 $ composer install
+$ php bin/console importmap:install
 ```
 
 Generate key for auth spa

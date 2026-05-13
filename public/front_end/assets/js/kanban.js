@@ -120,16 +120,20 @@ var KanbanApp = (function () {
     // ── Auto-save field ──
 
     function autoSaveField(fieldName, getValue) {
-        if (!currentCardId) return;
+        // Фиксируем целевую карточку на момент вызова: пока запрос летит, пользователь
+        // может переключиться на другую карточку и currentCardId/currentCardData поменяются.
+        var cardId = currentCardId;
+        if (!cardId) return;
         setSaveStatus("saving");
         var payload = {};
         payload[fieldName] = getValue();
-        apiFetch("/api/kanban/cards/" + currentCardId, {
+        apiFetch("/api/kanban/cards/" + cardId, {
             method: "PATCH",
             body: JSON.stringify(payload)
         }).then(function (data) {
             setSaveStatus("saved");
-            if (currentCardData && data) {
+            var sameCard = currentCardData && String(currentCardData.id) === String(cardId);
+            if (sameCard && data) {
                 if (data.title !== undefined) currentCardData.title = data.title;
                 if (data.description !== undefined) currentCardData.description = data.description;
                 if (data.priority !== undefined) {
@@ -141,11 +145,29 @@ var KanbanApp = (function () {
                 if (data.borderColor !== undefined) currentCardData.borderColor = data.borderColor;
                 if (data.updatedAt) currentCardData.updatedAt = data.updatedAt;
             }
-            updateCardOnBoard(currentCardData || data);
+            if (data) {
+                if (data.id === undefined) data.id = cardId;
+                updateCardOnBoard(data);
+            } else if (sameCard) {
+                updateCardOnBoard(currentCardData);
+            }
         }).catch(function (err) {
             setSaveStatus("error");
             showToast(err.message);
         });
+    }
+
+    // Принудительно «закоммитить» редактируемые поля сайдбара (description/title) до смены
+    // currentCardId. dragula гасит естественный blur через preventDefault на mousedown по
+    // карточке, поэтому если этого не сделать, blur случится уже после смены currentCardId
+    // и PATCH уйдёт на чужой id.
+    function commitFocusedSidebarEdits() {
+        var active = document.activeElement;
+        if (!active) return;
+        var textarea = document.getElementById("task-description-textarea");
+        var titleInput = document.getElementById("task-sidebar-title-input");
+        if (textarea && active === textarea) textarea.blur();
+        if (titleInput && titleInput.tagName === "INPUT" && active === titleInput) titleInput.blur();
     }
 
     // ── Dragula Setup ──
@@ -724,6 +746,11 @@ var KanbanApp = (function () {
     }
 
     function openSidebar(cardId) {
+        // Сначала «закоммитить» возможные правки описания/названия предыдущей карточки —
+        // ДО смены currentCardId, чтобы их blur-обработчик отстрелял со старым id.
+        if (currentCardId && String(currentCardId) !== String(cardId)) {
+            commitFocusedSidebarEdits();
+        }
         // Remove highlight from any previously-open card
         document.querySelectorAll(".kanban-card--open").forEach(function (c) {
             c.classList.remove("kanban-card--open");
@@ -836,6 +863,8 @@ var KanbanApp = (function () {
     }
 
     function closeSidebar() {
+        // Закоммитить редактируемые поля до сброса currentCardId.
+        commitFocusedSidebarEdits();
         document.querySelectorAll(".kanban-card--open").forEach(function (c) {
             c.classList.remove("kanban-card--open");
         });
@@ -1264,9 +1293,11 @@ var KanbanApp = (function () {
         if (!input || input.tagName !== "INPUT" || !config.canEdit) return;
 
         function save() {
-            if (currentCardId && input.value.trim()) {
-                autoSaveField("title", function () { return input.value.trim(); });
-            }
+            if (!currentCardId) return;
+            var value = input.value.trim();
+            if (!value) return;
+            if (currentCardData && value === (currentCardData.title || "")) return;
+            autoSaveField("title", function () { return value; });
         }
 
         input.addEventListener("keydown", function (e) {
@@ -1301,9 +1332,10 @@ var KanbanApp = (function () {
         if (!config.canEdit) return;
 
         textarea.addEventListener("blur", function () {
-            if (currentCardId) {
-                autoSaveField("description", function () { return textarea.value; });
-            }
+            if (!currentCardId) return;
+            var value = textarea.value;
+            if (currentCardData && value === (currentCardData.description || "")) return;
+            autoSaveField("description", function () { return value; });
         });
     }
 
