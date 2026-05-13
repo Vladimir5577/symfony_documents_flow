@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Controller\ApiExternal;
+namespace App\Controller\ApiExternal\CitizenAppeal;
 
 use App\Service\ApiExternal\CitizenAppeal\CitizenAppealApiService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;

@@ -114,6 +114,9 @@
         </a>
     </li>
 
+    <!-- ###############################################################
+ ################################################################## -->
+
     {% if is_granted('ROLE_MANAGER') %}
         <li class="sidebar-group-label">Справочники</li>
 
@@ -140,6 +143,9 @@
             </a>
         </li>
     {% endif %}
+
+    <!-- ###############################################################
+    ################################################################## -->
 
     <li class="sidebar-group-label">Инструменты</li>
 
@@ -172,6 +178,20 @@
             <a href="{{ path('app_citizen_appeal') }}" class="sidebar-link">
                 <i class="bi bi-kanban"></i>
                 <span>Обращения граждан</span>
+            </a>
+        </li>
+    {% endif %}
+
+    <!-- ###############################################################
+     ################################################################## -->
+
+    {% if is_granted('ROLE_WORK_CITIZEN_APPEAL') %}
+        <li class="sidebar-group-label">Заявки на договор</li>
+
+        <li class="sidebar-item {% if active_tab == 'contract_application' %}active{% endif %}">
+            <a href="{{ path('app_contract_application') }}" class="sidebar-link">
+                <i class="bi bi-file-earmark-text"></i>
+                <span>Заявки на договор</span>
             </a>
         </li>
     {% endif %}

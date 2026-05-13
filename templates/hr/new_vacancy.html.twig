@@ -1,0 +1,252 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Новая вакансия{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+
+<h1>Новая вакансия</h1>
+
+<div class="mb-3">
+    <a href="{{ path('app_hr_vacancies') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Назад к списку
+    </a>
+</div>
+
+<div id="form-error" class="alert alert-danger d-none" role="alert"></div>
+
+<section class="section">
+
+    <form id="new-form" novalidate>
+
+        <div class="card mb-3">
+            <div class="card-header"><h4 class="card-title mb-0">Основная информация</h4></div>
+            <div class="card-body">
+                <div class="row g-3">
+
+                    <div class="col-12">
+                        <label class="form-label">Название <span class="text-danger">*</span></label>
+                        <input type="text" name="title" class="form-control" required maxlength="255">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Зарплата</label>
+                        <input type="text" name="salary" class="form-control" maxlength="100" placeholder="от 50 000 ₽">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Город <span class="text-danger">*</span></label>
+                        <select name="city" class="form-select" required>
+                            <option value="">— Выберите —</option>
+                            <option value="donetsk">Донецк</option>
+                            <option value="makeyevka">Макеевка</option>
+                            <option value="mariupol">Мариуполь</option>
+                            <option value="gorlovka">Горловка</option>
+                            <option value="enakievo">Енакиево</option>
+                            <option value="shakhtersk">Шахтёрск</option>
+                            <option value="torez">Торез</option>
+                            <option value="amvrosievka">Амвросиевка</option>
+                            <option value="yasinovataya">Ясиноватая</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Занятость <span class="text-danger">*</span></label>
+                        <select name="employmentType" class="form-select" required>
+                            <option value="">— Выберите —</option>
+                            <option value="full_time">Полная занятость</option>
+                            <option value="part_time">Частичная занятость</option>
+                            <option value="internship">Стажировка</option>
+                            <option value="contract">Контракт</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">График <span class="text-danger">*</span></label>
+                        <select name="schedule" class="form-select" required>
+                            <option value="">— Выберите —</option>
+                            <option value="five_two">График 5/2</option>
+                            <option value="two_two">График 2/2</option>
+                            <option value="shift">Сменный</option>
+                            <option value="flexible">Гибкий</option>
+                            <option value="remote">Удалённо</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Опыт <span class="text-danger">*</span></label>
+                        <select name="experience" class="form-select" required>
+                            <option value="">— Выберите —</option>
+                            <option value="none">Без опыта</option>
+                            <option value="one_year">От 1 года</option>
+                            <option value="two_years">От 2 лет</option>
+                            <option value="three_years">От 3 лет</option>
+                            <option value="five_years">От 5 лет</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Телефон</label>
+                        <input type="text" name="contactPhone" class="form-control" maxlength="32">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="contactEmail" class="form-control">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Порядок сортировки</label>
+                        <input type="number" name="sortOrder" class="form-control" value="0" min="0">
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="isPublished" id="isPublished">
+                            <label class="form-check-label" for="isPublished">Опубликовать сразу</label>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Краткое описание</label>
+                        <textarea name="shortDescription" class="form-control" rows="3" maxlength="5000"></textarea>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        {% set blockTypes = [
+            {value: 'requirements', label: 'Требования'},
+            {value: 'duties',       label: 'Обязанности'},
+            {value: 'conditions',   label: 'Условия'},
+        ] %}
+
+        {% for blockType in blockTypes %}
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="card-title mb-0">{{ blockType.label }}</h4>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addItem('{{ blockType.value }}')">
+                        <i class="bi bi-plus"></i> Добавить пункт
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="items-list" id="items-{{ blockType.value }}">
+                        <p class="text-muted small mb-0" id="empty-{{ blockType.value }}">Нет пунктов. Нажмите «Добавить пункт».</p>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" id="submit-btn">Создать</button>
+            <a href="{{ path('app_hr_vacancies') }}" class="btn btn-outline-secondary">Отмена</a>
+        </div>
+
+    </form>
+
+</section>
+
+<script>
+const createUrl = '{{ path('app_hr_vacancies_create') }}';
+
+function addItem(blockType) {
+    const list = document.getElementById('items-' + blockType);
+    const empty = document.getElementById('empty-' + blockType);
+    if (empty) empty.remove();
+
+    const div = document.createElement('div');
+    div.className = 'input-group mb-2';
+    div.innerHTML = '<input type="text" class="form-control" maxlength="500">'
+        + '<button type="button" class="btn btn-outline-danger" onclick="removeItem(this)">'
+        + '<i class="bi bi-x"></i></button>';
+    list.appendChild(div);
+    div.querySelector('input').focus();
+}
+
+function removeItem(btn) {
+    const group = btn.closest('.input-group');
+    const list  = group.parentElement;
+    group.remove();
+    if (list.querySelectorAll('.input-group').length === 0) {
+        const blockType = list.id.replace('items-', '');
+        const p = document.createElement('p');
+        p.className = 'text-muted small mb-0';
+        p.id = 'empty-' + blockType;
+        p.textContent = 'Нет пунктов. Нажмите «Добавить пункт».';
+        list.appendChild(p);
+    }
+}
+
+document.getElementById('new-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const form = e.target;
+    const errorBox = document.getElementById('form-error');
+    errorBox.classList.add('d-none');
+
+    const blockTypes = ['requirements', 'duties', 'conditions'];
+    const bodyBlocks = [];
+    for (const type of blockTypes) {
+        const inputs = document.querySelectorAll('#items-' + type + ' input');
+        const items = Array.from(inputs).map(i => i.value.trim()).filter(v => v !== '');
+        if (items.length > 0) {
+            bodyBlocks.push({ type, items });
+        }
+    }
+
+    const salary       = form.salary.value.trim();
+    const shortDesc    = form.shortDescription.value.trim();
+    const contactPhone = form.contactPhone.value.trim();
+    const contactEmail = form.contactEmail.value.trim();
+
+    const payload = {
+        title:            form.title.value.trim(),
+        city:             form.city.value,
+        employmentType:   form.employmentType.value,
+        schedule:         form.schedule.value,
+        experience:       form.experience.value,
+        salary:           salary || null,
+        shortDescription: shortDesc || null,
+        contactPhone:     contactPhone || null,
+        contactEmail:     contactEmail || null,
+        sortOrder:        parseInt(form.sortOrder.value, 10) || 0,
+        isPublished:      form.isPublished.checked,
+        bodyBlocks,
+    };
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Создание…';
+
+    try {
+        const res = await fetch(createUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            errorBox.textContent = data.error ?? 'Произошла ошибка';
+            errorBox.classList.remove('d-none');
+            errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        window.location.href = '/hr_vacancies/' + data.id;
+    } catch (err) {
+        errorBox.textContent = 'Ошибка сети: ' + err.message;
+        errorBox.classList.remove('d-none');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Создать';
+    }
+});
+</script>
+
+{% endblock %}

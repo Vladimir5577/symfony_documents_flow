@@ -1,0 +1,540 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Заявка {{ application.publicId }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+
+{% for message in app.flashes('success') %}
+    <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+{% endfor %}
+{% for message in app.flashes('error') %}
+    <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+{% endfor %}
+
+<h1>Заявка {{ application.publicId }}</h1>
+
+<div class="mb-3">
+    <a href="{{ path('app_contract_application') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Назад к списку
+    </a>
+</div>
+
+<section class="section">
+
+    {# Статус и управление #}
+    <div class="card mb-3">
+        <div class="card-header">
+            <h4 class="card-title mb-0">Статус заявки</h4>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-3">
+                <dt class="col-sm-3 text-muted">Номер</dt>
+                <dd class="col-sm-9">{{ application.publicId }}</dd>
+
+                <dt class="col-sm-3 text-muted">Статус</dt>
+                <dd class="col-sm-9">
+                    {% if application.status == 'new' %}
+                        <span class="badge bg-secondary">{{ application.statusLabel }}</span>
+                    {% elseif application.status == 'in_review' %}
+                        <span class="badge bg-warning text-dark">{{ application.statusLabel }}</span>
+                    {% elseif application.status == 'contract_sent' %}
+                        <span class="badge bg-info text-dark">{{ application.statusLabel }}</span>
+                    {% elseif application.status == 'signed' %}
+                        <span class="badge bg-success">{{ application.statusLabel }}</span>
+                    {% else %}
+                        <span class="badge bg-danger">{{ application.statusLabel }}</span>
+                    {% endif %}
+                </dd>
+
+                <dt class="col-sm-3 text-muted">Дата подачи</dt>
+                <dd class="col-sm-9">{{ application.createdAt|date('d.m.Y H:i') }}</dd>
+
+                {% if application.adminComment %}
+                    <dt class="col-sm-3 text-muted">Комментарий</dt>
+                    <dd class="col-sm-9">
+                        <div class="border rounded p-3" style="background: var(--bs-secondary-bg);">{{ application.adminComment|nl2br }}</div>
+                    </dd>
+                {% endif %}
+            </dl>
+
+            <div class="d-flex gap-2 flex-wrap mb-0">
+                <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="status" value="new">
+                    <button type="submit" class="btn btn-sm {{ application.status == 'new' ? 'btn-secondary' : 'btn-outline-secondary' }}">Новая</button>
+                </form>
+                <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="status" value="in_review">
+                    <button type="submit" class="btn btn-sm {{ application.status == 'in_review' ? 'btn-warning' : 'btn-outline-warning' }}">На проверке</button>
+                </form>
+                <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="status" value="contract_sent">
+                    <button type="submit" class="btn btn-sm {{ application.status == 'contract_sent' ? 'btn-info' : 'btn-outline-info' }}">Договор отправлен</button>
+                </form>
+                <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="status" value="signed">
+                    <button type="submit" class="btn btn-sm {{ application.status == 'signed' ? 'btn-success' : 'btn-outline-success' }}">Подписан</button>
+                </form>
+                <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="status" value="rejected">
+                    <button type="submit" class="btn btn-sm {{ application.status == 'rejected' ? 'btn-danger' : 'btn-outline-danger' }}">Отклонена</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {# Комментарий администратора #}
+    <div class="card mb-3">
+        <div class="card-header">
+            <h4 class="card-title mb-0">Комментарий администратора</h4>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}">
+                <div class="mb-3">
+                    <textarea name="adminComment" class="form-control" rows="3">{{ application.adminComment }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
+            </form>
+        </div>
+    </div>
+
+    {# Потребитель #}
+    <div class="card mb-3">
+        <div class="card-header">
+            <h4 class="card-title mb-0">Данные потребителя</h4>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3 text-muted">Тип</dt>
+                <dd class="col-sm-9">{{ application.consumerTypeLabel }}</dd>
+
+                <dt class="col-sm-3 text-muted">Наименование</dt>
+                <dd class="col-sm-9">{{ application.consumerName }}</dd>
+
+                {% if application.organization %}
+                    <dt class="col-sm-3 text-muted">Организация</dt>
+                    <dd class="col-sm-9">{{ application.organization }}</dd>
+                {% endif %}
+
+                <dt class="col-sm-3 text-muted">Телефон</dt>
+                <dd class="col-sm-9">{{ application.primaryPhone ?? '—' }}</dd>
+
+                <dt class="col-sm-3 text-muted">Email</dt>
+                <dd class="col-sm-9">{{ application.primaryEmail ?? '—' }}</dd>
+            </dl>
+        </div>
+    </div>
+
+    {# Реквизиты #}
+    {% if application.requisites %}
+        {% set r = application.requisites %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Реквизиты</h4>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    {% if r.organizationName is defined and r.organizationName %}
+                        <dt class="col-sm-3 text-muted">Полное наименование</dt>
+                        <dd class="col-sm-9">{{ r.organizationName }}</dd>
+                    {% endif %}
+                    {% if r.legalAddress is defined and r.legalAddress %}
+                        <dt class="col-sm-3 text-muted">Юридический адрес</dt>
+                        <dd class="col-sm-9">{{ r.legalAddress }}</dd>
+                    {% endif %}
+                    {% if r.actualAddress is defined and r.actualAddress %}
+                        <dt class="col-sm-3 text-muted">Фактический адрес</dt>
+                        <dd class="col-sm-9">{{ r.actualAddress }}</dd>
+                    {% endif %}
+                    {% if r.inn is defined and r.inn %}
+                        <dt class="col-sm-3 text-muted">ИНН</dt>
+                        <dd class="col-sm-9">{{ r.inn }}</dd>
+                    {% endif %}
+                    {% if r.kpp is defined and r.kpp %}
+                        <dt class="col-sm-3 text-muted">КПП</dt>
+                        <dd class="col-sm-9">{{ r.kpp }}</dd>
+                    {% endif %}
+                    {% if r.ogrn is defined and r.ogrn %}
+                        <dt class="col-sm-3 text-muted">ОГРН</dt>
+                        <dd class="col-sm-9">{{ r.ogrn }}</dd>
+                    {% endif %}
+                    {% if r.director is defined and r.director %}
+                        <dt class="col-sm-3 text-muted">Руководитель</dt>
+                        <dd class="col-sm-9">{{ r.director }}{% if r.directorPosition is defined and r.directorPosition %}, {{ r.directorPosition }}{% endif %}</dd>
+                    {% endif %}
+                    {% if r.representativeName is defined and r.representativeName %}
+                        <dt class="col-sm-3 text-muted">Представитель</dt>
+                        <dd class="col-sm-9">{{ r.representativeName }}</dd>
+                    {% endif %}
+                    {% if r.orgPhone is defined and r.orgPhone %}
+                        <dt class="col-sm-3 text-muted">Телефон организации</dt>
+                        <dd class="col-sm-9">{{ r.orgPhone }}</dd>
+                    {% endif %}
+                    {% if r.orgEmail is defined and r.orgEmail %}
+                        <dt class="col-sm-3 text-muted">Email организации</dt>
+                        <dd class="col-sm-9">{{ r.orgEmail }}</dd>
+                    {% endif %}
+                    {% if r.bankAccount is defined and r.bankAccount %}
+                        <dt class="col-sm-3 text-muted">Расчётный счёт</dt>
+                        <dd class="col-sm-9">{{ r.bankAccount }}</dd>
+                    {% endif %}
+                    {% if r.bankName is defined and r.bankName %}
+                        <dt class="col-sm-3 text-muted">Банк</dt>
+                        <dd class="col-sm-9">{{ r.bankName }}</dd>
+                    {% endif %}
+                    {% if r.bankBik is defined and r.bankBik %}
+                        <dt class="col-sm-3 text-muted">БИК</dt>
+                        <dd class="col-sm-9">{{ r.bankBik }}</dd>
+                    {% endif %}
+                    {% if r.bankCorr is defined and r.bankCorr %}
+                        <dt class="col-sm-3 text-muted">Корр. счёт</dt>
+                        <dd class="col-sm-9">{{ r.bankCorr }}</dd>
+                    {% endif %}
+                    {% if r.personName is defined and r.personName %}
+                        <dt class="col-sm-3 text-muted">ФИО</dt>
+                        <dd class="col-sm-9">{{ r.personName }}</dd>
+                    {% endif %}
+                    {% if r.personAddress is defined and r.personAddress %}
+                        <dt class="col-sm-3 text-muted">Адрес</dt>
+                        <dd class="col-sm-9">{{ r.personAddress }}</dd>
+                    {% endif %}
+                    {% if r.passportSeries is defined and r.passportSeries %}
+                        <dt class="col-sm-3 text-muted">Паспорт серия</dt>
+                        <dd class="col-sm-9">{{ r.passportSeries }}</dd>
+                    {% endif %}
+                    {% if r.passportIssuedBy is defined and r.passportIssuedBy %}
+                        <dt class="col-sm-3 text-muted">Паспорт выдан</dt>
+                        <dd class="col-sm-9">{{ r.passportIssuedBy }}{% if r.passportIssuedDate is defined and r.passportIssuedDate %} {{ r.passportIssuedDate }}{% endif %}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    {% endif %}
+
+    {# Подписант и доставка #}
+    {% if application.signer %}
+        {% set s = application.signer %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Подписант и доставка</h4>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    {% if s.signerType is defined and s.signerType %}
+                        <dt class="col-sm-3 text-muted">Подписант</dt>
+                        <dd class="col-sm-9">
+                            {% if s.signerType == 'director' %}Руководитель
+                            {% elseif s.signerType == 'representative' %}Представитель по доверенности
+                            {% else %}{{ s.signerType }}
+                            {% endif %}
+                        </dd>
+                    {% endif %}
+                    {% if s.signerName is defined and s.signerName %}
+                        <dt class="col-sm-3 text-muted">ФИО подписанта</dt>
+                        <dd class="col-sm-9">{{ s.signerName }}</dd>
+                    {% endif %}
+                    {% if s.signerPosition is defined and s.signerPosition %}
+                        <dt class="col-sm-3 text-muted">Должность</dt>
+                        <dd class="col-sm-9">{{ s.signerPosition }}</dd>
+                    {% endif %}
+                    {% if s.signerPhone is defined and s.signerPhone %}
+                        <dt class="col-sm-3 text-muted">Телефон подписанта</dt>
+                        <dd class="col-sm-9">{{ s.signerPhone }}</dd>
+                    {% endif %}
+                    {% if s.signerEmail is defined and s.signerEmail %}
+                        <dt class="col-sm-3 text-muted">Email подписанта</dt>
+                        <dd class="col-sm-9">{{ s.signerEmail }}</dd>
+                    {% endif %}
+                    {% if s.signerDocument is defined and s.signerDocument %}
+                        <dt class="col-sm-3 text-muted">Документ</dt>
+                        <dd class="col-sm-9">{{ s.signerDocument }}</dd>
+                    {% endif %}
+                    {% if s.deliveryMethod is defined and s.deliveryMethod %}
+                        <dt class="col-sm-3 text-muted">Способ доставки</dt>
+                        <dd class="col-sm-9">
+                            {% if s.deliveryMethod == 'edo' %}ЭДО
+                            {% elseif s.deliveryMethod == 'mail' %}Почта
+                            {% elseif s.deliveryMethod == 'courier' %}Курьер
+                            {% elseif s.deliveryMethod == 'pickup' %}Самовывоз
+                            {% else %}{{ s.deliveryMethod }}
+                            {% endif %}
+                        </dd>
+                    {% endif %}
+                    {% if s.edo is defined and s.edo == 'yes' %}
+                        <dt class="col-sm-3 text-muted">ЭДО оператор</dt>
+                        <dd class="col-sm-9">{{ s.edoOperator ?? '—' }}</dd>
+
+                        <dt class="col-sm-3 text-muted">ЭДО ID</dt>
+                        <dd class="col-sm-9">{{ s.edoId ?? '—' }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    {% endif %}
+
+    {# Отходы #}
+    {% if application.waste %}
+        {% set w = application.waste %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Сведения об отходах</h4>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    {% if w.objectCategory is defined and w.objectCategory %}
+                        <dt class="col-sm-3 text-muted">Категория объекта</dt>
+                        <dd class="col-sm-9">
+                            {% if w.objectCategory == 'commercial' %}Коммерческая
+                            {% elseif w.objectCategory == 'residential' %}Жилая
+                            {% elseif w.objectCategory == 'industrial' %}Промышленная
+                            {% else %}{{ w.objectCategory }}
+                            {% endif %}
+                        </dd>
+                    {% endif %}
+                    {% if w.wasteName is defined and w.wasteName %}
+                        <dt class="col-sm-3 text-muted">Вид отходов</dt>
+                        <dd class="col-sm-9">{{ w.wasteName }}</dd>
+                    {% endif %}
+                    {% if w.wasteCode is defined and w.wasteCode %}
+                        <dt class="col-sm-3 text-muted">Код ФККО</dt>
+                        <dd class="col-sm-9">{{ w.wasteCode }}</dd>
+                    {% endif %}
+                    {% if w.calcAmount is defined and w.calcAmount %}
+                        <dt class="col-sm-3 text-muted">Объём</dt>
+                        <dd class="col-sm-9">{{ w.calcAmount }} {% if w.calcUnit is defined %}{{ w.calcUnit == 'm3' ? 'м³' : w.calcUnit }}{% endif %}</dd>
+                    {% endif %}
+                    {% if w.wastePassport is defined and w.wastePassport %}
+                        <dt class="col-sm-3 text-muted">Паспорт отходов</dt>
+                        <dd class="col-sm-9">{{ w.wastePassport == 'yes' ? 'Есть' : 'Нет' }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    {% endif %}
+
+    {# Объект #}
+    {% if application.site %}
+        {% set si = application.site %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Объект</h4>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    {% if si.siteName is defined and si.siteName %}
+                        <dt class="col-sm-3 text-muted">Название</dt>
+                        <dd class="col-sm-9">{{ si.siteName }}</dd>
+                    {% endif %}
+                    {% if si.siteAddress is defined and si.siteAddress %}
+                        <dt class="col-sm-3 text-muted">Адрес</dt>
+                        <dd class="col-sm-9">{{ si.siteAddress }}</dd>
+                    {% endif %}
+                    {% if si.siteActivity is defined and si.siteActivity %}
+                        <dt class="col-sm-3 text-muted">Вид деятельности</dt>
+                        <dd class="col-sm-9">{{ si.siteActivity }}</dd>
+                    {% endif %}
+                    {% if si.siteArea is defined and si.siteArea %}
+                        <dt class="col-sm-3 text-muted">Площадь</dt>
+                        <dd class="col-sm-9">{{ si.siteArea }} м²</dd>
+                    {% endif %}
+                    {% if si.siteStaffCount is defined and si.siteStaffCount %}
+                        <dt class="col-sm-3 text-muted">Численность сотрудников</dt>
+                        <dd class="col-sm-9">{{ si.siteStaffCount }}</dd>
+                    {% endif %}
+                    {% if si.sitePurpose is defined and si.sitePurpose %}
+                        <dt class="col-sm-3 text-muted">Назначение</dt>
+                        <dd class="col-sm-9">{{ si.sitePurpose == 'residential' ? 'Жилое' : 'Нежилое' }}</dd>
+                    {% endif %}
+                    {% if si.ownership is defined and si.ownership %}
+                        <dt class="col-sm-3 text-muted">Право пользования</dt>
+                        <dd class="col-sm-9">
+                            {% if si.ownership == 'own' %}Собственность
+                            {% elseif si.ownership == 'rent' %}Аренда
+                            {% else %}{{ si.ownership }}
+                            {% endif %}
+                        </dd>
+                    {% endif %}
+                    {% if si.ownershipDocDetails is defined and si.ownershipDocDetails %}
+                        <dt class="col-sm-3 text-muted">Документ на собственность</dt>
+                        <dd class="col-sm-9">{{ si.ownershipDocDetails }}</dd>
+                    {% endif %}
+                    {% if si.rentDocDetails is defined and si.rentDocDetails %}
+                        <dt class="col-sm-3 text-muted">Документ на аренду</dt>
+                        <dd class="col-sm-9">{{ si.rentDocDetails }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    {% endif %}
+
+    {# Контейнеры #}
+    {% if application.containers %}
+        {% set c = application.containers %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Контейнеры и вывоз</h4>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    {% if c.containerOwnership is defined and c.containerOwnership %}
+                        <dt class="col-sm-3 text-muted">Контейнеры</dt>
+                        <dd class="col-sm-9">
+                            {% if c.containerOwnership == 'operator' %}Оператора
+                            {% elseif c.containerOwnership == 'own' %}Собственные
+                            {% else %}{{ c.containerOwnership }}
+                            {% endif %}
+                        </dd>
+                    {% endif %}
+                    {% if c.containerMaterial is defined and c.containerMaterial %}
+                        <dt class="col-sm-3 text-muted">Материал</dt>
+                        <dd class="col-sm-9">
+                            {% if c.containerMaterial == 'metal' %}Металл
+                            {% elseif c.containerMaterial == 'plastic' %}Пластик
+                            {% else %}{{ c.containerMaterial }}
+                            {% endif %}
+                        </dd>
+                    {% endif %}
+                    {% if c.containerKind is defined and c.containerKind %}
+                        <dt class="col-sm-3 text-muted">Тип контейнера</dt>
+                        <dd class="col-sm-9">{{ c.containerKind }}</dd>
+                    {% endif %}
+                    {% if c.containerVolume is defined and c.containerVolume %}
+                        <dt class="col-sm-3 text-muted">Объём контейнера</dt>
+                        <dd class="col-sm-9">{{ c.containerVolume }} м³{% if c.containerVolumeOther is defined and c.containerVolumeOther %} ({{ c.containerVolumeOther }}){% endif %}</dd>
+                    {% endif %}
+                    {% if c.containerCount is defined and c.containerCount %}
+                        <dt class="col-sm-3 text-muted">Количество</dt>
+                        <dd class="col-sm-9">{{ c.containerCount }} шт.</dd>
+                    {% endif %}
+                    {% if c.containerSchedule is defined and c.containerSchedule %}
+                        <dt class="col-sm-3 text-muted">График вывоза</dt>
+                        <dd class="col-sm-9">
+                            {% if c.containerSchedule == 'daily' %}Ежедневно
+                            {% elseif c.containerSchedule == 'twice_week' %}2 раза в неделю
+                            {% elseif c.containerSchedule == 'once_week' %}1 раз в неделю
+                            {% else %}{{ c.containerSchedule }}
+                            {% endif %}
+                        </dd>
+                    {% endif %}
+                    {% if c.accumulationAddress is defined and c.accumulationAddress %}
+                        <dt class="col-sm-3 text-muted">Место накопления</dt>
+                        <dd class="col-sm-9">{{ c.accumulationAddress }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    {% endif %}
+
+    {# Дополнительно #}
+    {% if application.extra %}
+        {% set e = application.extra %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Дополнительная информация</h4>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    {% if e.siteContactName is defined and e.siteContactName %}
+                        <dt class="col-sm-3 text-muted">Контактное лицо на объекте</dt>
+                        <dd class="col-sm-9">{{ e.siteContactName }}</dd>
+                    {% endif %}
+                    {% if e.siteContactPhone is defined and e.siteContactPhone %}
+                        <dt class="col-sm-3 text-muted">Телефон контактного лица</dt>
+                        <dd class="col-sm-9">{{ e.siteContactPhone }}</dd>
+                    {% endif %}
+                    {% if e.accessConditions is defined and e.accessConditions %}
+                        <dt class="col-sm-3 text-muted">Условия доступа</dt>
+                        <dd class="col-sm-9">{{ e.accessConditions }}</dd>
+                    {% endif %}
+                    {% if e.message is defined and e.message %}
+                        <dt class="col-sm-3 text-muted">Сообщение</dt>
+                        <dd class="col-sm-9">
+                            <div class="border rounded p-3" style="background: var(--bs-secondary-bg);">{{ e.message|nl2br }}</div>
+                        </dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    {% endif %}
+
+    {# Файлы #}
+    {% if application.files|length > 0 %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Прикреплённые файлы ({{ application.files|length }})</h4>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    {% for file in application.files %}
+                        {% set ext = file.originalName|split('.')|last|lower %}
+                        <li class="list-group-item d-flex align-items-center gap-3 px-3">
+                            <div class="flex-shrink-0 rounded d-flex align-items-center justify-content-center text-muted" style="width: 40px; height: 40px; background: var(--bs-secondary-bg);">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+                            </div>
+                            <span class="flex-grow-1">
+                                {{ file.originalName }}
+                                <span class="text-muted small ms-2">{{ file.fileSizeFormatted }}</span>
+                            </span>
+                            {% if ext in ['pdf'] %}
+                                <a href="{{ path('app_contract_application_file_proxy', {id: file.id}) }}" class="btn btn-sm btn-outline-secondary flex-shrink-0" target="_blank" rel="noopener">
+                                    Просмотр
+                                </a>
+                            {% endif %}
+                            {% if ext in ['jpeg', 'jpg', 'png', 'gif', 'webp', 'bmp'] %}
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#imagePreviewModal"
+                                        data-image-url="{{ path('app_contract_application_file_proxy', {id: file.id}) }}">
+                                    Просмотр
+                                </button>
+                            {% endif %}
+                            <a href="{{ path('app_contract_application_file_proxy', {id: file.id, download: 1}) }}" class="btn btn-sm btn-outline-primary flex-shrink-0" target="_blank" rel="noopener">
+                                Скачать
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    {% endif %}
+
+</section>
+
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imagePreviewModalLabel">Просмотр изображения</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body text-center p-0 bg-dark d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 60px);">
+                <img src="" alt="Просмотр" class="img-fluid" id="imagePreviewModalImg" style="max-height: calc(100vh - 60px); max-width: 100%; object-fit: contain;">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('imagePreviewModal')?.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget;
+        var imageUrl = button?.getAttribute('data-image-url');
+        var img = document.getElementById('imagePreviewModalImg');
+        if (img && imageUrl) { img.src = imageUrl; }
+    });
+    document.getElementById('imagePreviewModal')?.addEventListener('hidden.bs.modal', function () {
+        var img = document.getElementById('imagePreviewModalImg');
+        if (img) { img.src = ''; }
+    });
+</script>
+
+{% endblock %}

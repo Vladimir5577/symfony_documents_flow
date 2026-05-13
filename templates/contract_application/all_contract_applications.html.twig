@@ -1,0 +1,162 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Заявки на заключение договора{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+
+<h1>Заявки на заключение договора</h1>
+
+{% for message in app.flashes('error') %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+{% endfor %}
+
+<section class="section">
+
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Фильтры</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label mb-1">Поиск</label>
+                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Имя, email или телефон" value="{{ filters.search }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Статус</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">— Все —</option>
+                        <option value="new"           {{ filters.status == 'new'           ? 'selected' : '' }}>Новая</option>
+                        <option value="in_review"     {{ filters.status == 'in_review'     ? 'selected' : '' }}>На проверке</option>
+                        <option value="contract_sent" {{ filters.status == 'contract_sent' ? 'selected' : '' }}>Договор отправлен</option>
+                        <option value="signed"        {{ filters.status == 'signed'        ? 'selected' : '' }}>Подписан</option>
+                        <option value="rejected"      {{ filters.status == 'rejected'      ? 'selected' : '' }}>Отклонена</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Тип потребителя</label>
+                    <select name="consumerType" class="form-select form-select-sm">
+                        <option value="">— Все —</option>
+                        <option value="legal"  {{ filters.consumerType == 'legal'  ? 'selected' : '' }}>Юридическое лицо</option>
+                        <option value="ip"     {{ filters.consumerType == 'ip'     ? 'selected' : '' }}>ИП</option>
+                        <option value="person" {{ filters.consumerType == 'person' ? 'selected' : '' }}>Физическое лицо</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Дата от</label>
+                    <input type="date" name="dateFrom" class="form-control form-control-sm" value="{{ filters.dateFrom }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Дата до</label>
+                    <input type="date" name="dateTo" class="form-control form-control-sm" value="{{ filters.dateTo }}">
+                </div>
+                <div class="col-12 d-flex gap-2 justify-content-end">
+                    <a href="{{ path('app_contract_application') }}" class="btn btn-outline-secondary btn-sm">Сбросить</a>
+                    <button type="submit" class="btn btn-primary btn-sm">Применить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <p class="text-muted mb-0">Всего заявок: {{ list ? list.total : 0 }}</p>
+        </div>
+        <div class="card-body p-0">
+            {% if list and list.items|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>№</th>
+                                <th>Тип</th>
+                                <th>Наименование</th>
+                                <th>Телефон</th>
+                                <th>Email</th>
+                                <th>Статус</th>
+                                <th>Дата подачи</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for application in list.items %}
+                                <tr class="application-row" data-href="{{ path('app_contract_application_show', {id: application.id}) }}" role="button" tabindex="0">
+                                    <td><span class="text-muted small">{{ application.publicId }}</span></td>
+                                    <td class="text-muted small">{{ application.consumerTypeLabel }}</td>
+                                    <td>{{ application.consumerName }}</td>
+                                    <td class="text-muted small">{{ application.primaryPhone ?? '—' }}</td>
+                                    <td class="text-muted small">{{ application.primaryEmail ?? '—' }}</td>
+                                    <td>
+                                        {% if application.status == 'new' %}
+                                            <span class="badge bg-secondary">{{ application.statusLabel }}</span>
+                                        {% elseif application.status == 'in_review' %}
+                                            <span class="badge bg-warning text-dark">{{ application.statusLabel }}</span>
+                                        {% elseif application.status == 'contract_sent' %}
+                                            <span class="badge bg-info text-dark">{{ application.statusLabel }}</span>
+                                        {% elseif application.status == 'signed' %}
+                                            <span class="badge bg-success">{{ application.statusLabel }}</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ application.statusLabel }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-muted small">{{ application.createdAt|date('d.m.Y H:i') }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if list.pages > 1 %}
+                    <div class="card-footer">
+                        <nav>
+                            <ul class="pagination pagination-sm justify-content-center mb-0">
+                                {% if list.page > 1 %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ path('app_contract_application', filters|merge({page: list.page - 1})) }}">«</a>
+                                    </li>
+                                {% endif %}
+                                {% for p in 1..list.pages %}
+                                    <li class="page-item {{ p == list.page ? 'active' : '' }}">
+                                        <a class="page-link" href="{{ path('app_contract_application', filters|merge({page: p})) }}">{{ p }}</a>
+                                    </li>
+                                {% endfor %}
+                                {% if list.page < list.pages %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ path('app_contract_application', filters|merge({page: list.page + 1})) }}">»</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                {% endif %}
+
+            {% elseif list %}
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-inbox fs-1"></i>
+                    <p class="mt-2">Заявок не найдено</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+</section>
+
+<style>
+    tr.application-row { cursor: pointer; }
+</style>
+
+<script>
+document.querySelectorAll('tr.application-row[data-href]').forEach(function(row) {
+    row.addEventListener('click', function() {
+        window.location.href = this.dataset.href;
+    });
+});
+</script>
+
+{% endblock %}

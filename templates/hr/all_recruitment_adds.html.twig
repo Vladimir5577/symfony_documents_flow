@@ -8,11 +8,172 @@
 
 {% block main %}
 
-    <h1>Все вакансии</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Все вакансии</h1>
+    <a href="{{ path('app_hr_vacancies_new') }}" class="btn btn-primary">
+        <i class="bi bi-plus"></i> Добавить вакансию
+    </a>
+</div>
 
+{% for message in app.flashes('error') %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+{% endfor %}
 
-    <section class="section">
+<section class="section">
 
-    </section>
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Фильтры</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label mb-1">Поиск</label>
+                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Название или описание" value="{{ filters.search }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Город</label>
+                    <select name="city" class="form-select form-select-sm">
+                        <option value="">— Все —</option>
+                        <option value="donetsk"      {{ filters.city == 'donetsk'      ? 'selected' : '' }}>Донецк</option>
+                        <option value="makeyevka"    {{ filters.city == 'makeyevka'    ? 'selected' : '' }}>Макеевка</option>
+                        <option value="mariupol"     {{ filters.city == 'mariupol'     ? 'selected' : '' }}>Мариуполь</option>
+                        <option value="gorlovka"     {{ filters.city == 'gorlovka'     ? 'selected' : '' }}>Горловка</option>
+                        <option value="enakievo"     {{ filters.city == 'enakievo'     ? 'selected' : '' }}>Енакиево</option>
+                        <option value="shakhtersk"   {{ filters.city == 'shakhtersk'   ? 'selected' : '' }}>Шахтёрск</option>
+                        <option value="torez"        {{ filters.city == 'torez'        ? 'selected' : '' }}>Торез</option>
+                        <option value="amvrosievka"  {{ filters.city == 'amvrosievka'  ? 'selected' : '' }}>Амвросиевка</option>
+                        <option value="yasinovataya" {{ filters.city == 'yasinovataya' ? 'selected' : '' }}>Ясиноватая</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Занятость</label>
+                    <select name="employmentType" class="form-select form-select-sm">
+                        <option value="">— Все —</option>
+                        <option value="full_time"   {{ filters.employmentType == 'full_time'   ? 'selected' : '' }}>Полная</option>
+                        <option value="part_time"   {{ filters.employmentType == 'part_time'   ? 'selected' : '' }}>Частичная</option>
+                        <option value="internship"  {{ filters.employmentType == 'internship'  ? 'selected' : '' }}>Стажировка</option>
+                        <option value="contract"    {{ filters.employmentType == 'contract'    ? 'selected' : '' }}>Контракт</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Опыт</label>
+                    <select name="experience" class="form-select form-select-sm">
+                        <option value="">— Все —</option>
+                        <option value="none"        {{ filters.experience == 'none'        ? 'selected' : '' }}>Без опыта</option>
+                        <option value="one_year"    {{ filters.experience == 'one_year'    ? 'selected' : '' }}>От 1 года</option>
+                        <option value="two_years"   {{ filters.experience == 'two_years'   ? 'selected' : '' }}>От 2 лет</option>
+                        <option value="three_years" {{ filters.experience == 'three_years' ? 'selected' : '' }}>От 3 лет</option>
+                        <option value="five_years"  {{ filters.experience == 'five_years'  ? 'selected' : '' }}>От 5 лет</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-1">Статус</label>
+                    <select name="isPublished" class="form-select form-select-sm">
+                        <option value="">— Все —</option>
+                        <option value="true"  {{ filters.isPublished == 'true'  ? 'selected' : '' }}>Опубликована</option>
+                        <option value="false" {{ filters.isPublished == 'false' ? 'selected' : '' }}>Скрыта</option>
+                    </select>
+                </div>
+                <div class="col-12 d-flex gap-2 justify-content-end">
+                    <a href="{{ path('app_hr_vacancies') }}" class="btn btn-outline-secondary btn-sm">Сбросить</a>
+                    <button type="submit" class="btn btn-primary btn-sm">Применить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <p class="text-muted mb-0">Всего вакансий: {{ list ? list.total : 0 }}</p>
+        </div>
+        <div class="card-body p-0">
+            {% if list and list.items|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название</th>
+                                <th>Зарплата</th>
+                                <th>Город</th>
+                                <th>Занятость</th>
+                                <th>Опыт</th>
+                                <th>Статус</th>
+                                <th>Дата</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for vacancy in list.items %}
+                                <tr class="vacancy-row" data-href="{{ path('app_hr_vacancies_show', {id: vacancy.id}) }}" role="button" tabindex="0">
+                                    <td class="text-muted small">{{ vacancy.id }}</td>
+                                    <td>{{ vacancy.title }}</td>
+                                    <td class="text-muted small">{{ vacancy.salary ?? '—' }}</td>
+                                    <td>{{ vacancy.cityLabel }}</td>
+                                    <td class="text-muted small">{{ vacancy.employmentTypeLabel }}</td>
+                                    <td class="text-muted small">{{ vacancy.experienceLabel }}</td>
+                                    <td>
+                                        {% if vacancy.isPublished %}
+                                            <span class="badge bg-success">Опубликована</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Скрыта</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-muted small">{{ vacancy.createdAt|date('d.m.Y') }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if list.pages > 1 %}
+                    <div class="card-footer">
+                        <nav>
+                            <ul class="pagination pagination-sm justify-content-center mb-0">
+                                {% if list.page > 1 %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ path('app_hr_vacancies', filters|merge({page: list.page - 1})) }}">«</a>
+                                    </li>
+                                {% endif %}
+                                {% for p in 1..list.pages %}
+                                    <li class="page-item {{ p == list.page ? 'active' : '' }}">
+                                        <a class="page-link" href="{{ path('app_hr_vacancies', filters|merge({page: p})) }}">{{ p }}</a>
+                                    </li>
+                                {% endfor %}
+                                {% if list.page < list.pages %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ path('app_hr_vacancies', filters|merge({page: list.page + 1})) }}">»</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                {% endif %}
+
+            {% elseif list %}
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-briefcase fs-1"></i>
+                    <p class="mt-2">Вакансий не найдено</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+</section>
+
+<style>
+    tr.vacancy-row { cursor: pointer; }
+</style>
+
+<script>
+document.querySelectorAll('tr.vacancy-row[data-href]').forEach(function(row) {
+    row.addEventListener('click', function() {
+        window.location.href = this.dataset.href;
+    });
+});
+</script>
 
 {% endblock %}
