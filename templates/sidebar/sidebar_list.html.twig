@@ -185,7 +185,7 @@
     <!-- ###############################################################
      ################################################################## -->
 
-    {% if is_granted('ROLE_WORK_CITIZEN_APPEAL') %}
+    {% if is_granted('ROLE_WORK_CITIZEN_APPEAL') or is_granted('ROLE_CONTRACT_APPLICATION') or is_granted('ROLE_MANAGER_CONTRACT_APPLICATION') %}
         <li class="sidebar-group-label">Заявки на договор</li>
 
         <li class="sidebar-item {% if active_tab == 'contract_application' %}active{% endif %}">
