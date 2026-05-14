@@ -23,9 +23,160 @@
 
 <h1>Заявка {{ application.publicId }}</h1>
 
-<div class="mb-3">
+{% set applicationCopyLines = [
+    'Заявка ' ~ application.publicId,
+    '----------------',
+    'Номер: ' ~ application.publicId,
+    'Статус: ' ~ application.statusLabel,
+    'Дата подачи: ' ~ application.createdAt|date('d.m.Y H:i'),
+    '',
+    'Данные потребителя',
+    '----------------',
+    'Тип: ' ~ application.consumerTypeLabel,
+    'Наименование: ' ~ application.consumerName,
+    'Организация: ' ~ (application.organization ?: '—'),
+    'Телефон: ' ~ (application.primaryPhone ?: '—'),
+    'Email: ' ~ (application.primaryEmail ?: '—')
+] %}
+
+{% if application.adminComment %}
+    {% set applicationCopyLines = applicationCopyLines|merge([
+        '',
+        'Комментарий администратора',
+        '----------------',
+        application.adminComment
+    ]) %}
+{% endif %}
+
+{% if application.requisites %}
+    {% set r = application.requisites %}
+    {% set applicationCopyLines = applicationCopyLines|merge([
+        '',
+        'Реквизиты',
+        '----------------'
+    ]) %}
+    {% if r.organizationName is defined and r.organizationName %}{% set applicationCopyLines = applicationCopyLines|merge(['Полное наименование: ' ~ r.organizationName]) %}{% endif %}
+    {% if r.legalAddress is defined and r.legalAddress %}{% set applicationCopyLines = applicationCopyLines|merge(['Юридический адрес: ' ~ r.legalAddress]) %}{% endif %}
+    {% if r.actualAddress is defined and r.actualAddress %}{% set applicationCopyLines = applicationCopyLines|merge(['Фактический адрес: ' ~ r.actualAddress]) %}{% endif %}
+    {% if r.inn is defined and r.inn %}{% set applicationCopyLines = applicationCopyLines|merge(['ИНН: ' ~ r.inn]) %}{% endif %}
+    {% if r.kpp is defined and r.kpp %}{% set applicationCopyLines = applicationCopyLines|merge(['КПП: ' ~ r.kpp]) %}{% endif %}
+    {% if r.ogrn is defined and r.ogrn %}{% set applicationCopyLines = applicationCopyLines|merge(['ОГРН: ' ~ r.ogrn]) %}{% endif %}
+    {% if r.director is defined and r.director %}{% set applicationCopyLines = applicationCopyLines|merge(['Руководитель: ' ~ r.director ~ ((r.directorPosition is defined and r.directorPosition) ? ', ' ~ r.directorPosition : '')]) %}{% endif %}
+    {% if r.representativeName is defined and r.representativeName %}{% set applicationCopyLines = applicationCopyLines|merge(['Представитель: ' ~ r.representativeName]) %}{% endif %}
+    {% if r.orgPhone is defined and r.orgPhone %}{% set applicationCopyLines = applicationCopyLines|merge(['Телефон организации: ' ~ r.orgPhone]) %}{% endif %}
+    {% if r.orgEmail is defined and r.orgEmail %}{% set applicationCopyLines = applicationCopyLines|merge(['Email организации: ' ~ r.orgEmail]) %}{% endif %}
+    {% if r.bankAccount is defined and r.bankAccount %}{% set applicationCopyLines = applicationCopyLines|merge(['Расчётный счёт: ' ~ r.bankAccount]) %}{% endif %}
+    {% if r.bankName is defined and r.bankName %}{% set applicationCopyLines = applicationCopyLines|merge(['Банк: ' ~ r.bankName]) %}{% endif %}
+    {% if r.bankBik is defined and r.bankBik %}{% set applicationCopyLines = applicationCopyLines|merge(['БИК: ' ~ r.bankBik]) %}{% endif %}
+    {% if r.bankCorr is defined and r.bankCorr %}{% set applicationCopyLines = applicationCopyLines|merge(['Корр. счёт: ' ~ r.bankCorr]) %}{% endif %}
+    {% if r.personName is defined and r.personName %}{% set applicationCopyLines = applicationCopyLines|merge(['ФИО: ' ~ r.personName]) %}{% endif %}
+    {% if r.personAddress is defined and r.personAddress %}{% set applicationCopyLines = applicationCopyLines|merge(['Адрес: ' ~ r.personAddress]) %}{% endif %}
+    {% if r.passportSeries is defined and r.passportSeries %}{% set applicationCopyLines = applicationCopyLines|merge(['Паспорт серия: ' ~ r.passportSeries]) %}{% endif %}
+    {% if r.passportIssuedBy is defined and r.passportIssuedBy %}{% set applicationCopyLines = applicationCopyLines|merge(['Паспорт выдан: ' ~ r.passportIssuedBy ~ ((r.passportIssuedDate is defined and r.passportIssuedDate) ? ' ' ~ r.passportIssuedDate : '')]) %}{% endif %}
+{% endif %}
+
+{% if application.signer %}
+    {% set s = application.signer %}
+    {% set signerTypeLabel = s.signerType == 'director' ? 'Руководитель' : (s.signerType == 'representative' ? 'Представитель по доверенности' : s.signerType) %}
+    {% set deliveryMethodLabel = s.deliveryMethod == 'edo' ? 'ЭДО' : (s.deliveryMethod == 'mail' ? 'Почта' : (s.deliveryMethod == 'courier' ? 'Курьер' : (s.deliveryMethod == 'pickup' ? 'Самовывоз' : s.deliveryMethod))) %}
+    {% set applicationCopyLines = applicationCopyLines|merge([
+        '',
+        'Подписант и доставка',
+        '----------------'
+    ]) %}
+    {% if s.signerType is defined and s.signerType %}{% set applicationCopyLines = applicationCopyLines|merge(['Подписант: ' ~ signerTypeLabel]) %}{% endif %}
+    {% if s.signerName is defined and s.signerName %}{% set applicationCopyLines = applicationCopyLines|merge(['ФИО подписанта: ' ~ s.signerName]) %}{% endif %}
+    {% if s.signerPosition is defined and s.signerPosition %}{% set applicationCopyLines = applicationCopyLines|merge(['Должность: ' ~ s.signerPosition]) %}{% endif %}
+    {% if s.signerPhone is defined and s.signerPhone %}{% set applicationCopyLines = applicationCopyLines|merge(['Телефон подписанта: ' ~ s.signerPhone]) %}{% endif %}
+    {% if s.signerEmail is defined and s.signerEmail %}{% set applicationCopyLines = applicationCopyLines|merge(['Email подписанта: ' ~ s.signerEmail]) %}{% endif %}
+    {% if s.signerDocument is defined and s.signerDocument %}{% set applicationCopyLines = applicationCopyLines|merge(['Документ: ' ~ s.signerDocument]) %}{% endif %}
+    {% if s.deliveryMethod is defined and s.deliveryMethod %}{% set applicationCopyLines = applicationCopyLines|merge(['Способ доставки: ' ~ deliveryMethodLabel]) %}{% endif %}
+    {% if s.edo is defined and s.edo == 'yes' %}
+        {% set applicationCopyLines = applicationCopyLines|merge([
+            'ЭДО оператор: ' ~ (s.edoOperator ?: '—'),
+            'ЭДО ID: ' ~ (s.edoId ?: '—')
+        ]) %}
+    {% endif %}
+{% endif %}
+
+{% if application.waste %}
+    {% set w = application.waste %}
+    {% set objectCategoryLabel = w.objectCategory == 'commercial' ? 'Коммерческая' : (w.objectCategory == 'residential' ? 'Жилая' : (w.objectCategory == 'industrial' ? 'Промышленная' : w.objectCategory)) %}
+    {% set calcUnitLabel = w.calcUnit is defined ? (w.calcUnit == 'm3' ? 'м³' : w.calcUnit) : '' %}
+    {% set applicationCopyLines = applicationCopyLines|merge([
+        '',
+        'Сведения об отходах',
+        '----------------'
+    ]) %}
+    {% if w.objectCategory is defined and w.objectCategory %}{% set applicationCopyLines = applicationCopyLines|merge(['Категория объекта: ' ~ objectCategoryLabel]) %}{% endif %}
+    {% if w.wasteName is defined and w.wasteName %}{% set applicationCopyLines = applicationCopyLines|merge(['Вид отходов: ' ~ w.wasteName]) %}{% endif %}
+    {% if w.wasteCode is defined and w.wasteCode %}{% set applicationCopyLines = applicationCopyLines|merge(['Код ФККО: ' ~ w.wasteCode]) %}{% endif %}
+    {% if w.calcAmount is defined and w.calcAmount %}{% set applicationCopyLines = applicationCopyLines|merge(['Объём: ' ~ w.calcAmount ~ (calcUnitLabel ? ' ' ~ calcUnitLabel : '')]) %}{% endif %}
+    {% if w.wastePassport is defined and w.wastePassport %}{% set applicationCopyLines = applicationCopyLines|merge(['Паспорт отходов: ' ~ (w.wastePassport == 'yes' ? 'Есть' : 'Нет')]) %}{% endif %}
+{% endif %}
+
+{% if application.site %}
+    {% set si = application.site %}
+    {% set sitePurposeLabel = si.sitePurpose == 'residential' ? 'Жилое' : 'Нежилое' %}
+    {% set ownershipLabel = si.ownership == 'own' ? 'Собственность' : (si.ownership == 'rent' ? 'Аренда' : si.ownership) %}
+    {% set applicationCopyLines = applicationCopyLines|merge([
+        '',
+        'Объект',
+        '----------------'
+    ]) %}
+    {% if si.siteName is defined and si.siteName %}{% set applicationCopyLines = applicationCopyLines|merge(['Название: ' ~ si.siteName]) %}{% endif %}
+    {% if si.siteAddress is defined and si.siteAddress %}{% set applicationCopyLines = applicationCopyLines|merge(['Адрес: ' ~ si.siteAddress]) %}{% endif %}
+    {% if si.siteActivity is defined and si.siteActivity %}{% set applicationCopyLines = applicationCopyLines|merge(['Вид деятельности: ' ~ si.siteActivity]) %}{% endif %}
+    {% if si.siteArea is defined and si.siteArea %}{% set applicationCopyLines = applicationCopyLines|merge(['Площадь: ' ~ si.siteArea ~ ' м²']) %}{% endif %}
+    {% if si.siteStaffCount is defined and si.siteStaffCount %}{% set applicationCopyLines = applicationCopyLines|merge(['Численность сотрудников: ' ~ si.siteStaffCount]) %}{% endif %}
+    {% if si.sitePurpose is defined and si.sitePurpose %}{% set applicationCopyLines = applicationCopyLines|merge(['Назначение: ' ~ sitePurposeLabel]) %}{% endif %}
+    {% if si.ownership is defined and si.ownership %}{% set applicationCopyLines = applicationCopyLines|merge(['Право пользования: ' ~ ownershipLabel]) %}{% endif %}
+    {% if si.ownershipDocDetails is defined and si.ownershipDocDetails %}{% set applicationCopyLines = applicationCopyLines|merge(['Документ на собственность: ' ~ si.ownershipDocDetails]) %}{% endif %}
+    {% if si.rentDocDetails is defined and si.rentDocDetails %}{% set applicationCopyLines = applicationCopyLines|merge(['Документ на аренду: ' ~ si.rentDocDetails]) %}{% endif %}
+{% endif %}
+
+{% if application.containers %}
+    {% set c = application.containers %}
+    {% set containerOwnershipLabel = c.containerOwnership == 'operator' ? 'Оператора' : (c.containerOwnership == 'own' ? 'Собственные' : c.containerOwnership) %}
+    {% set containerMaterialLabel = c.containerMaterial == 'metal' ? 'Металл' : (c.containerMaterial == 'plastic' ? 'Пластик' : c.containerMaterial) %}
+    {% set containerScheduleLabel = c.containerSchedule == 'daily' ? 'Ежедневно' : (c.containerSchedule == 'twice_week' ? '2 раза в неделю' : (c.containerSchedule == 'once_week' ? '1 раз в неделю' : c.containerSchedule)) %}
+    {% set applicationCopyLines = applicationCopyLines|merge([
+        '',
+        'Контейнеры и вывоз',
+        '----------------'
+    ]) %}
+    {% if c.containerOwnership is defined and c.containerOwnership %}{% set applicationCopyLines = applicationCopyLines|merge(['Контейнеры: ' ~ containerOwnershipLabel]) %}{% endif %}
+    {% if c.containerMaterial is defined and c.containerMaterial %}{% set applicationCopyLines = applicationCopyLines|merge(['Материал: ' ~ containerMaterialLabel]) %}{% endif %}
+    {% if c.containerKind is defined and c.containerKind %}{% set applicationCopyLines = applicationCopyLines|merge(['Тип контейнера: ' ~ c.containerKind]) %}{% endif %}
+    {% if c.containerVolume is defined and c.containerVolume %}{% set applicationCopyLines = applicationCopyLines|merge(['Объём контейнера: ' ~ c.containerVolume ~ ' м³' ~ ((c.containerVolumeOther is defined and c.containerVolumeOther) ? ' (' ~ c.containerVolumeOther ~ ')' : '')]) %}{% endif %}
+    {% if c.containerCount is defined and c.containerCount %}{% set applicationCopyLines = applicationCopyLines|merge(['Количество: ' ~ c.containerCount ~ ' шт.']) %}{% endif %}
+    {% if c.containerSchedule is defined and c.containerSchedule %}{% set applicationCopyLines = applicationCopyLines|merge(['График вывоза: ' ~ containerScheduleLabel]) %}{% endif %}
+    {% if c.accumulationAddress is defined and c.accumulationAddress %}{% set applicationCopyLines = applicationCopyLines|merge(['Место накопления: ' ~ c.accumulationAddress]) %}{% endif %}
+{% endif %}
+
+{% if application.extra %}
+    {% set e = application.extra %}
+    {% set applicationCopyLines = applicationCopyLines|merge([
+        '',
+        'Дополнительная информация',
+        '----------------'
+    ]) %}
+    {% if e.siteContactName is defined and e.siteContactName %}{% set applicationCopyLines = applicationCopyLines|merge(['Контактное лицо на объекте: ' ~ e.siteContactName]) %}{% endif %}
+    {% if e.siteContactPhone is defined and e.siteContactPhone %}{% set applicationCopyLines = applicationCopyLines|merge(['Телефон контактного лица: ' ~ e.siteContactPhone]) %}{% endif %}
+    {% if e.accessConditions is defined and e.accessConditions %}{% set applicationCopyLines = applicationCopyLines|merge(['Условия доступа: ' ~ e.accessConditions]) %}{% endif %}
+    {% if e.message is defined and e.message %}{% set applicationCopyLines = applicationCopyLines|merge(['', 'Сообщение', '----------------', e.message]) %}{% endif %}
+{% endif %}
+
+<div class="mb-3 d-flex gap-2 flex-wrap">
     <a href="{{ path('app_contract_application') }}" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left"></i> Назад к списку
+    </a>
+    <button type="button" class="btn btn-sm btn-outline-primary" id="copyApplicationForKanbanBtn"
+            data-application-text="{{ applicationCopyLines|join("\n")|e('html_attr') }}">
+        <i class="bi bi-clipboard"></i> Скопировать содержимое заявки
+    </button>
+    <a href="{{ path('app_contract_application_pdf', {id: application.id}) }}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener">
+        <i class="bi bi-file-earmark-pdf"></i> Скачать PDF
     </a>
 </div>
 
@@ -534,6 +685,59 @@
     document.getElementById('imagePreviewModal')?.addEventListener('hidden.bs.modal', function () {
         var img = document.getElementById('imagePreviewModalImg');
         if (img) { img.src = ''; }
+    });
+
+    document.getElementById('copyApplicationForKanbanBtn')?.addEventListener('click', function () {
+        var btn = this;
+        var text = btn.getAttribute('data-application-text') || '';
+        var original = btn.innerHTML;
+        var done = function () {
+            btn.innerHTML = '<i class="bi bi-check2"></i> Скопировано';
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-success');
+            setTimeout(function () {
+                btn.innerHTML = original;
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-primary');
+            }, 1500);
+        };
+        var fail = function () {
+            btn.innerHTML = '<i class="bi bi-x"></i> Не удалось скопировать';
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-danger');
+            setTimeout(function () {
+                btn.innerHTML = original;
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-outline-primary');
+            }, 1500);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(function () {
+                try {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    done();
+                } catch (e) { fail(); }
+            });
+        } else {
+            try {
+                var ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                done();
+            } catch (e) { fail(); }
+        }
     });
 </script>
 
