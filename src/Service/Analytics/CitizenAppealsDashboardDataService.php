@@ -4,25 +4,19 @@ declare(strict_types=1);
 
 namespace App\Service\Analytics;
 
-use App\Repository\Analytics\AnalyticsAggregatedDataRepository;
 use App\Repository\Organization\OrganizationRepository;
+use Doctrine\DBAL\Connection;
 
 /**
  * Данные для дашборда «Обращение граждан».
- * Разрез — по городам внутри одной организации (по суффиксу business_key).
+ * Отдаёт сырые недельные значения по 7 городам, без агрегаций/KPI —
+ * фронт сам считает что ему нужно.
+ *
+ * Источник — analytics_report_values (только утверждённые отчёты).
  */
 final class CitizenAppealsDashboardDataService
 {
-    public const SCALE_MONTH = 'month';
-    public const SCALE_WEEK = 'week';
-
-    private const MONTH_LABELS_RU = [
-        1 => 'Янв', 2 => 'Фев', 3 => 'Мар', 4 => 'Апр',
-        5 => 'Май', 6 => 'Июн', 7 => 'Июл', 8 => 'Авг',
-        9 => 'Сен', 10 => 'Окт', 11 => 'Ноя', 12 => 'Дек',
-    ];
-
-    /** city slug => human label */
+    /** city slug => human label. Порядок зафиксирован для UI. */
     private const CITY_LABELS = [
         'gorlovka' => 'Горловка г.о.',
         'donetsk' => 'Донецк г.о.',
@@ -37,29 +31,130 @@ final class CitizenAppealsDashboardDataService
     private const PREFIX_APPEALS = 'appeals_';
 
     public function __construct(
-        private readonly AnalyticsAggregatedDataRepository $aggregatedDataRepo,
+        private readonly Connection $connection,
         private readonly OrganizationRepository $organizationRepo,
     ) {
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array{cities: array, weeks: array}
      */
-    public function getData(int $organizationId, string $scale = self::SCALE_WEEK): array
+    public function getData(int $organizationId): array
     {
         $orgIds = $this->resolveOrganizationIds($organizationId);
 
+        $cities = [];
+        foreach (self::CITY_LABELS as $key => $name) {
+            $cities[] = ['key' => $key, 'name' => $name];
+        }
+
         if (empty($orgIds)) {
-            return $this->emptyData($scale);
+            return ['cities' => $cities, 'weeks' => []];
         }
 
         $keys = $this->allBusinessKeys();
+        $rows = $this->fetchReportValues($orgIds, $keys);
 
-        $rows = $scale === self::SCALE_WEEK
-            ? $this->aggregatedDataRepo->findWeeklyAggregated($orgIds, $keys)
-            : $this->aggregatedDataRepo->findMonthlyAggregated($orgIds, $keys);
+        return [
+            'cities' => $cities,
+            'weeks' => $this->groupByWeek($rows),
+        ];
+    }
 
-        return $this->buildResponse($rows, $scale);
+    /**
+     * @param int[]    $organizationIds
+     * @param string[] $businessKeys
+     *
+     * @return array<int, array{iso_year: int, iso_week: int, start_date: string, end_date: string, business_key: string, value: string|null}>
+     */
+    private function fetchReportValues(array $organizationIds, array $businessKeys): array
+    {
+        $orgPlaceholders = implode(',', array_fill(0, count($organizationIds), '?'));
+        $keyPlaceholders = implode(',', array_fill(0, count($businessKeys), '?'));
+
+        $sql = <<<SQL
+            SELECT
+                p.iso_year,
+                p.iso_week,
+                p.start_date::text AS start_date,
+                p.end_date::text   AS end_date,
+                m.business_key,
+                rv.value_number    AS value
+            FROM analytics_report_values rv
+            JOIN analytics_reports r ON r.id = rv.report_id
+            JOIN analytics_periods p ON p.id = r.period_id
+            JOIN analytics_board_version_metrics vm ON vm.id = rv.board_version_metric_id
+            JOIN analytics_metrics m ON m.id = vm.metric_id
+            WHERE r.status = 'approved'
+              AND r.organization_id IN ({$orgPlaceholders})
+              AND m.business_key IN ({$keyPlaceholders})
+              AND p.iso_year IS NOT NULL
+              AND p.iso_week IS NOT NULL
+            ORDER BY p.iso_year, p.iso_week
+            SQL;
+
+        $params = array_merge($organizationIds, $businessKeys);
+
+        return $this->connection->executeQuery($sql, $params)->fetchAllAssociative();
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function groupByWeek(array $rows): array
+    {
+        $weeks = [];
+
+        foreach ($rows as $row) {
+            $year = (int) $row['iso_year'];
+            $week = (int) $row['iso_week'];
+            $weekKey = sprintf('%04d-%02d', $year, $week);
+
+            if (!isset($weeks[$weekKey])) {
+                $weeks[$weekKey] = [
+                    'year' => $year,
+                    'week' => $week,
+                    'startDate' => (string) $row['start_date'],
+                    'endDate' => (string) $row['end_date'],
+                    'label' => self::weekRangeLabel((string) $row['start_date'], (string) $row['end_date']),
+                    'cities' => $this->emptyCityValues(),
+                ];
+            }
+
+            $bk = (string) $row['business_key'];
+            $value = (int) round((float) ($row['value'] ?? 0));
+
+            if (str_starts_with($bk, self::PREFIX_CALLS)) {
+                $city = substr($bk, strlen(self::PREFIX_CALLS));
+                if (isset($weeks[$weekKey]['cities'][$city])) {
+                    $weeks[$weekKey]['cities'][$city]['calls'] = $value;
+                }
+            } elseif (str_starts_with($bk, self::PREFIX_APPEALS)) {
+                $city = substr($bk, strlen(self::PREFIX_APPEALS));
+                if (isset($weeks[$weekKey]['cities'][$city])) {
+                    $weeks[$weekKey]['cities'][$city]['appeals'] = $value;
+                }
+            }
+        }
+
+        ksort($weeks);
+
+        return array_values($weeks);
+    }
+
+    /**
+     * @return array<string, array{calls: int, appeals: int}>
+     */
+    private function emptyCityValues(): array
+    {
+        $values = [];
+        foreach (array_keys(self::CITY_LABELS) as $city) {
+            $values[$city] = ['calls' => 0, 'appeals' => 0];
+        }
+
+        return $values;
     }
 
     /**
@@ -97,127 +192,11 @@ final class CitizenAppealsDashboardDataService
         return $this->organizationRepo->findOrganizationWithChildrenIds($orgId);
     }
 
-    /**
-     * @param array<int, array<string, int|string|null>> $rows
-     * @return array<string, mixed>
-     */
-    private function buildResponse(array $rows, string $scale): array
+    private static function weekRangeLabel(string $startDate, string $endDate): string
     {
-        $periodKeys = [];
-        foreach ($rows as $row) {
-            if ($scale === self::SCALE_WEEK) {
-                $key = $row['yr'] . '-W' . str_pad((string) $row['wk'], 2, '0', STR_PAD_LEFT);
-                $periodKeys[$key] = (int) $row['wk'];
-                continue;
-            }
+        $start = new \DateTime($startDate);
+        $end = new \DateTime($endDate);
 
-            $key = $row['yr'] . '-' . str_pad((string) $row['mo'], 2, '0', STR_PAD_LEFT);
-            $periodKeys[$key] = (int) $row['mo'];
-        }
-        ksort($periodKeys);
-
-        $labels = [];
-        $periodOrder = [];
-        $idx = 0;
-
-        $years = array_unique(array_map(static fn(string $k) => substr($k, 0, 4), array_keys($periodKeys)));
-        $multiYear = count($years) > 1;
-
-        foreach ($periodKeys as $key => $value) {
-            $yr = (int) substr($key, 0, 4);
-            if ($scale === self::SCALE_WEEK) {
-                $label = self::weekRangeLabel($yr, $value, $multiYear);
-            } else {
-                $label = self::MONTH_LABELS_RU[$value];
-                if ($multiYear) {
-                    $label .= " '" . substr((string) $yr, 2);
-                }
-            }
-            $labels[] = $label;
-            $periodOrder[$key] = $idx++;
-        }
-
-        $totalPoints = count($labels);
-
-        $callsSeries = array_fill(0, $totalPoints, 0);
-        $appealsSeries = array_fill(0, $totalPoints, 0);
-
-        foreach ($rows as $row) {
-            $key = $scale === self::SCALE_WEEK
-                ? $row['yr'] . '-W' . str_pad((string) $row['wk'], 2, '0', STR_PAD_LEFT)
-                : $row['yr'] . '-' . str_pad((string) $row['mo'], 2, '0', STR_PAD_LEFT);
-
-            if (!isset($periodOrder[$key])) {
-                continue;
-            }
-
-            $bk = (string) $row['business_key'];
-            $val = (float) ($row['total_value'] ?? 0);
-
-            if (str_starts_with($bk, self::PREFIX_CALLS)) {
-                $callsSeries[$periodOrder[$key]] += (int) round($val);
-            } elseif (str_starts_with($bk, self::PREFIX_APPEALS)) {
-                $appealsSeries[$periodOrder[$key]] += (int) round($val);
-            }
-        }
-
-        $totalCalls = (int) array_sum($callsSeries);
-        $totalAppeals = (int) array_sum($appealsSeries);
-        $conversionPct = $totalCalls > 0
-            ? round($totalAppeals / $totalCalls * 100, 1)
-            : 0.0;
-
-        return [
-            'scale' => $scale,
-            'labels' => $labels,
-            'appeals' => [
-                'kpis' => [
-                    'totalCalls' => $totalCalls,
-                    'totalAppeals' => $totalAppeals,
-                    'conversionPct' => $conversionPct,
-                ],
-                'series' => [
-                    'calls' => $callsSeries,
-                    'appeals' => $appealsSeries,
-                ],
-            ],
-        ];
-    }
-
-    private static function weekRangeLabel(int $year, int $week, bool $multiYear): string
-    {
-        $monday = new \DateTime();
-        $monday->setISODate($year, $week, 1);
-        $sunday = clone $monday;
-        $sunday->modify('+6 days');
-
-        $label = $monday->format('d.m') . '–' . $sunday->format('d.m');
-        if ($multiYear) {
-            $label .= "'" . substr((string) $year, 2);
-        }
-
-        return $label;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function emptyData(string $scale): array
-    {
-        return [
-            'scale' => $scale,
-            'labels' => [],
-            'appeals' => [
-                'kpis' => [
-                    'totalCalls' => 0,
-                    'totalAppeals' => 0,
-                    'conversionPct' => 0,
-                ],
-                'series' => [
-                    'calls' => [],
-                    'appeals' => [],
-                ],
-            ],
-        ];
+        return $start->format('d.m') . '–' . $end->format('d.m');
     }
 }
