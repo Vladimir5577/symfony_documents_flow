@@ -63,114 +63,6 @@ final class CitizenAppealsDashboardDataService
     }
 
     /**
-     * @return array{scale: string, selectedYear: int, selectedPeriod: int, availablePeriods: array, rows: array}
-     */
-    public function getCompareData(int $organizationId, string $scale = self::SCALE_WEEK, ?int $year = null, ?int $period = null): array
-    {
-        $orgIds = $this->resolveOrganizationIds($organizationId);
-
-        if (empty($orgIds)) {
-            return $this->emptyCompareData($scale);
-        }
-
-        $availablePeriods = $scale === self::SCALE_WEEK
-            ? $this->aggregatedDataRepo->findAvailableWeeks($orgIds)
-            : $this->aggregatedDataRepo->findAvailableMonths($orgIds);
-
-        if (empty($availablePeriods)) {
-            return $this->emptyCompareData($scale);
-        }
-
-        if ($year === null || $period === null) {
-            $latest = $availablePeriods[0];
-            $year = (int) $latest['yr'];
-            $period = (int) ($scale === self::SCALE_WEEK ? $latest['wk'] : $latest['mo']);
-        }
-
-        $periodsForSelect = [];
-        foreach ($availablePeriods as $ap) {
-            if ($scale === self::SCALE_WEEK) {
-                $periodsForSelect[] = [
-                    'year' => (int) $ap['yr'],
-                    'period' => (int) $ap['wk'],
-                    'label' => self::weekRangeLabel((int) $ap['yr'], (int) $ap['wk'], true),
-                ];
-            } else {
-                $periodsForSelect[] = [
-                    'year' => (int) $ap['yr'],
-                    'period' => (int) $ap['mo'],
-                    'label' => self::MONTH_LABELS_RU[(int) $ap['mo']] . ' ' . $ap['yr'],
-                ];
-            }
-        }
-
-        $keys = $this->allBusinessKeys();
-        $rows = $scale === self::SCALE_WEEK
-            ? $this->aggregatedDataRepo->findCompareWeekly($orgIds, $keys, $year, $period)
-            : $this->aggregatedDataRepo->findCompareMonthly($orgIds, $keys, $year, $period);
-
-        // city => ['calls' => x, 'appeals' => y]
-        $cityData = array_fill_keys(array_keys(self::CITY_LABELS), ['calls' => 0.0, 'appeals' => 0.0]);
-
-        foreach ($rows as $row) {
-            $bk = (string) $row['business_key'];
-            $val = (float) ($row['total_value'] ?? 0);
-
-            if (str_starts_with($bk, self::PREFIX_CALLS)) {
-                $city = substr($bk, strlen(self::PREFIX_CALLS));
-                if (isset($cityData[$city])) {
-                    $cityData[$city]['calls'] += $val;
-                }
-            } elseif (str_starts_with($bk, self::PREFIX_APPEALS)) {
-                $city = substr($bk, strlen(self::PREFIX_APPEALS));
-                if (isset($cityData[$city])) {
-                    $cityData[$city]['appeals'] += $val;
-                }
-            }
-        }
-
-        $resultRows = [];
-        $totals = ['calls' => 0.0, 'appeals' => 0.0];
-
-        foreach (self::CITY_LABELS as $city => $name) {
-            $calls = $cityData[$city]['calls'];
-            $appeals = $cityData[$city]['appeals'];
-            $totals['calls'] += $calls;
-            $totals['appeals'] += $appeals;
-
-            $resultRows[] = $this->buildCompareRow($name, $calls, $appeals, false);
-        }
-
-        $totalRow = $this->buildCompareRow('Итого', $totals['calls'], $totals['appeals'], true);
-        array_unshift($resultRows, $totalRow);
-
-        return [
-            'scale' => $scale,
-            'selectedYear' => $year,
-            'selectedPeriod' => $period,
-            'availablePeriods' => $periodsForSelect,
-            'rows' => $resultRows,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function buildCompareRow(string $name, float $calls, float $appeals, bool $isTotal): array
-    {
-        $callsInt = (int) round($calls);
-        $appealsInt = (int) round($appeals);
-
-        return [
-            'name' => $name,
-            'isTotal' => $isTotal,
-            'calls' => $callsInt,
-            'appeals' => $appealsInt,
-            'conversionPct' => $callsInt > 0 ? round($appealsInt / $callsInt * 100, 1) : 0.0,
-        ];
-    }
-
-    /**
      * @return string[]
      */
     private function allBusinessKeys(): array
@@ -326,20 +218,6 @@ final class CitizenAppealsDashboardDataService
                     'appeals' => [],
                 ],
             ],
-        ];
-    }
-
-    /**
-     * @return array{scale: string, selectedYear: int, selectedPeriod: int, availablePeriods: array, rows: array}
-     */
-    private function emptyCompareData(string $scale): array
-    {
-        return [
-            'scale' => $scale,
-            'selectedYear' => 0,
-            'selectedPeriod' => 0,
-            'availablePeriods' => [],
-            'rows' => [],
         ];
     }
 }

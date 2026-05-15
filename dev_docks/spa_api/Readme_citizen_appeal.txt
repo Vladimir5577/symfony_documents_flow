@@ -3,13 +3,13 @@ SPA API — Citizen Appeals Analytics (Dashboard)
 ================================================================================
 
 Эндпоинт для получения данных дашборда "Обращение граждан":
-KPI по звонкам/обращениям, ряды по периодам, таблица сравнения
-по городам (городским округам).
+KPI по звонкам/обращениям и ряды по периодам.
 
-В отличие от HR-аналитики, разрез в таблице сравнения здесь —
-**по городам внутри одной организации**, а не по организациям.
-Город определяется по суффиксу business_key (calls_gorlovka,
-appeals_donetsk и т.д.).
+Метрики устроены так: по каждому из 7 городов (городских округов)
+заведена пара business_key — calls_<city> и appeals_<city>. В ответе
+endpoint все 7 городов сворачиваются в общие суммы по периодам.
+Если нужна разбивка по городам — её можно собрать на фронте, дёргая
+эндпоинт по разным org_id или используя другой источник.
 
 --------------------------------------------------------------------------------
 1. ЗАПРОС
@@ -86,9 +86,6 @@ fetch:
     calls_*   суммируются по периодам и по городам;
     appeals_* суммируются по периодам и по городам.
 
-В hr-аналитике есть остаточные метрики (AVG) — здесь их нет, поэтому
-KPI считаются как обычные суммы.
-
 Источник данных в БД:
   analytics_boards         id=3, name="Обращение граждан", period_type=weekly
   analytics_metrics        id 28..41 (см. выше)
@@ -106,8 +103,7 @@ HTTP 200, application/json.
 {
   "scale":   "week" | "month",   // эхо запрошенного scale (после нормализации)
   "labels":  string[],           // подписи периодов оси X
-  "appeals": { ... },            // KPI + ряды
-  "compare": { ... }             // таблица сравнения по городам
+  "appeals": { ... }             // KPI + ряды
 }
 
 Длина каждого массива в appeals.series совпадает с длиной labels: i-й
@@ -139,55 +135,9 @@ HTTP 200, application/json.
 }
 
 KPI и series — суммы по всем 7 городам в рамках выбранных организаций.
-Для разбивки по городам — использовать compare.rows.
-
---- compare ------------------------------------------------------------------
-
-Таблица сравнения 7 городов за один конкретный период.
-
-{
-  "scale":          "week" | "month",
-  "selectedYear":   number,    // год показанного периода
-  "selectedPeriod": number,    // ISO-неделя 1..53 или месяц 1..12
-
-  "availablePeriods": [        // отсортирован от свежего к старому
-    {
-      "year":   number,
-      "period": number,        // неделя или месяц
-      "label":  string         // "11.05–17.05'26" или "Май 2026"
-    }
-  ],
-
-  "rows": [                    // первая строка — всегда "Итого",
-                               // далее 7 городов в фиксированном порядке:
-                               // Горловка, Донецк, Енакиево, Макеевка,
-                               // Шахтёрск, Мариуполь, Ясиноватая
-    {
-      "name":          string,   // название города или "Итого"
-      "isTotal":       boolean,  // true только у строки "Итого"
-      "calls":         number,   // целое
-      "appeals":       number,   // целое
-      "conversionPct": number    // appeals / calls * 100, до 0.1
-    }
-  ]
-}
-
-selectedYear / selectedPeriod равны первому элементу availablePeriods
-(самый свежий доступный период). Если данных нет вообще —
-selectedYear = 0, selectedPeriod = 0, availablePeriods = [], rows = [].
-
-Особенности строки «Итого»:
-  - calls, appeals — простые суммы по всем 7 городам;
-  - conversionPct пересчитан от суммарного appeals и суммарного calls,
-    а не усреднён по городам.
-
-Порядок строк-городов в rows всегда фиксирован (как объявлен в
-CitizenAppealsDashboardDataService::CITY_LABELS), даже если у какого-то
-города нет данных — он всё равно присутствует с calls=0, appeals=0,
-conversionPct=0.
 
 --------------------------------------------------------------------------------
-4. ПРИМЕР ОТВЕТА (укороченный, scale = week)
+4. ПРИМЕР ОТВЕТА (scale = week)
 --------------------------------------------------------------------------------
 
 GET /spa/api/analytics/citizen-appeals/dashboard/data?org_id=20&scale=week
@@ -205,26 +155,6 @@ GET /spa/api/analytics/citizen-appeals/dashboard/data?org_id=20&scale=week
       "calls":   [503, 608, 1111],
       "appeals": [377, 551, 928]
     }
-  },
-  "compare": {
-    "scale": "week",
-    "selectedYear":   2026,
-    "selectedPeriod": 20,
-    "availablePeriods": [
-      { "year": 2026, "period": 20, "label": "11.05–17.05'26" },
-      { "year": 2026, "period": 19, "label": "04.05–10.05'26" },
-      { "year": 2026, "period": 18, "label": "27.04–03.05'26" }
-    ],
-    "rows": [
-      { "name": "Итого",         "isTotal": true,  "calls": 1111, "appeals": 928, "conversionPct": 83.5 },
-      { "name": "Горловка г.о.", "isTotal": false, "calls": 103,  "appeals": 55,  "conversionPct": 53.4 },
-      { "name": "Донецк г.о.",   "isTotal": false, "calls": 506,  "appeals": 479, "conversionPct": 94.7 },
-      { "name": "Енакиево г.о.", "isTotal": false, "calls": 43,   "appeals": 5,   "conversionPct": 11.6 },
-      { "name": "Макеевка г.о.", "isTotal": false, "calls": 346,  "appeals": 61,  "conversionPct": 17.6 },
-      { "name": "Шахтёрск г.о.", "isTotal": false, "calls": 22,   "appeals": 5,   "conversionPct": 22.7 },
-      { "name": "Мариуполь г.о.","isTotal": false, "calls": 91,   "appeals": 40,  "conversionPct": 44.0 },
-      { "name": "Ясиноватая",    "isTotal": false, "calls": 0,    "appeals": 283, "conversionPct": 0.0 }
-    ]
   }
 }
 
@@ -248,13 +178,6 @@ GET /spa/api/analytics/citizen-appeals/dashboard/data?org_id=20&scale=week
       "calls":   [],
       "appeals": []
     }
-  },
-  "compare": {
-    "scale": "week",
-    "selectedYear":   0,
-    "selectedPeriod": 0,
-    "availablePeriods": [],
-    "rows": []
   }
 }
 
@@ -268,16 +191,11 @@ GET /spa/api/analytics/citizen-appeals/dashboard/data?org_id=20&scale=week
 - org_id, по которому нет ни одной строки данных, возвращает пустой
   ответ (см. раздел 5). Ошибки нет.
 
-- compare всегда возвращает 8 строк (1 «Итого» + 7 городов) при наличии
-  данных, даже если по конкретному городу нет ни звонков, ни обращений
-  в выбранном периоде — он будет с нулями.
-
 - Длина массивов в appeals.series равна длине labels. Если для какого-то
   периода нет данных — на этой позиции стоит 0 (а не пропуск/null).
 
-- conversionPct: если calls == 0, возвращается 0.0 (без деления),
-  даже если appeals > 0 (как у Ясиноватой в примере выше — звонки
-  не приходят, но обращения регистрируются по другим каналам).
+- conversionPct: если totalCalls == 0, возвращается 0.0 (без деления),
+  даже если totalAppeals > 0.
 
 - Поскольку period_type доски = weekly, при scale="month" данные одной
   ISO-недели попадают в месяц по start_date этой недели (понедельник).

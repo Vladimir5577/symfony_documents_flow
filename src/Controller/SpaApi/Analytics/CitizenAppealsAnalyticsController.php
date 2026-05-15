@@ -29,7 +29,6 @@ final class CitizenAppealsAnalyticsController extends AbstractController
             : CitizenAppealsDashboardDataService::SCALE_WEEK;
 
         $data = $service->getData($orgId, $scale);
-        $data['compare'] = $service->getCompareData($orgId, $scale);
 
         return $this->json($data);
     }
