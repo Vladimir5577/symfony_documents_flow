@@ -57,8 +57,8 @@
                                   JWT остаётся валидным до своего exp —
                                   фронт должен сам его выкинуть.
 
-  GET  /spa/api/me                Возвращает данные текущего пользователя
-                                  (id, login, roles). Требует Bearer JWT.
+  GET  /spa/api/me                Данные текущего пользователя и список его
+                                  Kanban-проектов (для меню SPA). Требует Bearer JWT.
 
 Любой другой `/spa/api/*` эндпоинт по умолчанию требует валидный JWT
 (access_control: `^/spa/api  →  ROLE_USER`). Конкретные роли проверяются
@@ -86,7 +86,34 @@ curl http://localhost:8080/spa/api/me \
   -H "Authorization: Bearer eyJ0eXAi..."
 
 → 200
-{ "id": 1, "login": "admin", "roles": ["ROLE_ADMIN"] }
+{
+  "id": 1,
+  "login": "admin",
+  "roles": ["ROLE_ADMIN"],
+  "lastname": "Иванов",
+  "firstname": "Иван",
+  "patronymic": "Иванович",
+  "projects": [
+    {
+      "id": 3,
+      "name": "Мой проект",
+      "description": null,
+      "isOwner": true,
+      "isProjectAdmin": true,
+      "entryBoardId": 12,
+      "entryHref": "/projects/3/boards/12"
+    }
+  ]
+}
+
+Поле projects — тот же список, что /personal_projects
+(KanbanProjectRepository::findByMemberWithAccessibleBoards):
+  владелец; участник KANBAN_ADMIN; участник с назначенными карточками.
+Сортировка: updatedAt DESC.
+
+  entryBoardId / entryHref — куда вести из меню (логика как /personal_projects):
+    админ проекта → первая доска проекта;
+    остальные → первая доска с назначенными карточками, иначе страница проекта.
 
 
 # Обновление JWT (старый refresh уходит, выдаётся новый)
