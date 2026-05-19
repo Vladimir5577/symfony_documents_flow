@@ -1,0 +1,896 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}AI-ассистент{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <style>
+        /* ===== Page header (в стиле остальных страниц) ===== */
+        .ai-breadcrumb {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 0.15rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.75rem;
+            color: #8a98ac;
+        }
+        .ai-page-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #25396f;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+        }
+        .ai-page-title i { color: #7c5cbf; font-size: 1.05rem; }
+        .ai-page-subtitle {
+            font-size: 0.72rem;
+            color: #8a98ac;
+            margin: 0.1rem 0 0;
+        }
+
+        /* ===== Chat container ===== */
+        .ai-chat {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 180px);
+            min-height: 480px;
+            max-width: 900px;
+            margin: 1rem auto 0;
+            background: #fff;
+            border-radius: 0.65rem;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+            overflow: hidden;
+        }
+
+        /* ===== Toolbar ===== */
+        .ai-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 0.85rem;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            background: #fafbfd;
+        }
+        .ai-toolbar-status {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.72rem;
+            color: #8a98ac;
+            margin-right: auto;
+        }
+        .ai-toolbar-status::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #3a9d8f;
+            box-shadow: 0 0 0 3px rgba(58, 157, 143, 0.18);
+        }
+        .ai-toolbar-btn {
+            background: none;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            color: #6b7d99;
+            border-radius: 0.35rem;
+            font-size: 0.72rem;
+            padding: 0.25rem 0.55rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: background 0.15s, color 0.15s;
+        }
+        .ai-toolbar-btn:hover { background: #f1f4fa; color: #435ebe; }
+        .ai-toolbar-btn i { font-size: 0.7rem; }
+
+        /* ===== Messages ===== */
+        .ai-msgs {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            background: #f6f8fc;
+        }
+        .ai-msg {
+            max-width: 75%;
+            padding: 0.65rem 0.9rem;
+            border-radius: 0.7rem;
+            font-size: 0.86rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .ai-msg-user {
+            align-self: flex-end;
+            background: #435ebe;
+            color: #fff;
+            border-bottom-right-radius: 0.15rem;
+        }
+        .ai-msg-assistant {
+            align-self: flex-start;
+            background: #fff;
+            color: #25396f;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-bottom-left-radius: 0.15rem;
+        }
+        .ai-msg-error {
+            align-self: center;
+            background: #fdecec;
+            color: #c33;
+            font-size: 0.78rem;
+            text-align: center;
+            max-width: 90%;
+        }
+        .ai-msg-typing { font-style: italic; opacity: 0.6; }
+
+        /* ===== Input ===== */
+        .ai-input {
+            display: flex;
+            align-items: flex-end;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+            background: #fff;
+        }
+        .ai-input textarea {
+            flex: 1;
+            resize: none;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 0.5rem;
+            padding: 0.55rem 0.75rem;
+            font-size: 0.86rem;
+            line-height: 1.45;
+            font-family: inherit;
+            max-height: 180px;
+            outline: none;
+        }
+        .ai-input textarea:focus {
+            border-color: #435ebe;
+            box-shadow: 0 0 0 2px rgba(67, 94, 190, 0.15);
+        }
+        .ai-input button.ai-send,
+        .ai-input button.ai-attach {
+            border: none;
+            border-radius: 0.5rem;
+            min-width: 42px;
+            height: 42px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .ai-input button.ai-send {
+            background: #435ebe;
+            color: #fff;
+        }
+        .ai-input button.ai-send:hover:not(:disabled) { background: #344ea1; }
+        .ai-input button.ai-attach {
+            background: #fff;
+            color: #6b7d99;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        .ai-input button.ai-attach:hover:not(:disabled) {
+            background: #f1f4fa;
+            color: #435ebe;
+            border-color: rgba(67, 94, 190, 0.3);
+        }
+        .ai-input button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        /* ===== Selected attachments (chips above textarea) ===== */
+        .ai-attachments {
+            display: none;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            padding: 0.55rem 0.75rem 0;
+            background: #fff;
+        }
+        .ai-attachments.is-visible { display: flex; }
+        .ai-attach-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: #f1f4fa;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 0.4rem;
+            padding: 0.2rem 0.35rem 0.2rem 0.3rem;
+            font-size: 0.72rem;
+            color: #25396f;
+            max-width: 220px;
+        }
+        .ai-attach-chip img {
+            width: 22px;
+            height: 22px;
+            object-fit: cover;
+            border-radius: 0.2rem;
+            flex-shrink: 0;
+        }
+        .ai-attach-chip i.ai-attach-icon {
+            font-size: 0.95rem;
+            color: #7c5cbf;
+            flex-shrink: 0;
+        }
+        .ai-attach-chip .ai-attach-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .ai-attach-remove {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #8a98ac;
+            padding: 0;
+            line-height: 1;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+        .ai-attach-remove:hover { color: #c33; }
+
+        /* ===== Files inside sent bubbles ===== */
+        .ai-msg-files {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+            margin-top: 0.4rem;
+        }
+        .ai-msg-file {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: rgba(255, 255, 255, 0.18);
+            border-radius: 0.3rem;
+            padding: 0.15rem 0.4rem;
+            font-size: 0.72rem;
+            max-width: 220px;
+        }
+        .ai-msg-file .ai-msg-file-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* ===== Rate-limit banner ===== */
+        .ai-rate-limit {
+            display: none;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.5rem 0.85rem;
+            background: #fff5e6;
+            color: #b8741c;
+            border-top: 1px solid rgba(184, 116, 28, 0.2);
+            font-size: 0.78rem;
+        }
+        .ai-rate-limit.is-visible { display: flex; }
+        .ai-rate-limit i { font-size: 0.9rem; }
+        .ai-rate-limit strong { font-variant-numeric: tabular-nums; }
+
+        /* ===== Hint ===== */
+        .ai-hint {
+            text-align: center;
+            font-size: 0.7rem;
+            color: #a0aec0;
+            padding: 0 0.75rem 0.5rem;
+            background: #fff;
+        }
+        .ai-hint kbd {
+            background: #f1f4fa;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 0.25rem;
+            padding: 0 0.3rem;
+            font-size: 0.65rem;
+            font-family: inherit;
+        }
+
+        /* ===== Welcome placeholder ===== */
+        .ai-welcome {
+            margin: auto;
+            text-align: center;
+            color: #8a98ac;
+            padding: 2rem 1rem;
+        }
+        .ai-welcome i {
+            font-size: 2.5rem;
+            color: #7c5cbf;
+            opacity: 0.6;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+        .ai-welcome h2 {
+            font-size: 1rem;
+            color: #25396f;
+            margin: 0 0 0.3rem;
+            font-weight: 600;
+        }
+        .ai-welcome p {
+            font-size: 0.82rem;
+            margin: 0;
+        }
+
+        /* ===== Markdown-rendered assistant content ===== */
+        .ai-msg-md p:first-child { margin-top: 0; }
+        .ai-msg-md p:last-child  { margin-bottom: 0; }
+        .ai-msg-md p  { margin: 0.4rem 0; }
+        .ai-msg-md ul, .ai-msg-md ol { margin: 0.3rem 0; padding-left: 1.4rem; }
+        .ai-msg-md li { margin: 0.15rem 0; }
+        .ai-msg-md code {
+            background: rgba(0, 0, 0, 0.06);
+            border-radius: 0.2rem;
+            padding: 0 0.3rem;
+            font-size: 0.78rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+        .ai-msg-md pre {
+            background: rgba(0, 0, 0, 0.06);
+            border-radius: 0.35rem;
+            padding: 0.55rem 0.75rem;
+            overflow-x: auto;
+            margin: 0.4rem 0;
+        }
+        .ai-msg-md pre code { background: none; padding: 0; font-size: 0.78rem; }
+        .ai-msg-md strong { font-weight: 600; }
+        .ai-msg-md em { font-style: italic; }
+        .ai-msg-md a { color: #435ebe; word-break: break-all; }
+        .ai-msg-md h1, .ai-msg-md h2, .ai-msg-md h3 { font-size: 0.95rem; margin: 0.4rem 0 0.2rem; font-weight: 600; }
+        .ai-msg-md blockquote {
+            border-left: 3px solid rgba(0, 0, 0, 0.1);
+            padding-left: 0.6rem;
+            color: #6b7d99;
+            margin: 0.3rem 0;
+        }
+
+        /* ===== Failed message indicator ===== */
+        .ai-msg-failed {
+            opacity: 0.85;
+            border: 1px solid rgba(212, 68, 68, 0.4) !important;
+        }
+        .ai-msg-failed-note {
+            display: block;
+            font-size: 0.65rem;
+            margin-top: 0.3rem;
+            color: #d44;
+            opacity: 0.85;
+        }
+
+        /* ===== Attached file as link (in historic message bubbles) ===== */
+        .ai-msg-file {
+            text-decoration: none !important;
+            color: inherit !important;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .ai-msg-file:hover { filter: brightness(1.1); }
+        .ai-msg-assistant .ai-msg-file {
+            background: rgba(0, 0, 0, 0.05);
+            color: #25396f !important;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 767.98px) {
+            .ai-chat { height: calc(100vh - 140px); margin-top: 0.6rem; }
+            .ai-msg { max-width: 92%; }
+        }
+
+        /* ===== Dark theme ===== */
+        [data-bs-theme="dark"] .ai-breadcrumb { color: #6b6b80; }
+        [data-bs-theme="dark"] .ai-page-title { color: #d8d8ec; }
+        [data-bs-theme="dark"] .ai-page-subtitle { color: #6b6b80; }
+        [data-bs-theme="dark"] .ai-chat {
+            background: #1e1e2d;
+            border-color: rgba(255, 255, 255, 0.04);
+        }
+        [data-bs-theme="dark"] .ai-toolbar {
+            background: #1a1a28;
+            border-bottom-color: rgba(255, 255, 255, 0.04);
+        }
+        [data-bs-theme="dark"] .ai-toolbar-status { color: #6b6b80; }
+        [data-bs-theme="dark"] .ai-toolbar-btn {
+            border-color: rgba(255, 255, 255, 0.08);
+            color: #8a8aa8;
+        }
+        [data-bs-theme="dark"] .ai-toolbar-btn:hover { background: #14141f; color: #7b96e4; }
+        [data-bs-theme="dark"] .ai-msgs { background: #14141f; }
+        [data-bs-theme="dark"] .ai-msg-assistant {
+            background: #1e1e2d;
+            color: #c2c2d9;
+            border-color: rgba(255, 255, 255, 0.06);
+        }
+        [data-bs-theme="dark"] .ai-msg-error { background: rgba(195, 51, 51, 0.15); color: #f08585; }
+        [data-bs-theme="dark"] .ai-input {
+            background: #1e1e2d;
+            border-top-color: rgba(255, 255, 255, 0.06);
+        }
+        [data-bs-theme="dark"] .ai-input textarea {
+            background: #14141f;
+            color: #c2c2d9;
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        [data-bs-theme="dark"] .ai-input textarea:focus { border-color: #7b96e4; }
+        [data-bs-theme="dark"] .ai-input button.ai-attach {
+            background: #14141f;
+            color: #8a8aa8;
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        [data-bs-theme="dark"] .ai-input button.ai-attach:hover:not(:disabled) {
+            background: #1a1a28;
+            color: #7b96e4;
+            border-color: rgba(123, 150, 228, 0.4);
+        }
+        [data-bs-theme="dark"] .ai-attachments { background: #1e1e2d; }
+        [data-bs-theme="dark"] .ai-attach-chip {
+            background: #14141f;
+            border-color: rgba(255, 255, 255, 0.08);
+            color: #c2c2d9;
+        }
+        [data-bs-theme="dark"] .ai-rate-limit {
+            background: rgba(184, 116, 28, 0.15);
+            color: #f3b773;
+            border-top-color: rgba(184, 116, 28, 0.3);
+        }
+        [data-bs-theme="dark"] .ai-hint { background: #1e1e2d; color: #6b6b80; }
+        [data-bs-theme="dark"] .ai-hint kbd {
+            background: #14141f;
+            border-color: rgba(255, 255, 255, 0.08);
+            color: #c2c2d9;
+        }
+        [data-bs-theme="dark"] .ai-welcome { color: #6b6b80; }
+        [data-bs-theme="dark"] .ai-welcome h2 { color: #d8d8ec; }
+        [data-bs-theme="dark"] .ai-msg-md code,
+        [data-bs-theme="dark"] .ai-msg-md pre { background: rgba(255, 255, 255, 0.07); }
+        [data-bs-theme="dark"] .ai-msg-md a { color: #7b96e4; }
+        [data-bs-theme="dark"] .ai-msg-md blockquote { border-left-color: rgba(255, 255, 255, 0.15); color: #8a8aa8; }
+        [data-bs-theme="dark"] .ai-msg-assistant .ai-msg-file {
+            background: rgba(255, 255, 255, 0.07);
+            color: #c2c2d9 !important;
+        }
+    </style>
+
+    <ul class="ai-breadcrumb">
+        <li>AI-ассистент</li>
+    </ul>
+    <h1 class="ai-page-title"><i class="bi bi-stars"></i> AI-ассистент</h1>
+    <p class="ai-page-subtitle">Задайте вопрос — отвечу, помогу с черновиком, разъясню документ</p>
+
+    <div class="ai-chat"
+         data-send-url="{{ path('api_ai_chat_send') }}"
+         data-clear-url="{{ path('api_ai_chat_clear') }}">
+        <div class="ai-toolbar">
+            <span class="ai-toolbar-status">подключено</span>
+            <button type="button" class="ai-toolbar-btn" id="aiClearBtn" title="Очистить переписку">
+                <i class="bi bi-arrow-counterclockwise"></i> Очистить
+            </button>
+        </div>
+
+        <div class="ai-msgs" id="aiMsgs">
+            {% if history|default([])|length == 0 %}
+                <div class="ai-welcome" id="aiWelcome">
+                    <i class="bi bi-chat-dots"></i>
+                    <h2>Здравствуйте!</h2>
+                    <p>С чего начнём?</p>
+                </div>
+            {% else %}
+                {% for m in history %}
+                    <div class="ai-msg ai-msg-{{ m.role }}{% if m.status == 'failed' %} ai-msg-failed{% endif %}"
+                         data-message-id="{{ m.id }}">
+                        {% if m.role == 'assistant' %}
+                            <div class="ai-msg-md">{{ m.content }}</div>
+                        {% elseif m.content|length > 0 %}
+                            <div>{{ m.content }}</div>
+                        {% endif %}
+
+                        {% if m.attachments|length > 0 %}
+                            <div class="ai-msg-files">
+                                {% for a in m.attachments %}
+                                    <a href="{{ a.url }}" class="ai-msg-file" target="_blank" rel="noopener" title="{{ a.title }}">
+                                        <i class="bi {{ a.is_image ? 'bi-image' : 'bi-file-earmark-pdf' }}"></i>
+                                        <span class="ai-msg-file-name">{{ a.title }}</span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% if m.status == 'failed' %}
+                            <span class="ai-msg-failed-note">⚠ Не отправлено</span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+
+        <div class="ai-attachments" id="aiAttachments"></div>
+
+        <div class="ai-rate-limit" id="aiRateLimit">
+            <i class="bi bi-hourglass-split"></i>
+            <span>Лимит API. Доступно через <strong id="aiRateLimitSec">0</strong> сек.</span>
+        </div>
+
+        <form class="ai-input" id="aiInputForm">
+            <input type="file" id="aiFileInput" multiple accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" hidden>
+            <button type="button" class="ai-attach" id="aiAttachBtn" aria-label="Прикрепить файл" title="Прикрепить файл (изображения и PDF, до 10 МБ)">
+                <i class="bi bi-paperclip"></i>
+            </button>
+            <textarea id="aiInput" rows="1" placeholder="Введите сообщение…"></textarea>
+            <button type="submit" class="ai-send" id="aiSend" aria-label="Отправить">
+                <i class="bi bi-send-fill"></i>
+            </button>
+        </form>
+        <div class="ai-hint">
+            <kbd>Enter</kbd> — отправить, <kbd>Shift</kbd>+<kbd>Enter</kbd> — перенос строки
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <script>
+        (function () {
+            const chat          = document.querySelector('.ai-chat');
+            const msgs          = document.getElementById('aiMsgs');
+            const form          = document.getElementById('aiInputForm');
+            const input         = document.getElementById('aiInput');
+            const sendBtn       = document.getElementById('aiSend');
+            const clearBtn      = document.getElementById('aiClearBtn');
+            const attachBtn     = document.getElementById('aiAttachBtn');
+            const fileInput     = document.getElementById('aiFileInput');
+            const attachmentsEl = document.getElementById('aiAttachments');
+            const rateLimitEl   = document.getElementById('aiRateLimit');
+            const rateLimitSecEl= document.getElementById('aiRateLimitSec');
+            const sendUrl       = chat.dataset.sendUrl;
+            const clearUrl      = chat.dataset.clearUrl;
+
+            // Лимиты совпадают с серверной валидацией.
+            const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+            const MAX_PDF_BYTES   = 10 * 1024 * 1024;
+            const MAX_FILES       = 10;
+            const ALLOWED_IMAGE   = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+            // Файлы, прикреплённые к ТЕКУЩЕМУ сообщению (до нажатия «отправить»).
+            // История сообщений теперь живёт в БД — фронт её не помнит и не пересылает.
+            const pendingFiles = [];
+            let busy = false;
+            let rateLimitTimer = null;
+
+            // marked настраиваем «бережно»: переводы строк превращаются в <br>, остальное по GFM.
+            if (typeof marked !== 'undefined') {
+                marked.setOptions({ gfm: true, breaks: true });
+            }
+
+            function renderMarkdown(rawText) {
+                if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+                    // Если CDN не загрузился — отдаём plain text, чтобы не сломать чат.
+                    const div = document.createElement('div');
+                    div.textContent = rawText;
+                    return div.innerHTML;
+                }
+                return DOMPurify.sanitize(marked.parse(rawText));
+            }
+
+            // Рендерим markdown в assistant-сообщениях, которые пришли из SSR (Twig вставил сырой текст).
+            document.querySelectorAll('.ai-msg-md:not(.is-rendered)').forEach(function (el) {
+                el.innerHTML = renderMarkdown(el.textContent);
+                el.classList.add('is-rendered');
+            });
+            // Прокручиваем сразу вниз — открыли страницу, должны видеть последние сообщения.
+            msgs.scrollTop = msgs.scrollHeight;
+
+            function startRateLimitCountdown(seconds) {
+                if (rateLimitTimer) clearInterval(rateLimitTimer);
+
+                let remaining = Math.max(1, seconds | 0);
+                rateLimitSecEl.textContent = String(remaining);
+                rateLimitEl.classList.add('is-visible');
+                sendBtn.disabled = true;
+                attachBtn.disabled = true;
+
+                rateLimitTimer = setInterval(function () {
+                    remaining--;
+                    if (remaining <= 0) {
+                        clearInterval(rateLimitTimer);
+                        rateLimitTimer = null;
+                        rateLimitEl.classList.remove('is-visible');
+                        if (!busy) {
+                            sendBtn.disabled = false;
+                            attachBtn.disabled = false;
+                        }
+                    } else {
+                        rateLimitSecEl.textContent = String(remaining);
+                    }
+                }, 1000);
+            }
+
+            function dropWelcome() {
+                const welcome = document.getElementById('aiWelcome');
+                if (welcome && welcome.parentNode) welcome.remove();
+            }
+
+            // Универсальный аппендер для рантайм-сообщений (отрисовка после ответа API).
+            // serverData (опц.) — объект из ответа сервера: id, attachments[], status.
+            function append(role, text, options) {
+                dropWelcome();
+                options = options || {};
+
+                const el = document.createElement('div');
+                el.className = 'ai-msg ai-msg-' + role + (options.failed ? ' ai-msg-failed' : '');
+                if (options.id) el.dataset.messageId = options.id;
+
+                if (text) {
+                    if (role === 'assistant') {
+                        const md = document.createElement('div');
+                        md.className = 'ai-msg-md is-rendered';
+                        md.innerHTML = renderMarkdown(text);
+                        el.appendChild(md);
+                    } else {
+                        const txt = document.createElement('div');
+                        txt.textContent = text;
+                        el.appendChild(txt);
+                    }
+                }
+
+                // Аттачменты: либо данные с сервера (с url), либо локальные File-объекты (без url, до отправки).
+                if (options.attachments && options.attachments.length > 0) {
+                    const list = document.createElement('div');
+                    list.className = 'ai-msg-files';
+                    options.attachments.forEach(function (a) {
+                        const isImage = a.is_image || (a.type && a.type.startsWith('image/'));
+                        const chip = a.url
+                            ? document.createElement('a')
+                            : document.createElement('span');
+                        chip.className = 'ai-msg-file';
+                        if (a.url) {
+                            chip.href = a.url;
+                            chip.target = '_blank';
+                            chip.rel = 'noopener';
+                            chip.title = a.title || a.name || '';
+                        }
+                        const icon = document.createElement('i');
+                        icon.className = isImage ? 'bi bi-image' : 'bi bi-file-earmark-pdf';
+                        const name = document.createElement('span');
+                        name.className = 'ai-msg-file-name';
+                        name.textContent = a.title || a.name || '';
+                        chip.appendChild(icon);
+                        chip.appendChild(name);
+                        list.appendChild(chip);
+                    });
+                    el.appendChild(list);
+                }
+
+                if (options.failed) {
+                    const note = document.createElement('span');
+                    note.className = 'ai-msg-failed-note';
+                    note.textContent = '⚠ Не отправлено';
+                    el.appendChild(note);
+                }
+
+                msgs.appendChild(el);
+                msgs.scrollTop = msgs.scrollHeight;
+                return el;
+            }
+
+            function renderAttachments() {
+                attachmentsEl.innerHTML = '';
+                if (pendingFiles.length === 0) {
+                    attachmentsEl.classList.remove('is-visible');
+                    return;
+                }
+                attachmentsEl.classList.add('is-visible');
+
+                pendingFiles.forEach(function (file, idx) {
+                    const chip = document.createElement('span');
+                    chip.className = 'ai-attach-chip';
+
+                    if (file.type.startsWith('image/')) {
+                        const img = document.createElement('img');
+                        img.src = URL.createObjectURL(file);
+                        img.onload = function () { URL.revokeObjectURL(img.src); };
+                        chip.appendChild(img);
+                    } else {
+                        const icon = document.createElement('i');
+                        icon.className = 'bi bi-file-earmark-pdf ai-attach-icon';
+                        chip.appendChild(icon);
+                    }
+
+                    const name = document.createElement('span');
+                    name.className = 'ai-attach-name';
+                    name.textContent = file.name;
+                    chip.appendChild(name);
+
+                    const remove = document.createElement('button');
+                    remove.type = 'button';
+                    remove.className = 'ai-attach-remove';
+                    remove.innerHTML = '<i class="bi bi-x-lg"></i>';
+                    remove.title = 'Убрать';
+                    remove.addEventListener('click', function () {
+                        pendingFiles.splice(idx, 1);
+                        renderAttachments();
+                    });
+                    chip.appendChild(remove);
+
+                    attachmentsEl.appendChild(chip);
+                });
+            }
+
+            function showInlineError(text) {
+                append('error', text);
+            }
+
+            function addFiles(fileList) {
+                for (let i = 0; i < fileList.length; i++) {
+                    const f = fileList[i];
+
+                    if (pendingFiles.length >= MAX_FILES) {
+                        showInlineError('Можно прикрепить максимум ' + MAX_FILES + ' файлов за раз.');
+                        break;
+                    }
+                    const isImage = ALLOWED_IMAGE.indexOf(f.type) !== -1;
+                    const isPdf   = f.type === 'application/pdf';
+                    if (!isImage && !isPdf) {
+                        showInlineError('Тип файла не поддерживается: ' + f.name);
+                        continue;
+                    }
+                    const limit = isImage ? MAX_IMAGE_BYTES : MAX_PDF_BYTES;
+                    if (f.size > limit) {
+                        showInlineError('Файл слишком большой (макс ' + (limit / 1024 / 1024) + ' МБ): ' + f.name);
+                        continue;
+                    }
+                    pendingFiles.push(f);
+                }
+                renderAttachments();
+            }
+
+            // Пузырь юзера рендерим оптимистично, ДО ответа сервера. После — заменяем на серверную версию
+            // (с настоящим id и URL аттачментов), чтобы клик по файлу сразу работал.
+            function renderUserBubbleFromLocal(text, files) {
+                return append('user', text, {
+                    attachments: files.map(function (f) { return { name: f.name, type: f.type }; }),
+                });
+            }
+            function replaceBubbleWithServer(localEl, serverMsg) {
+                if (!serverMsg) return;
+                const replacement = append(serverMsg.role, serverMsg.content, {
+                    id: serverMsg.id,
+                    attachments: serverMsg.attachments || [],
+                    failed: serverMsg.status === 'failed',
+                });
+                localEl.parentNode.insertBefore(replacement, localEl);
+                localEl.remove();
+            }
+
+            async function send(text, files) {
+                busy = true;
+                sendBtn.disabled = true;
+                attachBtn.disabled = true;
+
+                const userBubble = renderUserBubbleFromLocal(text, files);
+                const typing = append('assistant', 'Думаю…');
+                typing.classList.add('ai-msg-typing');
+
+                const fd = new FormData();
+                fd.append('message', text);
+                files.forEach(function (f) { fd.append('attachments[]', f, f.name); });
+
+                let hitRateLimit = false;
+
+                try {
+                    const res = await fetch(sendUrl, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        body: fd
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    typing.remove();
+
+                    if (res.status === 429) {
+                        hitRateLimit = true;
+                        const retryAfter = parseInt(data.retry_after, 10) || 30;
+                        // Заменяем оптимистичный пузырь на серверную failed-версию (если бэк отдал).
+                        if (data.user_message) replaceBubbleWithServer(userBubble, data.user_message);
+                        append('error', data.error || ('Превышен лимит, подождите ' + retryAfter + ' сек.'));
+                        startRateLimitCountdown(retryAfter);
+                    } else if (!res.ok) {
+                        if (data.user_message) replaceBubbleWithServer(userBubble, data.user_message);
+                        append('error', data.error || ('Ошибка HTTP ' + res.status));
+                    } else {
+                        if (data.user_message) replaceBubbleWithServer(userBubble, data.user_message);
+                        if (data.assistant_message) {
+                            append('assistant', data.assistant_message.content, {
+                                id: data.assistant_message.id,
+                            });
+                        }
+                    }
+                } catch (e) {
+                    typing.remove();
+                    append('error', 'Сеть: ' + e.message);
+                } finally {
+                    busy = false;
+                    if (!hitRateLimit) {
+                        sendBtn.disabled = false;
+                        attachBtn.disabled = false;
+                        input.focus();
+                    }
+                }
+            }
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const text = input.value.trim();
+                if (busy || rateLimitTimer) return;
+                if (!text && pendingFiles.length === 0) return;
+
+                // Снимаем «срез» прикреплённых файлов, чтобы пользователь мог тут же начать
+                // выбирать следующие, пока этот запрос ещё в полёте.
+                const filesToSend = pendingFiles.slice();
+                pendingFiles.length = 0;
+                renderAttachments();
+                input.value = '';
+                input.style.height = '';
+
+                send(text, filesToSend);
+            });
+
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    form.requestSubmit();
+                }
+            });
+
+            input.addEventListener('input', function () {
+                input.style.height = 'auto';
+                input.style.height = Math.min(input.scrollHeight, 180) + 'px';
+            });
+
+            attachBtn.addEventListener('click', function () {
+                fileInput.click();
+            });
+            fileInput.addEventListener('change', function () {
+                if (fileInput.files && fileInput.files.length > 0) {
+                    addFiles(fileInput.files);
+                }
+                // Сбрасываем value, чтобы повторный выбор того же файла снова срабатывал.
+                fileInput.value = '';
+            });
+
+            clearBtn.addEventListener('click', async function () {
+                if (!confirm('Удалить всю переписку и прикреплённые файлы? Это действие нельзя отменить.')) return;
+
+                clearBtn.disabled = true;
+                try {
+                    const res = await fetch(clearUrl, {
+                        method: 'DELETE',
+                        credentials: 'same-origin'
+                    });
+                    if (!res.ok) {
+                        showInlineError('Не удалось очистить переписку: HTTP ' + res.status);
+                        return;
+                    }
+                    // Полностью очищаем UI и возвращаем welcome-плейсхолдер.
+                    pendingFiles.length = 0;
+                    renderAttachments();
+                    msgs.innerHTML =
+                        '<div class="ai-welcome" id="aiWelcome">' +
+                            '<i class="bi bi-chat-dots"></i>' +
+                            '<h2>Здравствуйте!</h2>' +
+                            '<p>С чего начнём?</p>' +
+                        '</div>';
+                    input.focus();
+                } catch (e) {
+                    showInlineError('Сеть: ' + e.message);
+                } finally {
+                    clearBtn.disabled = false;
+                }
+            });
+
+            input.focus();
+        })();
+    </script>
+{% endblock %}

@@ -29,6 +29,19 @@ parameters:
     don_snab_api_url: '%env(resolve:DON_SNAB_API_URL)%'
     don_snab_api_key: '%env(resolve:DON_SNAB_API_KEY)%'
 
+    # anthropic (claude) api
+    anthropic_api_url:    '%env(resolve:ANTHROPIC_API_URL)%'
+    anthropic_api_key:    '%env(resolve:ANTHROPIC_API_KEY)%'
+    anthropic_model:      '%env(resolve:ANTHROPIC_MODEL)%'
+    anthropic_max_tokens: '%env(int:ANTHROPIC_MAX_TOKENS)%'
+    anthropic_timeout:    '%env(int:ANTHROPIC_TIMEOUT)%'
+    anthropic_system_prompt: '%env(resolve:ANTHROPIC_SYSTEM_PROMPT)%'
+    anthropic_history_limit: '%env(int:ANTHROPIC_HISTORY_LIMIT)%'
+    ai_chat_render_limit:    '%env(int:AI_CHAT_RENDER_LIMIT)%'
+
+    # ai chat uploads
+    private_upload_dir_ai: '%env(resolve:PRIVATE_UPLOAD_DIR_AI)%'
+
 services:
     # default configuration for services in *this* file
     _defaults:
@@ -62,6 +75,26 @@ services:
         arguments:
             $apiUrl: '%don_snab_api_url%'
             $apiKey: '%don_snab_api_key%'
+
+    App\Service\AI\AnthropicClient:
+        arguments:
+            $apiUrl:        '%anthropic_api_url%'
+            $apiKey:        '%anthropic_api_key%'
+            $model:         '%anthropic_model%'
+            $maxTokens:     '%anthropic_max_tokens%'
+            $timeout:       '%anthropic_timeout%'
+            $systemPrompt:  '%anthropic_system_prompt%'
+
+    App\Controller\Api\AI\AiChatApiController:
+        arguments:
+            $historyLimit:       '%anthropic_history_limit%'
+            $privateUploadDirAi: '%private_upload_dir_ai%'
+        tags: ['controller.service_arguments']
+
+    App\Controller\AI\AIController:
+        arguments:
+            $renderLimit: '%ai_chat_render_limit%'
+        tags: ['controller.service_arguments']
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

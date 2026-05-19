@@ -73,3 +73,13 @@ vich_uploader:
                     property: message.room.id
             delete_on_remove: true
             delete_on_update: true
+        ai_files:
+            uri_prefix: /uploads/ai
+            upload_destination: '%private_upload_dir_ai%'
+            namer: Vich\UploaderBundle\Naming\SmartUniqueNamer
+            directory_namer:
+                service: Vich\UploaderBundle\Naming\PropertyDirectoryNamer
+                options:
+                    property: message.user.id
+            delete_on_remove: true
+            delete_on_update: true
