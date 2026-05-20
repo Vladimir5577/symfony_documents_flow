@@ -44,7 +44,8 @@ var KanbanApp = (function () {
         var container = document.getElementById("toast-container");
         if (!container) return;
         var toast = document.createElement("div");
-        toast.className = "alert alert-" + type + " alert-dismissible fade show mb-2";
+        var alertType = ["success", "warning", "info", "danger"].indexOf(type) !== -1 ? type : "danger";
+        toast.className = "alert alert-" + alertType + " alert-dismissible fade show mb-2";
         toast.setAttribute("role", "alert");
         toast.innerHTML = escapeHtml(message) +
             '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
@@ -1883,34 +1884,63 @@ select.addEventListener("change", function () {
         });
     }
 
-    function initDescriptionAttachments() {
-        var input = document.getElementById("description-attachment-input");
-        var triggerBtn = document.getElementById("description-attachment-trigger");
-        var fileNameEl = document.getElementById("description-attachment-filename");
-        if (!input || !config.canEdit) return;
+    function addDescriptionAttachment(newAtt) {
+        if (!currentCardData || !newAtt) return;
+        newAtt.context = "description";
+        currentCardData.attachments = currentCardData.attachments || [];
+        currentCardData.attachments.push(newAtt);
+        var desc = currentCardData.attachments.filter(function (a) { return a.context === "description"; });
+        desc.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+        renderDescriptionAttachments(desc);
+    }
 
-        if (triggerBtn) {
-            triggerBtn.addEventListener("click", function () {
-                input.click();
-            });
+    function uploadDescriptionFiles(files) {
+        if (!files || !files.length || !currentCardId) return;
+
+        var list = Array.prototype.slice.call(files);
+        var input = document.getElementById("description-attachment-input");
+        var dropzone = document.getElementById("description-attachment-dropzone");
+        var statusEl = document.getElementById("description-attachment-upload-status");
+        var total = list.length;
+        var done = 0;
+        var failed = 0;
+        var busy = false;
+
+        function setBusy(isBusy) {
+            busy = isBusy;
+            if (dropzone) {
+                dropzone.classList.toggle("task-description-dropzone-busy", isBusy);
+                dropzone.setAttribute("aria-busy", isBusy ? "true" : "false");
+            }
+            if (input) input.disabled = isBusy;
         }
 
-        input.addEventListener("change", function () {
-            if (!input.files.length || !currentCardId) return;
+        function setStatus(text) {
+            if (!statusEl) return;
+            if (text) {
+                statusEl.style.display = "";
+                statusEl.textContent = text;
+            } else {
+                statusEl.style.display = "none";
+                statusEl.textContent = "";
+            }
+        }
 
-            var file = input.files[0];
-            if (fileNameEl) fileNameEl.textContent = file.name || "Файл не выбран";
-            // [KANBAN: валидация расширения — ВРЕМЕННО ОТКЛЮЧЕНА]
-            /*
-            var ext = file.name.split(".").pop().toLowerCase();
-            var allowed = ["pdf", "png", "jpg", "jpeg", "webp", "docx", "xlsx"];
-            if (allowed.indexOf(ext) === -1) {
-                showToast("Тип файла ." + ext + " не поддерживается.");
-                input.value = "";
-                if (fileNameEl) fileNameEl.textContent = "Файл не выбран";
+        function uploadNext(index) {
+            if (index >= list.length) {
+                setBusy(false);
+                setStatus("");
+                if (input) input.value = "";
+                if (done > 1 && failed === 0) {
+                    showToast("Загружено файлов: " + done, "success");
+                } else if (done > 0 && failed > 0) {
+                    showToast("Загружено " + done + " из " + total + ", ошибок: " + failed, "warning");
+                }
                 return;
             }
-            */
+
+            var file = list[index];
+            setStatus("Загрузка " + (index + 1) + " из " + total + "…");
 
             var formData = new FormData();
             formData.append("file", file);
@@ -1920,21 +1950,65 @@ select.addEventListener("change", function () {
                 method: "POST",
                 body: formData
             }).then(function (newAtt) {
-                input.value = "";
-                if (fileNameEl) fileNameEl.textContent = "Файл не выбран";
-                newAtt.context = "description";
-                if (currentCardData && newAtt) {
-                    currentCardData.attachments = currentCardData.attachments || [];
-                    currentCardData.attachments.push(newAtt);
-                    var desc = currentCardData.attachments.filter(function (a) { return a.context === 'description'; });
-                    desc.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
-                    renderDescriptionAttachments(desc);
-                }
+                done++;
+                addDescriptionAttachment(newAtt);
+                uploadNext(index + 1);
             }).catch(function (err) {
-                showToast(err.message);
-                input.value = "";
-                if (fileNameEl) fileNameEl.textContent = "Файл не выбран";
+                failed++;
+                showToast((file.name ? file.name + ": " : "") + err.message);
+                uploadNext(index + 1);
             });
+        }
+
+        if (busy) return;
+        setBusy(true);
+        uploadNext(0);
+    }
+
+    function initDescriptionAttachments() {
+        var input = document.getElementById("description-attachment-input");
+        var dropzone = document.getElementById("description-attachment-dropzone");
+        if (!input || !config.canEdit) return;
+
+        input.addEventListener("change", function () {
+            if (!input.files.length) return;
+            uploadDescriptionFiles(input.files);
+        });
+
+        if (!dropzone) return;
+
+        dropzone.addEventListener("click", function () {
+            if (dropzone.classList.contains("task-description-dropzone-busy")) return;
+            input.click();
+        });
+
+        dropzone.addEventListener("keydown", function (e) {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            if (dropzone.classList.contains("task-description-dropzone-busy")) return;
+            input.click();
+        });
+
+        dropzone.addEventListener("dragover", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add("task-description-dropzone-dragover");
+        });
+
+        dropzone.addEventListener("dragleave", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove("task-description-dropzone-dragover");
+        });
+
+        dropzone.addEventListener("drop", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove("task-description-dropzone-dragover");
+            if (dropzone.classList.contains("task-description-dropzone-busy")) return;
+            var dt = e.dataTransfer;
+            if (!dt || !dt.files || !dt.files.length) return;
+            uploadDescriptionFiles(dt.files);
         });
     }
 
