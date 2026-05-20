@@ -1,0 +1,217 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Отклик #{{ application.id }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+
+{% for message in app.flashes('success') %}
+    <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+{% endfor %}
+{% for message in app.flashes('error') %}
+    <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+{% endfor %}
+
+<h1>Отклик #{{ application.id }}</h1>
+
+<div class="mb-3">
+    <a href="{{ path('app_vacancies_applications') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Назад к списку
+    </a>
+</div>
+
+<section class="section">
+
+    <div class="card mb-3">
+        <div class="card-header">
+            <h4 class="card-title mb-0">Данные кандидата</h4>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3 text-muted">ФИО</dt>
+                <dd class="col-sm-9">{{ application.fio }}</dd>
+
+                <dt class="col-sm-3 text-muted">Телефон</dt>
+                <dd class="col-sm-9">{{ application.phone }}</dd>
+
+                <dt class="col-sm-3 text-muted">Email</dt>
+                <dd class="col-sm-9">{{ application.email }}</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">
+            <h4 class="card-title mb-0">Отклик</h4>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3 text-muted">Вакансия</dt>
+                <dd class="col-sm-9">{{ application.vacancyTitleSnapshot }}</dd>
+
+                <dt class="col-sm-3 text-muted">Статус</dt>
+                <dd class="col-sm-9">
+                    {% if application.status == 'new' %}
+                        <span class="badge bg-primary">{{ application.statusLabel }}</span>
+                    {% elseif application.status == 'viewed' %}
+                        <span class="badge bg-info text-dark">{{ application.statusLabel }}</span>
+                    {% elseif application.status == 'invited' %}
+                        <span class="badge bg-success">{{ application.statusLabel }}</span>
+                    {% elseif application.status == 'rejected' %}
+                        <span class="badge bg-danger">{{ application.statusLabel }}</span>
+                    {% else %}
+                        <span class="badge bg-secondary">{{ application.statusLabel }}</span>
+                    {% endif %}
+                </dd>
+
+                <dt class="col-sm-3 text-muted">Дата подачи</dt>
+                <dd class="col-sm-9">{{ application.createdAt|date('d.m.Y H:i') }}</dd>
+
+                {% if application.coverLetter %}
+                    <dt class="col-sm-3 text-muted">Сопроводительное письмо</dt>
+                    <dd class="col-sm-9">
+                        <div class="border rounded p-3" style="background: var(--bs-secondary-bg);">{{ application.coverLetter|nl2br }}</div>
+                    </dd>
+                {% endif %}
+
+                {% if application.adminComment %}
+                    <dt class="col-sm-3 text-muted">Комментарий администратора</dt>
+                    <dd class="col-sm-9">
+                        <div class="border rounded p-3" style="background: var(--bs-secondary-bg);">{{ application.adminComment|nl2br }}</div>
+                    </dd>
+                {% endif %}
+            </dl>
+        </div>
+    </div>
+
+    {% if application.resume %}
+        {% set resume = application.resume %}
+        {% set ext = resume.originalName|split('.')|last|lower %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Резюме</h4>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="flex-shrink-0 rounded d-flex align-items-center justify-content-center text-muted" style="width: 40px; height: 40px; background: var(--bs-secondary-bg);">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+                    </div>
+                    <span class="flex-grow-1">
+                        {{ resume.originalName }}
+                        <span class="text-muted small ms-2">{{ resume.fileSizeFormatted }}</span>
+                    </span>
+                    {% if ext == 'pdf' %}
+                        <a href="{{ path('app_vacancy_application_resume_proxy', {id: application.id}) }}" class="btn btn-sm btn-outline-secondary flex-shrink-0" target="_blank" rel="noopener">
+                            Просмотр
+                        </a>
+                    {% endif %}
+                    {% if ext in ['jpeg', 'jpg', 'png', 'gif', 'webp', 'bmp'] %}
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                                data-bs-toggle="modal"
+                                data-bs-target="#resumePreviewModal"
+                                data-image-url="{{ path('app_vacancy_application_resume_proxy', {id: application.id}) }}">
+                            Просмотр
+                        </button>
+                    {% endif %}
+                    <a href="{{ path('app_vacancy_application_resume_proxy', {id: application.id, download: 1}) }}" class="btn btn-sm btn-outline-primary flex-shrink-0" target="_blank" rel="noopener">
+                        Скачать
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card mb-3">
+        <div class="card-header">
+            <h4 class="card-title mb-0">Изменить статус</h4>
+        </div>
+        <div class="card-body d-flex flex-wrap gap-2">
+            <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+                <input type="hidden" name="status" value="new">
+                <button type="submit" class="btn {{ application.status == 'new' ? 'btn-primary' : 'btn-outline-primary' }}">
+                    Новый
+                </button>
+            </form>
+            <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+                <input type="hidden" name="status" value="viewed">
+                <button type="submit" class="btn {{ application.status == 'viewed' ? 'btn-info' : 'btn-outline-info' }}">
+                    Просмотрен
+                </button>
+            </form>
+            <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+                <input type="hidden" name="status" value="invited">
+                <button type="submit" class="btn {{ application.status == 'invited' ? 'btn-success' : 'btn-outline-success' }}">
+                    Приглашён
+                </button>
+            </form>
+            <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+                <input type="hidden" name="status" value="rejected">
+                <button type="submit" class="btn {{ application.status == 'rejected' ? 'btn-danger' : 'btn-outline-danger' }}">
+                    Отказ
+                </button>
+            </form>
+            <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+                <input type="hidden" name="status" value="archived">
+                <button type="submit" class="btn {{ application.status == 'archived' ? 'btn-secondary' : 'btn-outline-secondary' }}">
+                    Архив
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h4 class="card-title mb-0">Комментарий администратора</h4>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}">
+                <div class="mb-3">
+                    <textarea name="adminComment" class="form-control" rows="4">{{ application.adminComment }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </form>
+        </div>
+    </div>
+
+</section>
+
+{% if application.resume %}
+<div class="modal fade" id="resumePreviewModal" tabindex="-1" aria-labelledby="resumePreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resumePreviewModalLabel">Просмотр изображения</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body text-center p-0 bg-dark d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 60px);">
+                <img src="" alt="Просмотр" class="img-fluid" id="resumePreviewModalImg" style="max-height: calc(100vh - 60px); max-width: 100%; object-fit: contain;">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('resumePreviewModal')?.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget;
+        var imageUrl = button?.getAttribute('data-image-url');
+        var img = document.getElementById('resumePreviewModalImg');
+        if (img && imageUrl) { img.src = imageUrl; }
+    });
+    document.getElementById('resumePreviewModal')?.addEventListener('hidden.bs.modal', function () {
+        var img = document.getElementById('resumePreviewModalImg');
+        if (img) { img.src = ''; }
+    });
+</script>
+{% endif %}
+
+{% endblock %}

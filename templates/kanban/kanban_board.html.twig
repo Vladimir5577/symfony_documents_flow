@@ -991,6 +991,37 @@
             padding: 0.25rem 0;
         }
 
+        .task-description-dropzone {
+            min-height: 100px;
+            border: 2px dashed var(--bs-border-color, rgba(0, 0, 0, .175));
+            background: var(--bs-body-bg);
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .2s, background-color .2s, opacity .2s;
+        }
+
+        .task-description-dropzone:hover,
+        .task-description-dropzone.task-description-dropzone-dragover {
+            border-color: var(--bs-primary);
+            background: color-mix(in srgb, var(--bs-primary) 8%, var(--bs-body-bg));
+        }
+
+        .task-description-dropzone.task-description-dropzone-busy {
+            pointer-events: none;
+            opacity: 0.65;
+            cursor: wait;
+        }
+
+        .task-description-dropzone-text {
+            color: var(--bs-secondary-color);
+            font-size: 0.875rem;
+            line-height: 1.4;
+        }
+
         .task-subtasks-pane {
             display: flex;
             flex-direction: column;
@@ -1162,6 +1193,22 @@
             bottom: 1rem;
             right: 1rem;
             z-index: 9999;
+        }
+
+        .kanban-toast-container .alert-success {
+            background-color: #198754;
+            border-color: #198754;
+            color: #fff;
+        }
+
+        .kanban-toast-container .alert-success .btn-close {
+            filter: brightness(0) invert(1);
+        }
+
+        .kanban-toast-container .alert-warning {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #212529;
         }
 
         /* Attachment list */
@@ -1568,15 +1615,21 @@
                         <textarea class="form-control task-description-textarea" id="task-description-textarea" placeholder="Введите описание задачи..." {% if memberRole.value == 'VIEWER' %}readonly{% endif %}></textarea>
                         {% if memberRole.value != 'VIEWER' %}
                         <div class="mt-3">
-                            <div class="mb-2 d-flex align-items-center gap-2 flex-wrap">
-                                {# [KANBAN: фильтр accept — ВРЕМЕННО ОТКЛЮЧЁН] было: accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx" #}
-                                <input type="file" id="description-attachment-input" class="d-none">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" id="description-attachment-trigger">
-                                    Выбрать файл
-                                </button>
-                                <span id="description-attachment-filename" class="small text-muted">Файл не выбран</span>
+                            {# [KANBAN: фильтр accept — ВРЕМЕННО ОТКЛЮЧЁН] было: accept=".pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx" #}
+                            <input type="file" id="description-attachment-input" class="d-none" multiple>
+                            <div
+                                id="description-attachment-dropzone"
+                                class="task-description-dropzone rounded"
+                                role="button"
+                                tabindex="0"
+                                aria-label="Загрузить вложения в описание"
+                            >
+                                <span class="task-description-dropzone-text">
+                                    Перетащите файлы сюда или нажмите для выбора
+                                </span>
                             </div>
-                            <div id="description-attachments-list"></div>
+                            <div id="description-attachment-upload-status" class="small text-muted mt-2" style="display:none" aria-live="polite"></div>
+                            <div id="description-attachments-list" class="mt-3"></div>
                         </div>
                         {% endif %}
                     </div>

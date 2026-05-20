@@ -208,6 +208,13 @@
                 <span>Вакансии</span>
             </a>
         </li>
+
+        <li class="sidebar-item {% if active_tab == 'hr_vacancies_applications' %}active{% endif %}">
+            <a href="{{ path('app_vacancies_applications') }}" class="sidebar-link">
+                <i class="bi bi-kanban"></i>
+                <span>Отклики на вакансии</span>
+            </a>
+        </li>
     {% endif %}
 
     <!-- ###############################################################

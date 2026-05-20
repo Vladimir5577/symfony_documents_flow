@@ -40,7 +40,7 @@ final class VacancyController extends AbstractController
             $this->addFlash('error', 'Не удалось загрузить вакансии: ' . $e->getMessage());
         }
 
-        return $this->render('hr/all_recruitment_adds.html.twig', [
+        return $this->render('hr/vacancy/all_recruitment_adds.html.twig', [
             'active_tab' => 'hr_vacancies',
             'list'       => $list,
             'filters'    => $filters,
@@ -50,7 +50,7 @@ final class VacancyController extends AbstractController
     #[Route('/hr_vacancies/new', name: 'app_hr_vacancies_new')]
     public function new(): Response
     {
-        return $this->render('hr/new_vacancy.html.twig', [
+        return $this->render('hr/vacancy/new_vacancy.html.twig', [
             'active_tab' => 'hr_vacancies',
         ]);
     }
@@ -83,7 +83,7 @@ final class VacancyController extends AbstractController
             return $this->redirectToRoute('app_hr_vacancies');
         }
 
-        return $this->render('hr/show_vacancy.html.twig', [
+        return $this->render('hr/vacancy/show_vacancy.html.twig', [
             'active_tab' => 'hr_vacancies',
             'vacancy'    => $vacancy,
         ]);
@@ -99,7 +99,7 @@ final class VacancyController extends AbstractController
             return $this->redirectToRoute('app_hr_vacancies');
         }
 
-        return $this->render('hr/edit_vacancy.html.twig', [
+        return $this->render('hr/vacancy/edit_vacancy.html.twig', [
             'active_tab' => 'hr_vacancies',
             'vacancy'    => $vacancy,
         ]);
