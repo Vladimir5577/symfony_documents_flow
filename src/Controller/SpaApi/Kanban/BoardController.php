@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Controller\SpaApi\Project;
+namespace App\Controller\SpaApi\Kanban;
 
 use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\KanbanColumn;
@@ -19,7 +19,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 #[Route('/spa/api/projects')]
-final class ProjectBoardController extends AbstractController
+final class BoardController extends AbstractController
 {
     public function __construct(
         private readonly KanbanProjectRepository $projectRepository,
