@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Controller\SpaApi\Project;
+namespace App\Controller\SpaApi\Kanban;
 
 use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\Project\KanbanProjectUser;
