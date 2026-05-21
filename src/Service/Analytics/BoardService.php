@@ -52,12 +52,13 @@ final class BoardService
             throw new \RuntimeException('Доска с именем «' . $name . '» уже существует.', 0, $e);
         }
 
-        // Создаём первую draft-версию
         $version = new AnalyticsBoardVersion();
         $version->setBoard($board);
         $version->setVersionNumber(1);
-        // status = Draft по умолчанию в конструкторе
         $this->em->persist($version);
+        $this->em->flush();
+
+        $board->setActiveVersion($version);
         $this->em->flush();
 
         return $board;
@@ -84,20 +85,6 @@ final class BoardService
         $this->em->flush();
     }
 
-    /**
-     * Получить первую draft-версию доски (если есть).
-     */
-    public function findDraftVersion(AnalyticsBoard $board): ?AnalyticsBoardVersion
-    {
-        foreach ($board->getBoardVersions() as $version) {
-            if ($version->getStatus() === \App\Enum\Analytics\AnalyticsBoardVersionStatus::Draft) {
-                return $version;
-            }
-        }
-
-        return null;
-    }
-
     public function removeVersionMetric(\App\Entity\Analytics\AnalyticsBoardVersionMetric $vm): void
     {
         // Отвязываем от коллекции, чтобы orphanRemoval сработал при flush
@@ -107,8 +94,23 @@ final class BoardService
         }
     }
 
+    public function hasReportsForVersion(AnalyticsBoardVersion $version): bool
+    {
+        return $this->em->getRepository(\App\Entity\Analytics\AnalyticsReport::class)->count([
+            'boardVersion' => $version,
+        ]) > 0;
+    }
+
     public function removeVersion(AnalyticsBoardVersion $version): void
     {
+        if ($version->getBoard()?->getActiveVersion() === $version) {
+            throw new \RuntimeException('Нельзя удалить активную версию доски.');
+        }
+
+        if ($this->hasReportsForVersion($version)) {
+            throw new \RuntimeException('Нельзя удалить версию, по которой уже есть отчёты.');
+        }
+
         $this->em->remove($version);
     }
 

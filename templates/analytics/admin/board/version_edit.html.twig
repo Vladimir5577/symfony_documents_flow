@@ -22,15 +22,12 @@
         <div class="alert alert-danger">{{ message }}</div>
     {% endfor %}
 
+    {% set is_active_version = board.activeVersion and board.activeVersion.id == version.id %}
     <div class="mb-3">
         Статус:
-        {% if version.status.value == 'published' %}
-            <span class="badge bg-success">Опубликована</span>
-        {% elseif version.status.value == 'archived' %}
-            <span class="badge bg-secondary">Архив</span>
-        {% else %}
-            <span class="badge bg-info">Черновик</span>
-        {% endif %}
+        <span class="badge {{ is_active_version ? 'bg-success' : 'bg-secondary' }}">
+            {{ is_active_version ? 'Активная' : 'Неактивная' }}
+        </span>
     </div>
 
     <section id="multiple-column-form">

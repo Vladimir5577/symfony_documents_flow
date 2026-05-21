@@ -22,7 +22,6 @@ use Gedmo\Mapping\Annotation as Gedmo;
 #[ORM\Index(name: 'idx_analytics_reports_organization_period', columns: ['organization_id', 'period_id'])]
 #[ORM\Index(name: 'idx_analytics_reports_board_id', columns: ['board_id'])]
 #[ORM\Index(name: 'idx_analytics_reports_status', columns: ['status'])]
-#[ORM\Index(name: 'idx_analytics_reports_status_period', columns: ['status', 'period_id'])]
 class AnalyticsReport
 {
     #[ORM\Id]
@@ -53,9 +52,6 @@ class AnalyticsReport
     #[ORM\Column(type: Types::STRING, length: 16, enumType: AnalyticsReportStatus::class)]
     private ?AnalyticsReportStatus $status = null;
 
-    #[ORM\Column(name: 'is_complete', options: ['default' => false])]
-    private bool $isComplete = false;
-
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $comment = null;
 
@@ -66,16 +62,6 @@ class AnalyticsReport
     #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable]
     private ?\DateTimeImmutable $updatedAt = null;
-
-    #[ORM\Column(name: 'submitted_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $submittedAt = null;
-
-    #[ORM\Column(name: 'approved_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $approvedAt = null;
-
-    #[ORM\ManyToOne(targetEntity: User::class)]
-    #[ORM\JoinColumn(name: 'approved_by', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
-    private ?User $approvedBy = null;
 
     /** @var Collection<int, AnalyticsReportValue> */
     #[ORM\OneToMany(targetEntity: AnalyticsReportValue::class, mappedBy: 'report', cascade: ['persist', 'remove'], orphanRemoval: true)]
@@ -165,18 +151,6 @@ class AnalyticsReport
         return $this;
     }
 
-    public function isComplete(): bool
-    {
-        return $this->isComplete;
-    }
-
-    public function setIsComplete(bool $isComplete): static
-    {
-        $this->isComplete = $isComplete;
-
-        return $this;
-    }
-
     public function getComment(): ?string
     {
         return $this->comment;
@@ -209,42 +183,6 @@ class AnalyticsReport
     public function setUpdatedAt(?\DateTimeImmutable $updatedAt): static
     {
         $this->updatedAt = $updatedAt;
-
-        return $this;
-    }
-
-    public function getSubmittedAt(): ?\DateTimeImmutable
-    {
-        return $this->submittedAt;
-    }
-
-    public function setSubmittedAt(?\DateTimeImmutable $submittedAt): static
-    {
-        $this->submittedAt = $submittedAt;
-
-        return $this;
-    }
-
-    public function getApprovedAt(): ?\DateTimeImmutable
-    {
-        return $this->approvedAt;
-    }
-
-    public function setApprovedAt(?\DateTimeImmutable $approvedAt): static
-    {
-        $this->approvedAt = $approvedAt;
-
-        return $this;
-    }
-
-    public function getApprovedBy(): ?User
-    {
-        return $this->approvedBy;
-    }
-
-    public function setApprovedBy(?User $approvedBy): static
-    {
-        $this->approvedBy = $approvedBy;
 
         return $this;
     }

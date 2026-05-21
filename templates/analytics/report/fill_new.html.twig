@@ -99,8 +99,8 @@
                                         <button type="submit" name="submit_action" value="draft" class="btn btn-primary">
                                             Сохранить как черновик
                                         </button>
-                                        <button type="submit" name="submit_action" value="approve" class="btn btn-success">
-                                            Сохранить и утвердить
+                                        <button type="submit" name="submit_action" value="confirm" class="btn btn-success">
+                                            Сохранить и подтвердить
                                         </button>
                                     </div>
                                 </div>
@@ -118,26 +118,26 @@
 
             form.addEventListener('submit', function (e) {
                 var submitter = e.submitter;
-                if (!submitter || submitter.value !== 'approve') return;
+                if (!submitter || submitter.value !== 'confirm') return;
 
-                if (form.dataset.approveConfirmed === '1') {
-                    delete form.dataset.approveConfirmed;
+                if (form.dataset.confirmConfirmed === '1') {
+                    delete form.dataset.confirmConfirmed;
                     return;
                 }
 
                 e.preventDefault();
                 Swal.fire({
                     title: 'Вы уверены?',
-                    text: 'Утвержденный отчет нельзя будет редактировать.',
+                    text: 'Подтверждённый отчёт нельзя будет редактировать.',
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#198754',
                     cancelButtonColor: '#6c757d',
-                    confirmButtonText: 'Да, утвердить',
+                    confirmButtonText: 'Да, подтвердить',
                     cancelButtonText: 'Отмена'
                 }).then(function (result) {
                     if (result.isConfirmed) {
-                        form.dataset.approveConfirmed = '1';
+                        form.dataset.confirmConfirmed = '1';
                         form.requestSubmit(submitter);
                     }
                 });

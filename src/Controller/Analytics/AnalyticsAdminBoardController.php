@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Controller\Analytics;
 
 use App\Entity\Analytics\AnalyticsBoardVersionMetric;
-use App\Enum\Analytics\AnalyticsBoardVersionStatus;
 use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardVersionRepository;
 use App\Repository\Analytics\AnalyticsMetricRepository;
@@ -52,7 +51,7 @@ final class AnalyticsAdminBoardController extends AbstractController
                     description: $request->request->getString('description') ?: null,
                     periodType: $periodType,
                 );
-                $this->addFlash('success', 'Доска создана. Первая draft-версия создана автоматически.');
+                $this->addFlash('success', 'Доска создана. Первая активная версия создана автоматически.');
                 return $this->redirectToRoute('app_analytics_admin_board');
             } catch (\Throwable $e) {
                 $this->addFlash('error', $e->getMessage());
@@ -103,8 +102,8 @@ final class AnalyticsAdminBoardController extends AbstractController
             throw $this->createNotFoundException('Версия не найдена.');
         }
 
-        if ($version->getStatus() === AnalyticsBoardVersionStatus::Archived) {
-            $this->addFlash('error', 'Нельзя редактировать архивную версию.');
+        if ($board->getActiveVersion() === $version) {
+            $this->addFlash('error', 'Активную версию нельзя редактировать напрямую — создайте новую версию из неё.');
             return $this->redirectToRoute('app_analytics_admin_board_show', ['id' => $boardId]);
         }
 
@@ -192,7 +191,7 @@ final class AnalyticsAdminBoardController extends AbstractController
 
         try {
             $newVersion = $cloneService->cloneFromVersion($sourceVersion);
-            $this->addFlash('success', 'Создана новая версия v' . $newVersion->getVersionNumber() . ' (draft).');
+            $this->addFlash('success', 'Создана новая неактивная версия v' . $newVersion->getVersionNumber() . '.');
         } catch (\Throwable $e) {
             $this->addFlash('error', $e->getMessage());
         }
@@ -201,7 +200,7 @@ final class AnalyticsAdminBoardController extends AbstractController
     }
 
     #[Route('/analytics/admin/board/version/{versionId}/publish', name: 'app_analytics_admin_board_publish', methods: ['POST'])]
-    public function publish(
+    public function activate(
         int $versionId,
         Request $request,
         CsrfTokenManagerInterface $csrf,
@@ -221,8 +220,8 @@ final class AnalyticsAdminBoardController extends AbstractController
         }
 
         try {
-            $publishService->publish($version);
-            $this->addFlash('success', 'Версия v' . $version->getVersionNumber() . ' опубликована.');
+            $publishService->activate($version);
+            $this->addFlash('success', 'Версия v' . $version->getVersionNumber() . ' сделана активной.');
         } catch (\Throwable $e) {
             $this->addFlash('error', $e->getMessage());
         }
@@ -260,13 +259,9 @@ final class AnalyticsAdminBoardController extends AbstractController
         }
 
         try {
-            if ($version->getStatus() === AnalyticsBoardVersionStatus::Published) {
-                $this->addFlash('error', 'Нельзя удалить опублированную версию.');
-            } else {
-                $boardService->removeVersion($version);
-                $boardService->flush();
-                $this->addFlash('success', 'Версия удалена.');
-            }
+            $boardService->removeVersion($version);
+            $boardService->flush();
+            $this->addFlash('success', 'Версия удалена.');
         } catch (\Throwable $e) {
             $this->addFlash('error', 'Не удалось удалить версию: ' . $e->getMessage());
         }

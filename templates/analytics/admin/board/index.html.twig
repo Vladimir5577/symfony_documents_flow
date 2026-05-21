@@ -61,11 +61,9 @@
                                             <td>{{ board.description|default('—') }}</td>
                                             <td>
                                                 {% for version in board.boardVersions %}
-                                                    <span class="badge
-                                                        {%- if version.status.value == 'published' %} bg-success
-                                                        {%- elseif version.status.value == 'archived' %} bg-secondary
-                                                        {%- else %} bg-info{% endif %} me-1">
-                                                        v{{ version.versionNumber }} ({{ version.status.value }})
+                                                    {% set is_active_version = board.activeVersion and board.activeVersion.id == version.id %}
+                                                    <span class="badge {{ is_active_version ? 'bg-success' : 'bg-secondary' }} me-1">
+                                                        v{{ version.versionNumber }} ({{ is_active_version ? 'активная' : 'неактивная' }})
                                                     </span>
                                                 {% else %}
                                                     —

@@ -69,33 +69,8 @@ final class CitizenAppealsDashboardDataService
      */
     private function fetchReportValues(array $organizationIds, array $businessKeys): array
     {
-        $orgPlaceholders = implode(',', array_fill(0, count($organizationIds), '?'));
-        $keyPlaceholders = implode(',', array_fill(0, count($businessKeys), '?'));
-
-        $sql = <<<SQL
-            SELECT
-                p.iso_year,
-                p.iso_week,
-                p.start_date::text AS start_date,
-                p.end_date::text   AS end_date,
-                m.business_key,
-                rv.value_number    AS value
-            FROM analytics_report_values rv
-            JOIN analytics_reports r ON r.id = rv.report_id
-            JOIN analytics_periods p ON p.id = r.period_id
-            JOIN analytics_board_version_metrics vm ON vm.id = rv.board_version_metric_id
-            JOIN analytics_metrics m ON m.id = vm.metric_id
-            WHERE r.status = 'approved'
-              AND r.organization_id IN ({$orgPlaceholders})
-              AND m.business_key IN ({$keyPlaceholders})
-              AND p.iso_year IS NOT NULL
-              AND p.iso_week IS NOT NULL
-            ORDER BY p.iso_year, p.iso_week
-            SQL;
-
-        $params = array_merge($organizationIds, $businessKeys);
-
-        return $this->connection->executeQuery($sql, $params)->fetchAllAssociative();
+        // Заглушка: выборка временно отключена, будет переписана вместе с дашборд-слоем.
+        return [];
     }
 
     /**

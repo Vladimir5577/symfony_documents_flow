@@ -64,12 +64,6 @@ final class FillReportValueService
             }
 
             $reportValue = $existingMap[$metricId] ?? new AnalyticsReportValue();
-
-            // Snapshot
-            $reportValue->setMetricNameSnapshot($metric->getName());
-            $reportValue->setMetricUnitSnapshot($metric->getUnit());
-            $reportValue->setMetricTypeSnapshot($metric->getType());
-            $reportValue->setEffectiveAt(new \DateTimeImmutable());
             $reportValue->setCreatedBy($user);
 
             // Записываем значение в соответствующее поле
@@ -104,8 +98,6 @@ final class FillReportValueService
             }
         }
 
-        // Пересчитываем completeness
-        $this->recalculateComplete($report);
         $this->em->flush();
     }
 
@@ -126,11 +118,5 @@ final class FillReportValueService
         }
 
         return true;
-    }
-
-    private function recalculateComplete(AnalyticsReport $report): void
-    {
-        $report->setIsComplete($this->checkComplete($report));
-        $this->em->persist($report);
     }
 }

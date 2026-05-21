@@ -29,17 +29,8 @@
         Статус:
         {% if report.status.value == 'draft' %}
             <span class="badge bg-info">Черновик</span>
-        {% elseif report.status.value == 'submitted' %}
-            <span class="badge bg-warning">Отправлен</span>
         {% else %}
-            <span class="badge bg-success">Утверждён</span>
-        {% endif %}
-
-        Полнота:
-        {% if report.complete %}
-            <span class="badge bg-success">Все обязательные метрики заполнены</span>
-        {% else %}
-            <span class="badge bg-danger">Не всё заполнено</span>
+            <span class="badge bg-success">Подтверждён</span>
         {% endif %}
     </div>
 

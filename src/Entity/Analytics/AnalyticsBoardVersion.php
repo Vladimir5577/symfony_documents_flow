@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Entity\Analytics;
 
-use App\Enum\Analytics\AnalyticsBoardVersionStatus;
 use App\Repository\Analytics\AnalyticsBoardVersionRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -12,10 +11,6 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
 
-/**
- * В PostgreSQL рекомендуется частичный уникальный индекс на (board_id) WHERE status = 'published'
- * (имя напр. uniq_analytics_board_versions_one_published_per_board) — добавляется вручную в миграцию.
- */
 #[ORM\Entity(repositoryClass: AnalyticsBoardVersionRepository::class)]
 #[ORM\Table(name: 'analytics_board_versions')]
 #[ORM\UniqueConstraint(name: 'uniq_analytics_board_versions_board_version', columns: ['board_id', 'version_number'])]
@@ -34,9 +29,6 @@ class AnalyticsBoardVersion
     #[ORM\Column(name: 'version_number')]
     private ?int $versionNumber = null;
 
-    #[ORM\Column(type: Types::STRING, length: 16, enumType: AnalyticsBoardVersionStatus::class)]
-    private ?AnalyticsBoardVersionStatus $status = null;
-
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
@@ -53,7 +45,6 @@ class AnalyticsBoardVersion
     public function __construct()
     {
         $this->versionMetrics = new ArrayCollection();
-        $this->status = AnalyticsBoardVersionStatus::Draft;
     }
 
     public function getId(): ?int
@@ -81,18 +72,6 @@ class AnalyticsBoardVersion
     public function setVersionNumber(int $versionNumber): static
     {
         $this->versionNumber = $versionNumber;
-
-        return $this;
-    }
-
-    public function getStatus(): ?AnalyticsBoardVersionStatus
-    {
-        return $this->status;
-    }
-
-    public function setStatus(AnalyticsBoardVersionStatus $status): static
-    {
-        $this->status = $status;
 
         return $this;
     }

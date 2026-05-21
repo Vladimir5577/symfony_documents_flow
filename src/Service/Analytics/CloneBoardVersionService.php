@@ -7,7 +7,6 @@ namespace App\Service\Analytics;
 use App\Entity\Analytics\AnalyticsBoard;
 use App\Entity\Analytics\AnalyticsBoardVersion;
 use App\Entity\Analytics\AnalyticsBoardVersionMetric;
-use App\Enum\Analytics\AnalyticsBoardVersionStatus;
 use Doctrine\ORM\EntityManagerInterface;
 
 final class CloneBoardVersionService
@@ -18,7 +17,7 @@ final class CloneBoardVersionService
     }
 
     /**
-     * Создаёт новую draft-версию доски, копируя состав метрик из указанной версии.
+     * Создаёт новую неактивную версию доски, копируя состав метрик из указанной версии.
      */
     public function cloneFromVersion(AnalyticsBoardVersion $sourceVersion): AnalyticsBoardVersion
     {
@@ -38,7 +37,6 @@ final class CloneBoardVersionService
         $newVersion = new AnalyticsBoardVersion();
         $newVersion->setBoard($board);
         $newVersion->setVersionNumber($maxVersion + 1);
-        // Status = Draft (по умолчанию в конструкторе)
         $this->em->persist($newVersion);
 
         // Копируем состав метрик

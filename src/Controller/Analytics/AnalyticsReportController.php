@@ -14,7 +14,6 @@ use App\Service\Analytics\CreateReportService;
 use App\Service\Analytics\FillReportValueService;
 use App\Service\Analytics\ApproveReportService;
 use App\Service\Analytics\RecalculateAggregatesService;
-use App\Service\Analytics\SubmitReportService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -59,7 +58,7 @@ final class AnalyticsReportController extends AbstractController
 
     /**
      * Возвращает доступные доски для организации пользователя:
-     * - только с published-версией;
+     * - только с активной версией;
      * - если доска назначена на нескольких уровнях, выбираем ближайший к пользователю.
      *
      * @return array<int, \App\Entity\Analytics\AnalyticsOrganizationBoard> key = board_id
@@ -80,15 +79,7 @@ final class AnalyticsReportController extends AbstractController
         $orgRank = array_flip($orgIds); // меньше индекс = ближе к пользователю
         foreach ($orgBoards as $orgBoard) {
             $board = $orgBoard->getBoard();
-            $hasPublished = false;
-            foreach ($board->getBoardVersions() as $v) {
-                if ($v->getStatus()->value === 'published') {
-                    $hasPublished = true;
-                    break;
-                }
-            }
-
-            if (!$hasPublished) {
+            if ($board->getActiveVersion() === null) {
                 continue;
             }
 
@@ -181,7 +172,6 @@ final class AnalyticsReportController extends AbstractController
         CreateReportService $reportService,
         FillReportValueService $fillService,
         ApproveReportService $approveService,
-        SubmitReportService $submitService,
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
@@ -209,26 +199,19 @@ final class AnalyticsReportController extends AbstractController
             return $this->redirectToRoute('app_analytics_report_new');
         }
 
-        $publishedVersion = null;
-        foreach ($board->getBoardVersions() as $v) {
-            if ($v->getStatus()->value === 'published') {
-                $publishedVersion = $v;
-                break;
-            }
-        }
-        if (!$publishedVersion) {
-            $this->addFlash('error', 'У выбранной доски нет опубликованной версии.');
+        $activeVersion = $board->getActiveVersion();
+        if (!$activeVersion) {
+            $this->addFlash('error', 'У выбранной доски нет активной версии.');
             return $this->redirectToRoute('app_analytics_report_new');
         }
 
         $nowMoscow = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Moscow'));
         $periodRepo = $em->getRepository(AnalyticsPeriod::class);
 
-        $currentPeriod = match ($board->getPeriodType()) {
-            AnalyticsPeriodType::Daily => $periodRepo->findOneBy(['type' => AnalyticsPeriodType::Daily, 'periodDate' => $nowMoscow->setTime(0, 0, 0)]),
-            AnalyticsPeriodType::Weekly => $this->findWeeklyPeriod($periodRepo, $nowMoscow),
-            AnalyticsPeriodType::Monthly => $periodRepo->findOneBy(['type' => AnalyticsPeriodType::Monthly, 'year' => (int) $nowMoscow->format('Y'), 'month' => (int) $nowMoscow->format('n')]),
-        };
+        $currentPeriod = $periodRepo->findOneBy([
+            'type' => $board->getPeriodType(),
+            'startDate' => $this->currentPeriodStartDate($board->getPeriodType(), $nowMoscow),
+        ]);
         $currentIsoLabel = $currentPeriod?->getDisplayLabel() ?? $nowMoscow->format('d.m.Y');
 
         if ($request->isMethod('POST')) {
@@ -256,10 +239,9 @@ final class AnalyticsReportController extends AbstractController
                 $report = $reportService->createReportForBoard($ownerOrganization, $boardId, $user);
                 $fillService->fillValues($report, $values, $user);
 
-                if ($submitAction === 'approve' || $submitAction === 'submit') {
-                    $submitService->submit($report);
-                    $approveService->approve($report, $user);
-                    $this->addFlash('success', 'Отчёт сохранён и утверждён.');
+                if ($submitAction === 'confirm' || $submitAction === 'approve' || $submitAction === 'submit') {
+                    $approveService->confirm($report);
+                    $this->addFlash('success', 'Отчёт сохранён и подтверждён.');
 
                     return $this->redirectToRoute('app_analytics_report');
                 }
@@ -275,7 +257,7 @@ final class AnalyticsReportController extends AbstractController
 
         return $this->render('analytics/report/fill_new.html.twig', [
             'board' => $board,
-            'boardVersion' => $publishedVersion,
+            'boardVersion' => $activeVersion,
             'ownerOrganization' => $ownerOrganization,
             'currentPeriod' => $currentPeriod,
             'currentIsoLabel' => $currentIsoLabel,
@@ -305,10 +287,7 @@ final class AnalyticsReportController extends AbstractController
         }
 
         $canEdit = $isAdmin
-            || (
-                $report->getStatus() !== AnalyticsReportStatus::Approved
-                && (!$report->getPeriod() || !$report->getPeriod()->isClosed())
-            );
+            || $report->getStatus() !== AnalyticsReportStatus::Confirmed;
 
         if ($request->isMethod('POST')) {
             if (!$canEdit) {
@@ -324,10 +303,10 @@ final class AnalyticsReportController extends AbstractController
             $values = $request->request->all('values') ?? [];
 
             try {
-                $wasApproved = $report->getStatus() === AnalyticsReportStatus::Approved;
+                $wasConfirmed = $report->getStatus() === AnalyticsReportStatus::Confirmed;
                 $fillService->fillValues($report, $values, $user, $isAdmin);
 
-                if ($isAdmin && $wasApproved) {
+                if ($isAdmin && $wasConfirmed) {
                     $recalculateService->recalculateForScope($report->getPeriod(), $report->getOrganization());
                     $this->addFlash('success', 'Агрегированная аналитика пересчитана.');
                 }
@@ -395,13 +374,12 @@ final class AnalyticsReportController extends AbstractController
         ]);
     }
 
-    #[Route('/analytics/report/{id}/submit', name: 'app_analytics_report_submit', methods: ['POST'])]
-    public function submit(
+    #[Route('/analytics/report/{id}/confirm', name: 'app_analytics_report_confirm', methods: ['POST'])]
+    public function confirm(
         int $id,
         Request $request,
         CsrfTokenManagerInterface $csrf,
         CreateReportService $reportService,
-        SubmitReportService $submitService,
         ApproveReportService $approveService,
     ): Response {
         $user = $this->getUser();
@@ -414,26 +392,14 @@ final class AnalyticsReportController extends AbstractController
             throw $this->createNotFoundException('Отчёт не найден.');
         }
 
-        if (!$csrf->isTokenValid(new CsrfToken('report_submit_' . $id, $request->request->getString('_token')))) {
+        if (!$csrf->isTokenValid(new CsrfToken('report_confirm_' . $id, $request->request->getString('_token')))) {
             $this->addFlash('error', 'Неверный CSRF-токен.');
             return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
         }
 
-        $submitAction = $request->request->getString('submit_action', 'submit');
-
         try {
-            if ($submitAction === 'approve') {
-                if (!$this->isGranted('ROLE_MANAGER')) {
-                    throw new \RuntimeException('Недостаточно прав для утверждения отчёта.');
-                }
-
-                $submitService->submit($report);
-                $approveService->approve($report, $user);
-                $this->addFlash('success', 'Отчёт отправлен и утверждён.');
-            } else {
-                $submitService->submit($report);
-                $this->addFlash('success', 'Отчёт отправлен на утверждение.');
-            }
+            $approveService->confirm($report);
+            $this->addFlash('success', 'Отчёт подтверждён.');
         } catch (\Throwable $e) {
             $this->addFlash('error', $e->getMessage());
         }
@@ -468,13 +434,13 @@ final class AnalyticsReportController extends AbstractController
         $isManager = $this->isGranted('ROLE_MANAGER');
 
         if ($isAdmin) {
-            $wasApproved = $report->getStatus() === AnalyticsReportStatus::Approved;
+            $wasConfirmed = $report->getStatus() === AnalyticsReportStatus::Confirmed;
             $reportPeriod = $report->getPeriod();
             $reportOrganization = $report->getOrganization();
             $em->remove($report);
             $em->flush();
 
-            if ($wasApproved) {
+            if ($wasConfirmed) {
                 $recalculateService->recalculateForScope($reportPeriod, $reportOrganization);
                 $this->addFlash('success', 'Агрегированная аналитика пересчитана.');
             }
@@ -484,13 +450,13 @@ final class AnalyticsReportController extends AbstractController
         }
 
         $isAuthor = $report->getCreatedBy()?->getId() === $user->getId();
-        $canDeleteNotApproved = $report->getStatus() !== AnalyticsReportStatus::Approved
+        $canDeleteNotConfirmed = $report->getStatus() !== AnalyticsReportStatus::Confirmed
             && $isManager
             && $isAuthor
             && $user->getOrganization()
             && $this->isOrganizationInHierarchy($user->getOrganization(), $report->getOrganization());
 
-        if (!$canDeleteNotApproved) {
+        if (!$canDeleteNotConfirmed) {
             $this->addFlash('error', 'Недостаточно прав для удаления этого отчёта.');
             return $this->redirectToRoute('app_analytics_report');
         }
@@ -502,12 +468,15 @@ final class AnalyticsReportController extends AbstractController
         return $this->redirectToRoute('app_analytics_report');
     }
 
-    private function findWeeklyPeriod(object $periodRepo, \DateTimeImmutable $now): ?AnalyticsPeriod
+    private function currentPeriodStartDate(AnalyticsPeriodType $type, \DateTimeImmutable $now): \DateTimeImmutable
     {
-        return $periodRepo->findOneBy([
-            'type' => AnalyticsPeriodType::Weekly,
-            'isoYear' => (int) $now->format('o'),
-            'isoWeek' => (int) $now->format('W'),
-        ]);
+        return match ($type) {
+            AnalyticsPeriodType::Daily => $now->setTime(0, 0, 0),
+            AnalyticsPeriodType::Weekly => (new \DateTimeImmutable())->setISODate(
+                (int) $now->format('o'),
+                (int) $now->format('W'),
+            ),
+            AnalyticsPeriodType::Monthly => new \DateTimeImmutable(sprintf('%s-%s-01', $now->format('Y'), $now->format('m'))),
+        };
     }
 }

@@ -38,6 +38,10 @@ class AnalyticsBoard
     #[Gedmo\Timestampable]
     private ?\DateTimeImmutable $updatedAt = null;
 
+    #[ORM\ManyToOne(targetEntity: AnalyticsBoardVersion::class)]
+    #[ORM\JoinColumn(name: 'active_version_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?AnalyticsBoardVersion $activeVersion = null;
+
     /** @var Collection<int, AnalyticsBoardVersion> */
     #[ORM\OneToMany(targetEntity: AnalyticsBoardVersion::class, mappedBy: 'board', cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['versionNumber' => 'ASC'])]
@@ -97,6 +101,22 @@ class AnalyticsBoard
     public function setUpdatedAt(?\DateTimeImmutable $updatedAt): static
     {
         $this->updatedAt = $updatedAt;
+
+        return $this;
+    }
+
+    public function getActiveVersion(): ?AnalyticsBoardVersion
+    {
+        return $this->activeVersion;
+    }
+
+    public function setActiveVersion(?AnalyticsBoardVersion $activeVersion): static
+    {
+        if ($activeVersion !== null && $activeVersion->getBoard() !== $this) {
+            throw new \InvalidArgumentException('Активная версия должна принадлежать этой доске.');
+        }
+
+        $this->activeVersion = $activeVersion;
 
         return $this;
     }
