@@ -33,6 +33,62 @@ final class ProjectController extends AbstractController
     ) {
     }
 
+    #[Route('', name: 'spa_api_project_create', methods: ['POST'])]
+    public function create(Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload)) {
+            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $name = trim((string) ($payload['name'] ?? ''));
+        if ($name === '') {
+            return $this->json(['error' => 'Название проекта обязательно'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (mb_strlen($name) > 255) {
+            return $this->json(
+                ['error' => 'Название проекта слишком длинное (максимум 255 символов)'],
+                Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        $descriptionRaw = $payload['description'] ?? null;
+        $description = is_string($descriptionRaw) ? trim($descriptionRaw) : null;
+        if ($description === '') {
+            $description = null;
+        }
+
+        $memberUserIdsRaw = $payload['memberUserIds'] ?? [];
+        $memberUserIds = is_array($memberUserIdsRaw)
+            ? array_values(array_filter(array_map(static fn ($id) => (int) $id, $memberUserIdsRaw), static fn (int $id) => $id > 0))
+            : [];
+
+        $boardsConfig = $this->parseBoardsConfig(is_array($payload['boards'] ?? null) ? $payload['boards'] : []);
+
+        $firstBoard = $this->kanbanService->createProject($name, $description, $user, $memberUserIds, $boardsConfig);
+        $project = $firstBoard->getProject();
+        $projectId = $project?->getId();
+        if ($project === null || $projectId === null) {
+            return $this->json(['error' => 'Не удалось создать проект'], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        return $this->json([
+            'id' => $projectId,
+            'name' => $project->getName(),
+            'description' => $project->getDescription(),
+            'createdAt' => $project->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+            'updatedAt' => $project->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
+            'isOwner' => true,
+            'isProjectAdmin' => true,
+            'entryBoardId' => $firstBoard->getId(),
+        ], Response::HTTP_CREATED);
+    }
+
     #[Route('/{id}', name: 'spa_api_project_view', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function view(int $id, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -111,8 +167,8 @@ final class ProjectController extends AbstractController
         ]);
     }
 
-    #[Route('/{id}/boards', name: 'spa_api_project_board_create', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function createBoard(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    #[Route('/{id}', name: 'spa_api_project_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
+    public function delete(int $id, #[CurrentUser] ?User $user): JsonResponse
     {
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
@@ -123,120 +179,14 @@ final class ProjectController extends AbstractController
             return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
         }
 
-        $projectId = $project->getId();
-        if ($projectId === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+        if ($project->getOwner() !== $user) {
+            return $this->json(['error' => 'Недостаточно прав'], Response::HTTP_FORBIDDEN);
         }
 
-        $payload = json_decode($request->getContent(), true);
-        if (!is_array($payload)) {
-            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
-        }
-
-        $title = trim((string) ($payload['title'] ?? ''));
-        if ($title === '') {
-            return $this->json(['error' => 'Название доски обязательно'], Response::HTTP_BAD_REQUEST);
-        }
-
-        $columnsRaw = $payload['columns'] ?? null;
-        $columns = is_array($columnsRaw)
-            ? array_values(array_filter(array_map(static fn ($column) => trim((string) $column), $columnsRaw)))
-            : [];
-        if ($columns === []) {
-            $columns = ['Backlog', 'To Do', 'In Progress', 'Done'];
-        }
-
-        $board = $this->kanbanService->createBoard($project, $title, $user);
-        foreach ($columns as $columnTitle) {
-            if ($columnTitle !== '') {
-                $this->kanbanService->createColumn($board, $columnTitle);
-            }
-        }
-
-        return $this->json($this->formatBoard($board, $projectId), Response::HTTP_CREATED);
-    }
-
-    #[Route('/{id}/boards/{boardId}', name: 'spa_api_project_board_update', requirements: ['id' => '\d+', 'boardId' => '\d+'], methods: ['PATCH'])]
-    public function updateBoard(int $id, int $boardId, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        if (!$user instanceof User) {
-            throw $this->createAccessDeniedException();
-        }
-
-        $project = $this->projectRepository->find($id);
-        if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
-        }
-
-        $projectId = $project->getId();
-        if ($projectId === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
-        }
-
-        $board = $this->boardRepository->find($boardId);
-        if ($board === null || $board->getProject()?->getId() !== $projectId) {
-            return $this->json(['error' => 'Доска не найдена'], Response::HTTP_NOT_FOUND);
-        }
-
-        $payload = json_decode($request->getContent(), true);
-        if (!is_array($payload)) {
-            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
-        }
-
-        if (!array_key_exists('title', $payload)) {
-            return $this->json(['error' => 'Название доски обязательно'], Response::HTTP_BAD_REQUEST);
-        }
-
-        $title = trim((string) $payload['title']);
-        if ($title === '') {
-            return $this->json(['error' => 'Название доски обязательно'], Response::HTTP_BAD_REQUEST);
-        }
-
-        if (mb_strlen($title) > 200) {
-            return $this->json(
-                ['error' => 'Название доски слишком длинное (максимум 200 символов)'],
-                Response::HTTP_BAD_REQUEST,
-            );
-        }
-
-        $board->setTitle($title);
+        $project->setDeletedAt(new \DateTimeImmutable());
         $this->entityManager->flush();
 
-        return $this->json($this->formatBoard($board, $projectId));
-    }
-
-    #[Route('/{id}/boards/{boardId}', name: 'spa_api_project_board_delete', requirements: ['id' => '\d+', 'boardId' => '\d+'], methods: ['DELETE'])]
-    public function deleteBoard(int $id, int $boardId, #[CurrentUser] ?User $user): JsonResponse
-    {
-        if (!$user instanceof User) {
-            throw $this->createAccessDeniedException();
-        }
-
-        $project = $this->projectRepository->find($id);
-        if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
-        }
-
-        $board = $this->boardRepository->find($boardId);
-        if ($board === null || $board->getProject()?->getId() !== $project->getId()) {
-            return $this->json(['error' => 'Доска не найдена'], Response::HTTP_NOT_FOUND);
-        }
-
-        $nextBoardId = null;
-        foreach ($this->boardRepository->findByProject($project) as $projectBoard) {
-            if ($projectBoard->getId() !== $board->getId()) {
-                $nextBoardId = $projectBoard->getId();
-                break;
-            }
-        }
-
-        $this->entityManager->remove($board);
-        $this->entityManager->flush();
-
-        return $this->json([
-            'success' => true,
-            'nextBoardId' => $nextBoardId,
-        ]);
+        return $this->json(['success' => true]);
     }
 
     /**
@@ -279,5 +229,27 @@ final class ProjectController extends AbstractController
             'firstname' => $user->getFirstname(),
             'patronymic' => $user->getPatronymic(),
         ];
+    }
+
+    /**
+     * @param array<int|string, mixed> $raw
+     *
+     * @return array<int, array{title: string, columns: array<int, string>}>
+     */
+    private function parseBoardsConfig(array $raw): array
+    {
+        $result = [];
+        foreach ($raw as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $title = trim((string) ($item['title'] ?? ''));
+            $columns = isset($item['columns']) && is_array($item['columns'])
+                ? array_values(array_filter(array_map(static fn ($column) => trim((string) $column), $item['columns'])))
+                : [];
+            $result[] = ['title' => $title, 'columns' => $columns];
+        }
+
+        return $result;
     }
 }
