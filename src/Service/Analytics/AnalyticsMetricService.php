@@ -6,6 +6,7 @@ namespace App\Service\Analytics;
 
 use App\Entity\Analytics\AnalyticsMetric;
 use App\Enum\Analytics\AnalyticsMetricAggregationType;
+use App\Enum\Analytics\AnalyticsMetricCategory;
 use App\Repository\Analytics\AnalyticsMetricRepository;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -26,6 +27,26 @@ final class AnalyticsMetricService
         return $this->repository->findAll();
     }
 
+    /**
+     * @return AnalyticsMetric[]
+     */
+    public function findFiltered(
+        ?string $search,
+        ?AnalyticsMetricCategory $category,
+        ?string $type,
+        ?bool $isActive,
+    ): array {
+        return $this->repository->findFiltered($search, $category, $type, $isActive);
+    }
+
+    /**
+     * @return string[]
+     */
+    public function findDistinctTypes(): array
+    {
+        return $this->repository->findDistinctTypes();
+    }
+
     public function findById(int $id): ?AnalyticsMetric
     {
         return $this->repository->find($id);
@@ -41,6 +62,7 @@ final class AnalyticsMetricService
         string $unit,
         AnalyticsMetricAggregationType $aggregationType,
         string|null $inputType,
+        AnalyticsMetricCategory $category,
         bool $isActive,
     ): AnalyticsMetric {
         $metric = new AnalyticsMetric();
@@ -50,6 +72,7 @@ final class AnalyticsMetricService
         $metric->setUnit(trim($unit));
         $metric->setAggregationType($aggregationType);
         $metric->setInputType($inputType);
+        $metric->setCategory($category);
         $metric->setIsActive($isActive);
 
         try {
@@ -73,6 +96,7 @@ final class AnalyticsMetricService
         string $unit,
         AnalyticsMetricAggregationType $aggregationType,
         string|null $inputType,
+        AnalyticsMetricCategory $category,
         bool $isActive,
     ): void {
         $metric->setBusinessKey(strtolower(trim($businessKey)));
@@ -81,6 +105,7 @@ final class AnalyticsMetricService
         $metric->setUnit(trim($unit));
         $metric->setAggregationType($aggregationType);
         $metric->setInputType($inputType);
+        $metric->setCategory($category);
         $metric->setIsActive($isActive);
 
         try {

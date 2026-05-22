@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Controller\Analytics;
 
-use App\Entity\Analytics\AnalyticsBoardVersionMetric;
+use App\Enum\Analytics\AnalyticsMetricCategory;
 use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardVersionRepository;
 use App\Repository\Analytics\AnalyticsMetricRepository;
+use App\Entity\Analytics\AnalyticsMetric;
 use App\Service\Analytics\BoardService;
 use App\Service\Analytics\CloneBoardVersionService;
 use App\Service\Analytics\PublishBoardVersionService;
+use App\Service\Analytics\VersionMetricTreeBuilder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -85,6 +87,7 @@ final class AnalyticsAdminBoardController extends AbstractController
         CsrfTokenManagerInterface $csrf,
         BoardService $boardService,
         AnalyticsMetricRepository $metricRepository,
+        VersionMetricTreeBuilder $metricTreeBuilder,
     ): Response {
         $board = $boardService->findById($boardId);
         if (!$board) {
@@ -102,57 +105,61 @@ final class AnalyticsAdminBoardController extends AbstractController
             throw $this->createNotFoundException('Версия не найдена.');
         }
 
-        if ($board->getActiveVersion() === $version) {
-            $this->addFlash('error', 'Активную версию нельзя редактировать напрямую — создайте новую версию из неё.');
-            return $this->redirectToRoute('app_analytics_admin_board_show', ['id' => $boardId]);
-        }
-
         if ($request->isMethod('POST') && $request->request->has('save_metrics')) {
             if (!$csrf->isTokenValid(new CsrfToken('version_edit_' . $versionId, $request->request->getString('_token')))) {
                 $this->addFlash('error', 'Неверный CSRF-токен.');
                 return $this->redirectToRoute('app_analytics_admin_board_version_edit', ['boardId' => $boardId, 'versionId' => $versionId]);
             }
 
-            // Удаляем все текущие метрики версии
-            foreach ($version->getVersionMetrics()->toArray() as $vm) {
-                $boardService->removeVersionMetric($vm);
-            }
-            $boardService->flush();
-
-            // Добавляем выбранные метрики из request
-            $selectedMetrics = $request->request->all('metrics') ?? [];
-            $position = 1;
-
-            foreach ($selectedMetrics as $metricIdStr => $data) {
-                $metricId = (int) $metricIdStr;
-                // Пропускаем метрики где чекбокс не отмечен (enabled не отправлен)
-                if (empty($data['enabled'])) {
-                    continue;
-                }
-                $metric = $metricRepository->find($metricId);
-                if (!$metric) {
-                    continue;
-                }
-
-                $vm = new AnalyticsBoardVersionMetric();
-                $vm->setBoardVersion($version);
-                $vm->setMetric($metric);
-                $vm->setPosition($position++);
-                $vm->setIsRequired(!empty($data['is_required']));
-                $version->addVersionMetric($vm);
+            try {
+                $selectedMetrics = $request->request->all('metrics') ?? [];
+                $boardService->syncVersionMetrics($version, $selectedMetrics, $metricRepository->findAll());
+                $this->addFlash('success', 'Состав метрик сохранён.');
+            } catch (\Throwable $e) {
+                $this->addFlash('error', $e->getMessage());
             }
 
-            $boardService->flush();
-            $this->addFlash('success', 'Состав метрик сохранён.');
             return $this->redirectToRoute('app_analytics_admin_board_version_edit', ['boardId' => $boardId, 'versionId' => $versionId]);
         }
 
         $allMetrics = $metricRepository->findAll();
 
+        /** @var array<int, array{position: int, is_required: bool, parent_metric_id: int|null}> $vmByMetric */
+        $vmByMetric = [];
+        foreach ($version->getVersionMetrics() as $vm) {
+            $metricId = $vm->getMetric()?->getId();
+            if ($metricId === null) {
+                continue;
+            }
+            $parentMetricId = $vm->getParent()?->getMetric()?->getId();
+            $vmByMetric[$metricId] = [
+                'position' => $vm->getPosition(),
+                'is_required' => $vm->isRequired(),
+                'parent_metric_id' => $parentMetricId,
+            ];
+        }
+
+        $selectedEntries = [];
+        /** @var AnalyticsMetric[] $unselectedMetrics */
+        $unselectedMetrics = [];
+        foreach ($allMetrics as $metric) {
+            $metricId = $metric->getId();
+            if ($metricId === null) {
+                continue;
+            }
+            if (isset($vmByMetric[$metricId])) {
+                $selectedEntries[] = ['metric' => $metric, 'data' => $vmByMetric[$metricId]];
+            } else {
+                $unselectedMetrics[] = $metric;
+            }
+        }
+
         return $this->render('analytics/admin/board/version_edit.html.twig', [
             'board' => $board,
             'version' => $version,
-            'allMetrics' => $allMetrics,
+            'selectedMetricsFlat' => $metricTreeBuilder->flatten($selectedEntries),
+            'unselectedMetrics' => $unselectedMetrics,
+            'categories' => AnalyticsMetricCategory::cases(),
             'active_tab' => 'analytics_boards',
         ]);
     }

@@ -8,7 +8,10 @@
 
 {% block main %}
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Состав метрик — v{{ version.versionNumber }}</h1>
+        <div>
+            <h1 class="mb-1">Состав метрик — v{{ version.versionNumber }}</h1>
+            <div class="text-muted">{{ board.name }}</div>
+        </div>
         <a href="{{ path('app_analytics_admin_board_show', {id: board.id}) }}" class="btn btn-secondary">
             <i class="bi bi-arrow-left me-1"></i>Назад к доске
         </a>
@@ -17,7 +20,6 @@
     {% for message in app.flashes('success') %}
         <div class="alert alert-success">{{ message }}</div>
     {% endfor %}
-
     {% for message in app.flashes('error') %}
         <div class="alert alert-danger">{{ message }}</div>
     {% endfor %}
@@ -30,170 +32,433 @@
         </span>
     </div>
 
-    <section id="multiple-column-form">
-        <div class="row match-height">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h4 class="card-title">Метрики доски</h4>
-                    </div>
-                    <div class="card-content">
-                        <div class="card-body">
-                            <form action="{{ path('app_analytics_admin_board_version_edit', {boardId: board.id, versionId: version.id}) }}" method="post" class="form">
-                                <input type="hidden" name="_token" value="{{ csrf_token('version_edit_' ~ version.id) }}">
+    <style>
+        #enabled-tbody td { vertical-align: middle; }
+        #enabled-tbody .drag-handle { cursor: grab; color: #adb5bd; text-align: center; }
+        #enabled-tbody .child-indicator { color: #adb5bd; margin-right: 6px; }
+        #enabled-tbody .business-key { color: #6c757d; font-size: 0.85em; margin-left: 0.4rem; }
+        #enabled-tbody .position-label { color: #6c757d; }
+        #empty-enabled { text-align: center; padding: 2rem; color: #6c757d; }
 
-                                {% if allMetrics|length > 0 %}
-                                    <table class="table table-bordered mb-0">
-                                        <thead>
-                                        <tr>
-                                            <th style="width:40px"></th>
-                                            <th style="width:60px">№</th>
-                                            <th>Бизнес-ключ</th>
-                                            <th>Название</th>
-                                            <th>Тип</th>
-                                            <th>Единица</th>
-                                            <th>Агрегация</th>
-                                            <th style="width:80px">Обязательна</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody id="metrics-sortable">
-                                        {% set selected_metrics = [] %}
-                                        {% set unselected_metrics = [] %}
-                                        {% for item in allMetrics %}
-                                            {% set is_selected = false %}
-                                            {% set is_required = false %}
-                                            {% set item_pos = 999 %}
-                                            {% for vm in version.versionMetrics %}
-                                                {% if vm.metric.id == item.id %}
-                                                    {% set is_selected = true %}
-                                                    {% set is_required = vm.isRequired %}
-                                                    {% set item_pos = vm.position %}
-                                                {% endif %}
-                                            {% endfor %}
-                                            {% if is_selected %}
-                                                {% set selected_metrics = selected_metrics|merge([{metric: item, is_required: is_required, position: item_pos}]) %}
-                                            {% else %}
-                                                {% set unselected_metrics = unselected_metrics|merge([item]) %}
-                                            {% endif %}
-                                        {% endfor %}
+        .category-badge {
+            background-color: rgba(120, 140, 175, 0.16);
+            color: var(--bs-body-color);
+            border: 1px solid rgba(120, 140, 175, 0.28);
+            font-weight: 500;
+        }
 
-                                        {% for entry in selected_metrics|sort((a, b) => a.position <=> b.position) %}
-                                            <tr data-metric-id="{{ entry.metric.id }}">
-                                                <td class="drag-handle" style="cursor: grab; text-align: center; vertical-align: middle;">
-                                                    <i class="bi bi-grip-vertical" style="font-size: 1.2rem; color: #999;"></i>
-                                                </td>
-                                                <td>
-                                                    <input type="hidden" name="metrics[{{ entry.metric.id }}][position]" class="position-input" value="{{ entry.position }}">
-                                                    <span class="position-label">{{ entry.position }}</span>
-                                                </td>
-                                                <td>
-                                                    <div class="form-check">
-                                                        <input class="form-check-input metric-toggle" type="checkbox" name="metrics[{{ entry.metric.id }}][enabled]" id="metric_{{ entry.metric.id }}" value="1" checked>
-                                                        <label class="form-check-label" for="metric_{{ entry.metric.id }}">
-                                                            <code>{{ entry.metric.businessKey }}</code>
-                                                        </label>
-                                                    </div>
-                                                </td>
-                                                <td>{{ entry.metric.name }}</td>
-                                                <td>{{ entry.metric.type }}</td>
-                                                <td>{{ entry.metric.unit }}</td>
-                                                <td><span class="badge bg-primary">{{ entry.metric.aggregationType.value }}</span></td>
-                                                <td class="text-center">
-                                                    <input class="form-check-input" type="checkbox" name="metrics[{{ entry.metric.id }}][is_required]" value="1" {{ entry.is_required ? 'checked' : '' }}>
-                                                </td>
-                                            </tr>
-                                        {% endfor %}
+        #available-list { display: block; max-height: 420px; overflow-y: auto; border: 1px solid rgba(120, 140, 175, 0.25); border-radius: 6px; }
+        .available-item { display: flex; width: 100%; box-sizing: border-box; align-items: center; padding: 0.45rem 0.7rem; border-bottom: 1px solid rgba(120, 140, 175, 0.15); cursor: pointer; margin: 0; color: var(--bs-body-color); }
+        .available-item:last-child { border-bottom: none; }
+        .available-item:hover { background: rgba(120, 140, 175, 0.12); }
+        .available-item > input { margin-right: 0.7rem; flex-shrink: 0; }
+        .available-item .business-key { color: #6c757d; font-size: 0.85em; margin-left: 0.4rem; flex-shrink: 0; }
+        .available-item .metric-name-text { flex: 1 1 auto; min-width: 0; }
+        .available-item .badge { margin-left: auto; flex-shrink: 0; }
+    </style>
 
-                                        {% for item in unselected_metrics %}
-                                            <tr class="text-muted" data-metric-id="{{ item.id }}">
-                                                <td></td>
-                                                <td>
-                                                    <input type="hidden" name="metrics[{{ item.id }}][position]" class="position-input" value="0" disabled>
-                                                    <span class="position-label">—</span>
-                                                </td>
-                                                <td>
-                                                    <div class="form-check">
-                                                        <input class="form-check-input metric-toggle" type="checkbox" name="metrics[{{ item.id }}][enabled]" id="metric_{{ item.id }}" value="1">
-                                                        <label class="form-check-label" for="metric_{{ item.id }}">
-                                                            <code>{{ item.businessKey }}</code>
-                                                        </label>
-                                                    </div>
-                                                </td>
-                                                <td>{{ item.name }}</td>
-                                                <td>{{ item.type }}</td>
-                                                <td>{{ item.unit }}</td>
-                                                <td><span class="badge bg-primary">{{ item.aggregationType.value }}</span></td>
-                                                <td class="text-center">
-                                                    <input class="form-check-input" type="checkbox" name="metrics[{{ item.id }}][is_required]" value="1" disabled>
-                                                </td>
-                                            </tr>
-                                        {% endfor %}
-                                        </tbody>
-                                    </table>
+    <form method="post" action="{{ path('app_analytics_admin_board_version_edit', {boardId: board.id, versionId: version.id}) }}">
+        <input type="hidden" name="_token" value="{{ csrf_token('version_edit_' ~ version.id) }}">
+
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="card-title mb-0">
+                    Состав доски — <span id="enabled-count">{{ selectedMetricsFlat|length }}</span> метрик
+                </h4>
+                <button type="submit" name="save_metrics" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1"></i>Сохранить состав
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead>
+                    <tr>
+                        <th style="width:40px"></th>
+                        <th style="width:60px">№</th>
+                        <th>Метрика</th>
+                        <th style="width:160px">Категория</th>
+                        <th style="width:240px">Родитель</th>
+                        <th style="width:110px" class="text-center">Обязательна</th>
+                        <th style="width:50px"></th>
+                    </tr>
+                    </thead>
+                    <tbody id="enabled-tbody">
+                    {% for entry in selectedMetricsFlat %}
+                        <tr data-metric-id="{{ entry.metric.id }}"
+                            data-metric-name="{{ entry.metric.name }}"
+                            data-business-key="{{ entry.metric.businessKey }}"
+                            data-category="{{ entry.metric.category ? entry.metric.category.value : '' }}"
+                            data-category-label="{{ entry.metric.category ? entry.metric.category.label : '' }}"
+                            data-parent-id="{{ entry.data.parent_metric_id ?? '' }}"
+                            data-depth="{{ entry.depth }}">
+                            <td class="drag-handle"><i class="bi bi-grip-vertical"></i></td>
+                            <td>
+                                <span class="position-label">{{ loop.index }}</span>
+                                <input type="hidden" name="metrics[{{ entry.metric.id }}][position]" class="position-input" value="{{ loop.index }}">
+                                <input type="hidden" name="metrics[{{ entry.metric.id }}][enabled]" value="1">
+                            </td>
+                            <td class="metric-cell" style="padding-left: {{ 12 + entry.depth * 24 }}px;">
+                                {% if entry.depth > 0 %}<i class="bi bi-arrow-return-right child-indicator"></i>{% endif %}
+                                <span class="metric-name-text">{{ entry.metric.name }}</span>
+                                <span class="business-key"><code>{{ entry.metric.businessKey }}</code></span>
+                            </td>
+                            <td class="category-cell">
+                                {% if entry.metric.category %}
+                                    <span class="badge category-badge">{{ entry.metric.category.label }}</span>
                                 {% else %}
-                                    <p class="text-muted">Метрики ещё не созданы. <a href="{{ path('app_analytics_admin_metric_new') }}">Создать метрику</a></p>
+                                    <span class="text-muted">—</span>
                                 {% endif %}
-
-                                <div class="mt-3 d-flex justify-content-end">
-                                    <button type="submit" name="save_metrics" class="btn btn-primary">Сохранить состав</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm parent-select" name="metrics[{{ entry.metric.id }}][parent_metric_id]">
+                                    <option value="">— корень —</option>
+                                </select>
+                            </td>
+                            <td class="text-center">
+                                <input class="form-check-input" type="checkbox" name="metrics[{{ entry.metric.id }}][is_required]" value="1" {{ entry.data.is_required ? 'checked' : '' }}>
+                            </td>
+                            <td class="text-center">
+                                <button type="button" class="btn btn-sm btn-outline-danger remove-metric" title="Убрать из состава">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                <div id="empty-enabled" style="{{ selectedMetricsFlat|length > 0 ? 'display:none' : '' }}">
+                    Состав пуст. Добавьте метрики из списка ниже.
                 </div>
             </div>
         </div>
-    </section>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4 class="card-title mb-0"><i class="bi bi-plus-lg me-1"></i>Добавить метрику</h4>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <input id="available-search" type="text" class="form-control" placeholder="Поиск по названию или business_key…">
+                </div>
+                <div class="mb-3">
+                    <select id="available-category" class="form-select">
+                        <option value="">— Все категории —</option>
+                        {% for cat in categories %}
+                            <option value="{{ cat.value }}">{{ cat.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="available-list">
+                    {% for metric in unselectedMetrics %}
+                        <label class="available-item"
+                               data-metric-id="{{ metric.id }}"
+                               data-metric-name="{{ metric.name }}"
+                               data-business-key="{{ metric.businessKey }}"
+                               data-category="{{ metric.category ? metric.category.value : '' }}"
+                               data-category-label="{{ metric.category ? metric.category.label : '' }}">
+                            <input type="checkbox" class="form-check-input available-checkbox">
+                            <span class="metric-name-text">{{ metric.name }}</span>
+                            <span class="business-key"><code>{{ metric.businessKey }}</code></span>
+                            {% if metric.category %}
+                                <span class="badge category-badge">{{ metric.category.label }}</span>
+                            {% endif %}
+                        </label>
+                    {% endfor %}
+                </div>
+                <div id="empty-available" class="text-muted text-center py-3" style="display:none">Нет метрик по фильтру.</div>
+                <div class="mt-3 d-flex justify-content-end">
+                    <button type="button" id="add-selected" class="btn btn-success" disabled>
+                        <i class="bi bi-plus-lg me-1"></i>Добавить в состав
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
 
     <script src="/front_end/assets/extensions/sortablejs/Sortable.min.js"></script>
     <script>
         (function() {
-            var tbody = document.getElementById('metrics-sortable');
+            var enabledTbody = document.getElementById('enabled-tbody');
+            var availableList = document.getElementById('available-list');
+            var enabledCount = document.getElementById('enabled-count');
+            var emptyEnabled = document.getElementById('empty-enabled');
+            var emptyAvailable = document.getElementById('empty-available');
+            var addBtn = document.getElementById('add-selected');
+            var searchInput = document.getElementById('available-search');
+            var categorySelect = document.getElementById('available-category');
+            if (!enabledTbody || !availableList) return;
 
-            function updatePositions() {
-                var rows = tbody.querySelectorAll('tr');
-                var pos = 1;
-                rows.forEach(function(row) {
-                    var cb = row.querySelector('.metric-toggle');
-                    var posInput = row.querySelector('.position-input');
-                    var posLabel = row.querySelector('.position-label');
-                    if (cb && cb.checked) {
-                        posInput.value = pos;
-                        posInput.disabled = false;
-                        posLabel.textContent = pos;
-                        pos++;
-                    } else if (posInput) {
-                        posInput.value = 0;
-                        posInput.disabled = true;
-                        posLabel.textContent = '—';
+            function rowId(row) { return row.getAttribute('data-metric-id'); }
+            function enabledRows() { return Array.from(enabledTbody.querySelectorAll('tr')); }
+            function getEnabledRow(id) { return enabledTbody.querySelector('tr[data-metric-id="' + id + '"]'); }
+
+            function renumberPositions() {
+                var rows = enabledRows();
+                rows.forEach(function(row, i) {
+                    var pos = i + 1;
+                    var label = row.querySelector('.position-label');
+                    var input = row.querySelector('.position-input');
+                    if (label) label.textContent = pos;
+                    if (input) input.value = pos;
+                });
+                enabledCount.textContent = rows.length;
+                emptyEnabled.style.display = rows.length === 0 ? '' : 'none';
+            }
+
+            function calcDepth(id, seen) {
+                seen = seen || {};
+                if (!id || seen[id]) return 0;
+                seen[id] = true;
+                var row = getEnabledRow(id);
+                if (!row) return 0;
+                var pid = row.getAttribute('data-parent-id');
+                if (!pid) return 0;
+                return 1 + calcDepth(pid, seen);
+            }
+
+            function refreshIndents() {
+                enabledRows().forEach(function(row) {
+                    var depth = calcDepth(rowId(row));
+                    row.setAttribute('data-depth', depth);
+                    var cell = row.querySelector('.metric-cell');
+                    if (!cell) return;
+                    cell.style.paddingLeft = (12 + depth * 24) + 'px';
+                    var existing = cell.querySelector('.child-indicator');
+                    if (existing) existing.remove();
+                    if (depth > 0) {
+                        var icon = document.createElement('i');
+                        icon.className = 'bi bi-arrow-return-right child-indicator';
+                        cell.insertBefore(icon, cell.firstChild);
                     }
                 });
             }
 
-            Sortable.create(tbody, {
+            function descendantIds(id) {
+                var result = {};
+                function walk(parentId) {
+                    enabledRows().forEach(function(row) {
+                        if (row.getAttribute('data-parent-id') === String(parentId) && !result[rowId(row)]) {
+                            result[rowId(row)] = true;
+                            walk(rowId(row));
+                        }
+                    });
+                }
+                walk(id);
+                return result;
+            }
+
+            function rebuildParentOptions() {
+                var rows = enabledRows();
+                var items = rows.map(function(r) {
+                    return { id: rowId(r), name: r.getAttribute('data-metric-name') };
+                });
+                rows.forEach(function(row) {
+                    var sel = row.querySelector('.parent-select');
+                    if (!sel) return;
+                    var ownId = rowId(row);
+                    var blocked = descendantIds(ownId);
+                    blocked[ownId] = true;
+                    var current = row.getAttribute('data-parent-id') || '';
+                    sel.innerHTML = '<option value="">— корень —</option>';
+                    items.forEach(function(it) {
+                        if (blocked[it.id]) return;
+                        var opt = document.createElement('option');
+                        opt.value = it.id;
+                        opt.textContent = it.name;
+                        if (current === it.id) opt.selected = true;
+                        sel.appendChild(opt);
+                    });
+                    if (current && (blocked[current] || !items.some(function(it){ return it.id === current; }))) {
+                        row.setAttribute('data-parent-id', '');
+                        sel.value = '';
+                    }
+                });
+            }
+
+            function makeAvailableItem(id, name, bk, cat, catLabel) {
+                var label = document.createElement('label');
+                label.className = 'available-item';
+                label.setAttribute('data-metric-id', id);
+                label.setAttribute('data-metric-name', name);
+                label.setAttribute('data-business-key', bk);
+                label.setAttribute('data-category', cat || '');
+                label.setAttribute('data-category-label', catLabel || '');
+
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'form-check-input available-checkbox';
+                label.appendChild(cb);
+
+                var nameSpan = document.createElement('span');
+                nameSpan.className = 'metric-name-text';
+                nameSpan.textContent = name;
+                label.appendChild(nameSpan);
+
+                var bkSpan = document.createElement('span');
+                bkSpan.className = 'business-key';
+                var bkCode = document.createElement('code');
+                bkCode.textContent = bk;
+                bkSpan.appendChild(bkCode);
+                label.appendChild(bkSpan);
+
+                if (catLabel) {
+                    var badge = document.createElement('span');
+                    badge.className = 'badge category-badge';
+                    badge.textContent = catLabel;
+                    label.appendChild(badge);
+                }
+                return label;
+            }
+
+            function makeEnabledRow(id, name, bk, cat, catLabel) {
+                var tr = document.createElement('tr');
+                tr.setAttribute('data-metric-id', id);
+                tr.setAttribute('data-metric-name', name);
+                tr.setAttribute('data-business-key', bk);
+                tr.setAttribute('data-category', cat || '');
+                tr.setAttribute('data-category-label', catLabel || '');
+                tr.setAttribute('data-parent-id', '');
+                tr.setAttribute('data-depth', '0');
+
+                tr.innerHTML =
+                    '<td class="drag-handle"><i class="bi bi-grip-vertical"></i></td>' +
+                    '<td>' +
+                        '<span class="position-label"></span>' +
+                        '<input type="hidden" name="metrics[' + id + '][position]" class="position-input" value="0">' +
+                        '<input type="hidden" name="metrics[' + id + '][enabled]" value="1">' +
+                    '</td>' +
+                    '<td class="metric-cell" style="padding-left: 12px;">' +
+                        '<span class="metric-name-text"></span> ' +
+                        '<span class="business-key"><code></code></span>' +
+                    '</td>' +
+                    '<td class="category-cell">' +
+                        (catLabel ? '<span class="badge category-badge"></span>' : '<span class="text-muted">—</span>') +
+                    '</td>' +
+                    '<td>' +
+                        '<select class="form-select form-select-sm parent-select" name="metrics[' + id + '][parent_metric_id]">' +
+                            '<option value="">— корень —</option>' +
+                        '</select>' +
+                    '</td>' +
+                    '<td class="text-center">' +
+                        '<input class="form-check-input" type="checkbox" name="metrics[' + id + '][is_required]" value="1">' +
+                    '</td>' +
+                    '<td class="text-center">' +
+                        '<button type="button" class="btn btn-sm btn-outline-danger remove-metric" title="Убрать из состава"><i class="bi bi-x-lg"></i></button>' +
+                    '</td>';
+
+                tr.querySelector('.metric-name-text').textContent = name;
+                tr.querySelector('.business-key code').textContent = bk;
+                if (catLabel) tr.querySelector('.category-cell .badge').textContent = catLabel;
+                return tr;
+            }
+
+            function removeFromEnabled(row) {
+                var id = rowId(row);
+                enabledRows().forEach(function(r) {
+                    if (r.getAttribute('data-parent-id') === id) {
+                        r.setAttribute('data-parent-id', '');
+                        var sel = r.querySelector('.parent-select');
+                        if (sel) sel.value = '';
+                    }
+                });
+                var item = makeAvailableItem(
+                    id,
+                    row.getAttribute('data-metric-name'),
+                    row.getAttribute('data-business-key'),
+                    row.getAttribute('data-category'),
+                    row.getAttribute('data-category-label')
+                );
+                bindAvailableItem(item);
+                availableList.appendChild(item);
+                row.remove();
+            }
+
+            function addToEnabled(item) {
+                var tr = makeEnabledRow(
+                    item.getAttribute('data-metric-id'),
+                    item.getAttribute('data-metric-name'),
+                    item.getAttribute('data-business-key'),
+                    item.getAttribute('data-category'),
+                    item.getAttribute('data-category-label')
+                );
+                bindEnabledRow(tr);
+                enabledTbody.appendChild(tr);
+                item.remove();
+            }
+
+            function afterStructureChange() {
+                renumberPositions();
+                rebuildParentOptions();
+                refreshIndents();
+                applyAvailableFilter();
+                updateAddButton();
+            }
+
+            function applyAvailableFilter() {
+                var q = (searchInput.value || '').trim().toLowerCase();
+                var cat = categorySelect.value || '';
+                var anyVisible = false;
+                var items = availableList.querySelectorAll('.available-item');
+                items.forEach(function(item) {
+                    var name = (item.getAttribute('data-metric-name') || '').toLowerCase();
+                    var bk = (item.getAttribute('data-business-key') || '').toLowerCase();
+                    var ic = item.getAttribute('data-category') || '';
+                    var ok = true;
+                    if (q && name.indexOf(q) === -1 && bk.indexOf(q) === -1) ok = false;
+                    if (cat && ic !== cat) ok = false;
+                    item.style.display = ok ? '' : 'none';
+                    if (ok) anyVisible = true;
+                });
+                emptyAvailable.style.display = (items.length > 0 && !anyVisible) ? '' : 'none';
+            }
+
+            function updateAddButton() {
+                var any = availableList.querySelectorAll('.available-checkbox:checked').length > 0;
+                addBtn.disabled = !any;
+            }
+
+            function bindEnabledRow(row) {
+                var btn = row.querySelector('.remove-metric');
+                if (btn) btn.addEventListener('click', function() {
+                    removeFromEnabled(row);
+                    afterStructureChange();
+                });
+                var sel = row.querySelector('.parent-select');
+                if (sel) sel.addEventListener('change', function() {
+                    row.setAttribute('data-parent-id', sel.value || '');
+                    refreshIndents();
+                    rebuildParentOptions();
+                });
+            }
+            function bindAvailableItem(item) {
+                var cb = item.querySelector('.available-checkbox');
+                if (cb) cb.addEventListener('change', updateAddButton);
+            }
+
+            enabledRows().forEach(bindEnabledRow);
+            availableList.querySelectorAll('.available-item').forEach(bindAvailableItem);
+
+            addBtn.addEventListener('click', function() {
+                availableList.querySelectorAll('.available-checkbox:checked').forEach(function(cb) {
+                    addToEnabled(cb.closest('.available-item'));
+                });
+                afterStructureChange();
+            });
+
+            searchInput.addEventListener('input', applyAvailableFilter);
+            categorySelect.addEventListener('change', applyAvailableFilter);
+
+            Sortable.create(enabledTbody, {
                 handle: '.drag-handle',
                 animation: 150,
                 ghostClass: 'table-active',
-                onEnd: updatePositions
+                onEnd: renumberPositions
             });
 
-            tbody.querySelectorAll('.metric-toggle').forEach(function(cb) {
-                cb.addEventListener('change', function() {
-                    var row = cb.closest('tr');
-                    var reqCb = row.querySelector('input[name*="is_required"]');
-                    var handle = row.querySelector('.drag-handle');
-                    if (cb.checked) {
-                        row.classList.remove('text-muted');
-                        if (reqCb) reqCb.disabled = false;
-                        if (handle) handle.style.cursor = 'grab';
-                    } else {
-                        row.classList.add('text-muted');
-                        if (reqCb) { reqCb.disabled = true; reqCb.checked = false; }
-                        if (handle) handle.style.cursor = 'default';
-                    }
-                    updatePositions();
-                });
-            });
+            renumberPositions();
+            rebuildParentOptions();
+            refreshIndents();
+            applyAvailableFilter();
         })();
     </script>
 {% endblock %}

@@ -70,11 +70,11 @@
                                         <td>{{ version.createdAt ? version.createdAt|date('d.m.Y H:i') : '—' }}</td>
                                         <td>{{ version.updatedAt ? version.updatedAt|date('d.m.Y H:i') : '—' }}</td>
                                         <td>
-                                            {% if not is_active_version %}
-                                                <a href="{{ path('app_analytics_admin_board_version_edit', {boardId: board.id, versionId: version.id}) }}" class="btn btn-sm btn-outline-primary" title="Редактировать состав метрик">
-                                                    <i class="bi bi-pencil"></i> Состав
-                                                </a>
+                                            <a href="{{ path('app_analytics_admin_board_version_edit', {boardId: board.id, versionId: version.id}) }}" class="btn btn-sm btn-outline-primary" title="Редактировать состав метрик">
+                                                <i class="bi bi-pencil"></i> Состав
+                                            </a>
 
+                                            {% if not is_active_version %}
                                                 <form action="{{ path('app_analytics_admin_board_publish', {versionId: version.id}) }}" method="post" class="d-inline"
                                                       onsubmit="return confirm('Сделать версию v{{ version.versionNumber }} активной? Новые отчёты будут создаваться по ней.');">
                                                     <input type="hidden" name="_token" value="{{ csrf_token('version_publish_' ~ version.id) }}">

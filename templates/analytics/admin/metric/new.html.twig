@@ -95,6 +95,18 @@
                                         </div>
                                     </div>
 
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="category">Категория <span class="text-danger">*</span></label>
+                                            <select id="category" class="form-control" name="category" required>
+                                                <option value="">— Выберите категорию —</option>
+                                                {% for cat in categories %}
+                                                    <option value="{{ cat.value }}">{{ cat.label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+
                                     <div class="col-12">
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" checked>

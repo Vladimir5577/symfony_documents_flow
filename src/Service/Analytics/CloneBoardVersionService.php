@@ -39,7 +39,8 @@ final class CloneBoardVersionService
         $newVersion->setVersionNumber($maxVersion + 1);
         $this->em->persist($newVersion);
 
-        // Копируем состав метрик
+        // Фаза 1: копируем сами строки без parent (родителей ещё нет)
+        $newByOldId = [];
         foreach ($sourceVersion->getVersionMetrics() as $sourceMetric) {
             $versionMetric = new AnalyticsBoardVersionMetric();
             $versionMetric->setBoardVersion($newVersion);
@@ -47,6 +48,20 @@ final class CloneBoardVersionService
             $versionMetric->setPosition($sourceMetric->getPosition());
             $versionMetric->setIsRequired($sourceMetric->isRequired());
             $this->em->persist($versionMetric);
+            $newByOldId[$sourceMetric->getId()] = $versionMetric;
+        }
+
+        // Фаза 2: проставляем parent по карте старый id → новая сущность
+        foreach ($sourceVersion->getVersionMetrics() as $sourceMetric) {
+            $oldParent = $sourceMetric->getParent();
+            if (!$oldParent) {
+                continue;
+            }
+            $newChild = $newByOldId[$sourceMetric->getId()] ?? null;
+            $newParent = $newByOldId[$oldParent->getId()] ?? null;
+            if ($newChild && $newParent) {
+                $newChild->setParent($newParent);
+            }
         }
 
         $this->em->flush();

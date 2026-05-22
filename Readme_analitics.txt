@@ -13,10 +13,12 @@
     unit	string	Единица измерения (л, км, руб., шт.)
     aggregation_type	enum	Правило агрегации: sum | avg | min | max | last
     input_type	string	(опционально) Тип поля для ввода: text, number, select, checkbox
+    category	enum	Категория метрики для фильтрации в UI: finance | mechanics | hr | tko. Обязательна
     is_active	boolean	Включена ли метрика в использование
     created_at	timestamp	Дата создания
     updated_at	timestamp	Дата последнего изменения
     UNIQUE(business_key)		Один бизнес-смысл = один стабильный ключ
+    INDEX(category)		Для фильтрации списков метрик в админке досок
 
 4. analytics_boards
     id	PK	Уникальный идентификатор доски
@@ -40,9 +42,19 @@
     id	PK	Уникальный идентификатор
     board_version_id	FK → analytics_board_versions.id	Версия доски
     metric_id	FK → analytics_metrics.id	Метрика
+    parent_id	FK → analytics_board_version_metrics.id NULL	Родительская строка в этой же версии доски (визуальная вложенность в форме и таблице вывода). Без иерархии = NULL
     position	int	Порядок метрики внутри версии
     is_required	boolean	Обязательна ли метрика
     UNIQUE(board_version_id, metric_id)		Одна метрика один раз в версии
+    INDEX(parent_id)		Для построения дерева при рендере формы и таблицы
+
+    Иерархия (parent_id):
+    - Назначение — только визуальная группировка/вложенность в форме заполнения и в таблице вывода (как в бухгалтерском отчёте: 2.3 → 2.3.1 → ...).
+    - Никакой логики суммирования/валидации `Σ children == parent` нет: родитель и дети — независимые поля ввода со своими значениями.
+    - Иерархия живёт только в разметке формы и табличного вывода; `analytics_aggregated_data` и графики остаются плоскими, фильтруются по `business_key`.
+    - Родитель должен принадлежать той же `board_version_id` (проверка в сервисе).
+    - Циклы запрещены (проверка в сервисе при назначении parent).
+    - При клонировании версии (CloneBoardVersionService) parent копируется через карту старых vm.id → новые vm.
 
 7. analytics_organization_boards
     id	PK	Уникальный идентификатор
@@ -171,6 +183,11 @@
 
 --------------------------
 Критичные индексы (MVP)
+0) `analytics_metrics`
+   - UNIQUE(business_key) уже задаёт индекс
+   - INDEX(category) — фильтр списка метрик в админке доски
+0a) `analytics_board_version_metrics`
+   - INDEX(parent_id) — построение дерева при рендере формы и таблицы вывода
 1) `analytics_report_values`
    - INDEX(report_id)
    - INDEX(board_version_metric_id)
@@ -199,7 +216,9 @@ ENUM/CHECK ограничения (обязательно в БД)
    - CHECK/ENUM: `sum | avg | min | max | last`.
 3) `analytics_metrics.type`:
    - рекомендуется CHECK/ENUM (например: `number | currency | distance | liters | count | text | bool`) и единый справочник допустимых типов.
-4) Для `analytics_report_values` — CHECK: ровно одно из `value_number`, `value_text`, `value_bool`, `value_json` заполнено.
+4) `analytics_metrics.category`:
+   - CHECK/ENUM: `finance | mechanics | hr | tko`. NOT NULL.
+5) Для `analytics_report_values` — CHECK: ровно одно из `value_number`, `value_text`, `value_bool`, `value_json` заполнено.
 
 --------------------------
 FK стратегии (ON DELETE / ON UPDATE)
@@ -212,6 +231,8 @@ FK стратегии (ON DELETE / ON UPDATE)
    - ON DELETE CASCADE, ON UPDATE CASCADE
 3) `analytics_board_version_metrics.metric_id -> analytics_metrics.id`
    - ON DELETE RESTRICT, ON UPDATE CASCADE
+3a) `analytics_board_version_metrics.parent_id -> analytics_board_version_metrics.id`
+   - ON DELETE RESTRICT, ON UPDATE CASCADE (родителя нельзя удалить, пока есть дети — нужно сначала отвязать)
 4) `analytics_organization_boards.organization_id -> organization.id`
    - ON DELETE RESTRICT, ON UPDATE CASCADE
 5) `analytics_organization_boards.board_id -> analytics_boards.id`
@@ -356,12 +377,14 @@ WHERE business_key = :target_business_key
 --------------------------
 Жизненный цикл работы с доской (практический сценарий)
 1) Администратор создаёт метрики:
-   - добавляет записи в `analytics_metrics` (`business_key`, `type`, `unit`, `aggregation_type`).
+   - добавляет записи в `analytics_metrics` (`business_key`, `type`, `unit`, `aggregation_type`, `category`).
+   - `category` обязательна и используется для фильтрации длинного списка метрик при настройке состава версии доски.
 2) Администратор создаёт доску:
    - создаёт запись в `analytics_boards`.
 3) Администратор формирует версию доски:
    - создаёт `analytics_board_versions`;
-   - добавляет состав метрик в `analytics_board_version_metrics` (`position`, `is_required`);
+   - добавляет состав метрик в `analytics_board_version_metrics` (`position`, `is_required`, опционально `parent_id` для визуальной вложенности);
+   - в админке состава версии доступны фильтры по `category` и поиск по `name`/`business_key`, чтобы ориентироваться в длинном списке метрик;
    - делает версию активной через `analytics_boards.active_version_id`.
 4) Администратор назначает доску организации:
    - создаёт связь в `analytics_organization_boards` (`organization_id`, `board_id`, `is_required`).
@@ -398,7 +421,7 @@ UI без API: Twig + верстка (без Symfony Form)
 Обработка POST без FormType:
 - контроллер читает `Request` (`$request->request->all()` или именованные параметры);
 - валидация и приведение типов — в dedicated-сервисах (например `SaveMetricFromRequest`, `SaveReportValuesFromRequest`);
-- динамические поля отчёта: в шаблоне цикл по `board_version_metrics`, имена полей вида `values[{{ boardVersionMetricId }}]` или префикс + id; сервис парсит массив и пишет `AnalyticsReportValue` (значение + `created_by`); подписи/единицы берутся из `analytics_metrics` через JOIN;
+- динамические поля отчёта: в шаблоне рекурсивный рендер по дереву `board_version_metrics` (`parent_id` + `position`), отступ строки = глубина × фиксированный шаг; имена полей вида `values[{{ boardVersionMetricId }}]` или префикс + id; сервис парсит массив и пишет `AnalyticsReportValue` (значение + `created_by`); подписи/единицы берутся из `analytics_metrics` через JOIN. Родитель — такой же `<input>`, как и дети; никаких автосумм нет.
 - CSRF: в каждом `<form method="post">` скрытое поле через `csrf_token('...')` и проверка в контроллере через `CsrfTokenManagerInterface` / `isCsrfTokenValid`;
 - confirm — POST-форма (или одна страница с несколькими формами), только с токеном и нужными скрытыми полями.
 

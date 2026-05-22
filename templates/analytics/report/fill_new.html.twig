@@ -48,25 +48,28 @@
                                 <input type="hidden" name="_token" value="{{ csrf_token('report_fill_new_' ~ board.id) }}">
                                 <input type="hidden" name="board_id" value="{{ board.id }}">
 
-                                <table class="table table-bordered">
+                                <style>
+                                    .metrics-fill-table td.metric-cell { vertical-align: middle; }
+                                    .metrics-fill-table .child-indicator { color: #adb5bd; margin-right: 6px; }
+                                </style>
+                                <table class="table table-bordered metrics-fill-table">
                                     <thead>
                                     <tr>
                                         <th>Метрика</th>
-                                        <th>Тип</th>
                                         <th>Ед. изм.</th>
                                         <th>Значение</th>
                                     </tr>
                                     </thead>
                                     <tbody>
-                                    {% for vm in boardVersion.versionMetrics %}
-                                        {% set metric = vm.metric %}
-                                        <tr>
-                                            <td>
+                                    {% for entry in versionMetricsFlat %}
+                                        {% set vm = entry.versionMetric %}
+                                        {% set metric = entry.metric %}
+                                        <tr data-depth="{{ entry.depth }}">
+                                            <td class="metric-cell" style="padding-left: {{ 12 + entry.depth * 40 }}px;">
+                                                {% if entry.depth > 0 %}<i class="bi bi-arrow-return-right child-indicator"></i>{% endif %}
                                                 <strong>{{ metric.name }}</strong>
-                                                <br><small class="text-muted"><code>{{ metric.businessKey }}</code></small>
                                                 {% if vm.required %}<span class="text-danger">*</span>{% endif %}
                                             </td>
-                                            <td>{{ metric.type }}</td>
                                             <td>{{ metric.unit }}</td>
                                             <td>
                                                 {% if metric.type == 'bool' %}

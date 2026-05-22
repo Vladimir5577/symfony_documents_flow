@@ -14,6 +14,7 @@ use App\Service\Analytics\CreateReportService;
 use App\Service\Analytics\FillReportValueService;
 use App\Service\Analytics\ApproveReportService;
 use App\Service\Analytics\RecalculateAggregatesService;
+use App\Service\Analytics\VersionMetricTreeBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -172,6 +173,7 @@ final class AnalyticsReportController extends AbstractController
         CreateReportService $reportService,
         FillReportValueService $fillService,
         ApproveReportService $approveService,
+        VersionMetricTreeBuilder $metricTreeBuilder,
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
@@ -255,9 +257,27 @@ final class AnalyticsReportController extends AbstractController
             }
         }
 
+        $versionMetricEntries = [];
+        foreach ($activeVersion->getVersionMetrics() as $vm) {
+            $metric = $vm->getMetric();
+            if (!$metric || $metric->getId() === null) {
+                continue;
+            }
+            $versionMetricEntries[] = [
+                'metric' => $metric,
+                'versionMetric' => $vm,
+                'data' => [
+                    'position' => $vm->getPosition(),
+                    'is_required' => $vm->isRequired(),
+                    'parent_metric_id' => $vm->getParent()?->getMetric()?->getId(),
+                ],
+            ];
+        }
+
         return $this->render('analytics/report/fill_new.html.twig', [
             'board' => $board,
             'boardVersion' => $activeVersion,
+            'versionMetricsFlat' => $metricTreeBuilder->flatten($versionMetricEntries),
             'ownerOrganization' => $ownerOrganization,
             'currentPeriod' => $currentPeriod,
             'currentIsoLabel' => $currentIsoLabel,
