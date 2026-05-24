@@ -107,21 +107,10 @@ final class ProjectController extends AbstractController
             return $this->json(['error' => 'Проект не найден'], 404);
         }
 
-        $firstBoard = $project->getBoards()->first() ?: null;
         $memberRole = KanbanBoardMemberRole::KANBAN_ADMIN;
 
         try {
-            if ($firstBoard) {
-                $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
-                $memberRole = $this->kanbanService->getMemberRole($firstBoard, $user) ?? KanbanBoardMemberRole::KANBAN_VIEWER;
-
-                if ($memberRole !== KanbanBoardMemberRole::KANBAN_ADMIN) {
-                    return $this->json([
-                        'error' => 'Нет доступа к странице проекта',
-                        'entryBoardId' => $firstBoard->getId(),
-                    ], 403);
-                }
-            } elseif ($project->getOwner() !== $user && $this->projectUserRepository->findByProjectAndUser($project, $user) === null) {
+            if ($project->getOwner() !== $user && $this->projectUserRepository->findByProjectAndUser($project, $user) === null) {
                 return $this->json(['error' => 'Нет доступа к проекту'], 403);
             }
         } catch (AccessDeniedHttpException $e) {
