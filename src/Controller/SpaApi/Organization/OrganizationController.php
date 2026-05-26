@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\Organization;
 
+use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\Organization\Department;
 use App\Entity\Organization\Filial;
@@ -71,7 +72,7 @@ final class OrganizationController extends AbstractController
             ->getOneOrNullResult();
 
         if (!$organization instanceof AbstractOrganization) {
-            return $this->json(['error' => 'Организация не найдена'], 404);
+            return $this->json(['error' => SpaApiError::ORGANIZATION_NOT_FOUND], 404);
         }
 
         $organizationType = $organization instanceof Filial

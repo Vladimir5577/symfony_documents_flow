@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\Kanban;
 
+use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\KanbanColumn;
 use App\Entity\User\User;
@@ -38,12 +39,12 @@ final class BoardController extends AbstractController
 
         $project = $this->projectRepository->find($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $board = $this->boardRepository->findOneWithRelations($boardId);
         if ($board === null || $board->getProject()?->getId() !== $project->getId()) {
-            return $this->json(['error' => 'Доска не найдена'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::BOARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $columns = [];
@@ -68,22 +69,22 @@ final class BoardController extends AbstractController
 
         $project = $this->projectRepository->find($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $projectId = $project->getId();
         if ($projectId === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $payload = json_decode($request->getContent(), true);
         if (!is_array($payload)) {
-            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
         $title = trim((string) ($payload['title'] ?? ''));
         if ($title === '') {
-            return $this->json(['error' => 'Название доски обязательно'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::BOARD_TITLE_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
         $columnsRaw = $payload['columns'] ?? null;
@@ -113,36 +114,36 @@ final class BoardController extends AbstractController
 
         $project = $this->projectRepository->find($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $projectId = $project->getId();
         if ($projectId === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $board = $this->boardRepository->find($boardId);
         if ($board === null || $board->getProject()?->getId() !== $projectId) {
-            return $this->json(['error' => 'Доска не найдена'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::BOARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $payload = json_decode($request->getContent(), true);
         if (!is_array($payload)) {
-            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
         if (!array_key_exists('title', $payload)) {
-            return $this->json(['error' => 'Название доски обязательно'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::BOARD_TITLE_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
         $title = trim((string) $payload['title']);
         if ($title === '') {
-            return $this->json(['error' => 'Название доски обязательно'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::BOARD_TITLE_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
         if (mb_strlen($title) > 200) {
             return $this->json(
-                ['error' => 'Название доски слишком длинное (максимум 200 символов)'],
+                ['error' => SpaApiError::BOARD_TITLE_TOO_LONG],
                 Response::HTTP_BAD_REQUEST,
             );
         }
@@ -162,12 +163,12 @@ final class BoardController extends AbstractController
 
         $project = $this->projectRepository->find($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $board = $this->boardRepository->find($boardId);
         if ($board === null || $board->getProject()?->getId() !== $project->getId()) {
-            return $this->json(['error' => 'Доска не найдена'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::BOARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $nextBoardId = null;
