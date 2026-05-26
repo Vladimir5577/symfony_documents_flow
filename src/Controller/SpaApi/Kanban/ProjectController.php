@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\Kanban;
 
+use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\Kanban\Project\KanbanProjectUser;
@@ -43,17 +44,17 @@ final class ProjectController extends AbstractController
 
         $payload = json_decode($request->getContent(), true);
         if (!is_array($payload)) {
-            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
         $name = trim((string) ($payload['name'] ?? ''));
         if ($name === '') {
-            return $this->json(['error' => 'Название проекта обязательно'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::PROJECT_NAME_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
         if (mb_strlen($name) > 255) {
             return $this->json(
-                ['error' => 'Название проекта слишком длинное (максимум 255 символов)'],
+                ['error' => SpaApiError::PROJECT_NAME_TOO_LONG],
                 Response::HTTP_BAD_REQUEST,
             );
         }
@@ -75,7 +76,7 @@ final class ProjectController extends AbstractController
         $project = $firstBoard->getProject();
         $projectId = $project?->getId();
         if ($project === null || $projectId === null) {
-            return $this->json(['error' => 'Не удалось создать проект'], Response::HTTP_INTERNAL_SERVER_ERROR);
+            return $this->json(['error' => SpaApiError::PROJECT_CREATE_FAILED], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
 
         return $this->json([
@@ -99,22 +100,22 @@ final class ProjectController extends AbstractController
 
         $project = $this->projectRepository->find($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], 404);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], 404);
         }
 
         $projectId = $project->getId();
         if ($projectId === null) {
-            return $this->json(['error' => 'Проект не найден'], 404);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], 404);
         }
 
         $memberRole = KanbanBoardMemberRole::KANBAN_ADMIN;
 
         try {
             if ($project->getOwner() !== $user && $this->projectUserRepository->findByProjectAndUser($project, $user) === null) {
-                return $this->json(['error' => 'Нет доступа к проекту'], 403);
+                return $this->json(['error' => SpaApiError::PROJECT_ACCESS_DENIED], 403);
             }
         } catch (AccessDeniedHttpException $e) {
-            return $this->json(['error' => $e->getMessage()], 403);
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], 403);
         }
 
         $owner = $project->getOwner();
@@ -172,30 +173,30 @@ final class ProjectController extends AbstractController
 
         $project = $this->projectRepository->find($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $projectId = $project->getId();
         if ($projectId === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         try {
             $this->assertProjectAdmin($project, $user);
         } catch (AccessDeniedHttpException $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
         $payload = json_decode($request->getContent(), true);
         if (!is_array($payload)) {
-            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
         $hasName = array_key_exists('name', $payload);
         $hasDescription = array_key_exists('description', $payload);
         if (!$hasName && !$hasDescription) {
             return $this->json(
-                ['error' => 'Укажите хотя бы одно поле: name, description'],
+                ['error' => SpaApiError::UPDATE_FIELDS_REQUIRED],
                 Response::HTTP_BAD_REQUEST,
             );
         }
@@ -203,11 +204,11 @@ final class ProjectController extends AbstractController
         if ($hasName) {
             $name = trim((string) $payload['name']);
             if ($name === '') {
-                return $this->json(['error' => 'Название проекта обязательно'], Response::HTTP_BAD_REQUEST);
+                return $this->json(['error' => SpaApiError::PROJECT_NAME_REQUIRED], Response::HTTP_BAD_REQUEST);
             }
             if (mb_strlen($name) > 255) {
                 return $this->json(
-                    ['error' => 'Название проекта слишком длинное (максимум 255 символов)'],
+                    ['error' => SpaApiError::PROJECT_NAME_TOO_LONG],
                     Response::HTTP_BAD_REQUEST,
                 );
             }
@@ -217,7 +218,7 @@ final class ProjectController extends AbstractController
         if ($hasDescription) {
             $descriptionRaw = $payload['description'];
             if ($descriptionRaw !== null && !is_string($descriptionRaw)) {
-                return $this->json(['error' => 'Поле description должно быть строкой или null'], Response::HTTP_BAD_REQUEST);
+                return $this->json(['error' => SpaApiError::DESCRIPTION_INVALID_TYPE], Response::HTTP_BAD_REQUEST);
             }
             $description = is_string($descriptionRaw) ? trim($descriptionRaw) : null;
             $project->setDescription($description === '' ? null : $description);
@@ -242,11 +243,11 @@ final class ProjectController extends AbstractController
 
         $project = $this->projectRepository->find($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         if ($project->getOwner() !== $user) {
-            return $this->json(['error' => 'Недостаточно прав'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => SpaApiError::INSUFFICIENT_PERMISSIONS], Response::HTTP_FORBIDDEN);
         }
 
         $project->setDeletedAt(new \DateTimeImmutable());
@@ -270,7 +271,7 @@ final class ProjectController extends AbstractController
         }
 
         if ($project->getOwner() !== $user && $this->projectUserRepository->findByProjectAndUser($project, $user) === null) {
-            throw new AccessDeniedHttpException('Нет доступа к проекту');
+            throw new AccessDeniedHttpException(SpaApiError::PROJECT_ACCESS_DENIED);
         }
     }
 
