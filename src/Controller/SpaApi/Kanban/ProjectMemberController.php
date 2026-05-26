@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\Kanban;
 
+use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
@@ -54,24 +55,24 @@ final class ProjectMemberController extends AbstractController
 
         $project = $this->findProject($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         try {
             $this->assertProjectAdmin($project, $user);
         } catch (AccessDeniedHttpException $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
         $payload = json_decode($request->getContent(), true);
         if (!is_array($payload)) {
-            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
         $membersRaw = $payload['members'] ?? null;
         if (!is_array($membersRaw)) {
             return $this->json(
-                ['error' => 'Ожидается массив members: [{ userId, role }]'],
+                ['error' => SpaApiError::MEMBERS_ARRAY_EXPECTED],
                 Response::HTTP_BAD_REQUEST,
             );
         }
@@ -103,7 +104,7 @@ final class ProjectMemberController extends AbstractController
             $role = $roleValue !== '' ? KanbanBoardMemberRole::tryFrom($roleValue) : null;
             if ($role === null) {
                 return $this->json(
-                    ['error' => sprintf('Некорректная роль для пользователя %d', $memberUserId)],
+                    ['error' => SpaApiError::INVALID_ROLE_FOR_USER, 'userId' => $memberUserId],
                     Response::HTTP_BAD_REQUEST,
                 );
             }
@@ -115,7 +116,7 @@ final class ProjectMemberController extends AbstractController
         }
 
         if ($userIdToRole === []) {
-            return $this->json(['error' => 'Список участников не может быть пустым'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::MEMBERS_LIST_EMPTY], Response::HTTP_BAD_REQUEST);
         }
 
         $userIds = array_keys($userIdToRole);
@@ -133,7 +134,7 @@ final class ProjectMemberController extends AbstractController
             $memberUser = $this->userRepository->find($memberUserId);
             if (!$memberUser instanceof User) {
                 return $this->json(
-                    ['error' => sprintf('Пользователь %d не найден', $memberUserId)],
+                    ['error' => SpaApiError::USER_NOT_FOUND, 'userId' => $memberUserId],
                     Response::HTTP_BAD_REQUEST,
                 );
             }
@@ -181,39 +182,39 @@ final class ProjectMemberController extends AbstractController
 
         $project = $this->findProject($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         try {
             $this->assertProjectAdmin($project, $currentUser);
         } catch (AccessDeniedHttpException $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
         $owner = $project->getOwner();
         if ($owner !== null && $owner->getId() === $userId) {
-            return $this->json(['error' => 'Роль владельца нельзя изменить'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::OWNER_ROLE_IMMUTABLE], Response::HTTP_BAD_REQUEST);
         }
 
         $memberUser = $this->userRepository->find($userId);
         if (!$memberUser instanceof User) {
-            return $this->json(['error' => 'Участник не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::MEMBER_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $projectUser = $this->projectUserRepository->findByProjectAndUser($project, $memberUser);
         if ($projectUser === null) {
-            return $this->json(['error' => 'Пользователь не является участником проекта'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::USER_NOT_PROJECT_MEMBER], Response::HTTP_NOT_FOUND);
         }
 
         $payload = json_decode($request->getContent(), true);
         if (!is_array($payload)) {
-            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
         $roleValue = trim((string) ($payload['role'] ?? ''));
         $newRole = $roleValue !== '' ? KanbanBoardMemberRole::tryFrom($roleValue) : null;
         if ($newRole === null) {
-            return $this->json(['error' => 'Некорректная роль'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::INVALID_ROLE], Response::HTTP_BAD_REQUEST);
         }
 
         $projectUser->setRole($newRole);
@@ -239,32 +240,32 @@ final class ProjectMemberController extends AbstractController
 
         $project = $this->findProject($id);
         if ($project === null) {
-            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         try {
             $this->assertProjectAdmin($project, $currentUser);
         } catch (AccessDeniedHttpException $e) {
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
         if ($userId === $currentUser->getId()) {
-            return $this->json(['error' => 'Нельзя удалить себя из проекта'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::CANNOT_REMOVE_SELF], Response::HTTP_BAD_REQUEST);
         }
 
         $owner = $project->getOwner();
         if ($owner !== null && $owner->getId() === $userId) {
-            return $this->json(['error' => 'Нельзя удалить владельца проекта'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::CANNOT_REMOVE_OWNER], Response::HTTP_BAD_REQUEST);
         }
 
         $memberUser = $this->userRepository->find($userId);
         if (!$memberUser instanceof User) {
-            return $this->json(['error' => 'Участник не найден'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::MEMBER_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $projectUser = $this->projectUserRepository->findByProjectAndUser($project, $memberUser);
         if ($projectUser === null) {
-            return $this->json(['error' => 'Пользователь не является участником проекта'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::USER_NOT_PROJECT_MEMBER], Response::HTTP_NOT_FOUND);
         }
 
         foreach ($this->cardRepository->findCardsInProjectWithAssignee($project, $memberUser) as $card) {
@@ -305,7 +306,7 @@ final class ProjectMemberController extends AbstractController
         }
 
         if ($project->getOwner() !== $user && $this->projectUserRepository->findByProjectAndUser($project, $user) === null) {
-            throw new AccessDeniedHttpException('Нет доступа к проекту');
+            throw new AccessDeniedHttpException(SpaApiError::PROJECT_ACCESS_DENIED);
         }
     }
 

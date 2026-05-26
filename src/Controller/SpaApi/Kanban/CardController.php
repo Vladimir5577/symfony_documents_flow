@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\Kanban;
 
+use App\Controller\SpaApi\SpaApiError;
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Enum\Kanban\KanbanCardPriority;
@@ -49,12 +50,12 @@ final class CardController extends AbstractController
         $title = trim($payload['title'] ?? '');
 
         if (!$columnId || $title === '') {
-            return $this->json(['error' => 'column_id и title обязательны.'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::COLUMN_ID_AND_TITLE_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
         $column = $this->columnRepo->find($columnId);
         if (!$column) {
-            return $this->json(['error' => 'Колонка не найдена.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::COLUMN_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $this->kanbanService->requireRole($column->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
@@ -94,7 +95,7 @@ final class CardController extends AbstractController
 
         $card = $this->cardRepo->findOneWithRelations($id);
         if (!$card) {
-            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_VIEWER);
@@ -196,7 +197,7 @@ final class CardController extends AbstractController
 
         $card = $this->cardRepo->find($id);
         if (!$card) {
-            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $board = $card->getColumn()->getBoard();
@@ -251,7 +252,7 @@ final class CardController extends AbstractController
 
         $card = $this->cardRepo->find($id);
         if (!$card) {
-            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
@@ -259,7 +260,7 @@ final class CardController extends AbstractController
         $board = $card->getColumn()->getBoard();
         $project = $board->getProject();
         if (!$project) {
-            return $this->json(['error' => 'У доски нет проекта.'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::BOARD_HAS_NO_PROJECT], Response::HTTP_BAD_REQUEST);
         }
 
         $payload = json_decode($request->getContent(), true) ?? [];
@@ -267,12 +268,12 @@ final class CardController extends AbstractController
 
         $assigneesToSet = $this->userRepo->findByIds($userIds);
         if ($userIds !== [] && count($assigneesToSet) !== count($userIds)) {
-            return $this->json(['error' => 'Пользователь не найден.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::USER_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         foreach ($assigneesToSet as $assignee) {
             if ($project->getOwner() !== $assignee && $this->projectUserRepo->findByProjectAndUser($project, $assignee) === null) {
-                return $this->json(['error' => 'Пользователь не является участником проекта'], Response::HTTP_BAD_REQUEST);
+                return $this->json(['error' => SpaApiError::USER_NOT_PROJECT_MEMBER], Response::HTTP_BAD_REQUEST);
             }
         }
 
@@ -320,7 +321,7 @@ final class CardController extends AbstractController
 
         $card = $this->cardRepo->find($id);
         if (!$card) {
-            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
@@ -330,12 +331,12 @@ final class CardController extends AbstractController
         $position = $payload['position'] ?? null;
 
         if (!$columnId || $position === null) {
-            return $this->json(['error' => 'column_id и position обязательны.'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => SpaApiError::COLUMN_ID_AND_POSITION_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
         $targetColumn = $this->columnRepo->find($columnId);
         if (!$targetColumn) {
-            return $this->json(['error' => 'Колонка не найдена.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::COLUMN_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $prevUpdatedAt = isset($payload['prev_updated_at'])
@@ -398,7 +399,7 @@ final class CardController extends AbstractController
 
         $card = $this->cardRepo->find($id);
         if (!$card) {
-            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_ADMIN);
@@ -418,7 +419,7 @@ final class CardController extends AbstractController
 
         $card = $this->cardRepo->find($id);
         if (!$card) {
-            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_ADMIN);
