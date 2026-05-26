@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\Kanban;
 
-use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Enum\Kanban\KanbanCardPriority;
@@ -257,8 +256,25 @@ final class CardController extends AbstractController
 
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
 
+        $board = $card->getColumn()->getBoard();
+        $project = $board->getProject();
+        if (!$project) {
+            return $this->json(['error' => 'У доски нет проекта.'], Response::HTTP_BAD_REQUEST);
+        }
+
         $payload = json_decode($request->getContent(), true) ?? [];
         $userIds = array_slice(array_map('intval', array_filter($payload['user_ids'] ?? [], 'is_numeric')), 0, 1);
+
+        $assigneesToSet = $this->userRepo->findByIds($userIds);
+        if ($userIds !== [] && count($assigneesToSet) !== count($userIds)) {
+            return $this->json(['error' => 'Пользователь не найден.'], Response::HTTP_NOT_FOUND);
+        }
+
+        foreach ($assigneesToSet as $assignee) {
+            if ($project->getOwner() !== $assignee && $this->projectUserRepo->findByProjectAndUser($project, $assignee) === null) {
+                return $this->json(['error' => 'Пользователь не является участником проекта'], Response::HTTP_BAD_REQUEST);
+            }
+        }
 
         $previousAssigneeIds = array_map(static fn (User $u) => $u->getId(), $card->getAssignees()->toArray());
         foreach ($card->getAssignees() as $existing) {
@@ -266,7 +282,7 @@ final class CardController extends AbstractController
         }
 
         $newAssignees = [];
-        foreach ($this->userRepo->findByIds($userIds) as $assignee) {
+        foreach ($assigneesToSet as $assignee) {
             $card->addAssignee($assignee);
             if (!in_array($assignee->getId(), $previousAssigneeIds, true)) {
                 $newAssignees[] = $assignee;
@@ -275,82 +291,10 @@ final class CardController extends AbstractController
 
         $this->em->flush();
 
-        $board = $card->getColumn()->getBoard();
         $boardLink = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]);
         foreach ($newAssignees as $assignee) {
             if ($assignee->getId() !== $user->getId()) {
                 $this->notificationService->notifyKanbanTaskAssigned($assignee, $card->getTitle(), $boardLink, false);
-            }
-        }
-
-        $assignees = [];
-        foreach ($card->getAssignees() as $u) {
-            $assignees[] = [
-                'id' => $u->getId(),
-                'name' => trim($u->getLastname() . ' ' . $u->getFirstname()) ?: (string) $u->getId(),
-                'firstname' => $u->getFirstname(),
-                'lastname' => $u->getLastname(),
-            ];
-        }
-
-        return $this->json(['assignees' => $assignees]);
-    }
-
-    #[Route('/{id}/assign-new-member', name: 'spa_api_cards_assign_new_member', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function assignNewMember(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        if (!$user instanceof User) {
-            throw $this->createAccessDeniedException();
-        }
-
-        $card = $this->cardRepo->find($id);
-        if (!$card) {
-            return $this->json(['error' => 'Карточка не найдена.'], Response::HTTP_NOT_FOUND);
-        }
-
-        $board = $card->getColumn()->getBoard();
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
-
-        $project = $board->getProject();
-        if (!$project) {
-            return $this->json(['error' => 'У доски нет проекта.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        $payload = json_decode($request->getContent(), true) ?? [];
-        $userId = isset($payload['user_id']) ? (int) $payload['user_id'] : 0;
-        if ($userId <= 0) {
-            return $this->json(['error' => 'user_id обязателен.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        $targetUser = $this->userRepo->find($userId);
-        if (!$targetUser instanceof User) {
-            return $this->json(['error' => 'Пользователь не найден.'], Response::HTTP_NOT_FOUND);
-        }
-
-        $addedToProject = !$this->projectUserRepo->findByProjectAndUser($project, $targetUser);
-        if ($addedToProject) {
-            $projectUser = new KanbanProjectUser();
-            $projectUser->setKanbanProject($project);
-            $projectUser->setUser($targetUser);
-            $projectUser->setRole(KanbanBoardMemberRole::KANBAN_VIEWER);
-            $this->em->persist($projectUser);
-        }
-
-        $addedAsAssignee = !$card->getAssignees()->contains($targetUser);
-        if ($addedAsAssignee) {
-            $card->addAssignee($targetUser);
-        }
-
-        $this->em->flush();
-
-        if ($targetUser->getId() !== $user->getId()) {
-            $projectLink = $this->generateUrl('app_kanban_project', ['id' => $project->getId()]);
-            $boardLink = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]);
-            if ($addedToProject) {
-                $this->notificationService->notifyNewKanbanProjectUser($targetUser, $project->getName() ?? 'Проект', $projectLink);
-            }
-            if ($addedAsAssignee) {
-                $this->notificationService->notifyKanbanTaskAssigned($targetUser, $card->getTitle(), $boardLink, false);
             }
         }
 
