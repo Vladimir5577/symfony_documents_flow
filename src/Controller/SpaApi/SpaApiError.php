@@ -20,6 +20,8 @@ final class SpaApiError
     public const DESCRIPTION_INVALID_TYPE = 'description_invalid_type';
     public const INSUFFICIENT_PERMISSIONS = 'insufficient_permissions';
     public const INVALID_JSON = 'invalid_json';
+    public const LABEL_NAME_REQUIRED = 'label_name_required';
+    public const LABEL_NOT_FOUND = 'label_not_found';
     public const INVALID_ROLE = 'invalid_role';
     public const INVALID_ROLE_FOR_USER = 'invalid_role_for_user';
     public const MEMBER_NOT_FOUND = 'member_not_found';
