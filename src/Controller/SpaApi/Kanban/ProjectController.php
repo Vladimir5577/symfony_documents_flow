@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller\SpaApi\Kanban;
 
 use App\Entity\Kanban\KanbanBoard;
+use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
@@ -106,21 +107,10 @@ final class ProjectController extends AbstractController
             return $this->json(['error' => 'Проект не найден'], 404);
         }
 
-        $firstBoard = $project->getBoards()->first() ?: null;
         $memberRole = KanbanBoardMemberRole::KANBAN_ADMIN;
 
         try {
-            if ($firstBoard) {
-                $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
-                $memberRole = $this->kanbanService->getMemberRole($firstBoard, $user) ?? KanbanBoardMemberRole::KANBAN_VIEWER;
-
-                if ($memberRole !== KanbanBoardMemberRole::KANBAN_ADMIN) {
-                    return $this->json([
-                        'error' => 'Нет доступа к странице проекта',
-                        'entryBoardId' => $firstBoard->getId(),
-                    ], 403);
-                }
-            } elseif ($project->getOwner() !== $user && $this->projectUserRepository->findByProjectAndUser($project, $user) === null) {
+            if ($project->getOwner() !== $user && $this->projectUserRepository->findByProjectAndUser($project, $user) === null) {
                 return $this->json(['error' => 'Нет доступа к проекту'], 403);
             }
         } catch (AccessDeniedHttpException $e) {
@@ -167,6 +157,82 @@ final class ProjectController extends AbstractController
         ]);
     }
 
+    /**
+     * Обновление проекта (как POST /kanban_project/{id}/edit в ProjectKanbanController).
+     *
+     * Редактируемые поля из edit_project.html.twig: name, description.
+     * Участники и роли — отдельные эндпоинты (edit_members, change_member_role, remove_member).
+     */
+    #[Route('/{id}', name: 'spa_api_project_update', requirements: ['id' => '\d+'], methods: ['PATCH'])]
+    public function update(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $project = $this->projectRepository->find($id);
+        if ($project === null) {
+            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+        }
+
+        $projectId = $project->getId();
+        if ($projectId === null) {
+            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $this->assertProjectAdmin($project, $user);
+        } catch (AccessDeniedHttpException $e) {
+            return $this->json(['error' => $e->getMessage()], Response::HTTP_FORBIDDEN);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload)) {
+            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $hasName = array_key_exists('name', $payload);
+        $hasDescription = array_key_exists('description', $payload);
+        if (!$hasName && !$hasDescription) {
+            return $this->json(
+                ['error' => 'Укажите хотя бы одно поле: name, description'],
+                Response::HTTP_BAD_REQUEST,
+            );
+        }
+
+        if ($hasName) {
+            $name = trim((string) $payload['name']);
+            if ($name === '') {
+                return $this->json(['error' => 'Название проекта обязательно'], Response::HTTP_BAD_REQUEST);
+            }
+            if (mb_strlen($name) > 255) {
+                return $this->json(
+                    ['error' => 'Название проекта слишком длинное (максимум 255 символов)'],
+                    Response::HTTP_BAD_REQUEST,
+                );
+            }
+            $project->setName($name);
+        }
+
+        if ($hasDescription) {
+            $descriptionRaw = $payload['description'];
+            if ($descriptionRaw !== null && !is_string($descriptionRaw)) {
+                return $this->json(['error' => 'Поле description должно быть строкой или null'], Response::HTTP_BAD_REQUEST);
+            }
+            $description = is_string($descriptionRaw) ? trim($descriptionRaw) : null;
+            $project->setDescription($description === '' ? null : $description);
+        }
+
+        $this->entityManager->flush();
+
+        return $this->json([
+            'id' => $projectId,
+            'name' => $project->getName(),
+            'description' => $project->getDescription(),
+            'updatedAt' => $project->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
+        ]);
+    }
+
     #[Route('/{id}', name: 'spa_api_project_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
     public function delete(int $id, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -187,6 +253,25 @@ final class ProjectController extends AbstractController
         $this->entityManager->flush();
 
         return $this->json(['success' => true]);
+    }
+
+    /**
+     * Права как ProjectKanbanController::editProject — только администратор проекта.
+     *
+     * @throws AccessDeniedHttpException
+     */
+    private function assertProjectAdmin(KanbanProject $project, User $user): void
+    {
+        $firstBoard = $project->getBoards()->first() ?: null;
+        if ($firstBoard) {
+            $this->kanbanService->requireRole($firstBoard, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
+
+            return;
+        }
+
+        if ($project->getOwner() !== $user && $this->projectUserRepository->findByProjectAndUser($project, $user) === null) {
+            throw new AccessDeniedHttpException('Нет доступа к проекту');
+        }
     }
 
     /**
