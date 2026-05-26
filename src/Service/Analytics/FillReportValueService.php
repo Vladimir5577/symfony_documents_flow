@@ -76,9 +76,6 @@ final class FillReportValueService
             $hasNotes = $sanitizedNotes !== [];
 
             if ($isValueEmpty && !$hasNotes) {
-                if (isset($existingMap[$metricId])) {
-                    $this->em->remove($existingMap[$metricId]);
-                }
                 continue;
             }
 
