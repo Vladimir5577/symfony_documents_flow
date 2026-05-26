@@ -10,7 +10,7 @@ use Doctrine\Migrations\AbstractMigration;
 /**
  * Auto-generated Migration: Please modify to your needs!
  */
-final class Version20260522072029 extends AbstractMigration
+final class Version20260526052751 extends AbstractMigration
 {
     public function getDescription(): string
     {
@@ -21,6 +21,8 @@ final class Version20260522072029 extends AbstractMigration
     {
         // this up() migration is auto-generated, please modify it to your needs
         $this->addSql('DROP INDEX idx_analytics_agg_effective_at');
+        $this->addSql('DROP INDEX idx_analytics_agg_business_key_org');
+        $this->addSql('ALTER TABLE analytics_aggregated_data DROP business_key');
         $this->addSql('ALTER TABLE analytics_aggregated_data DROP metric_name_snapshot');
         $this->addSql('ALTER TABLE analytics_aggregated_data DROP metric_unit_snapshot');
         $this->addSql('ALTER TABLE analytics_aggregated_data DROP metric_type_snapshot');
@@ -66,11 +68,13 @@ final class Version20260522072029 extends AbstractMigration
     public function down(Schema $schema): void
     {
         // this down() migration is auto-generated, please modify it to your needs
+        $this->addSql('ALTER TABLE analytics_aggregated_data ADD business_key VARCHAR(128) NOT NULL');
         $this->addSql('ALTER TABLE analytics_aggregated_data ADD metric_name_snapshot VARCHAR(255) DEFAULT NULL');
         $this->addSql('ALTER TABLE analytics_aggregated_data ADD metric_unit_snapshot VARCHAR(64) DEFAULT NULL');
         $this->addSql('ALTER TABLE analytics_aggregated_data ADD metric_type_snapshot VARCHAR(64) DEFAULT NULL');
         $this->addSql('ALTER TABLE analytics_aggregated_data ADD effective_at TIMESTAMP(0) WITHOUT TIME ZONE DEFAULT NULL');
         $this->addSql('CREATE INDEX idx_analytics_agg_effective_at ON analytics_aggregated_data (effective_at)');
+        $this->addSql('CREATE INDEX idx_analytics_agg_business_key_org ON analytics_aggregated_data (business_key, organization_id)');
         $this->addSql('ALTER TABLE analytics_board_version_metrics DROP CONSTRAINT FK_B5260707727ACA70');
         $this->addSql('DROP INDEX idx_analytics_board_version_metrics_parent');
         $this->addSql('ALTER TABLE analytics_board_version_metrics DROP parent_id');

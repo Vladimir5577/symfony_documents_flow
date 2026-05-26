@@ -35,6 +35,8 @@
         Отчёт создаётся автоматически за текущий период ({{ board.periodType.label }}) после нажатия одной из кнопок сохранения.
     </div>
 
+    {% import 'analytics/report/_metric_notes.html.twig' as notes %}
+
     <section id="multiple-column-form">
         <div class="row match-height">
             <div class="col-12">
@@ -58,6 +60,7 @@
                                         <th>Метрика</th>
                                         <th>Ед. изм.</th>
                                         <th>Значение</th>
+                                        <th>Описание</th>
                                     </tr>
                                     </thead>
                                     <tbody>
@@ -91,7 +94,9 @@
                                                     <input type="number" step="any" name="values[{{ vm.id }}]" class="form-control" value="">
                                                 {% endif %}
                                             </td>
+                                            <td>{{ notes.toggleButton(vm.id) }}</td>
                                         </tr>
+                                        {{ notes.row(vm.id, [], 4) }}
                                     {% endfor %}
                                     </tbody>
                                 </table>
@@ -147,4 +152,6 @@
             });
         })();
     </script>
+
+    {% include 'analytics/report/_metric_notes.html.twig' %}
 {% endblock %}

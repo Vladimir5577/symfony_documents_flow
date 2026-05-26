@@ -6,6 +6,8 @@
     {% include 'sidebar/sidebar_list.html.twig' %}
 {% endblock %}
 
+{% import 'analytics/report/_metric_notes_view.html.twig' as notesView %}
+
 {% block main %}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -34,6 +36,14 @@
         {% endif %}
     </div>
 
+    <style>
+        .metric-notes-view-list { padding-left: 18px; font-size: 0.875rem; margin-top: 0; margin-bottom: 0; }
+        .metric-notes-view-list ul { padding-left: 18px; }
+        .metrics-view-table td.metric-cell { vertical-align: middle; }
+        .metrics-view-table .child-indicator { color: #adb5bd; margin-right: 6px; }
+        .metrics-view-table td.metric-notes-cell { background: #fafbfc; padding: 8px 12px; }
+    </style>
+
     <section>
         <div class="row match-height">
             <div class="col-12">
@@ -43,7 +53,7 @@
                     </div>
                     <div class="card-content">
                         <div class="card-body">
-                            <table class="table table-bordered">
+                            <table class="table table-bordered metrics-view-table">
                                 <thead>
                                 <tr>
                                     <th>Метрика</th>
@@ -53,13 +63,15 @@
                                 </tr>
                                 </thead>
                                 <tbody>
-                                {% for vm in report.boardVersion.versionMetrics %}
-                                    {% set metric = vm.metric %}
+                                {% for entry in versionMetricsFlat %}
+                                    {% set vm = entry.versionMetric %}
+                                    {% set metric = entry.metric %}
                                     {% set value = currentValues[vm.id] ?? '' %}
-                                    <tr>
-                                        <td>
+                                    {% set nodes = currentNotes[vm.id] ?? [] %}
+                                    <tr data-depth="{{ entry.depth }}">
+                                        <td class="metric-cell" style="padding-left: {{ 12 + entry.depth * 40 }}px;">
+                                            {% if entry.depth > 0 %}<i class="bi bi-arrow-return-right child-indicator"></i>{% endif %}
                                             <strong>{{ metric.name }}</strong>
-                                            <br><small class="text-muted"><code>{{ metric.businessKey }}</code></small>
                                             {% if vm.required %}<span class="text-danger">*</span>{% endif %}
                                         </td>
                                         <td>{{ metric.type }}</td>
@@ -78,6 +90,13 @@
                                             {% endif %}
                                         </td>
                                     </tr>
+                                    {% if nodes is iterable and nodes|length > 0 %}
+                                        <tr class="metric-notes-row-view">
+                                            <td colspan="4" class="metric-notes-cell" style="padding-left: {{ 12 + entry.depth * 40 }}px;">
+                                                {{ notesView.renderList(nodes) }}
+                                            </td>
+                                        </tr>
+                                    {% endif %}
                                 {% endfor %}
                                 </tbody>
                             </table>

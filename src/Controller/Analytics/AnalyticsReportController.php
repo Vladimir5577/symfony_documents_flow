@@ -223,6 +223,8 @@ final class AnalyticsReportController extends AbstractController
             }
 
             $values = $request->request->all('values') ?? [];
+            $notes = $this->decodeNotesPayload($request->request->all('notes') ?? []);
+
             $hasAnyValue = false;
             foreach ($values as $value) {
                 if ($value !== '' && $value !== null) {
@@ -230,8 +232,15 @@ final class AnalyticsReportController extends AbstractController
                     break;
                 }
             }
-            if (!$hasAnyValue) {
-                $this->addFlash('error', 'Введите хотя бы одно значение перед сохранением.');
+            $hasAnyNotes = false;
+            foreach ($notes as $tree) {
+                if ($tree !== []) {
+                    $hasAnyNotes = true;
+                    break;
+                }
+            }
+            if (!$hasAnyValue && !$hasAnyNotes) {
+                $this->addFlash('error', 'Введите хотя бы одно значение или описание перед сохранением.');
                 return $this->redirectToRoute('app_analytics_report_fill_new', ['board_id' => $boardId]);
             }
 
@@ -239,7 +248,7 @@ final class AnalyticsReportController extends AbstractController
 
             try {
                 $report = $reportService->createReportForBoard($ownerOrganization, $boardId, $user);
-                $fillService->fillValues($report, $values, $user);
+                $fillService->fillValues($report, $values, $user, notes: $notes);
 
                 if ($submitAction === 'confirm' || $submitAction === 'approve' || $submitAction === 'submit') {
                     $approveService->confirm($report);
@@ -293,6 +302,7 @@ final class AnalyticsReportController extends AbstractController
         CreateReportService $reportService,
         FillReportValueService $fillService,
         RecalculateAggregatesService $recalculateService,
+        VersionMetricTreeBuilder $metricTreeBuilder,
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
@@ -321,10 +331,11 @@ final class AnalyticsReportController extends AbstractController
             }
 
             $values = $request->request->all('values') ?? [];
+            $notes = $this->decodeNotesPayload($request->request->all('notes') ?? []);
 
             try {
                 $wasConfirmed = $report->getStatus() === AnalyticsReportStatus::Confirmed;
-                $fillService->fillValues($report, $values, $user, $isAdmin);
+                $fillService->fillValues($report, $values, $user, $isAdmin, $notes);
 
                 if ($isAdmin && $wasConfirmed) {
                     $recalculateService->recalculateForScope($report->getPeriod(), $report->getOrganization());
@@ -341,6 +352,7 @@ final class AnalyticsReportController extends AbstractController
 
         // Собираем текущие значения для шаблона
         $currentValues = [];
+        $currentNotes = [];
         foreach ($report->getValues() as $v) {
             $mid = $v->getBoardVersionMetric()->getId();
             if ($v->getValueNumber() !== null) {
@@ -350,12 +362,35 @@ final class AnalyticsReportController extends AbstractController
             } elseif ($v->getValueBool() !== null) {
                 $currentValues[$mid] = $v->getValueBool() ? '1' : '0';
             }
+            $json = $v->getValueJson();
+            if (is_array($json) && $json !== []) {
+                $currentNotes[$mid] = $json;
+            }
+        }
+
+        $versionMetricEntries = [];
+        foreach ($report->getBoardVersion()->getVersionMetrics() as $vm) {
+            $metric = $vm->getMetric();
+            if (!$metric || $metric->getId() === null) {
+                continue;
+            }
+            $versionMetricEntries[] = [
+                'metric' => $metric,
+                'versionMetric' => $vm,
+                'data' => [
+                    'position' => $vm->getPosition(),
+                    'is_required' => $vm->isRequired(),
+                    'parent_metric_id' => $vm->getParent()?->getMetric()?->getId(),
+                ],
+            ];
         }
 
         return $this->render('analytics/report/fill.html.twig', [
             'report' => $report,
             'currentValues' => $currentValues,
+            'currentNotes' => $currentNotes,
             'canEdit' => $canEdit,
+            'versionMetricsFlat' => $metricTreeBuilder->flatten($versionMetricEntries),
             'active_tab' => 'analytics_reports',
         ]);
     }
@@ -364,6 +399,7 @@ final class AnalyticsReportController extends AbstractController
     public function view(
         int $id,
         CreateReportService $reportService,
+        VersionMetricTreeBuilder $metricTreeBuilder,
     ): Response {
         $user = $this->getUser();
         if (!$user) {
@@ -376,6 +412,7 @@ final class AnalyticsReportController extends AbstractController
         }
 
         $currentValues = [];
+        $currentNotes = [];
         foreach ($report->getValues() as $v) {
             $mid = $v->getBoardVersionMetric()->getId();
             if ($v->getValueNumber() !== null) {
@@ -385,11 +422,34 @@ final class AnalyticsReportController extends AbstractController
             } elseif ($v->getValueBool() !== null) {
                 $currentValues[$mid] = $v->getValueBool() ? '1' : '0';
             }
+            $json = $v->getValueJson();
+            if (is_array($json) && $json !== []) {
+                $currentNotes[$mid] = $json;
+            }
+        }
+
+        $versionMetricEntries = [];
+        foreach ($report->getBoardVersion()->getVersionMetrics() as $vm) {
+            $metric = $vm->getMetric();
+            if (!$metric || $metric->getId() === null) {
+                continue;
+            }
+            $versionMetricEntries[] = [
+                'metric' => $metric,
+                'versionMetric' => $vm,
+                'data' => [
+                    'position' => $vm->getPosition(),
+                    'is_required' => $vm->isRequired(),
+                    'parent_metric_id' => $vm->getParent()?->getMetric()?->getId(),
+                ],
+            ];
         }
 
         return $this->render('analytics/report/view.html.twig', [
             'report' => $report,
             'currentValues' => $currentValues,
+            'currentNotes' => $currentNotes,
+            'versionMetricsFlat' => $metricTreeBuilder->flatten($versionMetricEntries),
             'active_tab' => 'analytics_reports',
         ]);
     }
@@ -486,6 +546,35 @@ final class AnalyticsReportController extends AbstractController
 
         $this->addFlash('success', 'Отчёт удалён.');
         return $this->redirectToRoute('app_analytics_report');
+    }
+
+    /**
+     * Декодирует payload notes из POST: каждый элемент приходит JSON-строкой.
+     * Битый JSON или не-массив на верхнем уровне → [] для этой метрики.
+     *
+     * @param array<int|string, mixed> $raw
+     *
+     * @return array<int, array<int, mixed>>
+     */
+    private function decodeNotesPayload(array $raw): array
+    {
+        $decoded = [];
+        foreach ($raw as $metricIdRaw => $jsonRaw) {
+            $metricId = (int) $metricIdRaw;
+            if ($metricId <= 0 || !is_string($jsonRaw) || $jsonRaw === '') {
+                continue;
+            }
+            try {
+                $tree = json_decode($jsonRaw, true, 32, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                continue;
+            }
+            if (!is_array($tree)) {
+                continue;
+            }
+            $decoded[$metricId] = $tree;
+        }
+        return $decoded;
     }
 
     private function currentPeriodStartDate(AnalyticsPeriodType $type, \DateTimeImmutable $now): \DateTimeImmutable

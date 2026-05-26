@@ -149,16 +149,15 @@
 
 11. analytics_aggregated_data
     - id
-    - metric_id	FK → analytics_metrics.id	Ссылка на метрику (целостность, защита от удаления строки метрики при наличии агрегатов)
+    - metric_id	FK → analytics_metrics.id	Ссылка на метрику (целостность, защита от удаления строки метрики при наличии агрегатов). Бизнес-ключ берётся напрямую через JOIN к `analytics_metrics.business_key`.
     - period_id	FK → analytics_periods.id	Ссылка на период
     - organization_id	FK → organization.id	Ссылка на организацию
-    - business_key	string	Денормализация `analytics_metrics.business_key` для фильтров графиков без JOIN; при записи должна совпадать с метрикой
     - aggregation_type	string	Правило агрегации: sum | avg | min | max | last
     - value	DECIMAL(20,4)	Агрегированное значение
     - source_count	int	Количество raw-записей, участвовавших в расчёте
     - calculated_at	timestamp	Время последнего пересчёта
     - UNIQUE(metric_id, period_id, organization_id)		Один агрегат на метрику / период / организацию
-    Примечание: агрегаты привязаны к метрике, периоду и организации. При подтверждении отчёта значения агрегируются по правилу `aggregation_type` метрики (sum/avg/min/max/last). Подписи/единицы при отображении графиков берутся из `analytics_metrics` через JOIN по `metric_id`.
+    Примечание: агрегаты привязаны к метрике, периоду и организации. При подтверждении отчёта значения агрегируются по правилу `aggregation_type` метрики (sum/avg/min/max/last). Подписи/единицы и `business_key` при отображении графиков берутся из `analytics_metrics` через JOIN по `metric_id` — отдельной денормализации `business_key` в этой таблице нет.
 
 --------------------------
 Консистентность агрегатов (выбранный подход для MVP)
@@ -201,8 +200,7 @@
 3) `analytics_aggregated_data`
    - UNIQUE(metric_id, period_id, organization_id) покрывает точечные выборки по тройке
    - INDEX(period_id, organization_id)
-   - INDEX(business_key, organization_id) — фильтры графиков по стабильному ключу без JOIN
-   - INDEX(metric_id, organization_id) — ряды по метрике в разрезе организации
+   - INDEX(metric_id, organization_id) — ряды по метрике в разрезе организации; фильтр графиков по `business_key` идёт через JOIN к `analytics_metrics`
 4) `analytics_periods`
    - UNIQUE(iso_year, iso_week) уже даёт индекс для выборки по неделе
    - INDEX(start_date) — сортировки и диапазоны по датам
@@ -309,21 +307,24 @@ FK стратегии (ON DELETE / ON UPDATE)
 Как будут строиться графики
 Пример:
 "Расход топлива по неделям"
-SELECT period_id, aggregated_value_number
-FROM analytics_aggregated_data
-WHERE business_key = 'fuel_consumption'
+SELECT ad.period_id, ad.value
+FROM analytics_aggregated_data ad
+JOIN analytics_metrics m ON m.id = ad.metric_id
+WHERE m.business_key = 'fuel_consumption'
 "Сравнение организаций"
-SELECT organization_id, aggregated_value_number
-FROM analytics_aggregated_data
-WHERE business_key = :target_business_key
-  AND period_id = :period_id
+SELECT ad.organization_id, ad.value
+FROM analytics_aggregated_data ad
+JOIN analytics_metrics m ON m.id = ad.metric_id
+WHERE m.business_key = :target_business_key
+  AND ad.period_id = :period_id
 
 Важно:
 - в реальном запросе агрегат (`SUM/AVG/MIN/MAX/last`) определяется по `analytics_metrics.aggregation_type`;
-- `analytics_aggregated_data.aggregated_value_number` уже содержит предрасчитанное значение по правилу метрики.
+- `analytics_aggregated_data.value` уже содержит предрасчитанное значение по правилу метрики;
+- `business_key` живёт только в `analytics_metrics`; в `analytics_aggregated_data` его нет, фильтр идёт через JOIN по `metric_id`. Альтернатива — заранее резолвить `metric_id` по `business_key` в сервисе и фильтровать прямо по `ad.metric_id`.
 
 Важно для графиков по длинному периоду (когда версии менялись):
-- использовать фильтрацию по `business_key` (или по `metric_id` с JOIN к `analytics_metrics` при необходимости);
+- использовать фильтрацию по `business_key` через JOIN к `analytics_metrics` (или по `metric_id`, если уже резолвлен);
 - версии досок не влияют на чтение агрегатов;
 - сложные JOIN по `board_version_metric_id` для длинной истории не требуются.
 

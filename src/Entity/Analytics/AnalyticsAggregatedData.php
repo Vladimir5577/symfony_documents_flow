@@ -17,7 +17,6 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'analytics_aggregated_data')]
 #[ORM\UniqueConstraint(name: 'uniq_analytics_agg', columns: ['metric_id', 'period_id', 'organization_id'])]
 #[ORM\Index(name: 'idx_analytics_agg_period_org', columns: ['period_id', 'organization_id'])]
-#[ORM\Index(name: 'idx_analytics_agg_business_key_org', columns: ['business_key', 'organization_id'])]
 #[ORM\Index(name: 'idx_analytics_agg_metric_org', columns: ['metric_id', 'organization_id'])]
 class AnalyticsAggregatedData
 {
@@ -37,9 +36,6 @@ class AnalyticsAggregatedData
     #[ORM\ManyToOne(targetEntity: AbstractOrganization::class)]
     #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?AbstractOrganization $organization = null;
-
-    #[ORM\Column(name: 'business_key', length: 128)]
-    private ?string $businessKey = null;
 
     #[ORM\Column(name: 'aggregation_type', length: 64)]
     private ?string $aggregationType = null;
@@ -66,9 +62,6 @@ class AnalyticsAggregatedData
     public function setMetric(?AnalyticsMetric $metric): static
     {
         $this->metric = $metric;
-        if ($metric !== null) {
-            $this->businessKey = $metric->getBusinessKey();
-        }
         return $this;
     }
 
@@ -91,17 +84,6 @@ class AnalyticsAggregatedData
     public function setOrganization(?AbstractOrganization $organization): static
     {
         $this->organization = $organization;
-        return $this;
-    }
-
-    public function getBusinessKey(): ?string
-    {
-        return $this->businessKey;
-    }
-
-    public function setBusinessKey(string $businessKey): static
-    {
-        $this->businessKey = $businessKey;
         return $this;
     }
 

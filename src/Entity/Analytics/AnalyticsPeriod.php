@@ -21,6 +21,12 @@ class AnalyticsPeriod
         9 => 'Сентябрь', 10 => 'Октябрь', 11 => 'Ноябрь', 12 => 'Декабрь',
     ];
 
+    private const MONTH_NAMES_GENITIVE = [
+        1 => 'января', 2 => 'февраля', 3 => 'марта', 4 => 'апреля',
+        5 => 'мая', 6 => 'июня', 7 => 'июля', 8 => 'августа',
+        9 => 'сентября', 10 => 'октября', 11 => 'ноября', 12 => 'декабря',
+    ];
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -117,6 +123,56 @@ class AnalyticsPeriod
                 '%s %s',
                 self::MONTH_NAMES[(int) $this->startDate->format('n')],
                 $this->startDate->format('Y'),
+            ),
+        };
+    }
+
+    public function getHumanLabel(): string
+    {
+        $startDay = (int) $this->startDate->format('j');
+        $startMonth = (int) $this->startDate->format('n');
+        $startYear = (int) $this->startDate->format('Y');
+        $endDay = (int) $this->endDate->format('j');
+        $endMonth = (int) $this->endDate->format('n');
+        $endYear = (int) $this->endDate->format('Y');
+
+        return match ($this->type) {
+            AnalyticsPeriodType::Daily => sprintf(
+                '%d %s %d',
+                $startDay,
+                self::MONTH_NAMES_GENITIVE[$startMonth],
+                $startYear,
+            ),
+            AnalyticsPeriodType::Weekly => match (true) {
+                $startYear !== $endYear => sprintf(
+                    '%d %s %d – %d %s %d',
+                    $startDay,
+                    self::MONTH_NAMES_GENITIVE[$startMonth],
+                    $startYear,
+                    $endDay,
+                    self::MONTH_NAMES_GENITIVE[$endMonth],
+                    $endYear,
+                ),
+                $startMonth !== $endMonth => sprintf(
+                    '%d %s – %d %s %d',
+                    $startDay,
+                    self::MONTH_NAMES_GENITIVE[$startMonth],
+                    $endDay,
+                    self::MONTH_NAMES_GENITIVE[$endMonth],
+                    $endYear,
+                ),
+                default => sprintf(
+                    '%d–%d %s %d',
+                    $startDay,
+                    $endDay,
+                    self::MONTH_NAMES_GENITIVE[$startMonth],
+                    $startYear,
+                ),
+            },
+            AnalyticsPeriodType::Monthly => sprintf(
+                '%s %d',
+                self::MONTH_NAMES[$startMonth],
+                $startYear,
             ),
         };
     }

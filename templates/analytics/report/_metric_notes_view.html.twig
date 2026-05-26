@@ -1,0 +1,22 @@
+{# Read-only отрисовка дерева пояснений для метрики (используется в view.html.twig). #}
+
+{% macro renderList(nodes) %}
+    {% import _self as self %}
+    {% if nodes is iterable and nodes|length > 0 %}
+        <ul class="metric-notes-view-list mb-0">
+            {% for node in nodes %}
+                {% set key = node.key|default('') %}
+                {% set value = node.value|default('') %}
+                {% set children = node.children|default([]) %}
+                {% if key != '' or value != '' or (children is iterable and children|length > 0) %}
+                    <li>
+                        {% if key != '' %}<strong>{{ key }}</strong>{% endif %}
+                        {% if key != '' and value != '' %} — {% endif %}
+                        {% if value != '' %}{{ value }}{% endif %}
+                        {{ self.renderList(children) }}
+                    </li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endmacro %}
