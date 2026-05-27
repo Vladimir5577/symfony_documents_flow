@@ -10,6 +10,7 @@ enum AnalyticsMetricCategory: string
     case Mechanics = 'mechanics';
     case Hr = 'hr';
     case Tko = 'tko';
+    case CitizenAppeal = 'citizen_appeal';
 
     public function label(): string
     {
@@ -18,6 +19,7 @@ enum AnalyticsMetricCategory: string
             self::Mechanics => 'Механики',
             self::Hr => 'Отдел кадров',
             self::Tko => 'ТКО',
+            self::CitizenAppeal => 'Обращение граждан',
         };
     }
 }
