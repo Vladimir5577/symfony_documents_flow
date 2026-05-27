@@ -1,20 +1,22 @@
 ================================================================================
-SPA API — Citizen Appeals Analytics (Dashboard)
+SPA API — Citizen Appeals Analytics
 ================================================================================
 
-Эндпоинт для получения сырых недельных значений по дашборду
-"Обращение граждан": по каждой неделе и каждому из 7 городов
-отдаётся пара чисел calls/appeals.
+Эндпоинт для получения отчётов «Обращение граждан» в виде дерева метрик
+по неделям. Никакой агрегации/расчётов на лету — отдаются ровно те значения,
+которые оператор ввёл в подтверждённых отчётах, в иерархии, заданной составом
+версии доски (`analytics_board_version_metrics.parent_id`).
 
-Никакой агрегации, KPI или conversion на стороне сервера — всё
-считает фронт.
+Контракт и формат — общий с финансовой аналитикой
+(см. Readme_financial_analytics.txt); отличается только категория метрик
+(`citizen_appeal`) и состав дерева.
 
 --------------------------------------------------------------------------------
 1. ЗАПРОС
 --------------------------------------------------------------------------------
 
   Method : GET
-  URL    : /spa/api/analytics/citizen-appeals/dashboard/data
+  URL    : /spa/api/analytics/citizen-appeals/reports
 
 Query-параметры:
 
@@ -24,67 +26,62 @@ Query-параметры:
                 самих и всех дочерних);
             N = конкретная организация N + все её дочерние.
 
-Авторизация:
-  JWT в заголовке Authorization (как у всех /spa/api/*).
-  См. dev_docks/spa_api/Readme_spa_auth.txt.
+  from    (string YYYY-MM-DD, опционально)
+            Нижняя граница периода: возвращаются только недели,
+            у которых analytics_periods.start_date >= from.
+            Невалидное значение (не подходящее под YYYY-MM-DD)
+            игнорируется без ошибки.
+
+  to      (string YYYY-MM-DD, опционально)
+            Верхняя граница периода: analytics_periods.end_date <= to.
+            Невалидное значение игнорируется.
+
+  limit   (int, опционально, по умолчанию 12, максимум 100)
+            Сколько недель вернуть. limit <= 0 → 12. limit > 100 → 100.
+            Пагинация — по неделям, а не по строкам метрик.
+
+  offset  (int, опционально, по умолчанию 0)
+            Сдвиг по неделям. offset < 0 → 0.
+
+Авторизация: JWT в заголовке Authorization (как у всех /spa/api/* маршрутов).
+См. dev_docks/spa_api/Readme_spa_auth.txt.
 
 Примеры URL:
 
-  /spa/api/analytics/citizen-appeals/dashboard/data
-  /spa/api/analytics/citizen-appeals/dashboard/data?org_id=20
+  // последние 12 недель организации 20
+  /spa/api/analytics/citizen-appeals/reports?org_id=20
+
+  // следующая страница (предыдущие 12 недель)
+  /spa/api/analytics/citizen-appeals/reports?org_id=20&offset=12
+
+  // апрель–май 2026, все недели в диапазоне
+  /spa/api/analytics/citizen-appeals/reports?org_id=20&from=2026-04-01&to=2026-05-31&limit=100
+
+  // только одна последняя неделя
+  /spa/api/analytics/citizen-appeals/reports?org_id=20&limit=1
 
 curl:
 
   curl -H "Authorization: Bearer <token>" \
-       "https://example.local/spa/api/analytics/citizen-appeals/dashboard/data?org_id=20"
+       "https://example.local/spa/api/analytics/citizen-appeals/reports?org_id=20&from=2026-04-01"
 
 fetch:
 
+  const params = new URLSearchParams({
+    org_id: '20',
+    from:   '2026-04-01',
+    to:     '2026-05-31',
+    limit:  '12',
+    offset: '0',
+  });
   const res = await fetch(
-    "/spa/api/analytics/citizen-appeals/dashboard/data?org_id=20",
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      credentials: "include"
-    }
+    `/spa/api/analytics/citizen-appeals/reports?${params}`,
+    { headers: { Authorization: "Bearer " + jwt } }
   );
   const data = await res.json();
 
 --------------------------------------------------------------------------------
-2. ИСТОЧНИК ДАННЫХ
---------------------------------------------------------------------------------
-
-Используются 14 бизнес-ключей из analytics_metrics — пары (calls_*, appeals_*)
-по 7 городам:
-
-  calls_gorlovka       / appeals_gorlovka       Горловка г.о.
-  calls_donetsk        / appeals_donetsk        Донецк г.о.
-  calls_enakievo       / appeals_enakievo       Енакиево г.о.
-  calls_makeevka       / appeals_makeevka       Макеевка г.о.
-  calls_shakhtersk     / appeals_shakhtersk     Шахтёрск г.о.
-  calls_mariupol       / appeals_mariupol       Мариуполь г.о.
-  calls_yasinovataya   / appeals_yasinovataya   Ясиноватая
-
-Все метрики имеют:
-  type             = number
-  unit             = кол-во
-  aggregation_type = sum
-  is_active        = true
-
-Endpoint читает напрямую из analytics_report_values, JOIN с analytics_reports,
-analytics_periods, analytics_board_version_metrics, analytics_metrics.
-Учитываются ТОЛЬКО утверждённые отчёты (status = 'approved').
-
-Никаких пересчётов, агрегатов, среднего, накопительных значений —
-просто то, что вручную забили в отчёт. Если за неделю отчёта нет —
-этой недели не будет и в ответе.
-
-Источник в БД:
-  analytics_boards         id=3, name="Обращение граждан", period_type=weekly
-  analytics_metrics        id 28..41 (см. выше)
-  analytics_report_values  фактические значения отчётов
-
---------------------------------------------------------------------------------
-3. ФОРМАТ ОТВЕТА
+2. ФОРМАТ ОТВЕТА
 --------------------------------------------------------------------------------
 
 HTTP 200, application/json.
@@ -92,82 +89,168 @@ HTTP 200, application/json.
 Корневой объект:
 
 {
-  "cities": [                    // справочник городов, порядок зафиксирован
-    { "key": string, "name": string },
-    ...
-  ],
-  "weeks": [                     // массив недель, отсортирован по возрастанию
+  "weeks": [
     {
-      "year":      number,       // ISO-год
-      "week":      number,       // ISO-неделя 1..53
-      "startDate": string,       // YYYY-MM-DD, понедельник
-      "endDate":   string,       // YYYY-MM-DD, воскресенье
-      "label":     string,       // "DD.MM–DD.MM" — готовый ярлык для UI
-      "cities": {
-        "<cityKey>": { "calls": number, "appeals": number },
-        ...                      // все 7 городов в каждой неделе
-      }
+      "startDate": "YYYY-MM-DD",   // analytics_periods.start_date
+      "endDate":   "YYYY-MM-DD",   // analytics_periods.end_date
+      "reports":   MetricNode[]    // дерево метрик за этот период
     },
     ...
   ]
 }
 
-Порядок городов в cities[] и ключи в weeks[].cities одинаковы:
-gorlovka, donetsk, enakievo, makeevka, shakhtersk, mariupol, yasinovataya.
+Имя поля `weeks` отражает текущую конфигурацию доски «Обращение граждан»
+(weekly): startDate — понедельник, endDate — воскресенье ISO-недели.
+Если в будущем доска будет переведена на daily/monthly, формат ответа не
+меняется: одна запись = один analytics_periods, поля те же.
 
-В каждой неделе всегда присутствуют все 7 городов. Если по конкретному
-городу в отчёте не было звонков или обращений (или метрика была пустой) —
-там стоит 0 (а не null/пропуск).
+Недели в ответе отсортированы по startDate по возрастанию (от старой к
+свежей). Пагинация (limit/offset) работает «от свежих к старым»: limit=12,
+offset=0 — последние 12 недель; offset=12 — следующая страница с предыдущими
+12 неделями. Внутри одной страницы порядок всегда ASC.
+В выборку попадают только отчёты со статусом `confirmed`.
 
---------------------------------------------------------------------------------
-4. ПРИМЕР ОТВЕТА
---------------------------------------------------------------------------------
-
-GET /spa/api/analytics/citizen-appeals/dashboard/data?org_id=20
+Узел дерева MetricNode:
 
 {
-  "cities": [
-    { "key": "gorlovka",     "name": "Горловка г.о." },
-    { "key": "donetsk",      "name": "Донецк г.о." },
-    { "key": "enakievo",     "name": "Енакиево г.о." },
-    { "key": "makeevka",     "name": "Макеевка г.о." },
-    { "key": "shakhtersk",   "name": "Шахтёрск г.о." },
-    { "key": "mariupol",     "name": "Мариуполь г.о." },
-    { "key": "yasinovataya", "name": "Ясиноватая" }
-  ],
+  "metric_key":  string,         // business_key метрики (citizen_appeal_*)
+  "name":        string,         // отображаемое имя метрики
+  "unit":        string|null,    // единица измерения (обычно "кол-во")
+  "valueNumber": number|null,    // числовое значение; null = не заполнено
+  "valueJSON":   any|null,       // расшифровка по подкатегориям; null если пусто
+  "children":    MetricNode[]    // подметрики; [] если нет детей
+}
+
+Правила формирования:
+
+- В каждой неделе возвращается **полный** набор метрик из версии доски,
+  привязанной к отчёту, — независимо от того, заполнено значение или нет.
+  Метрики без заполненного значения отдают `valueNumber: null` и
+  `valueJSON: null`. Это позволяет фронту нарисовать полный каркас формы
+  и проставить прочерк там, где значения нет.
+- Порядок узлов на одном уровне — по `analytics_board_version_metrics.position`
+  по возрастанию.
+- Иерархия строится по `parent_id`: корнями являются метрики с `parent_id = NULL`.
+- `valueJSON` декодируется из jsonb в JSON-значение — массив объектов вида
+  `[{ "key": string, "value": string, "children": [...] }]`. Используется для
+  расшифровки общего числа обращений по подкатегориям (например, «Перерасчет»,
+  «По коррект. пропис.»). Если пояснений нет — `null`.
+- Категория метрик жёстко зафиксирована в эндпоинте как `citizen_appeal`.
+
+--------------------------------------------------------------------------------
+3. СТРУКТУРА ДЕРЕВА
+--------------------------------------------------------------------------------
+
+Текущая версия доски «Обращение граждан» содержит 16 метрик
+(`analytics_metrics.category = 'citizen_appeal'`) в двух корневых узлах:
+
+  Обращения — Итого           (citizen_appeal_public_request_total)
+    ├─ Горловка г.о.          (citizen_appeal_public_request_gorlovka)
+    ├─ Донецк г.о.            (citizen_appeal_public_request_donetsk)
+    ├─ Енакиево г.о.          (citizen_appeal_public_request_enakievo)
+    ├─ Макеевка г.о.          (citizen_appeal_public_request_makeevka)
+    ├─ Шахтёрск г.о.          (citizen_appeal_public_request_shakhtersk)
+    ├─ Мариуполь г.о.         (citizen_appeal_public_request_mariupol)
+    └─ Ясиноватая             (citizen_appeal_public_request_yasinovataya)
+
+  Звонки — Итого              (citizen_appeal_calls_total)
+    ├─ Горловка г.о.          (citizen_appeal_calls_gorlovka)
+    ├─ Донецк г.о.            (citizen_appeal_calls_donetsk)
+    ├─ Енакиево г.о.          (citizen_appeal_calls_enakievo)
+    ├─ Макеевка г.о.          (citizen_appeal_calls_makeevka)
+    ├─ Шахтёрск г.о.          (citizen_appeal_calls_shakhtersk)
+    ├─ Мариуполь г.о.         (citizen_appeal_calls_mariupol)
+    └─ Ясиноватая             (citizen_appeal_calls_yasinovataya)
+
+Все метрики имеют:
+  type             = number
+  unit             = кол-во
+  aggregation_type = sum
+  is_active        = true
+
+В справочнике `analytics_metrics` дополнительно есть Амвросиевка
+(citizen_appeal_public_request_amvrosievka, citizen_appeal_calls_amvrosievka) —
+к текущей версии доски она не привязана и в ответе не появится. Состав
+дерева определяется составом версии доски, к которой привязан отчёт, поэтому
+любые правки в админке (`/analytics/admin/board/...`) сразу отражаются на
+ответе без перевыкатки клиента.
+
+--------------------------------------------------------------------------------
+4. ПРИМЕР ОТВЕТА (сокращённый)
+--------------------------------------------------------------------------------
+
+GET /spa/api/analytics/citizen-appeals/reports?org_id=20
+
+{
   "weeks": [
     {
-      "year": 2026,
-      "week": 18,
-      "startDate": "2026-04-27",
-      "endDate":   "2026-05-03",
-      "label":     "27.04–03.05",
-      "cities": {
-        "gorlovka":     { "calls": 43,  "appeals": 20 },
-        "donetsk":      { "calls": 244, "appeals": 174 },
-        "enakievo":     { "calls": 41,  "appeals": 4 },
-        "makeevka":     { "calls": 127, "appeals": 30 },
-        "shakhtersk":   { "calls": 9,   "appeals": 3 },
-        "mariupol":     { "calls": 39,  "appeals": 22 },
-        "yasinovataya": { "calls": 0,   "appeals": 124 }
-      }
-    },
-    {
-      "year": 2026,
-      "week": 19,
       "startDate": "2026-05-04",
       "endDate":   "2026-05-10",
-      "label":     "04.05–10.05",
-      "cities": {
-        "gorlovka":     { "calls": 60,  "appeals": 35 },
-        "donetsk":      { "calls": 262, "appeals": 305 },
-        "enakievo":     { "calls": 2,   "appeals": 1 },
-        "makeevka":     { "calls": 219, "appeals": 31 },
-        "shakhtersk":   { "calls": 13,  "appeals": 2 },
-        "mariupol":     { "calls": 52,  "appeals": 18 },
-        "yasinovataya": { "calls": 0,   "appeals": 159 }
-      }
+      "reports": [
+        {
+          "metric_key": "citizen_appeal_public_request_total",
+          "name":       "Обращения — Итого",
+          "unit":       "кол-во",
+          "valueNumber": 551,
+          "valueJSON":   null,
+          "children": [
+            {
+              "metric_key": "citizen_appeal_public_request_gorlovka",
+              "name":       "Обращения — Горловка г.о.",
+              "unit":       "кол-во",
+              "valueNumber": 35,
+              "valueJSON":   null,
+              "children":    []
+            },
+            {
+              "metric_key": "citizen_appeal_public_request_donetsk",
+              "name":       "Обращения — Донецк г.о.",
+              "unit":       "кол-во",
+              "valueNumber": 305,
+              "valueJSON": [
+                { "key": "Перерасчет", "value": "125", "children": [] }
+              ],
+              "children":    []
+            },
+            // ... enakievo, makeevka, shakhtersk, mariupol
+            {
+              "metric_key": "citizen_appeal_public_request_yasinovataya",
+              "name":       "Обращения — Ясиноватая",
+              "unit":       "кол-во",
+              "valueNumber": 159,
+              "valueJSON": [
+                { "key": "По коррект. пропис.", "value": "151", "children": [] }
+              ],
+              "children":    []
+            }
+          ]
+        },
+        {
+          "metric_key": "citizen_appeal_calls_total",
+          "name":       "Звонки — Итого",
+          "unit":       "кол-во",
+          "valueNumber": 778,
+          "valueJSON":   null,
+          "children": [
+            {
+              "metric_key": "citizen_appeal_calls_gorlovka",
+              "name":       "Звонки — Горловка г.о.",
+              "unit":       "кол-во",
+              "valueNumber": 60,
+              "valueJSON":   null,
+              "children":    []
+            }
+            // ... donetsk, enakievo, makeevka, shakhtersk, mariupol, yasinovataya
+          ]
+        }
+      ]
+    },
+    {
+      "startDate": "2026-05-11",
+      "endDate":   "2026-05-17",
+      "reports":   [ /* такая же структура с другими значениями */ ]
     }
+    // ... остальные недели
   ]
 }
 
@@ -175,19 +258,10 @@ GET /spa/api/analytics/citizen-appeals/dashboard/data?org_id=20
 5. ПРИМЕР ПУСТОГО ОТВЕТА
 --------------------------------------------------------------------------------
 
-Если по запрошенным организациям нет утверждённых отчётов —
-HTTP 200, weeks пустой, cities всегда заполнен:
+Если по запрошенным организациям нет ни одного `confirmed`-отчёта —
+HTTP 200 с пустым массивом недель:
 
 {
-  "cities": [
-    { "key": "gorlovka",     "name": "Горловка г.о." },
-    { "key": "donetsk",      "name": "Донецк г.о." },
-    { "key": "enakievo",     "name": "Енакиево г.о." },
-    { "key": "makeevka",     "name": "Макеевка г.о." },
-    { "key": "shakhtersk",   "name": "Шахтёрск г.о." },
-    { "key": "mariupol",     "name": "Мариуполь г.о." },
-    { "key": "yasinovataya", "name": "Ясиноватая" }
-  ],
   "weeks": []
 }
 
@@ -195,27 +269,49 @@ HTTP 200, weeks пустой, cities всегда заполнен:
 6. КРАЕВЫЕ СЛУЧАИ
 --------------------------------------------------------------------------------
 
-- В выборку попадают только отчёты со статусом 'approved'. Черновики
-  (draft) и поданные на проверку (submitted) не учитываются.
+- В выборке только подтверждённые отчёты (`status = 'confirmed'`).
+  Черновики (`draft`) **не отдаются** — они не должны влиять на аналитику.
 
-- Если отчёт за неделю существует, но какая-то метрика пустая —
-  соответствующее число будет 0 (не null). Город всё равно
-  присутствует.
+- Метрики, не заполненные в отчёте, всё равно присутствуют в дереве
+  с `valueNumber: null`. Фронт сам решает: показывать прочерк, скрывать
+  узел или выделять как «незаполнено».
 
-- Если за неделю вообще нет отчёта — этой недели не будет в weeks[].
+- `valueJSON` — массив объектов с расшифровкой общего числа по
+  подкатегориям (например, сколько из всех обращений Донецка — «Перерасчет»).
+  Не используется для всех метрик; для большинства строк остаётся `null`.
 
-- Города и их порядок зашиты в сервис (CITY_LABELS). Добавление
-  нового города — это правка кода сервиса + создание двух новых
-  метрик calls_<city>/appeals_<city> и привязка их к версии доски.
+- Иерархия живёт только в визуальном представлении формы и таблиц.
+  Никаких автосумм `parent = Σ children` нет: значения «Итого» оператор
+  вводит вручную, и они могут расходиться с суммой детей.
 
-- value хранится в БД как numeric(20,4), endpoint округляет до
-  ближайшего целого. Если нужны дробные — изменить приведение
-  в groupByWeek().
+- Сортировка узлов на одном уровне — строго по `position`. Изменение
+  состава версии доски (`/analytics/admin/board/...`) меняет порядок
+  отдачи без переразвёртывания клиента.
+
+- Состав городов и сам факт наличия раздела (например, наличие
+  Амвросиевки) определяется составом версии доски, привязанной к отчёту,
+  а не справочником `analytics_metrics`. Метрика в справочнике без
+  привязки к версии в ответе не появится.
+
+- Эндпоинт возвращает **только** метрики обращений граждан
+  (category = 'citizen_appeal'). Для других категорий (finance, hr, tko, ...)
+  предусмотрены отдельные эндпоинты.
+
+- При указании одновременно from/to и limit/offset фильтр диапазона
+  применяется первым, затем уже работает пагинация по отфильтрованным
+  неделям.
+
+- Невалидные значения query-параметров (например, from=invalid) не
+  возвращают ошибку — они просто игнорируются, чтобы клиент мог
+  безопасно строить URL.
 
 --------------------------------------------------------------------------------
 7. СВЯЗАННЫЕ ФАЙЛЫ
 --------------------------------------------------------------------------------
 
   Контроллер : src/Controller/SpaApi/Analytics/CitizenAppealsAnalyticsController.php
-  Сервис     : src/Service/Analytics/CitizenAppealsDashboardDataService.php
+  Сервис     : src/Service/Analytics/CitizenAppealsReportTreeService.php
+  Репозиторий: src/Repository/Analytics/AnalyticsReportValueRepository.php
+               (метод findReportsWithMetricTree — общий с финансовой аналитикой)
+  Финансы    : dev_docks/spa_api/Readme_financial_analytics.txt
   Auth       : dev_docks/spa_api/Readme_spa_auth.txt
