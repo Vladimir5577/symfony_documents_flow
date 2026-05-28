@@ -52,6 +52,18 @@
                                             <small class="text-muted">Как часто заполняются отчёты для этой доски</small>
                                         </div>
                                     </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="category">Категория <span class="text-danger">*</span></label>
+                                            <select id="category" name="category" class="form-select" required>
+                                                <option value="" disabled selected>— выберите категорию —</option>
+                                                {% for case in categories %}
+                                                    <option value="{{ case.value }}">{{ case.label() }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <small class="text-muted">Все метрики на доске должны принадлежать этой категории</small>
+                                        </div>
+                                    </div>
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="description">Описание</label>

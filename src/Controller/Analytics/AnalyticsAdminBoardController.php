@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\Analytics;
 
-use App\Enum\Analytics\AnalyticsMetricCategory;
+use App\Enum\Analytics\AnalyticsCategory;
 use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardVersionRepository;
 use App\Repository\Analytics\AnalyticsMetricRepository;
@@ -48,9 +48,16 @@ final class AnalyticsAdminBoardController extends AbstractController
                 $periodTypeRaw = $request->request->getString('period_type', 'weekly');
                 $periodType = AnalyticsPeriodType::tryFrom($periodTypeRaw) ?? AnalyticsPeriodType::Weekly;
 
+                $categoryRaw = $request->request->getString('category');
+                $category = AnalyticsCategory::tryFrom($categoryRaw);
+                if ($category === null) {
+                    throw new \RuntimeException('Категория обязательна и должна быть из списка.');
+                }
+
                 $boardService->create(
                     name: $request->request->getString('name'),
                     description: $request->request->getString('description') ?: null,
+                    category: $category,
                     periodType: $periodType,
                 );
                 $this->addFlash('success', 'Доска создана. Первая активная версия создана автоматически.');
@@ -61,6 +68,7 @@ final class AnalyticsAdminBoardController extends AbstractController
         }
 
         return $this->render('analytics/admin/board/new.html.twig', [
+            'categories' => AnalyticsCategory::cases(),
             'active_tab' => 'analytics_boards',
         ]);
     }
@@ -75,6 +83,54 @@ final class AnalyticsAdminBoardController extends AbstractController
 
         return $this->render('analytics/admin/board/show.html.twig', [
             'board' => $board,
+            'active_tab' => 'analytics_boards',
+        ]);
+    }
+
+    #[Route('/analytics/admin/board/{id}/edit', name: 'app_analytics_admin_board_edit')]
+    public function edit(
+        int $id,
+        Request $request,
+        CsrfTokenManagerInterface $csrf,
+        BoardService $boardService,
+    ): Response {
+        $board = $boardService->findById($id);
+        if (!$board) {
+            throw $this->createNotFoundException('Доска не найдена.');
+        }
+
+        if ($request->isMethod('POST')) {
+            if (!$csrf->isTokenValid(new CsrfToken('board_edit_' . $id, $request->request->getString('_token')))) {
+                $this->addFlash('error', 'Неверный CSRF-токен.');
+                return $this->redirectToRoute('app_analytics_admin_board_edit', ['id' => $id]);
+            }
+
+            try {
+                $periodTypeRaw = $request->request->getString('period_type', $board->getPeriodType()->value);
+                $periodType = AnalyticsPeriodType::tryFrom($periodTypeRaw) ?? $board->getPeriodType();
+
+                $categoryRaw = $request->request->getString('category', $board->getCategory()->value);
+                $category = AnalyticsCategory::tryFrom($categoryRaw) ?? $board->getCategory();
+
+                $boardService->update(
+                    board: $board,
+                    name: $request->request->getString('name'),
+                    description: $request->request->getString('description') ?: null,
+                    periodType: $periodType,
+                    category: $category,
+                );
+                $this->addFlash('success', 'Доска обновлена.');
+                return $this->redirectToRoute('app_analytics_admin_board_show', ['id' => $id]);
+            } catch (\Throwable $e) {
+                $this->addFlash('error', $e->getMessage());
+            }
+        }
+
+        return $this->render('analytics/admin/board/edit.html.twig', [
+            'board' => $board,
+            'categories' => AnalyticsCategory::cases(),
+            'can_change_category' => $boardService->canChangeCategory($board),
+            'can_change_period_type' => $boardService->canChangePeriodType($board),
             'active_tab' => 'analytics_boards',
         ]);
     }
@@ -159,7 +215,7 @@ final class AnalyticsAdminBoardController extends AbstractController
             'version' => $version,
             'selectedMetricsFlat' => $metricTreeBuilder->flatten($selectedEntries),
             'unselectedMetrics' => $unselectedMetrics,
-            'categories' => AnalyticsMetricCategory::cases(),
+            'categories' => AnalyticsCategory::cases(),
             'active_tab' => 'analytics_boards',
         ]);
     }

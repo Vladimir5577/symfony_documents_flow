@@ -14,6 +14,8 @@ final class CitizenAppealsAnalyticsController extends AbstractController
 {
     private const DEFAULT_LIMIT = 12;
     private const MAX_LIMIT = 100;
+    private const DEFAULT_PER_PAGE = 20;
+    private const MAX_PER_PAGE = 100;
     private const DATE_REGEX = '/^\d{4}-\d{2}-\d{2}$/';
 
     /**
@@ -45,6 +47,38 @@ final class CitizenAppealsAnalyticsController extends AbstractController
 
         return $this->json(
             $citizenAppealsReportTreeService->buildWeeks($orgId, $from, $to, $limit, $offset),
+        );
+    }
+
+    /**
+     * Плоский список подтверждённых отчётов «Обращение граждан» без метрик.
+     * Формат:
+     *   { items: [{ id, boardId, boardVersionId, organization: {id, name}, period: {startDate, endDate}, status, createdAt, updatedAt }], page, perPage, total }
+     */
+    #[Route('/spa/api/analytics/citizen-appeals/reports/list', name: 'spa_api_analytics_citizen_appeals_reports_list', methods: ['GET'])]
+    public function reportsList(
+        Request $request,
+        CitizenAppealsReportTreeService $citizenAppealsReportTreeService,
+    ): JsonResponse {
+        $orgId = $request->query->getInt('org_id', 0);
+
+        $from = $this->validateDateParam($request->query->get('from'));
+        $to   = $this->validateDateParam($request->query->get('to'));
+
+        $page    = $request->query->getInt('page', 1);
+        $perPage = $request->query->getInt('per_page', self::DEFAULT_PER_PAGE);
+
+        if ($page < 1) {
+            $page = 1;
+        }
+        if ($perPage < 1) {
+            $perPage = self::DEFAULT_PER_PAGE;
+        } elseif ($perPage > self::MAX_PER_PAGE) {
+            $perPage = self::MAX_PER_PAGE;
+        }
+
+        return $this->json(
+            $citizenAppealsReportTreeService->getAllReports($orgId, $from, $to, $page, $perPage),
         );
     }
 

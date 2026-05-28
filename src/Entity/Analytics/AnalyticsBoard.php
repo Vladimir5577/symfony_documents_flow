@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity\Analytics;
 
+use App\Enum\Analytics\AnalyticsCategory;
 use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -14,6 +15,7 @@ use Gedmo\Mapping\Annotation as Gedmo;
 
 #[ORM\Entity(repositoryClass: AnalyticsBoardRepository::class)]
 #[ORM\Table(name: 'analytics_boards')]
+#[ORM\Index(name: 'idx_analytics_boards_category', columns: ['category'])]
 class AnalyticsBoard
 {
     #[ORM\Id]
@@ -26,6 +28,9 @@ class AnalyticsBoard
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
+
+    #[ORM\Column(name: 'category', type: Types::STRING, length: 32, enumType: AnalyticsCategory::class)]
+    private AnalyticsCategory $category;
 
     #[ORM\Column(name: 'period_type', length: 16, enumType: AnalyticsPeriodType::class)]
     private AnalyticsPeriodType $periodType = AnalyticsPeriodType::Weekly;
@@ -152,6 +157,18 @@ class AnalyticsBoard
     public function setPeriodType(AnalyticsPeriodType $periodType): static
     {
         $this->periodType = $periodType;
+
+        return $this;
+    }
+
+    public function getCategory(): AnalyticsCategory
+    {
+        return $this->category;
+    }
+
+    public function setCategory(AnalyticsCategory $category): static
+    {
+        $this->category = $category;
 
         return $this;
     }

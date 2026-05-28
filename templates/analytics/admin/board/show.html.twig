@@ -9,9 +9,14 @@
 {% block main %}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>{{ board.name }}</h1>
-        <a href="{{ path('app_analytics_admin_board') }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left me-1"></i>Назад к списку
-        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ path('app_analytics_admin_board_edit', {id: board.id}) }}" class="btn btn-outline-primary">
+                <i class="bi bi-pencil me-1"></i>Редактировать
+            </a>
+            <a href="{{ path('app_analytics_admin_board') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Назад к списку
+            </a>
+        </div>
     </div>
 
     {% if board.description %}
@@ -25,6 +30,9 @@
             {% elseif board.periodType.value == 'weekly' %}Еженедельно
             {% elseif board.periodType.value == 'monthly' %}Ежемесячно
             {% endif %}
+        </span>
+        <span class="badge bg-secondary ms-1">
+            Категория: {{ board.category.label() }}
         </span>
     </div>
 

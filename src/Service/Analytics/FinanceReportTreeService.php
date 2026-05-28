@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Analytics;
 
+use App\Repository\Analytics\AnalyticsReportRepository;
 use App\Repository\Analytics\AnalyticsReportValueRepository;
 use App\Repository\Organization\OrganizationRepository;
 
@@ -16,10 +17,53 @@ use App\Repository\Organization\OrganizationRepository;
  */
 final class FinanceReportTreeService
 {
+    private const CATEGORY = 'finance';
+
     public function __construct(
         private readonly AnalyticsReportValueRepository $reportValueRepo,
+        private readonly AnalyticsReportRepository $reportRepo,
         private readonly OrganizationRepository $organizationRepo,
     ) {
+    }
+
+    /**
+     * Плоский список подтверждённых финансовых отчётов (без метрик).
+     * Доска находится по analytics_boards.category = 'finance'.
+     *
+     * @return array{
+     *     items: list<array<string, mixed>>,
+     *     page: int,
+     *     perPage: int,
+     *     total: int
+     * }
+     */
+    public function getAllReports(
+        int $organizationId,
+        ?string $from,
+        ?string $to,
+        int $page,
+        int $perPage,
+    ): array {
+        $orgIds = $this->resolveOrganizationIds($organizationId);
+        if ($orgIds === []) {
+            return ['items' => [], 'page' => $page, 'perPage' => $perPage, 'total' => 0];
+        }
+
+        $result = $this->reportRepo->findConfirmedListByCategory(
+            self::CATEGORY,
+            $orgIds,
+            $from,
+            $to,
+            $page,
+            $perPage,
+        );
+
+        return [
+            'items'   => $result['items'],
+            'page'    => $page,
+            'perPage' => $perPage,
+            'total'   => $result['total'],
+        ];
     }
 
     /**

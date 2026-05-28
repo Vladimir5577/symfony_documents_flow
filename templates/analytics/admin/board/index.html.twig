@@ -36,6 +36,7 @@
                                 <tr>
                                     <th>ID</th>
                                     <th>Название</th>
+                                    <th>Категория</th>
                                     <th>Частота</th>
                                     <th>Описание</th>
                                     <th>Версии</th>
@@ -49,6 +50,9 @@
                                         <tr>
                                             <td>{{ board.id }}</td>
                                             <td>{{ board.name }}</td>
+                                            <td>
+                                                <span class="badge bg-light text-dark">{{ board.category.label }}</span>
+                                            </td>
                                             <td>
                                                 {% if board.periodType.value == 'daily' %}
                                                     <span class="badge bg-info">Ежедневно</span>
@@ -85,7 +89,7 @@
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-4">Доски пока не созданы</td>
+                                        <td colspan="8" class="text-center text-muted py-4">Доски пока не созданы</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>

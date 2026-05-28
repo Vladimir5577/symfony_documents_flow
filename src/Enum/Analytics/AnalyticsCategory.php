@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace App\Enum\Analytics;
 
-enum AnalyticsMetricCategory: string
+enum AnalyticsCategory: string
 {
+    case Other = 'other';
     case Finance = 'finance';
     case Mechanics = 'mechanics';
     case Hr = 'hr';
@@ -15,6 +16,7 @@ enum AnalyticsMetricCategory: string
     public function label(): string
     {
         return match ($this) {
+            self::Other => 'Прочее',
             self::Finance => 'Финансы',
             self::Mechanics => 'Механики',
             self::Hr => 'Отдел кадров',

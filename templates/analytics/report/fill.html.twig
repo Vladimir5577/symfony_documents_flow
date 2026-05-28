@@ -34,6 +34,43 @@
         {% endif %}
     </div>
 
+    {% if isAdmin and availablePeriods is defined and availablePeriods|length > 0 %}
+        <div class="card mb-3">
+            <div class="card-body py-2">
+                <form action="{{ path('app_analytics_report_change_period', {id: report.id}) }}" method="post" class="row g-2 align-items-center">
+                    <input type="hidden" name="_token" value="{{ csrf_token('report_period_change_' ~ report.id) }}">
+                    <label for="report-period-select" class="col-auto col-form-label">
+                        <i class="bi bi-calendar3 me-1"></i>Период отчёта:
+                    </label>
+                    <div class="col-auto">
+                        <select id="report-period-select" name="period_id" class="form-select form-select-sm">
+                            {% for p in availablePeriods %}
+                                {% set isCurrent = report.period and p.id == report.period.id %}
+                                {% set isTaken = takenPeriodIds[p.id] is defined %}
+                                <option value="{{ p.id }}"
+                                        {% if isCurrent %}selected{% endif %}
+                                        {% if isTaken %}disabled{% endif %}>
+                                    {{ p.displayLabel }}{% if isTaken %} — занято{% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-sm btn-outline-primary"
+                                onclick="return confirm('Изменить период отчёта?{% if report.status.value == 'confirmed' %} Это вызовет пересчёт агрегатов.{% endif %}');">
+                            Изменить период
+                        </button>
+                    </div>
+                    {% if report.status.value == 'confirmed' %}
+                        <div class="col-auto">
+                            <small class="text-muted">Отчёт подтверждён — после смены агрегаты пересчитаются.</small>
+                        </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    {% endif %}
+
     {% import 'analytics/report/_metric_notes.html.twig' as notes %}
 
     <section id="multiple-column-form">

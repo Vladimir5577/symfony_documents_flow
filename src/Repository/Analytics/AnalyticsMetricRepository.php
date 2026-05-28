@@ -3,7 +3,7 @@
 namespace App\Repository\Analytics;
 
 use App\Entity\Analytics\AnalyticsMetric;
-use App\Enum\Analytics\AnalyticsMetricCategory;
+use App\Enum\Analytics\AnalyticsCategory;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -21,10 +21,10 @@ class AnalyticsMetricRepository extends ServiceEntityRepository
      * @return AnalyticsMetric[]
      */
     public function findFiltered(
-        ?string $search,
-        ?AnalyticsMetricCategory $category,
-        ?string $type,
-        ?bool $isActive,
+        ?string            $search,
+        ?AnalyticsCategory $category,
+        ?string            $type,
+        ?bool              $isActive,
     ): array {
         $qb = $this->createQueryBuilder('m');
 

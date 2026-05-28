@@ -298,3 +298,75 @@ HTTP 200 с пустым массивом недель:
 - Невалидные значения query-параметров (например, from=invalid) не
   возвращают ошибку — они просто игнорируются, чтобы клиент мог
   безопасно строить URL.
+
+--------------------------------------------------------------------------------
+6. СПИСОК ОТЧЁТОВ (без метрик)
+--------------------------------------------------------------------------------
+
+Плоский список подтверждённых финансовых отчётов — для экрана-индекса
+на фронте. Дерева метрик в ответе нет; за детализацией клиент обращается
+к основному эндпоинту /spa/api/analytics/finance/reports выше.
+
+Доска определяется по analytics_boards.category = 'finance' (одна доска
+на категорию). В выборку попадают только отчёты со status = 'confirmed'.
+
+  Method : GET
+  URL    : /spa/api/analytics/finance/reports/list
+
+Query-параметры:
+
+  org_id    (int, опц., default 0)        — та же логика, что в /reports.
+  from      (YYYY-MM-DD, опц.)            — analytics_periods.start_date >= from.
+  to        (YYYY-MM-DD, опц.)            — analytics_periods.end_date <= to.
+  page      (int, опц., default 1)        — номер страницы, начиная с 1.
+                                            page < 1 → 1.
+  per_page  (int, опц., default 20, max 100)
+                                          — кол-во отчётов на страницу.
+                                            per_page < 1 → 20, > 100 → 100.
+
+Невалидные значения дат и пагинации игнорируются/нормализуются без ошибки.
+
+Пример URL:
+
+  /spa/api/analytics/finance/reports/list?org_id=20&page=1&per_page=20
+  /spa/api/analytics/finance/reports/list?from=2026-04-01&to=2026-05-31&per_page=50
+
+Формат ответа:
+
+{
+  "items": [
+    {
+      "id":             123,
+      "boardId":        2,
+      "boardVersionId": 5,
+      "organization":   { "id": 20, "name": "Донецкий филиал" },
+      "period":         { "startDate": "2026-05-18", "endDate": "2026-05-24" },
+      "status":         "confirmed",
+      "createdAt":      "2026-05-25 10:11:12",
+      "updatedAt":      "2026-05-25 10:11:12"
+    }
+  ],
+  "page":    1,
+  "perPage": 20,
+  "total":   137
+}
+
+Сортировка: period.start_date DESC, id DESC (свежие сверху).
+Пустая выборка — HTTP 200 с `items: []` и `total: 0`.
+
+--------------------------------------------------------------------------------
+7. СВЯЗАННЫЕ ФАЙЛЫ
+--------------------------------------------------------------------------------
+
+  Контроллер : src/Controller/SpaApi/Analytics/FinancialAnalyticsController.php
+               методы financeReports() и reportsList()
+  Сервис     : src/Service/Analytics/FinanceReportTreeService.php
+               методы buildWeeks() и getAllReports()
+  Репозитории: src/Repository/Analytics/AnalyticsReportValueRepository.php
+               (findReportsWithMetricTree — общий с HR и обращениями граждан,
+                используется для дерева метрик)
+               src/Repository/Analytics/AnalyticsReportRepository.php
+               (findConfirmedListByCategory — плоский список для /list)
+  HR         : dev_docks/spa_api/Readme_hr_analytics.txt
+  Обращения  : dev_docks/spa_api/Readme_citizen_appeal.txt
+  Auth       : dev_docks/spa_api/Readme_spa_auth.txt

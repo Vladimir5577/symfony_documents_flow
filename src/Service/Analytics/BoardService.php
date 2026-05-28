@@ -9,6 +9,7 @@ use App\Entity\Analytics\AnalyticsBoardVersion;
 use App\Entity\Analytics\AnalyticsBoardVersionMetric;
 use App\Entity\Analytics\AnalyticsMetric;
 use App\Entity\Analytics\AnalyticsReportValue;
+use App\Enum\Analytics\AnalyticsCategory;
 use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardRepository;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
@@ -39,11 +40,16 @@ final class BoardService
     /**
      * @throws \RuntimeException если имя занято.
      */
-    public function create(string $name, ?string $description, ?AnalyticsPeriodType $periodType = null): AnalyticsBoard
-    {
+    public function create(
+        string $name,
+        ?string $description,
+        AnalyticsCategory $category,
+        ?AnalyticsPeriodType $periodType = null,
+    ): AnalyticsBoard {
         $board = new AnalyticsBoard();
         $board->setName(trim($name));
         $board->setDescription(trim($description ?? ''));
+        $board->setCategory($category);
         if ($periodType !== null) {
             $board->setPeriodType($periodType);
         }
@@ -70,10 +76,34 @@ final class BoardService
     /**
      * @throws \RuntimeException
      */
-    public function update(AnalyticsBoard $board, string $name, ?string $description): void
-    {
+    public function update(
+        AnalyticsBoard $board,
+        string $name,
+        ?string $description,
+        ?AnalyticsPeriodType $periodType = null,
+        ?AnalyticsCategory $category = null,
+    ): void {
         $board->setName(trim($name));
         $board->setDescription(trim($description ?? ''));
+
+        if ($periodType !== null && $periodType !== $board->getPeriodType()) {
+            if (!$this->canChangePeriodType($board)) {
+                throw new \RuntimeException(
+                    'Нельзя сменить частоту отчётов: по доске уже есть отчёты.',
+                );
+            }
+            $board->setPeriodType($periodType);
+        }
+
+        if ($category !== null && $category !== $board->getCategory()) {
+            if (!$this->canChangeCategory($board)) {
+                throw new \RuntimeException(
+                    'Категорию доски нельзя менять: уже есть метрики или отчёты. '
+                    . 'Создайте новую доску нужной категории.',
+                );
+            }
+            $board->setCategory($category);
+        }
 
         try {
             $this->em->flush();
@@ -82,10 +112,48 @@ final class BoardService
         }
     }
 
+    /**
+     * Можно ли сменить частоту отчётов: пока ни по одной версии нет отчётов.
+     * Метрики на доске сами по себе не мешают — они не привязаны к periodType.
+     */
+    public function canChangePeriodType(AnalyticsBoard $board): bool
+    {
+        return !$this->hasAnyReports($board);
+    }
+
+    public function hasAnyReports(AnalyticsBoard $board): bool
+    {
+        foreach ($board->getBoardVersions() as $version) {
+            if ($this->hasReportsForVersion($version)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function delete(AnalyticsBoard $board): void
     {
         $this->em->remove($board);
         $this->em->flush();
+    }
+
+    /**
+     * Можно ли сменить категорию доски: пока на доске нет ни одной метрики
+     * ни в одной версии и нет ни одного отчёта.
+     */
+    public function canChangeCategory(AnalyticsBoard $board): bool
+    {
+        foreach ($board->getBoardVersions() as $version) {
+            if ($version->getVersionMetrics()->count() > 0) {
+                return false;
+            }
+            if ($this->hasReportsForVersion($version)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function removeVersionMetric(AnalyticsBoardVersionMetric $vm): void
@@ -113,6 +181,11 @@ final class BoardService
      */
     public function syncVersionMetrics(AnalyticsBoardVersion $version, array $selectedMetrics, iterable $allMetricsById): void
     {
+        $boardCategory = $version->getBoard()?->getCategory();
+        if ($boardCategory === null) {
+            throw new \RuntimeException('У доски не задана категория — нельзя редактировать состав метрик.');
+        }
+
         $metricsById = [];
         foreach ($allMetricsById as $metric) {
             if ($metric instanceof AnalyticsMetric && $metric->getId() !== null) {
@@ -143,6 +216,15 @@ final class BoardService
             $metric = $metricsById[$metricId] ?? null;
             if (!$metric) {
                 continue;
+            }
+
+            if ($metric->getCategory() !== $boardCategory) {
+                throw new \RuntimeException(sprintf(
+                    'Нельзя добавить метрику «%s» (%s) на доску категории «%s».',
+                    $metric->getName() ?? (string) $metricId,
+                    $metric->getCategory()?->label() ?? '—',
+                    $boardCategory->label(),
+                ));
             }
 
             $enabledMetricIds[$metricId] = true;

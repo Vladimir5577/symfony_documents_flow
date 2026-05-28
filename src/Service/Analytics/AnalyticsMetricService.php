@@ -6,7 +6,7 @@ namespace App\Service\Analytics;
 
 use App\Entity\Analytics\AnalyticsMetric;
 use App\Enum\Analytics\AnalyticsMetricAggregationType;
-use App\Enum\Analytics\AnalyticsMetricCategory;
+use App\Enum\Analytics\AnalyticsCategory;
 use App\Repository\Analytics\AnalyticsMetricRepository;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,10 +31,10 @@ final class AnalyticsMetricService
      * @return AnalyticsMetric[]
      */
     public function findFiltered(
-        ?string $search,
-        ?AnalyticsMetricCategory $category,
-        ?string $type,
-        ?bool $isActive,
+        ?string            $search,
+        ?AnalyticsCategory $category,
+        ?string            $type,
+        ?bool              $isActive,
     ): array {
         return $this->repository->findFiltered($search, $category, $type, $isActive);
     }
@@ -56,14 +56,14 @@ final class AnalyticsMetricService
      * @throws \RuntimeException если business_key уже занят
      */
     public function create(
-        string $businessKey,
-        string $name,
-        string $type,
-        string $unit,
+        string                         $businessKey,
+        string                         $name,
+        string                         $type,
+        string                         $unit,
         AnalyticsMetricAggregationType $aggregationType,
-        string|null $inputType,
-        AnalyticsMetricCategory $category,
-        bool $isActive,
+        string|null                    $inputType,
+        AnalyticsCategory              $category,
+        bool                           $isActive,
     ): AnalyticsMetric {
         $metric = new AnalyticsMetric();
         $metric->setBusinessKey(strtolower(trim($businessKey)));
@@ -89,15 +89,15 @@ final class AnalyticsMetricService
      * @throws \RuntimeException если business_key уже занят другой метрикой
      */
     public function update(
-        AnalyticsMetric $metric,
-        string $businessKey,
-        string $name,
-        string $type,
-        string $unit,
+        AnalyticsMetric                $metric,
+        string                         $businessKey,
+        string                         $name,
+        string                         $type,
+        string                         $unit,
         AnalyticsMetricAggregationType $aggregationType,
-        string|null $inputType,
-        AnalyticsMetricCategory $category,
-        bool $isActive,
+        string|null                    $inputType,
+        AnalyticsCategory              $category,
+        bool                           $isActive,
     ): void {
         $metric->setBusinessKey(strtolower(trim($businessKey)));
         $metric->setName(trim($name));

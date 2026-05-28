@@ -14,6 +14,8 @@ final class HrAnalyticsController extends AbstractController
 {
     private const DEFAULT_LIMIT = 12;
     private const MAX_LIMIT = 100;
+    private const DEFAULT_PER_PAGE = 20;
+    private const MAX_PER_PAGE = 100;
     private const DATE_REGEX = '/^\d{4}-\d{2}-\d{2}$/';
 
     /**
@@ -45,6 +47,38 @@ final class HrAnalyticsController extends AbstractController
 
         return $this->json(
             $hrReportTreeService->buildWeeks($orgId, $from, $to, $limit, $offset),
+        );
+    }
+
+    /**
+     * Плоский список подтверждённых HR-отчётов без метрик.
+     * Формат:
+     *   { items: [{ id, boardId, boardVersionId, organization: {id, name}, period: {startDate, endDate}, status, createdAt, updatedAt }], page, perPage, total }
+     */
+    #[Route('/spa/api/analytics/hr/reports/list', name: 'spa_api_analytics_hr_reports_list', methods: ['GET'])]
+    public function reportsList(
+        Request $request,
+        HrReportTreeService $hrReportTreeService,
+    ): JsonResponse {
+        $orgId = $request->query->getInt('org_id', 0);
+
+        $from = $this->validateDateParam($request->query->get('from'));
+        $to   = $this->validateDateParam($request->query->get('to'));
+
+        $page    = $request->query->getInt('page', 1);
+        $perPage = $request->query->getInt('per_page', self::DEFAULT_PER_PAGE);
+
+        if ($page < 1) {
+            $page = 1;
+        }
+        if ($perPage < 1) {
+            $perPage = self::DEFAULT_PER_PAGE;
+        } elseif ($perPage > self::MAX_PER_PAGE) {
+            $perPage = self::MAX_PER_PAGE;
+        }
+
+        return $this->json(
+            $hrReportTreeService->getAllReports($orgId, $from, $to, $page, $perPage),
         );
     }
 

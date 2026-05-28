@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Entity\Analytics;
 
 use App\Enum\Analytics\AnalyticsMetricAggregationType;
-use App\Enum\Analytics\AnalyticsMetricCategory;
+use App\Enum\Analytics\AnalyticsCategory;
 use App\Repository\Analytics\AnalyticsMetricRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
@@ -40,8 +40,8 @@ class AnalyticsMetric
     #[ORM\Column(name: 'input_type', length: 32, nullable: true)]
     private ?string $inputType = null;
 
-    #[ORM\Column(name: 'category', type: Types::STRING, length: 32, enumType: AnalyticsMetricCategory::class, nullable: true)]
-    private ?AnalyticsMetricCategory $category = null;
+    #[ORM\Column(name: 'category', type: Types::STRING, length: 32, enumType: AnalyticsCategory::class, nullable: true)]
+    private ?AnalyticsCategory $category = null;
 
     #[ORM\Column(name: 'is_active', options: ['default' => true])]
     private bool $isActive = true;
@@ -131,12 +131,12 @@ class AnalyticsMetric
         return $this;
     }
 
-    public function getCategory(): ?AnalyticsMetricCategory
+    public function getCategory(): ?AnalyticsCategory
     {
         return $this->category;
     }
 
-    public function setCategory(?AnalyticsMetricCategory $category): static
+    public function setCategory(?AnalyticsCategory $category): static
     {
         $this->category = $category;
 

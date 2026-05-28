@@ -385,14 +385,118 @@ final class AnalyticsReportController extends AbstractController
             ];
         }
 
+        $availablePeriods = [];
+        $takenPeriodIds = [];
+        if ($isAdmin && $report->getBoard()) {
+            $availablePeriods = $em->getRepository(AnalyticsPeriod::class)->findBy(
+                ['type' => $report->getBoard()->getPeriodType()],
+                ['startDate' => 'DESC'],
+            );
+
+            $takenReports = $em->getRepository(AnalyticsReport::class)->findBy([
+                'organization' => $report->getOrganization(),
+                'board'        => $report->getBoard(),
+            ]);
+            foreach ($takenReports as $r) {
+                $p = $r->getPeriod();
+                if ($p && $r->getId() !== $report->getId()) {
+                    $takenPeriodIds[$p->getId()] = true;
+                }
+            }
+        }
+
         return $this->render('analytics/report/fill.html.twig', [
             'report' => $report,
             'currentValues' => $currentValues,
             'currentNotes' => $currentNotes,
             'canEdit' => $canEdit,
+            'isAdmin' => $isAdmin,
+            'availablePeriods' => $availablePeriods,
+            'takenPeriodIds' => $takenPeriodIds,
             'versionMetricsFlat' => $metricTreeBuilder->flatten($versionMetricEntries),
             'active_tab' => 'analytics_reports',
         ]);
+    }
+
+    #[Route('/analytics/report/{id}/change-period', name: 'app_analytics_report_change_period', methods: ['POST'])]
+    public function changePeriod(
+        int $id,
+        Request $request,
+        CsrfTokenManagerInterface $csrf,
+        CreateReportService $reportService,
+        RecalculateAggregatesService $recalculateService,
+        EntityManagerInterface $em,
+    ): Response {
+        $user = $this->getUser();
+        if (!$user) {
+            throw $this->createAccessDeniedException();
+        }
+        if (!$this->isGranted('ROLE_ADMIN')) {
+            throw $this->createAccessDeniedException('Изменение периода доступно только администратору.');
+        }
+
+        $report = $reportService->findByIdForUser($id, $user);
+        if (!$report) {
+            throw $this->createNotFoundException('Отчёт не найден.');
+        }
+
+        if (!$csrf->isTokenValid(new CsrfToken('report_period_change_' . $id, $request->request->getString('_token')))) {
+            $this->addFlash('error', 'Неверный CSRF-токен.');
+            return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
+        }
+
+        $newPeriodId = $request->request->getInt('period_id');
+        if ($newPeriodId <= 0) {
+            $this->addFlash('error', 'Не выбран период.');
+            return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
+        }
+
+        $oldPeriod = $report->getPeriod();
+        if ($oldPeriod && $oldPeriod->getId() === $newPeriodId) {
+            $this->addFlash('error', 'Этот период уже выбран.');
+            return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
+        }
+
+        $newPeriod = $em->getRepository(AnalyticsPeriod::class)->find($newPeriodId);
+        if (!$newPeriod) {
+            $this->addFlash('error', 'Выбранный период не найден.');
+            return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
+        }
+
+        $board = $report->getBoard();
+        if ($board && $newPeriod->getType() !== $board->getPeriodType()) {
+            $this->addFlash('error', 'Тип периода не совпадает с типом доски.');
+            return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
+        }
+
+        $duplicate = $em->getRepository(AnalyticsReport::class)->findOneBy([
+            'organization' => $report->getOrganization(),
+            'board'        => $report->getBoard(),
+            'period'       => $newPeriod,
+        ]);
+        if ($duplicate && $duplicate->getId() !== $report->getId()) {
+            $this->addFlash('error', 'На этот период у организации уже есть отчёт.');
+            return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
+        }
+
+        $report->setPeriod($newPeriod);
+
+        try {
+            $em->flush();
+        } catch (\Throwable $e) {
+            $this->addFlash('error', 'Не удалось сохранить период: ' . $e->getMessage());
+            return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
+        }
+
+        if ($report->getStatus() === AnalyticsReportStatus::Confirmed) {
+            $recalculateService->recalculateForScope($oldPeriod, $report->getOrganization());
+            $recalculateService->recalculateForScope($newPeriod, $report->getOrganization());
+            $this->addFlash('success', 'Период изменён, агрегированная аналитика пересчитана.');
+        } else {
+            $this->addFlash('success', 'Период изменён.');
+        }
+
+        return $this->redirectToRoute('app_analytics_report_fill', ['id' => $id]);
     }
 
     #[Route('/analytics/report/{id}/view', name: 'app_analytics_report_view')]
