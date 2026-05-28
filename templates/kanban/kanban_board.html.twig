@@ -750,6 +750,22 @@
             justify-content: center;
             border-radius: 0.5rem;
         }
+        .board-tab-draggable .board-tab-link {
+            cursor: grab;
+        }
+        .board-tab-draggable .board-tab-link:active {
+            cursor: grabbing;
+        }
+        .board-tab-item.gu-mirror {
+            opacity: 0.85;
+            transform: rotate(2deg);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            z-index: 9999;
+            list-style: none;
+        }
+        .board-tab-item.gu-transit {
+            opacity: 0.3;
+        }
 
         .task-chat-messages {
             display: flex;
@@ -1282,6 +1298,14 @@
                         <i class="bi bi-arrow-left"></i> Все проекты
                     </a>
                 </div>
+                <div>
+                    <a href="{{ path('app_kanban_board_archive', {id: board.id}) }}" class="btn btn-sm btn-outline-secondary" title="Архив задач">
+                        <i class="bi bi-archive"></i> Архив
+                        {% if archivedCount|default(0) > 0 %}
+                            <span class="badge bg-secondary ms-1">{{ archivedCount }}</span>
+                        {% endif %}
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -1291,7 +1315,7 @@
     <div class="board-tabs-wrap mb-3 d-flex align-items-center flex-wrap gap-2">
         <ul class="board-tabs mb-0">
             {% for b in _project_boards %}
-            <li class="board-tab-item" data-board-id="{{ b.id }}">
+            <li class="board-tab-item{% if isBoardAdmin|default(false) %} board-tab-draggable{% endif %}" data-board-id="{{ b.id }}" data-position="{{ b.position }}">
                 <div class="board-tab-link {{ b.id == board.id ? 'active' : '' }}">
                     <a href="{{ path('app_kanban_board', {id: b.id}) }}" class="board-tab-link-inner">
                         <span class="board-tab-title">{{ b.title }}</span>
@@ -1453,6 +1477,9 @@
                                     </button>
                                 </div>
                                 {% if isBoardAdmin|default(false) %}
+                                <button type="button" class="kanban-card-dropdown-item archive-card-btn" data-card-id="{{ card.id }}">
+                                    <i class="bi bi-archive"></i> В архив
+                                </button>
                                 <button type="button" class="kanban-card-dropdown-item delete-card-btn" data-card-id="{{ card.id }}">
                                     <i class="bi bi-trash"></i> Удалить
                                 </button>
@@ -2086,6 +2113,75 @@
                 });
             });
 
+            // Board tabs drag & drop (admin only)
+            {% if isBoardAdmin|default(false) %}
+            var boardTabsUl = document.querySelector('.board-tabs');
+            if (boardTabsUl && typeof dragula === 'function') {
+                var tabDrake = dragula([boardTabsUl], {
+                    direction: 'horizontal',
+                    moves: function(el, source, handle) {
+                        if (!el.classList || !el.classList.contains('board-tab-draggable')) return false;
+                        if (handle.closest('.board-tab-menu-btn')) return false;
+                        if (handle.closest('.board-tab-input')) return false;
+                        if (handle.closest('.board-tab-dropdown')) return false;
+                        return true;
+                    },
+                    invalid: function(el, handle) {
+                        return handle.tagName === 'BUTTON' || handle.tagName === 'INPUT' ||
+                               (handle.closest && (handle.closest('.board-tab-menu-btn') || handle.closest('.board-tab-input')));
+                    }
+                });
+
+                // Prevent navigation when a drag actually happened (dragula does not block the synthetic click on <a>)
+                var tabWasDragged = false;
+                tabDrake.on('drag', function() { tabWasDragged = true; });
+                tabDrake.on('cancel', function() { tabWasDragged = false; });
+                boardTabsUl.addEventListener('click', function(e) {
+                    if (tabWasDragged) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        tabWasDragged = false;
+                    }
+                }, true);
+
+                tabDrake.on('drop', function(el, target) {
+                    tabWasDragged = false;
+                    if (!target) return;
+                    var boardId = el.getAttribute('data-board-id');
+                    var items = Array.from(target.querySelectorAll('.board-tab-item'));
+                    var idx = items.indexOf(el);
+                    var position;
+
+                    if (items.length <= 1) {
+                        position = 1.0;
+                    } else if (idx === 0) {
+                        var nextPos = parseFloat(items[1].getAttribute('data-position') || '1');
+                        position = nextPos / 2;
+                    } else if (idx === items.length - 1) {
+                        var prevPos = parseFloat(items[idx - 1].getAttribute('data-position') || '0');
+                        position = prevPos + 1.0;
+                    } else {
+                        var prevP = parseFloat(items[idx - 1].getAttribute('data-position') || '0');
+                        var nextP = parseFloat(items[idx + 1].getAttribute('data-position') || '0');
+                        position = (prevP + nextP) / 2;
+                    }
+
+                    el.setAttribute('data-position', position);
+
+                    KanbanApp.apiFetch('/api/kanban/boards/' + boardId, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ position: position })
+                    }).then(function(data) {
+                        if (data && data.position !== undefined) {
+                            el.setAttribute('data-position', data.position);
+                        }
+                    }).catch(function(err) {
+                        KanbanApp.showToast(err.message);
+                    });
+                });
+            }
+            {% endif %}
+
             // Delete board
             document.querySelectorAll('.delete-board-btn').forEach(function(btn) {
                 btn.addEventListener('click', function(e) {
@@ -2308,6 +2404,57 @@
                             input.remove();
                             titleDiv.style.display = 'block';
                         }
+                    });
+                }
+            });
+
+            // Archive card
+            document.addEventListener('click', function(e) {
+                var archiveBtn = e.target.closest('.archive-card-btn');
+                if (archiveBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    var cardId = archiveBtn.getAttribute('data-card-id');
+                    var card = document.querySelector('.kanban-card[data-card-id="' + cardId + '"]');
+                    var dropdown = document.querySelector('.kanban-card-dropdown[data-card-id="' + cardId + '"]');
+
+                    if (dropdown) dropdown.style.display = 'none';
+                    currentOpenCardDropdown = null;
+
+                    KanbanApp.apiFetch('/api/kanban/cards/' + cardId + '/archive', {
+                        method: 'PATCH'
+                    })
+                    .then(function() {
+                        var column = card ? card.closest('.kanban-column') : null;
+                        if (card) card.remove();
+                        if (dropdown && dropdown.parentNode) dropdown.remove();
+                        if (column) {
+                            var counter = column.querySelector('.column-count');
+                            if (counter) counter.textContent = Math.max(0, parseInt(counter.textContent || '0', 10) - 1);
+                        }
+                        // Close sidebar if it was open for this card
+                        var sidebar = document.getElementById('task-sidebar');
+                        if (sidebar && sidebar.getAttribute('data-active-card-id') === cardId) {
+                            sidebar.setAttribute('aria-hidden', 'true');
+                        }
+                        // Bump archive badge counter
+                        var archiveLink = document.querySelector('a[href$="/archive"]');
+                        if (archiveLink) {
+                            var badge = archiveLink.querySelector('.badge');
+                            if (badge) {
+                                badge.textContent = (parseInt(badge.textContent || '0', 10) || 0) + 1;
+                            } else {
+                                var span = document.createElement('span');
+                                span.className = 'badge bg-secondary ms-1';
+                                span.textContent = '1';
+                                archiveLink.appendChild(span);
+                            }
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('Error:', error);
+                        KanbanApp.showToast(error.message);
                     });
                 }
             });

@@ -2,6 +2,7 @@
 
 namespace App\Repository\Kanban;
 
+use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\KanbanCard;
 use App\Entity\Kanban\KanbanColumn;
 use App\Entity\Kanban\Project\KanbanProject;
@@ -95,6 +96,58 @@ class KanbanCardRepository extends ServiceEntityRepository
             ->setParameter('user', $user)
             ->getQuery()
             ->getResult();
+    }
+
+    public function countArchivedByBoard(KanbanBoard $board): int
+    {
+        return (int) $this->createQueryBuilder('c')
+            ->select('COUNT(c.id)')
+            ->innerJoin('c.column', 'col')
+            ->where('col.board = :board')
+            ->andWhere('c.isArchived = true')
+            ->setParameter('board', $board)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Архивные карточки доски (постранично), отсортированные по дате архивации.
+     *
+     * @return array{cards: KanbanCard[], total: int, page: int, limit: int, totalPages: int}
+     */
+    public function findArchivedByBoardPaginated(KanbanBoard $board, int $page = 1, int $limit = 10): array
+    {
+        $offset = ($page - 1) * $limit;
+
+        $total = (int) $this->createQueryBuilder('c')
+            ->select('COUNT(c.id)')
+            ->innerJoin('c.column', 'col')
+            ->where('col.board = :board')
+            ->andWhere('c.isArchived = true')
+            ->setParameter('board', $board)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        $cards = $this->createQueryBuilder('c')
+            ->innerJoin('c.column', 'col')->addSelect('col')
+            ->leftJoin('c.archivedBy', 'ab')->addSelect('ab')
+            ->where('col.board = :board')
+            ->andWhere('c.isArchived = true')
+            ->setParameter('board', $board)
+            ->orderBy('c.archivedAt', 'DESC')
+            ->addOrderBy('c.id', 'DESC')
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        return [
+            'cards' => $cards,
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'totalPages' => (int) ceil($total / $limit),
+        ];
     }
 
     /**

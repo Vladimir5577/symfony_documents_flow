@@ -12,6 +12,7 @@ use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
+use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,6 +32,7 @@ final class ProjectKanbanController extends AbstractController
         private readonly KanbanChecklistItemRepository $checklistRepo,
         private readonly KanbanService $kanbanService,
         private readonly NotificationService $notificationService,
+        private readonly KanbanAttachmentPreviewUrlGenerator $attachmentPreviewUrlGenerator,
     ) {
     }
 
@@ -140,6 +142,7 @@ final class ProjectKanbanController extends AbstractController
             'currentUser' => $user,
             'projectBoards' => $projectBoards,
             'organizations' => $organizations,
+            'archivedCount' => $this->cardRepo->countArchivedByBoard($board),
         ]);
     }
 
@@ -811,5 +814,93 @@ final class ProjectKanbanController extends AbstractController
         $entityManager->flush();
 
         return $this->json(['success' => true, 'redirectUrl' => $redirectUrl]);
+    }
+
+    #[Route('/kanban/board/{id}/archive', name: 'app_kanban_board_archive', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function boardArchive(int $id, Request $request): Response
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $board = $this->boardRepo->find($id);
+        if (!$board) {
+            throw $this->createNotFoundException('Доска не найдена.');
+        }
+
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+
+        $memberRole = $this->kanbanService->getMemberRole($board, $user);
+
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = 10;
+
+        $pagination = $this->cardRepo->findArchivedByBoardPaginated($board, $page, $limit);
+
+        return $this->render('kanban/kanban_board_archive.html.twig', [
+            'active_tab' => 'kanban_boards',
+            'board' => $board,
+            'memberRole' => $memberRole,
+            'isBoardAdmin' => $memberRole === KanbanBoardMemberRole::KANBAN_ADMIN,
+            'cards' => $pagination['cards'],
+            'pagination' => [
+                'current_page' => $pagination['page'],
+                'total_pages' => $pagination['totalPages'],
+                'total_items' => $pagination['total'],
+                'items_per_page' => $pagination['limit'],
+            ],
+            'filter_query' => [],
+        ]);
+    }
+
+    #[Route('/kanban/card/{id}', name: 'app_kanban_card_view', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function viewCard(int $id): Response
+    {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $card = $this->cardRepo->findOneWithRelations($id);
+        if (!$card) {
+            throw $this->createNotFoundException('Карточка не найдена.');
+        }
+
+        $board = $card->getColumn()->getBoard();
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+
+        $memberRole = $this->kanbanService->getMemberRole($board, $user);
+
+        // Split attachments by context and build a unified chat timeline (comments + chat attachments)
+        $descriptionAttachments = [];
+        $infoAttachments = [];
+        $chatAttachments = [];
+        $previewUrls = [];
+        foreach ($card->getAttachments() as $att) {
+            match ($att->getContext()) {
+                'description' => $descriptionAttachments[] = $att,
+                'chat'        => $chatAttachments[] = $att,
+                default       => $infoAttachments[] = $att,
+            };
+            $previewUrls[$att->getId()] = $this->attachmentPreviewUrlGenerator->getPreviewUrl($att);
+        }
+
+        $timeline = [];
+        foreach ($card->getComments() as $c) {
+            $timeline[] = ['type' => 'comment', 'item' => $c, 'createdAt' => $c->getCreatedAt()];
+        }
+        foreach ($chatAttachments as $a) {
+            $timeline[] = ['type' => 'attachment', 'item' => $a, 'createdAt' => $a->getCreatedAt()];
+        }
+        usort($timeline, fn($a, $b) => ($a['createdAt']?->getTimestamp() ?? 0) <=> ($b['createdAt']?->getTimestamp() ?? 0));
+
+        return $this->render('kanban/kanban_card_view.html.twig', [
+            'active_tab' => 'kanban_boards',
+            'card' => $card,
+            'board' => $board,
+            'memberRole' => $memberRole,
+            'isBoardAdmin' => $memberRole === KanbanBoardMemberRole::KANBAN_ADMIN,
+            'descriptionAttachments' => $descriptionAttachments,
+            'infoAttachments' => $infoAttachments,
+            'chatTimeline' => $timeline,
+            'previewUrls' => $previewUrls,
+        ]);
     }
 }

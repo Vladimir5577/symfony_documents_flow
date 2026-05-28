@@ -1,0 +1,216 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Архив — {{ board.title }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="page-title">
+        <div class="row">
+            <div class="col-12 d-flex align-items-center justify-content-between">
+                <div>
+                    <a href="{{ path('app_kanban_board', {id: board.id}) }}" class="btn btn-link p-0 text-decoration-none text-muted mb-1">
+                        <i class="bi bi-arrow-left"></i> Назад к доске
+                    </a>
+                    <h3 class="mb-0 mt-1">
+                        <i class="bi bi-archive me-2"></i>Архив доски: {{ board.title }}
+                    </h3>
+                </div>
+                <span class="badge bg-secondary fs-6">Всего: {{ pagination.total_items }}</span>
+            </div>
+        </div>
+    </div>
+
+    <section class="section">
+        <div class="card">
+            <div class="card-body">
+                {% if pagination.total_items == 0 %}
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-archive" style="font-size: 3rem;"></i>
+                        <p class="mt-3 mb-0">В архиве нет задач</p>
+                    </div>
+                {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Задача</th>
+                                    <th>Колонка</th>
+                                    <th>Когда</th>
+                                    {% if isBoardAdmin %}
+                                    <th class="text-end">Действия</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for card in cards %}
+                                <tr class="archive-row" data-card-id="{{ card.id }}" data-href="{{ path('app_kanban_card_view', {id: card.id}) }}" role="button" tabindex="0">
+                                    <td>
+                                        <span class="fw-semibold">{{ card.title }}</span>
+                                        {% if card.description %}
+                                        <div class="small text-muted">{{ card.description|length > 100 ? card.description|slice(0, 100) ~ '…' : card.description }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light-secondary text-secondary">{{ card.column.title }}</span>
+                                    </td>
+                                    <td>
+                                        {{ card.archivedAt ? card.archivedAt|date('d.m.Y H:i') : '—' }}
+                                    </td>
+                                    {% if isBoardAdmin %}
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-success archive-restore-btn" data-card-id="{{ card.id }}" title="Восстановить">
+                                            <i class="bi bi-arrow-counterclockwise"></i> Восстановить
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger archive-delete-btn ms-1" data-card-id="{{ card.id }}" title="Удалить навсегда">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {# Пагинация #}
+                    {% if pagination.total_pages > 1 %}
+                        <nav aria-label="Навигация по страницам" class="mt-3">
+                            <ul class="pagination justify-content-center mb-0">
+                                {# Предыдущая страница #}
+                                <li class="page-item {% if pagination.current_page == 1 %}disabled{% endif %}">
+                                    <a class="page-link" href="{% if pagination.current_page > 1 %}{{ path('app_kanban_board_archive', filter_query|merge({id: board.id, page: pagination.current_page - 1})) }}{% else %}#{% endif %}" aria-label="Предыдущая">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </a>
+                                </li>
+
+                                {# Номера страниц #}
+                                {% set start_page = max(1, pagination.current_page - 2) %}
+                                {% set end_page = min(pagination.total_pages, pagination.current_page + 2) %}
+
+                                {% if start_page > 1 %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ path('app_kanban_board_archive', filter_query|merge({id: board.id, page: 1})) }}">1</a>
+                                    </li>
+                                    {% if start_page > 2 %}
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                                    {% endif %}
+                                {% endif %}
+
+                                {% for page in start_page..end_page %}
+                                    <li class="page-item {% if page == pagination.current_page %}active{% endif %}">
+                                        <a class="page-link" href="{{ path('app_kanban_board_archive', filter_query|merge({id: board.id, page: page})) }}">{{ page }}</a>
+                                    </li>
+                                {% endfor %}
+
+                                {% if end_page < pagination.total_pages %}
+                                    {% if end_page < pagination.total_pages - 1 %}
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                                    {% endif %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ path('app_kanban_board_archive', filter_query|merge({id: board.id, page: pagination.total_pages})) }}">{{ pagination.total_pages }}</a>
+                                    </li>
+                                {% endif %}
+
+                                {# Следующая страница #}
+                                <li class="page-item {% if pagination.current_page == pagination.total_pages %}disabled{% endif %}">
+                                    <a class="page-link" href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_kanban_board_archive', filter_query|merge({id: board.id, page: pagination.current_page + 1})) }}{% else %}#{% endif %}" aria-label="Следующая">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </nav>
+                        <div class="text-center mt-2">
+                            <small class="text-muted">
+                                Страница {{ pagination.current_page }} из {{ pagination.total_pages }}
+                                (показано {{ ((pagination.current_page - 1) * pagination.items_per_page) + 1 }} - {{ min(pagination.current_page * pagination.items_per_page, pagination.total_items) }} из {{ pagination.total_items }})
+                            </small>
+                        </div>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <style>.archive-row { cursor: pointer; }</style>
+    <script>
+        document.querySelectorAll('.archive-row').forEach(function (row) {
+            row.addEventListener('click', function (e) {
+                if (e.target.closest('button')) return;
+                window.location.href = this.dataset.href;
+            });
+            row.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    window.location.href = this.dataset.href;
+                }
+            });
+        });
+    </script>
+
+    {% if isBoardAdmin %}
+    <script>
+    (function() {
+        function apiFetch(url, opts) {
+            opts = opts || {};
+            opts.headers = Object.assign({
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }, opts.headers || {});
+            return fetch(url, opts).then(function(r) {
+                if (r.status === 204) return null;
+                return r.json().then(function(data) {
+                    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+                    return data;
+                });
+            });
+        }
+
+        document.addEventListener('click', function(e) {
+            var restoreBtn = e.target.closest('.archive-restore-btn');
+            if (restoreBtn) {
+                var cardId = restoreBtn.getAttribute('data-card-id');
+                Swal.fire({
+                    title: 'Восстановить задачу?',
+                    text: 'Задача вернётся в свою колонку на доске.',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#198754',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Восстановить',
+                    cancelButtonText: 'Отмена'
+                }).then(function(result) {
+                    if (!result.isConfirmed) return;
+                    apiFetch('/api/kanban/cards/' + cardId + '/archive', { method: 'PATCH' })
+                        .then(function() {
+                            var row = document.querySelector('tr[data-card-id="' + cardId + '"]');
+                            if (row) row.remove();
+                        })
+                        .catch(function(err) { Swal.fire({ title: 'Ошибка', text: err.message, icon: 'error' }); });
+                });
+                return;
+            }
+
+            var deleteBtn = e.target.closest('.archive-delete-btn');
+            if (deleteBtn) {
+                if (!confirm('Удалить задачу навсегда? Это действие нельзя отменить.')) return;
+                var cardId2 = deleteBtn.getAttribute('data-card-id');
+                apiFetch('/api/kanban/cards/' + cardId2, { method: 'DELETE' })
+                    .then(function() {
+                        var row = document.querySelector('tr[data-card-id="' + cardId2 + '"]');
+                        if (row) row.remove();
+                    })
+                    .catch(function(err) { alert(err.message); });
+            }
+        });
+    })();
+    </script>
+    {% endif %}
+{% endblock %}

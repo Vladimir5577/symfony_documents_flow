@@ -92,9 +92,6 @@ final class KanbanBoardApiController extends AbstractController
         foreach ($board->getColumns() as $col) {
             $cards = [];
             foreach ($col->getCards() as $card) {
-                if ($card->isArchived()) {
-                    continue;
-                }
                 $labels = [];
                 foreach ($card->getLabels() as $lbl) {
                     $labels[] = [
@@ -167,10 +164,42 @@ final class KanbanBoardApiController extends AbstractController
         if (isset($payload['title']) && trim($payload['title']) !== '') {
             $board->setTitle(trim($payload['title']));
         }
+        if (isset($payload['position'])) {
+            $board->setPosition((float) $payload['position']);
+        }
 
         $this->em->flush();
 
-        return $this->json(['id' => $board->getId(), 'title' => $board->getTitle()]);
+        // Rebalance board positions if neighbours are too close
+        if (isset($payload['position']) && $board->getProject()) {
+            $project = $board->getProject();
+            $boards = $this->boardRepo->createQueryBuilder('b')
+                ->where('b.project = :project')
+                ->setParameter('project', $project)
+                ->orderBy('b.position', 'ASC')
+                ->addOrderBy('b.id', 'ASC')
+                ->getQuery()
+                ->getResult();
+
+            $needsRebalance = false;
+            for ($i = 1; $i < count($boards); $i++) {
+                if (abs($boards[$i]->getPosition() - $boards[$i - 1]->getPosition()) < 1e-5) {
+                    $needsRebalance = true;
+                    break;
+                }
+            }
+
+            if ($needsRebalance) {
+                $this->boardRepo->rebalancePositionsInProject($project);
+                $this->em->flush();
+            }
+        }
+
+        return $this->json([
+            'id' => $board->getId(),
+            'title' => $board->getTitle(),
+            'position' => $board->getPosition(),
+        ]);
     }
 
     #[Route('/{id}', name: 'api_kanban_boards_delete', methods: ['DELETE'])]

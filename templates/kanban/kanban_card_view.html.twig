@@ -1,0 +1,455 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}{{ card.title }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <style>
+        .card-view-title { font-size: 1.6rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.25rem; }
+        .card-view-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem 1.5rem; }
+        .card-view-meta-item .label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--bs-secondary-color); margin-bottom: 0.2rem; }
+        .card-view-meta-item .value { font-size: 0.95rem; color: var(--bs-body-color); }
+
+        .card-view-assignees { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .card-view-assignee {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.3rem 0.6rem 0.3rem 0.3rem;
+            background: var(--bs-secondary-bg);
+            border-radius: 999px;
+            font-size: 0.85rem;
+        }
+        .card-view-assignee-avatar {
+            width: 26px; height: 26px; border-radius: 50%;
+            background: var(--bs-primary); color: #fff;
+            font-size: 0.7rem; font-weight: 600;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+
+        .card-view-description { white-space: pre-wrap; line-height: 1.55; color: var(--bs-body-color); }
+
+        .card-view-subtask {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.4rem;
+            transition: background-color 0.15s;
+        }
+        .card-view-subtask + .card-view-subtask { border-top: 1px solid var(--bs-border-color); }
+        .card-view-subtask .bi { font-size: 1.1rem; flex-shrink: 0; }
+        .card-view-subtask-text { flex: 1; min-width: 0; }
+        .card-view-subtask.done .card-view-subtask-text {
+            text-decoration: line-through; color: var(--bs-secondary-color);
+        }
+        .card-view-subtasks-progress { height: 8px; border-radius: 999px; background: var(--bs-secondary-bg); overflow: hidden; margin-bottom: 0.75rem; }
+        .card-view-subtasks-progress-fill { height: 100%; background: var(--bs-primary); transition: width 0.2s; }
+
+        /* Comments (chat bubbles in YouGile/Telegram style) */
+        .card-view-comments { display: flex; flex-direction: column; gap: 0.75rem; }
+        .card-view-comment { display: flex; gap: 0.6rem; max-width: 85%; }
+        .card-view-comment-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: var(--bs-primary); color: #fff;
+            font-size: 0.75rem; font-weight: 600;
+            display: inline-flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .card-view-comment-bubble {
+            background: var(--bs-secondary-bg);
+            border-radius: 0.25rem 1rem 1rem 1rem;
+            padding: 0.6rem 0.9rem;
+            min-width: 0;
+            flex: 1;
+        }
+        .card-view-comment-author { font-weight: 600; font-size: 0.85rem; color: var(--bs-primary); margin-bottom: 0.2rem; }
+        .card-view-comment-text { font-size: 0.9rem; line-height: 1.4; color: var(--bs-body-color); white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word; }
+        .card-view-comment-time { font-size: 0.72rem; color: var(--bs-secondary-color); margin-top: 0.3rem; }
+
+        .empty-soft { color: var(--bs-secondary-color); font-style: italic; font-size: 0.9rem; }
+
+        /* Attachments */
+        .card-view-attachments { display: flex; flex-direction: column; gap: 0.4rem; }
+        .card-view-attachment {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.5rem;
+            background: var(--bs-body-bg);
+            text-decoration: none;
+            color: var(--bs-body-color);
+            transition: background-color 0.15s, border-color 0.15s;
+        }
+        .card-view-attachment:hover { background: var(--bs-secondary-bg); border-color: var(--bs-primary); color: var(--bs-body-color); }
+        .card-view-attachment-icon { font-size: 1.4rem; flex-shrink: 0; color: var(--bs-primary); }
+        .card-view-attachment-body { flex: 1; min-width: 0; }
+        .card-view-attachment-name { font-weight: 500; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .card-view-attachment-meta { font-size: 0.75rem; color: var(--bs-secondary-color); }
+        .card-view-attachment-download { color: var(--bs-secondary-color); font-size: 1.1rem; flex-shrink: 0; }
+
+        .card-view-image-attachment {
+            display: inline-block;
+            max-width: 100%;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            border: 1px solid var(--bs-border-color);
+            cursor: zoom-in;
+        }
+        .card-view-image-attachment img { display: block; max-width: 240px; max-height: 240px; object-fit: cover; }
+
+        [data-bs-theme="dark"] .card-view-comment-bubble { background: rgba(255,255,255,0.05); }
+        [data-bs-theme="dark"] .card-view-attachment { background: rgba(255,255,255,0.03); }
+    </style>
+
+    {% macro file_icon(contentType, filename) %}
+        {%- set ct = contentType|lower -%}
+        {%- set ext = filename|split('.')|last|lower -%}
+        {%- if ct starts with 'image/' -%}bi-file-earmark-image
+        {%- elseif ct == 'application/pdf' or ext == 'pdf' -%}bi-file-earmark-pdf
+        {%- elseif ext in ['doc','docx'] or ct in ['application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'] -%}bi-file-earmark-word
+        {%- elseif ext in ['xls','xlsx'] or ct in ['application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'] -%}bi-file-earmark-excel
+        {%- elseif ext in ['zip','rar','7z'] -%}bi-file-earmark-zip
+        {%- elseif ext in ['mp4','mov','avi','webm'] or ct starts with 'video/' -%}bi-file-earmark-play
+        {%- else -%}bi-file-earmark
+        {%- endif -%}
+    {% endmacro %}
+
+    {% macro format_size(bytes) %}
+        {%- if bytes >= 1048576 -%}{{ (bytes / 1048576)|number_format(1, '.', '') }} МБ
+        {%- elseif bytes >= 1024 -%}{{ (bytes / 1024)|number_format(0) }} КБ
+        {%- else -%}{{ bytes }} Б
+        {%- endif -%}
+    {% endmacro %}
+
+    {% import _self as fmt %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="{{ path('app_kanban_board', {id: board.id}) }}" class="btn btn-link p-0 text-decoration-none text-muted">
+            <i class="bi bi-arrow-left me-1"></i>Назад к доске «{{ board.title }}»
+        </a>
+        {% if card.isArchived %}
+            <span class="badge bg-warning text-dark fs-6"><i class="bi bi-archive me-1"></i>В архиве</span>
+        {% endif %}
+    </div>
+
+    {# Заголовок и сводка задачи #}
+    <section class="section mb-4">
+        <div class="card">
+            <div class="card-content">
+                <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                        <div class="min-w-0 flex-grow-1">
+                            <div class="card-view-title">
+                                {% if card.borderColor %}<span class="badge bg-{{ card.borderColor }} me-2">&nbsp;</span>{% endif %}
+                                {{ card.title }}
+                            </div>
+                            <div class="text-muted small">
+                                <span>#{{ card.id }}</span>
+                                <span class="mx-1">·</span>
+                                <span><i class="bi bi-kanban"></i> {{ board.title }}</span>
+                                <span class="mx-1">·</span>
+                                <span><i class="bi bi-layout-three-columns"></i> {{ card.column.title }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if card.isArchived %}
+                    <div class="alert alert-warning d-flex align-items-center gap-2 mb-3">
+                        <i class="bi bi-archive fs-5"></i>
+                        <div class="flex-grow-1">
+                            Задача в архиве{% if card.archivedAt %} {{ card.archivedAt|date('d.m.Y H:i') }}{% endif %}.
+{#                            Задача в архиве{% if card.archivedBy %} — заархивировал <strong>{{ card.archivedBy.lastname }} {{ card.archivedBy.firstname }}</strong>{% endif %}{% if card.archivedAt %} {{ card.archivedAt|date('d.m.Y H:i') }}{% endif %}.#}
+                        </div>
+                        {% if isBoardAdmin %}
+                        <button type="button" class="btn btn-sm btn-success" id="card-view-restore-btn" data-card-id="{{ card.id }}">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Восстановить
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <div class="card-view-meta-grid">
+                        <div class="card-view-meta-item">
+                            <div class="label">Приоритет</div>
+                            <div class="value">
+                                {% if card.priority %}
+                                    <span class="badge bg-light-{{ card.priority.color }} text-{{ card.priority.color }}">{{ card.priority.label }}</span>
+                                {% else %}
+                                    <span class="empty-soft">не задан</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="card-view-meta-item">
+                            <div class="label">Срок</div>
+                            <div class="value">
+                                {% if card.dueDate %}
+                                    <i class="bi bi-calendar3 me-1 text-muted"></i>{{ card.dueDate|date('d.m.Y H:i') }}
+                                {% else %}
+                                    <span class="empty-soft">не задан</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="card-view-meta-item">
+                            <div class="label">Автор</div>
+                            <div class="value">
+                                {% if card.createdBy %}
+                                    {{ card.createdBy.lastname }} {{ card.createdBy.firstname }}
+                                {% else %}
+                                    <span class="empty-soft">—</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="card-view-meta-item">
+                            <div class="label">Создана</div>
+                            <div class="value">{{ card.createdAt ? card.createdAt|date('d.m.Y H:i') : '—' }}</div>
+                        </div>
+                        <div class="card-view-meta-item">
+                            <div class="label">Изменена</div>
+                            <div class="value">{{ card.updatedAt ? card.updatedAt|date('d.m.Y H:i') : '—' }}</div>
+                        </div>
+                    </div>
+
+                    {% if card.labels|length > 0 %}
+                    <div class="mt-3">
+                        <div class="card-view-meta-item">
+                            <div class="label mb-2">Метки</div>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for label in card.labels %}
+                                    <span class="badge {{ label.color.value }}">{{ label.name }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if card.assignees|length > 0 %}
+                    <div class="mt-3">
+                        <div class="card-view-meta-item">
+                            <div class="label mb-2">Исполнители</div>
+                            <div class="card-view-assignees">
+                                {% for u in card.assignees %}
+                                    {% set initials = ((u.firstname|default(''))|slice(0,1) ~ (u.lastname|default(''))|slice(0,1))|upper %}
+                                    <span class="card-view-assignee" title="{{ u.lastname }} {{ u.firstname }}">
+                                        <span class="card-view-assignee-avatar">{{ initials ?: '?' }}</span>
+                                        <span>{{ u.lastname }} {{ u.firstname }}</span>
+                                    </span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# Описание #}
+    <section class="section mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0"><i class="bi bi-card-text me-2"></i>Описание</h4>
+            </div>
+            <div class="card-content">
+                <div class="card-body">
+                    {% if card.description %}
+                        <div class="card-view-description">{{ card.description }}</div>
+                    {% else %}
+                        <div class="empty-soft">Описание не задано.</div>
+                    {% endif %}
+
+                    {% if descriptionAttachments|length > 0 %}
+                    <h5 class="mb-3 mt-4">Прикреплённые файлы</h5>
+                    <ul class="list-group list-group-flush">
+                        {% for att in descriptionAttachments %}
+                            {% set baseUrl = path('api_kanban_attachments_download', {cardId: card.id, id: att.id}) %}
+                            {% set inlineUrl = baseUrl ~ '?inline=1' %}
+                            {% set isImage = att.contentType starts with 'image/' %}
+                            {% set isPdf = att.contentType == 'application/pdf' or (att.filename|split('.')|last|lower) == 'pdf' %}
+                            <li class="list-group-item d-flex align-items-center gap-3 px-3">
+                                <div class="flex-shrink-0 rounded bg-light d-flex align-items-center justify-content-center text-muted" style="width: 40px; height: 40px;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+                                </div>
+                                <span class="flex-grow-1">{{ att.filename }}</span>
+                                {% if isPdf %}
+                                    <a href="{{ inlineUrl }}" class="btn btn-sm btn-outline-secondary flex-shrink-0" target="_blank" rel="noopener">Просмотр</a>
+                                {% elseif isImage %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="{{ inlineUrl }}">
+                                        Просмотр
+                                    </button>
+                                {% endif %}
+                                <a href="{{ baseUrl }}" class="btn btn-sm btn-outline-primary flex-shrink-0" download target="_blank" rel="noopener">Скачать</a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% if infoAttachments|length > 0 %}
+    <section class="section mb-4">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h4 class="card-title mb-0"><i class="bi bi-paperclip me-2"></i>Прикреплённые файлы</h4>
+                <span class="text-muted small">{{ infoAttachments|length }}</span>
+            </div>
+            <div class="card-content">
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        {% for att in infoAttachments %}
+                            {% set baseUrl = path('api_kanban_attachments_download', {cardId: card.id, id: att.id}) %}
+                            {% set inlineUrl = baseUrl ~ '?inline=1' %}
+                            {% set isImage = att.contentType starts with 'image/' %}
+                            {% set isPdf = att.contentType == 'application/pdf' or (att.filename|split('.')|last|lower) == 'pdf' %}
+                            <li class="list-group-item d-flex align-items-center gap-3 px-3">
+                                <div class="flex-shrink-0 rounded bg-light d-flex align-items-center justify-content-center text-muted" style="width: 40px; height: 40px;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+                                </div>
+                                <span class="flex-grow-1">
+                                    {{ att.filename }}
+                                    <div class="text-muted small">{{ fmt.format_size(att.sizeBytes) }}{% if att.author %} · {{ att.author.lastname }} {{ att.author.firstname }}{% endif %}{% if att.createdAt %} · {{ att.createdAt|date('d.m.Y H:i') }}{% endif %}</div>
+                                </span>
+                                {% if isPdf %}
+                                    <a href="{{ inlineUrl }}" class="btn btn-sm btn-outline-secondary flex-shrink-0" target="_blank" rel="noopener">Просмотр</a>
+                                {% elseif isImage %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="{{ inlineUrl }}">
+                                        Просмотр
+                                    </button>
+                                {% endif %}
+                                <a href="{{ baseUrl }}" class="btn btn-sm btn-outline-primary flex-shrink-0" download target="_blank" rel="noopener">Скачать</a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    {# Подзадачи #}
+    {% set _subtasksTotal = card.subtasks|length %}
+    {% set _subtasksDone = card.subtasks|filter(ci => ci.completed)|length %}
+    {% set _subtasksPercent = _subtasksTotal > 0 ? (_subtasksDone / _subtasksTotal * 100) : 0 %}
+    <section class="section mb-4">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h4 class="card-title mb-0"><i class="bi bi-check2-square me-2"></i>Подзадачи</h4>
+                {% if _subtasksTotal > 0 %}
+                    <span class="text-muted small">{{ _subtasksDone }} из {{ _subtasksTotal }}</span>
+                {% endif %}
+            </div>
+            <div class="card-content">
+                <div class="card-body">
+                    {% if _subtasksTotal > 0 %}
+                        <div class="card-view-subtasks-progress">
+                            <div class="card-view-subtasks-progress-fill" style="width: {{ _subtasksPercent }}%;"></div>
+                        </div>
+                        <div>
+                            {% for ci in card.subtasks %}
+                                <div class="card-view-subtask {{ ci.completed ? 'done' : '' }}">
+                                    <i class="bi {{ ci.completed ? 'bi-check-square-fill text-success' : 'bi-square text-muted' }}"></i>
+                                    <span class="card-view-subtask-text">{{ ci.title }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="empty-soft">Подзадач нет.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# Чат: комментарии + вложения чата в едином потоке по времени #}
+    <section class="section mb-4">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h4 class="card-title mb-0"><i class="bi bi-chat-dots me-2"></i>Чат</h4>
+                {% if chatTimeline|length > 0 %}
+                    <span class="text-muted small">{{ chatTimeline|length }}</span>
+                {% endif %}
+            </div>
+            <div class="card-content">
+                <div class="card-body">
+                    {% if chatTimeline|length > 0 %}
+                        <div class="card-view-comments">
+                            {% for entry in chatTimeline %}
+                                {% set author = entry.item.author %}
+                                {% set authorName = author ? (author.lastname ~ ' ' ~ author.firstname)|trim : '—' %}
+                                {% set initials = author ? ((author.firstname|default(''))|slice(0,1) ~ (author.lastname|default(''))|slice(0,1))|upper : '?' %}
+                                <div class="card-view-comment">
+                                    <div class="card-view-comment-avatar">{{ initials ?: '?' }}</div>
+                                    <div class="card-view-comment-bubble">
+                                        <div class="card-view-comment-author">{{ authorName }}</div>
+                                        {% if entry.type == 'comment' %}
+                                            <div class="card-view-comment-text">{{ entry.item.body|default('') }}</div>
+                                        {% else %}
+                                            {% set att = entry.item %}
+                                            {% set downloadUrl = path('api_kanban_attachments_download', {cardId: card.id, id: att.id}) %}
+                                            {% if att.contentType starts with 'image/' %}
+                                                {% set inlineUrl = downloadUrl ~ '?inline=1' %}
+                                                {% set thumbUrl = previewUrls[att.id]|default(inlineUrl) %}
+                                                <button type="button" class="card-view-image-attachment border-0 p-0 bg-transparent" data-bs-toggle="modal" data-bs-target="#imagePreviewModal" data-image-url="{{ inlineUrl }}" title="{{ att.filename }}">
+                                                    <img src="{{ thumbUrl }}" alt="{{ att.filename }}" loading="lazy">
+                                                </button>
+                                                <div class="text-muted small mt-1">{{ att.filename }} · {{ fmt.format_size(att.sizeBytes) }}</div>
+                                            {% else %}
+                                                <a class="card-view-attachment" href="{{ downloadUrl }}" target="_blank" rel="noopener">
+                                                    <i class="bi {{ fmt.file_icon(att.contentType, att.filename) }} card-view-attachment-icon"></i>
+                                                    <div class="card-view-attachment-body">
+                                                        <div class="card-view-attachment-name">{{ att.filename }}</div>
+                                                        <div class="card-view-attachment-meta">{{ fmt.format_size(att.sizeBytes) }}</div>
+                                                    </div>
+                                                    <i class="bi bi-download card-view-attachment-download"></i>
+                                                </a>
+                                            {% endif %}
+                                        {% endif %}
+                                        <div class="card-view-comment-time">{{ entry.createdAt ? entry.createdAt|date('d.m.Y H:i') : '' }}</div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="empty-soft">Сообщений и вложений пока нет.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {{ include('user/partials/_preview_image_script.html.twig') }}
+
+    {% if card.isArchived and isBoardAdmin %}
+    <script>
+    (function() {
+        var btn = document.getElementById('card-view-restore-btn');
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+            var cardId = btn.getAttribute('data-card-id');
+            Swal.fire({
+                title: 'Восстановить задачу?',
+                text: 'Задача вернётся в свою колонку на доске.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Восстановить',
+                cancelButtonText: 'Отмена'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+                fetch('/api/kanban/cards/' + cardId + '/archive', {
+                    method: 'PATCH',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+                }).then(function(r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    window.location.href = '{{ path('app_kanban_board', {id: board.id}) }}';
+                }).catch(function(err) {
+                    Swal.fire({ title: 'Ошибка', text: err.message, icon: 'error' });
+                });
+            });
+        });
+    })();
+    </script>
+    {% endif %}
+{% endblock %}

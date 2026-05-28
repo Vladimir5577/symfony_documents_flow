@@ -38,6 +38,13 @@ class KanbanCard
     #[ORM\Column(name: 'is_archived', options: ['default' => false])]
     private bool $isArchived = false;
 
+    #[ORM\Column(name: 'archived_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $archivedAt = null;
+
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'archived_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $archivedBy = null;
+
     #[ORM\ManyToOne(targetEntity: KanbanColumn::class, inversedBy: 'cards')]
     #[ORM\JoinColumn(name: 'column_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private KanbanColumn $column;
@@ -160,6 +167,28 @@ class KanbanCard
     public function setIsArchived(bool $isArchived): static
     {
         $this->isArchived = $isArchived;
+        return $this;
+    }
+
+    public function getArchivedAt(): ?\DateTimeImmutable
+    {
+        return $this->archivedAt;
+    }
+
+    public function setArchivedAt(?\DateTimeImmutable $archivedAt): static
+    {
+        $this->archivedAt = $archivedAt;
+        return $this;
+    }
+
+    public function getArchivedBy(): ?User
+    {
+        return $this->archivedBy;
+    }
+
+    public function setArchivedBy(?User $archivedBy): static
+    {
+        $this->archivedBy = $archivedBy;
         return $this;
     }
 
