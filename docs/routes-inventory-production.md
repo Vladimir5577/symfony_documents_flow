@@ -1,0 +1,511 @@
+﻿# Production Routes Inventory
+
+Filtered from `debug:router` (without profiler/internal routes).
+
+Total production API routes: 54
+Total production browser routes: 146
+
+## API by domain and CRUD
+
+### Domain: chat
+#### create
+| Route name | Path | Controller |
+|---|---|---|
+| api_chat_rooms_private | /api/chat/rooms/private | App\Controller\Api\Chat\ApiChatRoomController::createPrivate |
+| api_chat_rooms_group | /api/chat/rooms/group | App\Controller\Api\Chat\ApiChatRoomController::createGroup |
+| api_chat_rooms_add_participant | /api/chat/rooms/{id}/participants | App\Controller\Api\Chat\ApiChatRoomController::addParticipant |
+
+#### read
+| Route name | Path | Controller |
+|---|---|---|
+| api_chat_messages_list | /api/chat/rooms/{id}/messages | App\Controller\Api\Chat\ApiChatMessageController::messages |
+| api_chat_messages_send | /api/chat/rooms/{id}/messages | App\Controller\Api\Chat\ApiChatMessageController::send |
+| api_chat_messages_edit | /api/chat/messages/{id} | App\Controller\Api\Chat\ApiChatMessageController::edit |
+| api_chat_messages_delete | /api/chat/messages/{id} | App\Controller\Api\Chat\ApiChatMessageController::delete |
+| api_chat_messages_read | /api/chat/rooms/{id}/read | App\Controller\Api\Chat\ApiChatMessageController::markAsRead |
+| api_chat_unread_count | /api/chat/unread-count | App\Controller\Api\Chat\ApiChatMessageController::unreadCount |
+| api_chat_rooms_list | /api/chat/rooms | App\Controller\Api\Chat\ApiChatRoomController::list |
+| api_chat_rooms_department | /api/chat/rooms/department | App\Controller\Api\Chat\ApiChatRoomController::createDepartment |
+| api_chat_rooms_detail | /api/chat/rooms/{id} | App\Controller\Api\Chat\ApiChatRoomController::detail |
+| api_chat_user_profile | /api/chat/users/{id}/profile | App\Controller\Api\Chat\ApiChatUserController::profile |
+
+#### update
+| Route name | Path | Controller |
+|---|---|---|
+| api_chat_rooms_remove_participant | /api/chat/rooms/{id}/participants/{userId} | App\Controller\Api\Chat\ApiChatRoomController::removeParticipant |
+
+### Domain: kanban
+#### create
+| Route name | Path | Controller |
+|---|---|---|
+| api_kanban_boards_create | /api/kanban/boards | App\Controller\Kanban\Api\KanbanBoardApiController::create |
+| api_kanban_cards_create | /api/kanban/cards | App\Controller\Kanban\Api\KanbanCardApiController::create |
+| api_kanban_columns_create | /api/kanban/boards/{boardId}/columns | App\Controller\Kanban\Api\KanbanColumnApiController::create |
+| api_kanban_labels_create | /api/kanban/boards/{boardId}/labels | App\Controller\Kanban\Api\KanbanLabelApiController::create |
+
+#### read
+| Route name | Path | Controller |
+|---|---|---|
+| api_kanban_attachments_upload | /api/kanban/cards/{cardId}/attachments | App\Controller\Kanban\Api\KanbanAttachmentApiController::upload |
+| api_kanban_attachments_download | /api/kanban/cards/{cardId}/attachments/{id}/download | App\Controller\Kanban\Api\KanbanAttachmentApiController::download |
+| api_kanban_attachments_delete | /api/kanban/cards/{cardId}/attachments/{id} | App\Controller\Kanban\Api\KanbanAttachmentApiController::delete |
+| api_kanban_boards_list | /api/kanban/boards | App\Controller\Kanban\Api\KanbanBoardApiController::list |
+| api_kanban_boards_show | /api/kanban/boards/{id} | App\Controller\Kanban\Api\KanbanBoardApiController::show |
+| api_kanban_boards_add_member | /api/kanban/boards/{id}/members | App\Controller\Kanban\Api\KanbanBoardApiController::addMember |
+| api_kanban_cards_show | /api/kanban/cards/{id} | App\Controller\Kanban\Api\KanbanCardApiController::show |
+| api_kanban_cards_assign_new_member | /api/kanban/cards/{id}/assign-new-member | App\Controller\Kanban\Api\KanbanCardApiController::assignNewMember |
+| api_kanban_checklist_create | /api/kanban/cards/{cardId}/checklist | App\Controller\Kanban\Api\KanbanChecklistApiController::create |
+| api_kanban_checklist_update | /api/kanban/cards/{cardId}/checklist/{id} | App\Controller\Kanban\Api\KanbanChecklistApiController::update |
+| api_kanban_checklist_delete | /api/kanban/cards/{cardId}/checklist/{id} | App\Controller\Kanban\Api\KanbanChecklistApiController::delete |
+| api_kanban_comments_list | /api/kanban/cards/{cardId}/comments | App\Controller\Kanban\Api\KanbanCommentApiController::list |
+| api_kanban_comments_create | /api/kanban/cards/{cardId}/comments | App\Controller\Kanban\Api\KanbanCommentApiController::create |
+| api_kanban_comments_update | /api/kanban/cards/{cardId}/comments/{commentId} | App\Controller\Kanban\Api\KanbanCommentApiController::update |
+| api_kanban_comments_delete | /api/kanban/cards/{cardId}/comments/{commentId} | App\Controller\Kanban\Api\KanbanCommentApiController::delete |
+| api_kanban_labels_list | /api/kanban/boards/{boardId}/labels | App\Controller\Kanban\Api\KanbanLabelApiController::list |
+
+#### update
+| Route name | Path | Controller |
+|---|---|---|
+| api_kanban_boards_update | /api/kanban/boards/{id} | App\Controller\Kanban\Api\KanbanBoardApiController::update |
+| api_kanban_cards_update | /api/kanban/cards/{id} | App\Controller\Kanban\Api\KanbanCardApiController::update |
+| api_kanban_cards_assignees | /api/kanban/cards/{id}/assignees | App\Controller\Kanban\Api\KanbanCardApiController::setAssignees |
+| api_kanban_cards_move | /api/kanban/cards/{id}/move | App\Controller\Kanban\Api\KanbanCardApiController::move |
+| api_kanban_cards_archive | /api/kanban/cards/{id}/archive | App\Controller\Kanban\Api\KanbanCardApiController::archive |
+| api_kanban_columns_update | /api/kanban/boards/{boardId}/columns/{id} | App\Controller\Kanban\Api\KanbanColumnApiController::update |
+| api_kanban_labels_toggle | /api/kanban/boards/{boardId}/labels/cards/{cardId}/{labelId} | App\Controller\Kanban\Api\KanbanLabelApiController::toggleLabel |
+
+#### delete
+| Route name | Path | Controller |
+|---|---|---|
+| api_kanban_boards_delete | /api/kanban/boards/{id} | App\Controller\Kanban\Api\KanbanBoardApiController::delete |
+| api_kanban_cards_delete | /api/kanban/cards/{id} | App\Controller\Kanban\Api\KanbanCardApiController::deleteCard |
+| api_kanban_columns_delete | /api/kanban/boards/{boardId}/columns/{id} | App\Controller\Kanban\Api\KanbanColumnApiController::delete |
+| api_kanban_labels_delete | /api/kanban/boards/{boardId}/labels/{id} | App\Controller\Kanban\Api\KanbanLabelApiController::delete |
+
+#### search
+| Route name | Path | Controller |
+|---|---|---|
+| api_kanban_users_search | /api/kanban/users/search | App\Controller\Kanban\Api\KanbanUserSearchApiController::search |
+
+### Domain: notifications
+#### read
+| Route name | Path | Controller |
+|---|---|---|
+| api_notifications_latest | /api/notifications/latest | App\Controller\Notification\NotificationController::latest |
+
+#### update
+| Route name | Path | Controller |
+|---|---|---|
+| api_notifications_read | /api/notifications/{id}/read | App\Controller\Notification\NotificationController::markAsRead |
+| api_notifications_read_all | /api/notifications/read-all | App\Controller\Notification\NotificationController::markAllAsRead |
+
+### Domain: spa-auth
+#### create
+| Route name | Path | Controller |
+|---|---|---|
+| gesdinet_jwt_refresh_token | /spa/api/token/refresh | (security/internal) |
+| _logout_refresh_jwt | /spa/api/logout | (security/internal) |
+| spa_api_login_check | /spa/api/login_check | (security/internal) |
+
+#### read
+| Route name | Path | Controller |
+|---|---|---|
+| spa_api_me | /spa/api/me | App\Controller\SpaApi\MeController |
+
+#### delete
+| Route name | Path | Controller |
+|---|---|---|
+| spa_api_logout | /spa/api/logout | (security/internal) |
+
+## Browser routes by URL group
+
+### /all_organizations (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_all_organizations | /all_organizations | App\Controller\Organization\OrganizationController::allOrganizations |
+
+### /analytics (37)
+| Route name | Path | Controller |
+|---|---|---|
+| app_analytics_admin_board | /analytics/admin/board | App\Controller\Analytics\AnalyticsAdminBoardController::index |
+| app_analytics_admin_board_version_edit | /analytics/admin/board/{boardId}/version/{versionId}/edit | App\Controller\Analytics\AnalyticsAdminBoardController::version_edit |
+| app_analytics_admin_board_show | /analytics/admin/board/{id} | App\Controller\Analytics\AnalyticsAdminBoardController::show |
+| app_analytics_admin_board_clone | /analytics/admin/board/{id}/clone | App\Controller\Analytics\AnalyticsAdminBoardController::clone |
+| app_analytics_admin_board_delete | /analytics/admin/board/{id}/delete | App\Controller\Analytics\AnalyticsAdminBoardController::delete |
+| app_analytics_admin_board_version_delete | /analytics/admin/board/{id}/version/{versionId}/delete | App\Controller\Analytics\AnalyticsAdminBoardController::deleteVersion |
+| app_analytics_admin_board_new | /analytics/admin/board/new | App\Controller\Analytics\AnalyticsAdminBoardController::new |
+| app_analytics_admin_board_publish | /analytics/admin/board/version/{versionId}/publish | App\Controller\Analytics\AnalyticsAdminBoardController::publish |
+| app_analytics_admin_metric_index | /analytics/admin/metric | App\Controller\Analytics\AnalyticsAdminMetricController::index |
+| app_analytics_admin_metric_delete | /analytics/admin/metric/{id}/delete | App\Controller\Analytics\AnalyticsAdminMetricController::delete |
+| app_analytics_admin_metric_edit | /analytics/admin/metric/{id}/edit | App\Controller\Analytics\AnalyticsAdminMetricController::edit |
+| app_analytics_admin_metric_new | /analytics/admin/metric/new | App\Controller\Analytics\AnalyticsAdminMetricController::new |
+| app_analytics_admin_organization_index | /analytics/admin/organization | App\Controller\Analytics\AnalyticsAdminOrganizationController::index |
+| app_analytics_admin_organization_delete | /analytics/admin/organization/{id}/delete | App\Controller\Analytics\AnalyticsAdminOrganizationController::delete |
+| app_analytics_admin_organization_edit | /analytics/admin/organization/{id}/edit | App\Controller\Analytics\AnalyticsAdminOrganizationController::edit |
+| app_analytics_admin_organization_board | /analytics/admin/organization/board | App\Controller\Analytics\AnalyticsAdminOrganizationBoardController::index |
+| app_analytics_admin_organization_board_delete | /analytics/admin/organization/board/{id}/delete | App\Controller\Analytics\AnalyticsAdminOrganizationBoardController::delete |
+| app_analytics_admin_organization_board_toggle_required | /analytics/admin/organization/board/{id}/toggle-required | App\Controller\Analytics\AnalyticsAdminOrganizationBoardController::toggleRequired |
+| app_analytics_admin_organization_board_create | /analytics/admin/organization/board/create | App\Controller\Analytics\AnalyticsAdminOrganizationBoardController::create |
+| app_analytics_admin_organization_new | /analytics/admin/organization/new | App\Controller\Analytics\AnalyticsAdminOrganizationController::new |
+| app_analytics_admin_period | /analytics/admin/period | App\Controller\Analytics\AnalyticsAdminPeriodController::index |
+| app_analytics_admin_period_close | /analytics/admin/period/{id}/close | App\Controller\Analytics\AnalyticsAdminPeriodController::close |
+| app_analytics_admin_period_open | /analytics/admin/period/{id}/open | App\Controller\Analytics\AnalyticsAdminPeriodController::open |
+| app_analytics_admin_period_create | /analytics/admin/period/create | App\Controller\Analytics\AnalyticsAdminPeriodController::create |
+| app_analytics_admin_period_generate | /analytics/admin/period/generate | App\Controller\Analytics\AnalyticsAdminPeriodController::generate |
+| app_analytics_approval | /analytics/approval | App\Controller\Analytics\AnalyticsApprovalController::index |
+| app_analytics_approval_approve | /analytics/approval/{id}/approve | App\Controller\Analytics\AnalyticsApprovalController::approve |
+| app_analytics_dashboard | /analytics/dashboard | App\Controller\Analytics\AnalyticsDashboardController::index |
+| app_analytics_dashboard_compare_data | /analytics/dashboard/compare-data | App\Controller\Analytics\AnalyticsDashboardController::compareData |
+| app_analytics_dashboard_data | /analytics/dashboard/data | App\Controller\Analytics\AnalyticsDashboardController::data |
+| app_analytics_report | /analytics/report | App\Controller\Analytics\AnalyticsReportController::index |
+| app_analytics_report_delete | /analytics/report/{id}/delete | App\Controller\Analytics\AnalyticsReportController::delete |
+| app_analytics_report_fill | /analytics/report/{id}/fill | App\Controller\Analytics\AnalyticsReportController::fill |
+| app_analytics_report_submit | /analytics/report/{id}/submit | App\Controller\Analytics\AnalyticsReportController::submit |
+| app_analytics_report_view | /analytics/report/{id}/view | App\Controller\Analytics\AnalyticsReportController::view |
+| app_analytics_report_fill_new | /analytics/report/fill-new | App\Controller\Analytics\AnalyticsReportController::fillNew |
+| app_analytics_report_new | /analytics/report/new | App\Controller\Analytics\AnalyticsReportController::new |
+
+### /call_grpc (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_call_grpc | /call_grpc | App\Controller\Dashboard\DashBoardController::callGRPC |
+
+### /chat (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_chat | /chat | App\Controller\Chat\ChatController::index |
+
+### /citizen-appeal (4)
+| Route name | Path | Controller |
+|---|---|---|
+| app_citizen_appeal | /citizen-appeal | App\Controller\ApiExternal\CitizenAppealController::index |
+| app_citizen_appeal_show | /citizen-appeal/{id} | App\Controller\ApiExternal\CitizenAppealController::show |
+| app_citizen_appeal_update | /citizen-appeal/{id}/update | App\Controller\ApiExternal\CitizenAppealController::update |
+| app_citizen_appeal_file_proxy | /citizen-appeal/file/{id} | App\Controller\ApiExternal\CitizenAppealFileProxyController::proxy |
+
+### /convert_docx_to_pdf_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_convert_docx_to_pdf_documents | /convert_docx_to_pdf_document | App\Controller\Document\DocumentSignController::convertDocxToPdfDocument |
+
+### /convert_img_to_pdf (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_convert_img_to_pdf | /convert_img_to_pdf | App\Controller\Document\DocumentSignController::convertImgToPdf |
+
+### /create_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_create_document | /create_document/{type_id} | App\Controller\Document\DocumentController::createDocument |
+
+### /create_organization (1)
+| Route name | Path | Controller |
+|---|---|---|
+| create_organization | /create_organization | App\Controller\Organization\OrganizationController::createOrganization |
+
+### /create_pdf_table_executors (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_create_pdf_table_executors | /create_pdf_table_executors | App\Controller\Document\DocumentSignController::createPdfTableExecutors |
+
+### /create_post (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_create_post | /create_post | App\Controller\Post\PostController::createPost |
+
+### /dashboard (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_dash_board | /dashboard | App\Controller\Dashboard\DashBoardController::dashBoard |
+
+### /delete_organization (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_delete_organization | /delete_organization/{id} | App\Controller\Organization\OrganizationController::deleteOrganization |
+
+### /document (10)
+| Route name | Path | Controller |
+|---|---|---|
+| app_document_comment_create | /document/{id}/comment/create | App\Controller\Document\DocumentCommentController::create |
+| app_document_download_file | /document/{id}/file/{type} | App\Controller\Document\DocumentController::downloadDocumentFile |
+| app_publish_outgoing_document | /document/{id}/publish | App\Controller\Document\DocumentController::publishOutgoingDocument |
+| app_document_status_update | /document/{id}/status/update | App\Controller\Document\DocumentController::updateDocumentStatus |
+| app_document_comment_delete | /document/comment/{id}/delete | App\Controller\Document\DocumentCommentController::delete |
+| app_document_comment_edit | /document/comment/{id}/edit | App\Controller\Document\DocumentCommentController::edit |
+| app_document_comment_file_download | /document/comment/file/{id}/download | App\Controller\Document\DocumentCommentController::download |
+| app_document_org_users | /document/organization-users/{id} | App\Controller\Document\DocumentController::getOrganizationUsers |
+| app_document_sign | /document/sign | App\Controller\Document\DocumentSignController::index |
+| app_document_users_search | /document/users/search | App\Controller\Document\DocumentController::searchUsersForDocument |
+
+### /document_create_docx_form (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_document_create_docx_form | /document_create_docx_form | App\Controller\Document\DocumentCreateFromTemplateController::creteDocxForm |
+
+### /document_create_from_form_action (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_document_create_from_form_action | /document_create_from_form_action | App\Controller\Document\DocumentCreateFromTemplateController::createFromFormAction |
+
+### /document_file_delete (1)
+| Route name | Path | Controller |
+|---|---|---|
+| document_file_delete | /document_file_delete/{id} | App\Controller\Document\DocumentFileController::delete |
+
+### /document_file_download (1)
+| Route name | Path | Controller |
+|---|---|---|
+| document_file_download | /document_file_download/{id} | App\Controller\Document\DocumentFileController::download |
+
+### /document_upload_files_action (1)
+| Route name | Path | Controller |
+|---|---|---|
+| document_upload_files_action | /document_upload_files_action/{id} | App\Controller\Document\DocumentFileController::new |
+
+### /edit_docx (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_edit_docx | /edit_docx | App\Controller\Document\DocumentCreateFromTemplateController::editDocx |
+
+### /edit_organization (1)
+| Route name | Path | Controller |
+|---|---|---|
+| edit_organization | /edit_organization/{id} | App\Controller\Organization\OrganizationController::editOrganization |
+
+### /edit_outgoing_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_edit_outgoing_document | /edit_outgoing_document/{id} | App\Controller\Document\DocumentController::editOutgoingDocument |
+
+### /edit_pdf (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_edit_pdf | /edit_pdf | App\Controller\Document\DocumentSignController::editPdf |
+
+### /edit_recipients_outgoing_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_edit_recipients_outgoing_document | /edit_recipients_outgoing_document/{id} | App\Controller\Document\DocumentController::editRecipientsDocument |
+
+### /executors_signature (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_executors_signature | /executors_signature | App\Controller\Document\DocumentSignController::executorsSignature |
+
+### /history_outgoing_documents (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_history_outgoing_documents | /history_outgoing_documents | App\Controller\Document\DocumentController::getHistoryOutgoingDocuments |
+
+### /hr_vacancies (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_hr_vacancies | /hr_vacancies | App\Controller\ApiExternal\HR\VacancyController::index |
+
+### /incoming_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_history_incoming_document | /incoming_document/{id}/history/{userId} | App\Controller\Document\DocumentController::historyIncomingDocument |
+
+### /incoming_documents (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_incoming_documents | /incoming_documents | App\Controller\Document\DocumentController::getIncomingDocuments |
+
+### /instruction (3)
+| Route name | Path | Controller |
+|---|---|---|
+| app_instruction | /instruction | App\Controller\Info\InfoController::index |
+| app_instruction_video | /instruction/video/{video} | App\Controller\Info\InfoController::viewVideo |
+| app_instruction_video_file | /instruction/video-file/{video} | App\Controller\Info\InfoController::videoFile |
+
+### /kanban (2)
+| Route name | Path | Controller |
+|---|---|---|
+| app_kanban_board_delete | /kanban/board/{id}/delete | App\Controller\Kanban\ProjectKanbanController::deleteBoard |
+| app_kanban_board_rename | /kanban/board/{id}/rename | App\Controller\Kanban\ProjectKanbanController::renameBoard |
+
+### /kanban_board (2)
+| Route name | Path | Controller |
+|---|---|---|
+| app_kanban_board | /kanban_board/{id} | App\Controller\Kanban\ProjectKanbanController::kanbanBoard |
+| app_kanban_board_create | /kanban_board/create | App\Controller\Kanban\ProjectKanbanController::createBoard |
+
+### /kanban_create_project (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_kanban_create_project | /kanban_create_project | App\Controller\Kanban\ProjectKanbanController::kanbanCreateProject |
+
+### /kanban_project (9)
+| Route name | Path | Controller |
+|---|---|---|
+| app_kanban_project | /kanban_project/{id} | App\Controller\Kanban\ProjectKanbanController::viewProject |
+| app_kanban_project_board_create | /kanban_project/{id}/board_create | App\Controller\Kanban\ProjectKanbanController::createBoardInProject |
+| app_kanban_change_project_member_role | /kanban_project/{id}/change_member_role | App\Controller\Kanban\ProjectKanbanController::changeProjectMemberRole |
+| app_kanban_edit_project | /kanban_project/{id}/edit | App\Controller\Kanban\ProjectKanbanController::editProject |
+| app_kanban_edit_project_members | /kanban_project/{id}/edit_members | App\Controller\Kanban\ProjectKanbanController::editProjectMembers |
+| app_kanban_remove_project_member | /kanban_project/{id}/remove_member | App\Controller\Kanban\ProjectKanbanController::removeProjectMember |
+| app_kanban_project_statistics | /kanban_project/{id}/statistics | App\Controller\Kanban\ProjectKanbanController::projectStatistics |
+| app_kanban_project_statistics_data | /kanban_project/{id}/statistics/data | App\Controller\Kanban\ProjectKanbanController::projectStatisticsData |
+| app_kanban_project_create | /kanban_project/create | App\Controller\Kanban\ProjectKanbanController::createProject |
+
+### /login (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_login | /login | App\Controller\Auth\AuthController::login |
+
+### /logout (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_logout | /logout | App\Controller\Auth\AuthController::logout |
+
+### /my_files (13)
+| Route name | Path | Controller |
+|---|---|---|
+| app_my_files | /my_files | App\Controller\User\UserFileController::myFiles |
+| app_my_files_delete | /my_files/delete/{id} | App\Controller\User\UserFileController::delete |
+| app_my_files_download | /my_files/download/{id} | App\Controller\User\UserFileController::download |
+| app_my_files_file_move | /my_files/file/{id}/move | App\Controller\User\UserFileController::moveFile |
+| app_my_files_file_rename | /my_files/file/{id}/rename | App\Controller\User\UserFileController::renameFile |
+| app_my_files_folder | /my_files/folder/{id} | App\Controller\User\UserFileController::folder |
+| app_my_files_folder_delete | /my_files/folder/{id}/delete | App\Controller\User\UserFileController::deleteFolder |
+| app_my_files_folder_info | /my_files/folder/{id}/info | App\Controller\User\UserFileController::folderInfo |
+| app_my_files_folder_move | /my_files/folder/{id}/move | App\Controller\User\UserFileController::moveFolder |
+| app_my_files_folder_rename | /my_files/folder/{id}/rename | App\Controller\User\UserFileController::renameFolder |
+| app_my_files_folder_create | /my_files/folder/create | App\Controller\User\UserFileController::createFolder |
+| app_my_files_search | /my_files/search | App\Controller\User\UserFileController::search |
+| app_my_files_upload_single | /my_files/upload-single | App\Controller\User\UserFileController::uploadSingle |
+
+### /new_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_new_document | /new_document | App\Controller\Document\DocumentController::index |
+
+### /notifications (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_notifications | /notifications | App\Controller\Notification\NotificationController::index |
+
+### /organization (1)
+| Route name | Path | Controller |
+|---|---|---|
+| organization_download_requisites | /organization/{id}/requisites.txt | App\Controller\Organization\OrganizationController::downloadRequisites |
+
+### /organizations (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_organizations_search | /organizations/search | App\Controller\Organization\OrganizationController::searchOrganizations |
+
+### /outgoing_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_history_outgoing_document | /outgoing_document/{id}/history/{userId} | App\Controller\Document\DocumentController::historyOutgoingDocument |
+
+### /outgoing_documents (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_outgoing_documents | /outgoing_documents | App\Controller\Document\DocumentController::getOutgoingDocuments |
+
+### /personal_projects (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_kanban_personal_projects | /personal_projects | App\Controller\Kanban\ProjectKanbanController::personalProjects |
+
+### /posts (6)
+| Route name | Path | Controller |
+|---|---|---|
+| app_all_posts | /posts | App\Controller\Post\PostController::allPosts |
+| app_post_acknowledge | /posts/{id}/acknowledge | App\Controller\Post\PostController::acknowledgePost |
+| app_post_add_comment | /posts/{id}/comment | App\Controller\Post\PostController::addComment |
+| app_post_load_comments | /posts/{id}/comments | App\Controller\Post\PostController::loadComments |
+| app_post_file_download | /posts/file/{id}/download | App\Controller\Post\PostController::downloadFile |
+| app_all_posts_load_more | /posts/load-more | App\Controller\Post\PostController::loadMorePosts |
+
+### /register (1)
+| Route name | Path | Controller |
+|---|---|---|
+| user_register | /register | App\Controller\User\UserController::register |
+
+### /roles (2)
+| Route name | Path | Controller |
+|---|---|---|
+| app_roles | /roles | App\Controller\User\RoleController::index |
+| app_roles_reorder | /roles/reorder | App\Controller\User\RoleController::reorder |
+
+### /root (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_home | / | App\Controller\Auth\AuthController::home |
+
+### /save_docx (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_save_docx | /save_docx | App\Controller\Document\DocumentCreateFromTemplateController::saveDocx |
+
+### /save_file_from_template_to_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_save_file_from_template_to_document | /save_file_from_template_to_document | App\Controller\Document\DocumentCreateFromTemplateController::saveFileFromTemplateToDocument |
+
+### /sign_and_save_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_sign_and_save_document | /sign_and_save_document/{id} | App\Controller\Document\DocumentSignController::signAndSaveDocument |
+
+### /sign_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_sign_document | /sign_document | App\Controller\Document\DocumentSignController::signDocument |
+
+### /trigger_forcesave (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_trigger_forcesave | /trigger_forcesave | App\Controller\Document\DocumentCreateFromTemplateController::triggerForcesave |
+
+### /user (7)
+| Route name | Path | Controller |
+|---|---|---|
+| app_view_user | /user/{id} | App\Controller\User\UserController::viewUser |
+| app_user_avatar_original | /user/{id}/avatar/original | App\Controller\User\UserController::userAvatarOriginal |
+| app_edit_user_photo | /user/{id}/edit-photo | App\Controller\User\UserController::editUserPhoto |
+| app_update_user_photo | /user/{id}/update-photo | App\Controller\User\UserController::updateUserPhoto |
+| app_view_user_modal | /user/{id}/view-modal | App\Controller\User\UserController::viewUserModal |
+| app_view_user_modal_document | /user/{id}/view-modal-document | App\Controller\User\UserController::viewUserModalForDocument |
+| app_user_org_users | /user/organization-users/{id} | App\Controller\User\UserController::getOrganizationUsers |
+
+### /user_delete (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_delete_user | /user_delete/{id} | App\Controller\User\UserController::deleteUser |
+
+### /user_edit (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_edit_user | /user_edit/{id} | App\Controller\User\UserController::editUserPage |
+
+### /user_update (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_update_user | /user_update | App\Controller\User\UserController::editUser |
+
+### /users (2)
+| Route name | Path | Controller |
+|---|---|---|
+| app_all_users | /users | App\Controller\User\UserController::getAllUsers |
+| app_users_search | /users/search | App\Controller\User\UserController::searchUsers |
+
+### /view_incoming_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_view_incoming_document | /view_incoming_document/{id} | App\Controller\Document\DocumentController::viewIncomingDocument |
+
+### /view_organization (1)
+| Route name | Path | Controller |
+|---|---|---|
+| view_organization | /view_organization/{id} | App\Controller\Organization\OrganizationController::viewOrganization |
+
+### /view_outgoing_document (1)
+| Route name | Path | Controller |
+|---|---|---|
+| app_view_outgoing_document | /view_outgoing_document/{id} | App\Controller\Document\DocumentController::viewOutgoingDocument |
+

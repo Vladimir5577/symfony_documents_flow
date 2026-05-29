@@ -236,6 +236,7 @@ final class BoardController extends AbstractController
                 'checklistTotal' => $card->getSubtasks()->count(),
                 'checklistDone' => $card->getSubtasks()->filter(fn ($s) => $s->isCompleted())->count(),
                 'commentsCount' => $card->getComments()->count(),
+                'borderColor' => $card->getBorderColor(),
                 'updatedAt' => $card->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
             ];
         }

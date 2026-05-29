@@ -6,6 +6,7 @@ namespace App\Controller\SpaApi\Kanban;
 
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\KanbanColumnRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
@@ -68,31 +69,56 @@ final class ColumnController extends AbstractController
             return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
         }
 
-        if (!array_key_exists('position', $payload)) {
-            return $this->json(['error' => 'position обязателен'], Response::HTTP_BAD_REQUEST);
+        $hasPosition = array_key_exists('position', $payload);
+        $hasHeaderColor = array_key_exists('headerColor', $payload);
+        $hasTitle = array_key_exists('title', $payload);
+        if (!$hasPosition && !$hasHeaderColor && !$hasTitle) {
+            return $this->json(['error' => 'Укажите хотя бы одно поле: position, headerColor или title'], Response::HTTP_BAD_REQUEST);
         }
 
-        $column->setPosition((float) $payload['position']);
+        if ($hasPosition) {
+            $column->setPosition((float) $payload['position']);
+        }
+        if ($hasHeaderColor) {
+            $headerColor = KanbanColumnColor::tryFrom((string) $payload['headerColor']);
+            if ($headerColor === null) {
+                return $this->json(['error' => 'Некорректный цвет колонки'], Response::HTTP_BAD_REQUEST);
+            }
+            $column->setHeaderColor($headerColor);
+        }
+        if ($hasTitle) {
+            $title = trim((string) $payload['title']);
+            if ($title === '') {
+                return $this->json(['error' => 'Название колонки обязательно'], Response::HTTP_BAD_REQUEST);
+            }
+            if (mb_strlen($title) > 200) {
+                return $this->json(['error' => 'Название колонки слишком длинное'], Response::HTTP_BAD_REQUEST);
+            }
+            $column->setTitle($title);
+        }
+
         $this->entityManager->flush();
 
-        $columns = $this->columnRepository->createQueryBuilder('c')
-            ->where('c.board = :board')
-            ->setParameter('board', $board)
-            ->orderBy('c.position', 'ASC')
-            ->getQuery()
-            ->getResult();
+        if ($hasPosition) {
+            $columns = $this->columnRepository->createQueryBuilder('c')
+                ->where('c.board = :board')
+                ->setParameter('board', $board)
+                ->orderBy('c.position', 'ASC')
+                ->getQuery()
+                ->getResult();
 
-        $needsRebalance = false;
-        for ($i = 1, $count = count($columns); $i < $count; $i++) {
-            if (abs($columns[$i]->getPosition() - $columns[$i - 1]->getPosition()) < 1e-5) {
-                $needsRebalance = true;
-                break;
+            $needsRebalance = false;
+            for ($i = 1, $count = count($columns); $i < $count; $i++) {
+                if (abs($columns[$i]->getPosition() - $columns[$i - 1]->getPosition()) < 1e-5) {
+                    $needsRebalance = true;
+                    break;
+                }
             }
-        }
 
-        if ($needsRebalance) {
-            $this->columnRepository->rebalancePositions($board);
-            $this->entityManager->flush();
+            if ($needsRebalance) {
+                $this->columnRepository->rebalancePositions($board);
+                $this->entityManager->flush();
+            }
         }
 
         return $this->json([
@@ -101,5 +127,42 @@ final class ColumnController extends AbstractController
             'headerColor' => $column->getHeaderColor()->value,
             'position' => $column->getPosition(),
         ]);
+    }
+
+    #[Route('/{columnId}', name: 'spa_api_project_board_column_delete', requirements: [
+        'projectId' => '\d+',
+        'boardId' => '\d+',
+        'columnId' => '\d+',
+    ], methods: ['DELETE'])]
+    public function delete(
+        int $projectId,
+        int $boardId,
+        int $columnId,
+        #[CurrentUser] ?User $user,
+    ): JsonResponse {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $project = $this->projectRepository->find($projectId);
+        if ($project === null) {
+            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+        }
+
+        $board = $this->boardRepository->find($boardId);
+        if ($board === null || $board->getProject()?->getId() !== $project->getId()) {
+            return $this->json(['error' => 'Доска не найдена'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+
+        $column = $this->columnRepository->find($columnId);
+        if ($column === null || $column->getBoard()->getId() !== $boardId) {
+            return $this->json(['error' => 'Колонка не найдена'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->deleteColumn($column);
+
+        return $this->json(['success' => true]);
     }
 }
