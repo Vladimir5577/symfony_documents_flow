@@ -124,6 +124,9 @@ class KanbanService
             $this->em->persist($member);
         }
 
+        // Project must have an id before repository queries (e.g. getMaxPositionInProject).
+        $this->em->flush();
+
         if ($boardsConfig === []) {
             $boardsConfig = [
                 ['title' => 'Главная доска', 'columns' => ['Backlog', 'To Do', 'In Progress', 'Done']],
