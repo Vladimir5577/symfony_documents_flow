@@ -102,4 +102,41 @@ final class ColumnController extends AbstractController
             'position' => $column->getPosition(),
         ]);
     }
+
+    #[Route('/{columnId}', name: 'spa_api_project_board_column_delete', requirements: [
+        'projectId' => '\d+',
+        'boardId' => '\d+',
+        'columnId' => '\d+',
+    ], methods: ['DELETE'])]
+    public function delete(
+        int $projectId,
+        int $boardId,
+        int $columnId,
+        #[CurrentUser] ?User $user,
+    ): JsonResponse {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $project = $this->projectRepository->find($projectId);
+        if ($project === null) {
+            return $this->json(['error' => 'Проект не найден'], Response::HTTP_NOT_FOUND);
+        }
+
+        $board = $this->boardRepository->find($boardId);
+        if ($board === null || $board->getProject()?->getId() !== $project->getId()) {
+            return $this->json(['error' => 'Доска не найдена'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
+
+        $column = $this->columnRepository->find($columnId);
+        if ($column === null || $column->getBoard()->getId() !== $boardId) {
+            return $this->json(['error' => 'Колонка не найдена'], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->deleteColumn($column);
+
+        return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
 }
