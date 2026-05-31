@@ -7,7 +7,9 @@ namespace App\Controller\SpaApi;
 final class SpaApiError
 {
     public const ACCESS_DENIED = 'access_denied';
+    public const ATTACHMENT_LIMIT_REACHED = 'attachment_limit_reached';
     public const ATTACHMENT_NOT_FOUND = 'attachment_not_found';
+    public const ATTACHMENT_NOT_PREVIEWABLE = 'attachment_not_previewable';
     public const BOARD_HAS_NO_PROJECT = 'board_has_no_project';
     public const BOARD_NOT_FOUND = 'board_not_found';
     public const BOARD_TITLE_REQUIRED = 'board_title_required';

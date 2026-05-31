@@ -13,7 +13,9 @@ use App\Repository\Kanban\KanbanCardRepository;
 use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
 use App\Service\Kanban\KanbanAttachmentService;
 use App\Service\Kanban\KanbanService;
+use Liip\ImagineBundle\Service\FilterService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -26,6 +28,8 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
 final class AttachmentController extends AbstractController
 {
     private const ALLOWED_CONTEXTS = ['chat', 'info', 'description'];
+    private const MAX_ATTACHMENTS_PER_CARD = 16;
+    private const PREVIEW_FILTER = 'kanban_attachment_preview';
 
     public function __construct(
         private readonly KanbanCardRepository $cardRepo,
@@ -33,6 +37,9 @@ final class AttachmentController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly KanbanAttachmentService $attachmentService,
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
+        private readonly FilterService $filterService,
+        #[Autowire('%kernel.project_dir%')]
+        private readonly string $projectDir,
     ) {
     }
 
@@ -53,6 +60,10 @@ final class AttachmentController extends AbstractController
         $file = $request->files->get('file');
         if ($file === null) {
             return $this->json(['error' => SpaApiError::FILE_NOT_PROVIDED], Response::HTTP_BAD_REQUEST);
+        }
+
+        if ($this->attachmentRepo->count(['card' => $card]) >= self::MAX_ATTACHMENTS_PER_CARD) {
+            return $this->json(['error' => SpaApiError::ATTACHMENT_LIMIT_REACHED], Response::HTTP_BAD_REQUEST);
         }
 
         $attachment = $this->attachmentService->upload($file, $card);
@@ -97,6 +108,44 @@ final class AttachmentController extends AbstractController
             ? ResponseHeaderBag::DISPOSITION_INLINE
             : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
         $response->setContentDisposition($disposition, $attachment->getFilename());
+
+        return $response;
+    }
+
+    #[Route('/{id}/preview', name: 'spa_api_cards_attachments_preview', requirements: ['cardId' => '\d+', 'id' => '\d+'], methods: ['GET'])]
+    public function preview(int $cardId, int $id, #[CurrentUser] ?User $user): Response
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $card = $this->cardRepo->find($cardId);
+        if ($card === null) {
+            return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+
+        $attachment = $this->attachmentRepo->find($id);
+        if ($attachment === null || $attachment->getCard()->getId() !== $cardId) {
+            return $this->json(['error' => SpaApiError::ATTACHMENT_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        if (!$this->kanbanAttachmentPreviewUrlGenerator->isImage($attachment)) {
+            return $this->json(['error' => SpaApiError::ATTACHMENT_NOT_PREVIEWABLE], Response::HTTP_NOT_FOUND);
+        }
+
+        if (!is_file($this->attachmentService->getFilePath($attachment))) {
+            return $this->json(['error' => SpaApiError::FILE_NOT_FOUND_ON_DISK], Response::HTTP_NOT_FOUND);
+        }
+
+        $previewPath = $this->resolvePreviewFilePath($attachment);
+        if ($previewPath === null) {
+            return $this->json(['error' => SpaApiError::FILE_NOT_FOUND_ON_DISK], Response::HTTP_NOT_FOUND);
+        }
+
+        $response = new BinaryFileResponse($previewPath);
+        $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_INLINE, $attachment->getFilename());
 
         return $response;
     }
@@ -155,5 +204,24 @@ final class AttachmentController extends AbstractController
                 ? trim($author->getLastname() . ' ' . $author->getFirstname()) ?: null
                 : null,
         ];
+    }
+
+    private function resolvePreviewFilePath(KanbanAttachment $attachment): ?string
+    {
+        $storageKey = $attachment->getStorageKey();
+        if ($storageKey === '') {
+            return null;
+        }
+
+        $this->filterService->warmUpCache($storageKey, self::PREVIEW_FILTER);
+
+        $path = \sprintf(
+            '%s/public/media/cache/%s/%s',
+            $this->projectDir,
+            self::PREVIEW_FILTER,
+            $storageKey,
+        );
+
+        return is_file($path) ? $path : null;
     }
 }
