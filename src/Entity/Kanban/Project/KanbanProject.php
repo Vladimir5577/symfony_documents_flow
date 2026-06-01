@@ -47,6 +47,7 @@ class KanbanProject
 
     /** @var Collection<int, KanbanBoard> */
     #[ORM\OneToMany(mappedBy: 'project', targetEntity: KanbanBoard::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[ORM\OrderBy(['position' => 'ASC', 'id' => 'ASC'])]
     private Collection $boards;
 
     public function __construct()

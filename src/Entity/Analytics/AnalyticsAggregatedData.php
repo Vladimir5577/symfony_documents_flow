@@ -17,9 +17,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'analytics_aggregated_data')]
 #[ORM\UniqueConstraint(name: 'uniq_analytics_agg', columns: ['metric_id', 'period_id', 'organization_id'])]
 #[ORM\Index(name: 'idx_analytics_agg_period_org', columns: ['period_id', 'organization_id'])]
-#[ORM\Index(name: 'idx_analytics_agg_business_key_org', columns: ['business_key', 'organization_id'])]
 #[ORM\Index(name: 'idx_analytics_agg_metric_org', columns: ['metric_id', 'organization_id'])]
-#[ORM\Index(name: 'idx_analytics_agg_effective_at', columns: ['effective_at'])]
 class AnalyticsAggregatedData
 {
     #[ORM\Id]
@@ -39,23 +37,8 @@ class AnalyticsAggregatedData
     #[ORM\JoinColumn(name: 'organization_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?AbstractOrganization $organization = null;
 
-    #[ORM\Column(name: 'business_key', length: 128)]
-    private ?string $businessKey = null;
-
-    #[ORM\Column(name: 'metric_name_snapshot', length: 255, nullable: true)]
-    private ?string $metricNameSnapshot = null;
-
-    #[ORM\Column(name: 'metric_unit_snapshot', length: 64, nullable: true)]
-    private ?string $metricUnitSnapshot = null;
-
-    #[ORM\Column(name: 'metric_type_snapshot', length: 64, nullable: true)]
-    private ?string $metricTypeSnapshot = null;
-
     #[ORM\Column(name: 'aggregation_type', length: 64)]
     private ?string $aggregationType = null;
-
-    #[ORM\Column(name: 'effective_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $effectiveAt = null;
 
     #[ORM\Column(name: 'value', type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $value = null;
@@ -79,9 +62,6 @@ class AnalyticsAggregatedData
     public function setMetric(?AnalyticsMetric $metric): static
     {
         $this->metric = $metric;
-        if ($metric !== null) {
-            $this->businessKey = $metric->getBusinessKey();
-        }
         return $this;
     }
 
@@ -107,50 +87,6 @@ class AnalyticsAggregatedData
         return $this;
     }
 
-    public function getBusinessKey(): ?string
-    {
-        return $this->businessKey;
-    }
-
-    public function setBusinessKey(string $businessKey): static
-    {
-        $this->businessKey = $businessKey;
-        return $this;
-    }
-
-    public function getMetricNameSnapshot(): ?string
-    {
-        return $this->metricNameSnapshot;
-    }
-
-    public function setMetricNameSnapshot(?string $metricNameSnapshot): static
-    {
-        $this->metricNameSnapshot = $metricNameSnapshot;
-        return $this;
-    }
-
-    public function getMetricUnitSnapshot(): ?string
-    {
-        return $this->metricUnitSnapshot;
-    }
-
-    public function setMetricUnitSnapshot(?string $metricUnitSnapshot): static
-    {
-        $this->metricUnitSnapshot = $metricUnitSnapshot;
-        return $this;
-    }
-
-    public function getMetricTypeSnapshot(): ?string
-    {
-        return $this->metricTypeSnapshot;
-    }
-
-    public function setMetricTypeSnapshot(?string $metricTypeSnapshot): static
-    {
-        $this->metricTypeSnapshot = $metricTypeSnapshot;
-        return $this;
-    }
-
     public function getAggregationType(): ?string
     {
         return $this->aggregationType;
@@ -159,17 +95,6 @@ class AnalyticsAggregatedData
     public function setAggregationType(string $aggregationType): static
     {
         $this->aggregationType = $aggregationType;
-        return $this;
-    }
-
-    public function getEffectiveAt(): ?\DateTimeImmutable
-    {
-        return $this->effectiveAt;
-    }
-
-    public function setEffectiveAt(?\DateTimeImmutable $effectiveAt): static
-    {
-        $this->effectiveAt = $effectiveAt;
         return $this;
     }
 

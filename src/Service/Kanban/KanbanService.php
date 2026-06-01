@@ -124,6 +124,9 @@ class KanbanService
             $this->em->persist($member);
         }
 
+        // Project must have an id before repository queries (e.g. getMaxPositionInProject).
+        $this->em->flush();
+
         if ($boardsConfig === []) {
             $boardsConfig = [
                 ['title' => 'Главная доска', 'columns' => ['Backlog', 'To Do', 'In Progress', 'Done']],
@@ -169,9 +172,12 @@ class KanbanService
      */
     public function createBoard(KanbanProject $project, string $title, User $creator): KanbanBoard
     {
+        $maxPos = $this->boardRepo->getMaxPositionInProject($project);
+
         $board = new KanbanBoard();
         $board->setProject($project);
         $board->setTitle($title);
+        $board->setPosition($maxPos + 1.0);
         $board->setCreatedBy($creator);
 
         $this->em->persist($board);

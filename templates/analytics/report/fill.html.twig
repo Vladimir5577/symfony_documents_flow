@@ -29,19 +29,49 @@
         Статус:
         {% if report.status.value == 'draft' %}
             <span class="badge bg-info">Черновик</span>
-        {% elseif report.status.value == 'submitted' %}
-            <span class="badge bg-warning">Отправлен</span>
         {% else %}
-            <span class="badge bg-success">Утверждён</span>
-        {% endif %}
-
-        Полнота:
-        {% if report.complete %}
-            <span class="badge bg-success">Все обязательные метрики заполнены</span>
-        {% else %}
-            <span class="badge bg-danger">Не всё заполнено</span>
+            <span class="badge bg-success">Подтверждён</span>
         {% endif %}
     </div>
+
+    {% if isAdmin and availablePeriods is defined and availablePeriods|length > 0 %}
+        <div class="card mb-3">
+            <div class="card-body py-2">
+                <form action="{{ path('app_analytics_report_change_period', {id: report.id}) }}" method="post" class="row g-2 align-items-center">
+                    <input type="hidden" name="_token" value="{{ csrf_token('report_period_change_' ~ report.id) }}">
+                    <label for="report-period-select" class="col-auto col-form-label">
+                        <i class="bi bi-calendar3 me-1"></i>Период отчёта:
+                    </label>
+                    <div class="col-auto">
+                        <select id="report-period-select" name="period_id" class="form-select form-select-sm">
+                            {% for p in availablePeriods %}
+                                {% set isCurrent = report.period and p.id == report.period.id %}
+                                {% set isTaken = takenPeriodIds[p.id] is defined %}
+                                <option value="{{ p.id }}"
+                                        {% if isCurrent %}selected{% endif %}
+                                        {% if isTaken %}disabled{% endif %}>
+                                    {{ p.displayLabel }}{% if isTaken %} — занято{% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-sm btn-outline-primary"
+                                onclick="return confirm('Изменить период отчёта?{% if report.status.value == 'confirmed' %} Это вызовет пересчёт агрегатов.{% endif %}');">
+                            Изменить период
+                        </button>
+                    </div>
+                    {% if report.status.value == 'confirmed' %}
+                        <div class="col-auto">
+                            <small class="text-muted">Отчёт подтверждён — после смены агрегаты пересчитаются.</small>
+                        </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    {% endif %}
+
+    {% import 'analytics/report/_metric_notes.html.twig' as notes %}
 
     <section id="multiple-column-form">
         <div class="row match-height">
@@ -52,27 +82,34 @@
                     </div>
                     <div class="card-content">
                         <div class="card-body">
-                            <form id="report-fill-form" action="{{ path('app_analytics_report_fill', {id: report.id}) }}" method="post" class="form">
+                            <form id="report-fill-form" action="{{ path('app_analytics_report_fill', {id: report.id}) }}" method="post" class="form"
+                                  {% if not canEdit %}data-notes-readonly="1"{% endif %}>
                                 <input type="hidden" name="_token" value="{{ csrf_token('report_fill_' ~ report.id) }}">
 
-                                <table class="table table-bordered">
+                                <style>
+                                    .metrics-fill-table td.metric-cell { vertical-align: middle; }
+                                    .metrics-fill-table .child-indicator { color: #adb5bd; margin-right: 6px; }
+                                </style>
+                                <table class="table table-bordered metrics-fill-table">
                                     <thead>
                                     <tr>
                                         <th>Метрика</th>
                                         <th>Тип</th>
                                         <th>Ед. изм.</th>
                                         <th>Значение</th>
+                                        <th>Описание</th>
                                     </tr>
                                     </thead>
                                     <tbody>
-                                    {% for vm in report.boardVersion.versionMetrics %}
-                                        {% set metric = vm.metric %}
+                                    {% for entry in versionMetricsFlat %}
+                                        {% set vm = entry.versionMetric %}
+                                        {% set metric = entry.metric %}
                                         {% set value = currentValues[vm.id] ?? '' %}
 
-                                        <tr>
-                                            <td>
+                                        <tr data-depth="{{ entry.depth }}">
+                                            <td class="metric-cell" style="padding-left: {{ 12 + entry.depth * 40 }}px;">
+                                                {% if entry.depth > 0 %}<i class="bi bi-arrow-return-right child-indicator"></i>{% endif %}
                                                 <strong>{{ metric.name }}</strong>
-                                                <br><small class="text-muted"><code>{{ metric.businessKey }}</code></small>
                                                 {% if vm.required %}<span class="text-danger">*</span>{% endif %}
                                             </td>
                                             <td>{{ metric.type }}</td>
@@ -97,7 +134,9 @@
                                                     <input type="number" step="any" name="values[{{ vm.id }}]" class="form-control" value="{{ value }}" {{ vm.required ? 'required' : '' }} {% if not canEdit %}disabled{% endif %}>
                                                 {% endif %}
                                             </td>
+                                            <td>{{ notes.toggleButton(vm.id) }}</td>
                                         </tr>
+                                        {{ notes.row(vm.id, currentNotes[vm.id] ?? [], 5) }}
                                     {% endfor %}
                                     </tbody>
                                 </table>
@@ -112,34 +151,15 @@
                                 {% endif %}
 
                                 <div class="d-flex gap-2">
-                                    {% if canEdit and report.status.value == 'draft' %}
-{#                                        <form action="{{ path('app_analytics_report_submit', {id: report.id}) }}" method="post" onsubmit="return confirm('Отправить отчёт на утверждение? После отправки редактирование будет невозможно.');">#}
-{#                                            <input type="hidden" name="_token" value="{{ csrf_token('report_submit_' ~ report.id) }}">#}
-{#                                            <button type="submit" class="btn btn-success" {% if not report.complete %}disabled title="Заполните все обязательные метрики"{% endif %}>#}
-{#                                                Отправить на утверждение#}
-{#                                            </button>#}
-{#                                        </form>#}
-                                    {% endif %}
-
                                     {% if canEdit and report.status.value == 'draft' and is_granted('ROLE_MANAGER') %}
-                                        <form action="{{ path('app_analytics_report_submit', {id: report.id}) }}" method="post" onsubmit="return confirm('Утвердить отчёт #{{ report.id }}? Отчёт будет отправлен и сразу утверждён.');">
-                                            <input type="hidden" name="_token" value="{{ csrf_token('report_submit_' ~ report.id) }}">
-                                            <input type="hidden" name="submit_action" value="approve">
-                                            <button type="submit" class="btn btn-outline-success" {% if not report.complete %}disabled title="Заполните все обязательные метрики"{% endif %}>
-                                                <i class="bi bi-check-circle me-1"></i>Утвердить
+                                        <form action="{{ path('app_analytics_report_confirm', {id: report.id}) }}" method="post" onsubmit="return confirm('Подтвердить отчёт #{{ report.id }}?');">
+                                            <input type="hidden" name="_token" value="{{ csrf_token('report_confirm_' ~ report.id) }}">
+                                            <button type="submit" class="btn btn-outline-success">
+                                                <i class="bi bi-check-circle me-1"></i>Подтвердить
                                             </button>
                                         </form>
                                     {% endif %}
                                 </div>
-
-                                {% if report.status.value == 'submitted' and is_granted('ROLE_MANAGER') %}
-                                    <form action="{{ path('app_analytics_approval_approve', {id: report.id}) }}" method="post" onsubmit="return confirm('Утвердить отчёт #{{ report.id }}?');">
-                                        <input type="hidden" name="_token" value="{{ csrf_token('report_approve_' ~ report.id) }}">
-                                        <button type="submit" class="btn btn-success">
-                                            <i class="bi bi-check-circle me-1"></i>Утвердить
-                                        </button>
-                                    </form>
-                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -148,4 +168,5 @@
         </div>
     </section>
 
+    {% include 'analytics/report/_metric_notes.html.twig' %}
 {% endblock %}

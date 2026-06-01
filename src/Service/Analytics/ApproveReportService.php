@@ -6,7 +6,6 @@ namespace App\Service\Analytics;
 
 use App\Entity\Analytics\AnalyticsReport;
 use App\Entity\Organization\AbstractOrganization;
-use App\Entity\User\User;
 use App\Enum\Analytics\AnalyticsReportStatus;
 use App\Repository\Analytics\AnalyticsReportRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -16,19 +15,19 @@ final class ApproveReportService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly AnalyticsReportRepository $repository,
+        private readonly FillReportValueService $fillService,
         private readonly RecalculateAggregatesService $recalculateService,
     ) {
     }
 
     /**
-     * Получить все отчёты в статусе Submitted (на утверждение).
-     * Если передана организация — только отчёты этой организации.
+     * Получить все draft-отчёты (ожидают подтверждения).
      *
      * @return AnalyticsReport[]
      */
     public function findPendingReports(?AbstractOrganization $organization = null): array
     {
-        $criteria = ['status' => AnalyticsReportStatus::Submitted];
+        $criteria = ['status' => AnalyticsReportStatus::Draft];
         if ($organization !== null) {
             $criteria['organization'] = $organization;
         }
@@ -37,7 +36,7 @@ final class ApproveReportService
     }
 
     /**
-     * Получить все Submitted-отчёты по набору организаций (иерархический доступ).
+     * Получить draft-отчёты по набору организаций (иерархический доступ).
      *
      * @param int[] $organizationIds
      * @return AnalyticsReport[]
@@ -52,16 +51,13 @@ final class ApproveReportService
             ->join('r.organization', 'o')
             ->andWhere('r.status = :status')
             ->andWhere('o.id IN (:organizationIds)')
-            ->setParameter('status', AnalyticsReportStatus::Submitted)
+            ->setParameter('status', AnalyticsReportStatus::Draft)
             ->setParameter('organizationIds', $organizationIds)
             ->orderBy('r.createdAt', 'DESC')
             ->getQuery()
             ->getResult();
     }
 
-    /**
-     * Найти отчёт по ID.
-     */
     public function findById(int $id, ?AbstractOrganization $organization = null): ?AnalyticsReport
     {
         $report = $this->repository->find($id);
@@ -77,8 +73,6 @@ final class ApproveReportService
     }
 
     /**
-     * Найти отчёт по ID в пределах набора организаций (иерархический доступ).
-     *
      * @param int[] $organizationIds
      */
     public function findByIdForOrganizationIds(int $id, array $organizationIds): ?AnalyticsReport
@@ -99,20 +93,22 @@ final class ApproveReportService
     }
 
     /**
-     * Утвердить отчёт: Submitted -> Approved, записываем approvedAt и approvedBy.
+     * Подтвердить отчёт: draft -> confirmed.
+     * Проверяет полноту по required-метрикам.
      */
-    public function approve(AnalyticsReport $report, User $approvedBy): void
+    public function confirm(AnalyticsReport $report): void
     {
-        if ($report->getStatus() !== AnalyticsReportStatus::Submitted) {
-            throw new \RuntimeException('Утвердить можно только отчёт в статусе "Отправлен".');
+        if ($report->getStatus() !== AnalyticsReportStatus::Draft) {
+            throw new \RuntimeException('Подтвердить можно только черновик.');
         }
 
-        $report->setStatus(AnalyticsReportStatus::Approved);
-        $report->setApprovedAt(new \DateTimeImmutable());
-        $report->setApprovedBy($approvedBy);
+        if (!$this->fillService->checkComplete($report)) {
+            throw new \RuntimeException('Отчёт неполный: не все обязательные метрики заполнены.');
+        }
+
+        $report->setStatus(AnalyticsReportStatus::Confirmed);
         $this->em->flush();
 
-        // Автоматический пересчёт агрегатов после утверждения
         $this->recalculateService->recalculateForReport($report);
     }
 }

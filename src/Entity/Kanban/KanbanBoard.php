@@ -24,6 +24,9 @@ class KanbanBoard
     #[ORM\Column(length: 200)]
     private string $title;
 
+    #[ORM\Column(type: 'float', options: ['default' => 0])]
+    private float $position = 0.0;
+
     #[ORM\ManyToOne(targetEntity: KanbanProject::class)]
     #[ORM\JoinColumn(name: 'kanban_project_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?KanbanProject $project = null;
@@ -71,6 +74,17 @@ class KanbanBoard
     public function setTitle(string $title): static
     {
         $this->title = $title;
+        return $this;
+    }
+
+    public function getPosition(): float
+    {
+        return $this->position;
+    }
+
+    public function setPosition(float $position): static
+    {
+        $this->position = $position;
         return $this;
     }
 

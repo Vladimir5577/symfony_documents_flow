@@ -16,9 +16,6 @@ use Gedmo\Mapping\Annotation as Gedmo;
 #[ORM\Index(name: 'idx_analytics_report_values_report_id', columns: ['report_id'])]
 #[ORM\Index(name: 'idx_analytics_report_values_board_version_metric_id', columns: ['board_version_metric_id'])]
 #[ORM\Index(name: 'idx_analytics_report_values_metric_report', columns: ['board_version_metric_id', 'report_id'])]
-#[ORM\Index(name: 'idx_analytics_report_values_bvm_effective_at', columns: ['board_version_metric_id', 'effective_at'])]
-#[ORM\Index(name: 'idx_analytics_report_values_effective_at', columns: ['effective_at'])]
-#[ORM\HasLifecycleCallbacks]
 class AnalyticsReportValue
 {
     #[ORM\Id]
@@ -34,15 +31,6 @@ class AnalyticsReportValue
     #[ORM\JoinColumn(name: 'board_version_metric_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?AnalyticsBoardVersionMetric $boardVersionMetric = null;
 
-    #[ORM\Column(name: 'metric_name_snapshot', length: 255, nullable: true)]
-    private ?string $metricNameSnapshot = null;
-
-    #[ORM\Column(name: 'metric_unit_snapshot', length: 64, nullable: true)]
-    private ?string $metricUnitSnapshot = null;
-
-    #[ORM\Column(name: 'metric_type_snapshot', length: 64, nullable: true)]
-    private ?string $metricTypeSnapshot = null;
-
     #[ORM\Column(name: 'value_number', type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $valueNumber = null;
 
@@ -56,9 +44,6 @@ class AnalyticsReportValue
     #[ORM\Column(name: 'value_json', type: Types::JSONB, nullable: true)]
     private mixed $valueJson = null;
 
-    #[ORM\Column(name: 'effective_at', type: Types::DATETIME_IMMUTABLE)]
-    private ?\DateTimeImmutable $effectiveAt = null;
-
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'created_by', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?User $createdBy = null;
@@ -70,12 +55,6 @@ class AnalyticsReportValue
     #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable]
     private ?\DateTimeImmutable $updatedAt = null;
-
-    #[ORM\PrePersist]
-    public function ensureEffectiveAt(): void
-    {
-        $this->effectiveAt ??= new \DateTimeImmutable();
-    }
 
     public function getId(): ?int
     {
@@ -102,42 +81,6 @@ class AnalyticsReportValue
     public function setBoardVersionMetric(?AnalyticsBoardVersionMetric $boardVersionMetric): static
     {
         $this->boardVersionMetric = $boardVersionMetric;
-
-        return $this;
-    }
-
-    public function getMetricNameSnapshot(): ?string
-    {
-        return $this->metricNameSnapshot;
-    }
-
-    public function setMetricNameSnapshot(?string $metricNameSnapshot): static
-    {
-        $this->metricNameSnapshot = $metricNameSnapshot;
-
-        return $this;
-    }
-
-    public function getMetricUnitSnapshot(): ?string
-    {
-        return $this->metricUnitSnapshot;
-    }
-
-    public function setMetricUnitSnapshot(?string $metricUnitSnapshot): static
-    {
-        $this->metricUnitSnapshot = $metricUnitSnapshot;
-
-        return $this;
-    }
-
-    public function getMetricTypeSnapshot(): ?string
-    {
-        return $this->metricTypeSnapshot;
-    }
-
-    public function setMetricTypeSnapshot(?string $metricTypeSnapshot): static
-    {
-        $this->metricTypeSnapshot = $metricTypeSnapshot;
 
         return $this;
     }
@@ -186,18 +129,6 @@ class AnalyticsReportValue
     public function setValueJson(mixed $valueJson): static
     {
         $this->valueJson = $valueJson;
-
-        return $this;
-    }
-
-    public function getEffectiveAt(): ?\DateTimeImmutable
-    {
-        return $this->effectiveAt;
-    }
-
-    public function setEffectiveAt(\DateTimeImmutable $effectiveAt): static
-    {
-        $this->effectiveAt = $effectiveAt;
 
         return $this;
     }

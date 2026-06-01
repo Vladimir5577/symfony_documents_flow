@@ -6,6 +6,7 @@ namespace App\Service\Analytics;
 
 use App\Entity\Analytics\AnalyticsMetric;
 use App\Enum\Analytics\AnalyticsMetricAggregationType;
+use App\Enum\Analytics\AnalyticsCategory;
 use App\Repository\Analytics\AnalyticsMetricRepository;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -26,6 +27,26 @@ final class AnalyticsMetricService
         return $this->repository->findAll();
     }
 
+    /**
+     * @return AnalyticsMetric[]
+     */
+    public function findFiltered(
+        ?string            $search,
+        ?AnalyticsCategory $category,
+        ?string            $type,
+        ?bool              $isActive,
+    ): array {
+        return $this->repository->findFiltered($search, $category, $type, $isActive);
+    }
+
+    /**
+     * @return string[]
+     */
+    public function findDistinctTypes(): array
+    {
+        return $this->repository->findDistinctTypes();
+    }
+
     public function findById(int $id): ?AnalyticsMetric
     {
         return $this->repository->find($id);
@@ -35,13 +56,14 @@ final class AnalyticsMetricService
      * @throws \RuntimeException если business_key уже занят
      */
     public function create(
-        string $businessKey,
-        string $name,
-        string $type,
-        string $unit,
+        string                         $businessKey,
+        string                         $name,
+        string                         $type,
+        string                         $unit,
         AnalyticsMetricAggregationType $aggregationType,
-        string|null $inputType,
-        bool $isActive,
+        string|null                    $inputType,
+        AnalyticsCategory              $category,
+        bool                           $isActive,
     ): AnalyticsMetric {
         $metric = new AnalyticsMetric();
         $metric->setBusinessKey(strtolower(trim($businessKey)));
@@ -50,6 +72,7 @@ final class AnalyticsMetricService
         $metric->setUnit(trim($unit));
         $metric->setAggregationType($aggregationType);
         $metric->setInputType($inputType);
+        $metric->setCategory($category);
         $metric->setIsActive($isActive);
 
         try {
@@ -66,14 +89,15 @@ final class AnalyticsMetricService
      * @throws \RuntimeException если business_key уже занят другой метрикой
      */
     public function update(
-        AnalyticsMetric $metric,
-        string $businessKey,
-        string $name,
-        string $type,
-        string $unit,
+        AnalyticsMetric                $metric,
+        string                         $businessKey,
+        string                         $name,
+        string                         $type,
+        string                         $unit,
         AnalyticsMetricAggregationType $aggregationType,
-        string|null $inputType,
-        bool $isActive,
+        string|null                    $inputType,
+        AnalyticsCategory              $category,
+        bool                           $isActive,
     ): void {
         $metric->setBusinessKey(strtolower(trim($businessKey)));
         $metric->setName(trim($name));
@@ -81,6 +105,7 @@ final class AnalyticsMetricService
         $metric->setUnit(trim($unit));
         $metric->setAggregationType($aggregationType);
         $metric->setInputType($inputType);
+        $metric->setCategory($category);
         $metric->setIsActive($isActive);
 
         try {

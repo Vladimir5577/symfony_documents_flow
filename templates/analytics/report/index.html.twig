@@ -45,7 +45,6 @@
                                     <th>Период</th>
                                     <th>Версия</th>
                                     <th>Статус</th>
-                                    <th>Полный</th>
                                     <th>Создан</th>
                                     <th>Действия</th>
                                 </tr>
@@ -56,31 +55,28 @@
                                         <tr class="report-row-clickable" onclick="window.location.href='{{ path('app_analytics_report_view', {id: report.id}) }}'">
                                             <td>{{ report.id }}</td>
                                             <td>{{ report.board.name }}</td>
-                                            <td>{{ report.period ? report.period.displayLabel : '—' }}</td>
+                                            <td>{{ report.period ? report.period.humanLabel : '—' }}</td>
                                             <td>v{{ report.boardVersion.versionNumber }}</td>
                                             <td>
                                                 {% if report.status.value == 'draft' %}
                                                     <span class="badge bg-info">Черновик</span>
-                                                {% elseif report.status.value == 'submitted' %}
-                                                    <span class="badge bg-warning">Отправлен</span>
                                                 {% else %}
-                                                    <span class="badge bg-success">Утверждён</span>
-                                                {% endif %}
-                                            </td>
-                                            <td onclick="event.stopPropagation();">
-                                                {% if report.complete %}
-                                                    <span class="badge bg-success">Да</span>
-                                                {% else %}
-                                                    <span class="badge bg-secondary">Нет</span>
+                                                    <span class="badge bg-success">Подтверждён</span>
                                                 {% endif %}
                                             </td>
                                             <td>{{ report.createdAt ? report.createdAt|date('d.m.Y H:i') : '—' }}</td>
-                                            <td>
+                                            <td onclick="event.stopPropagation();">
                                                 {% if report.status.value == 'draft' %}
                                                     <a href="{{ path('app_analytics_report_fill', {id: report.id}) }}" class="btn btn-sm btn-outline-primary">
                                                         <i class="bi bi-pencil"></i> Редактировать
                                                     </a>
                                                     {% if is_granted('ROLE_MANAGER') %}
+                                                        <form action="{{ path('app_analytics_report_confirm', {id: report.id}) }}" method="post" class="d-inline">
+                                                            <input type="hidden" name="_token" value="{{ csrf_token('report_confirm_' ~ report.id) }}">
+                                                            <button type="submit" class="btn btn-sm btn-outline-success" onclick="return confirm('Подтвердить отчёт #{{ report.id }}?');">
+                                                                <i class="bi bi-check-circle"></i> Подтвердить
+                                                            </button>
+                                                        </form>
                                                         <form action="{{ path('app_analytics_report_delete', {id: report.id}) }}" method="post" class="d-inline">
                                                             <input type="hidden" name="_token" value="{{ csrf_token('report_delete_' ~ report.id) }}">
                                                             <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить черновик отчёта?')">
@@ -88,49 +84,27 @@
                                                             </button>
                                                         </form>
                                                     {% endif %}
-                                                {% elseif report.status.value == 'approved' %}
+                                                {% else %}
                                                     {% if is_granted('ROLE_ADMIN') %}
                                                         <a href="{{ path('app_analytics_report_fill', {id: report.id}) }}" class="btn btn-sm btn-outline-primary">
                                                             <i class="bi bi-pencil"></i> Редактировать
                                                         </a>
                                                         <form action="{{ path('app_analytics_report_delete', {id: report.id}) }}" method="post" class="d-inline">
                                                             <input type="hidden" name="_token" value="{{ csrf_token('report_delete_' ~ report.id) }}">
-                                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить утверждённый отчёт?')">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить подтверждённый отчёт?')">
                                                                 <i class="bi bi-trash"></i>
                                                             </button>
                                                         </form>
                                                     {% else %}
-                                                        <span class="text-muted">Утверждён</span>
+                                                        <span class="text-muted">Подтверждён</span>
                                                     {% endif %}
-                                                {% elseif report.status.value == 'submitted' %}
-                                                    <a href="{{ path('app_analytics_report_fill', {id: report.id}) }}" class="btn btn-sm btn-outline-primary">
-                                                        <i class="bi bi-pencil"></i> Редактировать
-                                                    </a>
-                                                    {% if is_granted('ROLE_ADMIN') or is_granted('ROLE_MANAGER') %}
-                                                        <form action="{{ path('app_analytics_approval_approve', {id: report.id}) }}" method="post" class="d-inline">
-                                                            <input type="hidden" name="_token" value="{{ csrf_token('report_approve_' ~ report.id) }}">
-                                                            <button type="submit" class="btn btn-sm btn-outline-success" onclick="return confirm('Утвердить отчёт #{{ report.id }}?');">
-                                                                <i class="bi bi-check-circle"></i> Утвердить
-                                                            </button>
-                                                        </form>
-                                                    {% endif %}
-                                                    {% if is_granted('ROLE_ADMIN') or is_granted('ROLE_MANAGER') %}
-                                                        <form action="{{ path('app_analytics_report_delete', {id: report.id}) }}" method="post" class="d-inline">
-                                                            <input type="hidden" name="_token" value="{{ csrf_token('report_delete_' ~ report.id) }}">
-                                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Удалить отправленный отчёт?')">
-                                                                <i class="bi bi-trash"></i>
-                                                            </button>
-                                                        </form>
-                                                    {% endif %}
-                                                {% else %}
-                                                    <span class="text-muted">{{ report.status.value }}</span>
                                                 {% endif %}
                                             </td>
                                         </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="8" class="text-center text-muted py-4">Отчётов пока нет</td>
+                                        <td colspan="7" class="text-center text-muted py-4">Отчётов пока нет</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>

@@ -6,6 +6,7 @@ namespace App\Service\Analytics;
 
 use App\Repository\Analytics\AnalyticsAggregatedDataRepository;
 use App\Repository\Analytics\AnalyticsOrganizationRepository;
+use App\Repository\Analytics\AnalyticsReportValueRepository;
 use App\Repository\Organization\OrganizationRepository;
 
 /**
@@ -103,10 +104,40 @@ final class DashboardDataService
     /** Финансовые ключи, значения которых нужно перевести в миллионы */
     private const FINANCE_KEYS = ['cash_inflow', 'cash_outflow', 'account_balance'];
 
+    /**
+     * Маппинг legacy-ключей дашборда (которые читает JS в dashboard.html.twig)
+     * на реальные business_key финансовых метрик из analytics_metrics.
+     * Источник реальных значений — analytics_report_values, а не агрегаты.
+     */
+    private const FINANCE_KEY_MAPPING = [
+        'accounts_receivable_total'                 => 'finance_debit',
+        'accounts_receivable_population_tko_export' => 'finance_debit_people',
+        'accounts_receivable_legal_entities_tko'    => 'finance_debit_legal',
+
+        'accounts_payable_total'                    => 'finance_credit',
+
+        'bank_balance_total'                        => 'finance_cash',
+        'bank_balance_main_account'                 => 'finance_cash_main',
+        'bank_balance_yasinovataya_unit'            => 'finance_cash_yasinovataya_mo',
+        'bank_balance_card_account'                 => 'finance_cash_card',
+        'bank_balance_head_opened_for_branches'     => 'finance_cash_branches_tko',
+        'bank_balance_landfills'                    => 'finance_cash_landfills',
+        'bank_balance_road_service'                 => 'finance_cash_road_service',
+        'bank_balance_branch_opened_accounts_total' => 'finance_cash_branches',
+        'bank_balance_donetsk_branch'               => 'finance_cash_branches_donetsk',
+        'bank_balance_mariupol_branch'              => 'finance_cash_branches_mariupol',
+        'bank_balance_makeevka_branch'              => 'finance_cash_branches_makeevka',
+        'bank_balance_shakhtyorsk_branch'           => 'finance_cash_branches_shakhtersk',
+        'bank_balance_gorlovka_branch'              => 'finance_cash_branches_gorlovka',
+        'bank_balance_yenakiieve_branch'            => 'finance_cash_branches_enakievo',
+        'bank_balance_amvrosiivka_branch'           => 'finance_cash_branches_amvrosievka',
+    ];
+
     public function __construct(
         private readonly AnalyticsAggregatedDataRepository $aggregatedDataRepo,
         private readonly AnalyticsOrganizationRepository $analyticsOrgRepo,
         private readonly OrganizationRepository $organizationRepo,
+        private readonly AnalyticsReportValueRepository $reportValueRepo,
     ) {
     }
 
@@ -128,7 +159,78 @@ final class DashboardDataService
             ? $this->aggregatedDataRepo->findWeeklyAggregated($orgIds, self::ALL_KEYS)
             : $this->aggregatedDataRepo->findMonthlyAggregated($orgIds, self::ALL_KEYS);
 
+        // Финансовые значения тянем напрямую из отчётов (без агрегации),
+        // мапим на legacy-ключи, которые ожидает JS дашборда.
+        $rows = array_merge($rows, $this->loadFinanceRows($orgIds, $scale));
+
         return $this->buildResponse($rows, $scale);
+    }
+
+    /**
+     * Финансовые ряды из analytics_report_values, приведённые к форме
+     * строк агрегата ({business_key, yr, mo, wk, total_value, avg_value}),
+     * чтобы buildResponse() мог обработать их в общем цикле.
+     *
+     * @param int[] $orgIds
+     *
+     * @return list<array{business_key:string, yr:int, mo:int, wk:int, total_value:null, avg_value:string|null}>
+     */
+    private function loadFinanceRows(array $orgIds, string $scale): array
+    {
+        $raw = $this->reportValueRepo->findValuesByCategory($orgIds, 'finance');
+        if ($raw === []) {
+            return [];
+        }
+
+        // our_finance_key => legacy_key
+        $ourToLegacy = array_flip(self::FINANCE_KEY_MAPPING);
+
+        if ($scale === self::SCALE_WEEK) {
+            $result = [];
+            foreach ($raw as $row) {
+                $legacyKey = $ourToLegacy[$row['business_key']] ?? null;
+                if ($legacyKey === null) {
+                    continue;
+                }
+                $result[] = [
+                    'business_key' => $legacyKey,
+                    'yr'           => (int) $row['yr'],
+                    'mo'           => (int) $row['mo'],
+                    'wk'           => (int) $row['wk'],
+                    'total_value'  => null,
+                    'avg_value'    => $row['value'],
+                ];
+            }
+            return $result;
+        }
+
+        // Месячный режим: на каждую (yr, mo, legacy_key) выбираем значение
+        // отчёта с самой поздней end_date в месяце (без расчётов).
+        $latestByMonthKey = [];
+        foreach ($raw as $row) {
+            $legacyKey = $ourToLegacy[$row['business_key']] ?? null;
+            if ($legacyKey === null) {
+                continue;
+            }
+            $bucket = $row['yr'] . '-' . $row['mo'] . '-' . $legacyKey;
+            if (!isset($latestByMonthKey[$bucket])
+                || $row['period_end'] > $latestByMonthKey[$bucket]['period_end']) {
+                $latestByMonthKey[$bucket] = $row + ['legacy_key' => $legacyKey];
+            }
+        }
+
+        $result = [];
+        foreach ($latestByMonthKey as $row) {
+            $result[] = [
+                'business_key' => $row['legacy_key'],
+                'yr'           => (int) $row['yr'],
+                'mo'           => (int) $row['mo'],
+                'wk'           => (int) $row['wk'],
+                'total_value'  => null,
+                'avg_value'    => $row['value'],
+            ];
+        }
+        return $result;
     }
 
     /**

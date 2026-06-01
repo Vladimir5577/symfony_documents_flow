@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace App\Controller\Analytics;
 
-use App\Entity\Analytics\AnalyticsBoardVersionMetric;
-use App\Enum\Analytics\AnalyticsBoardVersionStatus;
+use App\Enum\Analytics\AnalyticsCategory;
 use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardVersionRepository;
 use App\Repository\Analytics\AnalyticsMetricRepository;
+use App\Entity\Analytics\AnalyticsMetric;
 use App\Service\Analytics\BoardService;
 use App\Service\Analytics\CloneBoardVersionService;
 use App\Service\Analytics\PublishBoardVersionService;
+use App\Service\Analytics\VersionMetricTreeBuilder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -47,12 +48,19 @@ final class AnalyticsAdminBoardController extends AbstractController
                 $periodTypeRaw = $request->request->getString('period_type', 'weekly');
                 $periodType = AnalyticsPeriodType::tryFrom($periodTypeRaw) ?? AnalyticsPeriodType::Weekly;
 
+                $categoryRaw = $request->request->getString('category');
+                $category = AnalyticsCategory::tryFrom($categoryRaw);
+                if ($category === null) {
+                    throw new \RuntimeException('Категория обязательна и должна быть из списка.');
+                }
+
                 $boardService->create(
                     name: $request->request->getString('name'),
                     description: $request->request->getString('description') ?: null,
+                    category: $category,
                     periodType: $periodType,
                 );
-                $this->addFlash('success', 'Доска создана. Первая draft-версия создана автоматически.');
+                $this->addFlash('success', 'Доска создана. Первая активная версия создана автоматически.');
                 return $this->redirectToRoute('app_analytics_admin_board');
             } catch (\Throwable $e) {
                 $this->addFlash('error', $e->getMessage());
@@ -60,6 +68,7 @@ final class AnalyticsAdminBoardController extends AbstractController
         }
 
         return $this->render('analytics/admin/board/new.html.twig', [
+            'categories' => AnalyticsCategory::cases(),
             'active_tab' => 'analytics_boards',
         ]);
     }
@@ -78,6 +87,54 @@ final class AnalyticsAdminBoardController extends AbstractController
         ]);
     }
 
+    #[Route('/analytics/admin/board/{id}/edit', name: 'app_analytics_admin_board_edit')]
+    public function edit(
+        int $id,
+        Request $request,
+        CsrfTokenManagerInterface $csrf,
+        BoardService $boardService,
+    ): Response {
+        $board = $boardService->findById($id);
+        if (!$board) {
+            throw $this->createNotFoundException('Доска не найдена.');
+        }
+
+        if ($request->isMethod('POST')) {
+            if (!$csrf->isTokenValid(new CsrfToken('board_edit_' . $id, $request->request->getString('_token')))) {
+                $this->addFlash('error', 'Неверный CSRF-токен.');
+                return $this->redirectToRoute('app_analytics_admin_board_edit', ['id' => $id]);
+            }
+
+            try {
+                $periodTypeRaw = $request->request->getString('period_type', $board->getPeriodType()->value);
+                $periodType = AnalyticsPeriodType::tryFrom($periodTypeRaw) ?? $board->getPeriodType();
+
+                $categoryRaw = $request->request->getString('category', $board->getCategory()->value);
+                $category = AnalyticsCategory::tryFrom($categoryRaw) ?? $board->getCategory();
+
+                $boardService->update(
+                    board: $board,
+                    name: $request->request->getString('name'),
+                    description: $request->request->getString('description') ?: null,
+                    periodType: $periodType,
+                    category: $category,
+                );
+                $this->addFlash('success', 'Доска обновлена.');
+                return $this->redirectToRoute('app_analytics_admin_board_show', ['id' => $id]);
+            } catch (\Throwable $e) {
+                $this->addFlash('error', $e->getMessage());
+            }
+        }
+
+        return $this->render('analytics/admin/board/edit.html.twig', [
+            'board' => $board,
+            'categories' => AnalyticsCategory::cases(),
+            'can_change_category' => $boardService->canChangeCategory($board),
+            'can_change_period_type' => $boardService->canChangePeriodType($board),
+            'active_tab' => 'analytics_boards',
+        ]);
+    }
+
     #[Route('/analytics/admin/board/{boardId}/version/{versionId}/edit', name: 'app_analytics_admin_board_version_edit')]
     public function version_edit(
         int $boardId,
@@ -86,6 +143,7 @@ final class AnalyticsAdminBoardController extends AbstractController
         CsrfTokenManagerInterface $csrf,
         BoardService $boardService,
         AnalyticsMetricRepository $metricRepository,
+        VersionMetricTreeBuilder $metricTreeBuilder,
     ): Response {
         $board = $boardService->findById($boardId);
         if (!$board) {
@@ -103,57 +161,61 @@ final class AnalyticsAdminBoardController extends AbstractController
             throw $this->createNotFoundException('Версия не найдена.');
         }
 
-        if ($version->getStatus() === AnalyticsBoardVersionStatus::Archived) {
-            $this->addFlash('error', 'Нельзя редактировать архивную версию.');
-            return $this->redirectToRoute('app_analytics_admin_board_show', ['id' => $boardId]);
-        }
-
         if ($request->isMethod('POST') && $request->request->has('save_metrics')) {
             if (!$csrf->isTokenValid(new CsrfToken('version_edit_' . $versionId, $request->request->getString('_token')))) {
                 $this->addFlash('error', 'Неверный CSRF-токен.');
                 return $this->redirectToRoute('app_analytics_admin_board_version_edit', ['boardId' => $boardId, 'versionId' => $versionId]);
             }
 
-            // Удаляем все текущие метрики версии
-            foreach ($version->getVersionMetrics()->toArray() as $vm) {
-                $boardService->removeVersionMetric($vm);
-            }
-            $boardService->flush();
-
-            // Добавляем выбранные метрики из request
-            $selectedMetrics = $request->request->all('metrics') ?? [];
-            $position = 1;
-
-            foreach ($selectedMetrics as $metricIdStr => $data) {
-                $metricId = (int) $metricIdStr;
-                // Пропускаем метрики где чекбокс не отмечен (enabled не отправлен)
-                if (empty($data['enabled'])) {
-                    continue;
-                }
-                $metric = $metricRepository->find($metricId);
-                if (!$metric) {
-                    continue;
-                }
-
-                $vm = new AnalyticsBoardVersionMetric();
-                $vm->setBoardVersion($version);
-                $vm->setMetric($metric);
-                $vm->setPosition($position++);
-                $vm->setIsRequired(!empty($data['is_required']));
-                $version->addVersionMetric($vm);
+            try {
+                $selectedMetrics = $request->request->all('metrics') ?? [];
+                $boardService->syncVersionMetrics($version, $selectedMetrics, $metricRepository->findAll());
+                $this->addFlash('success', 'Состав метрик сохранён.');
+            } catch (\Throwable $e) {
+                $this->addFlash('error', $e->getMessage());
             }
 
-            $boardService->flush();
-            $this->addFlash('success', 'Состав метрик сохранён.');
             return $this->redirectToRoute('app_analytics_admin_board_version_edit', ['boardId' => $boardId, 'versionId' => $versionId]);
         }
 
         $allMetrics = $metricRepository->findAll();
 
+        /** @var array<int, array{position: int, is_required: bool, parent_metric_id: int|null}> $vmByMetric */
+        $vmByMetric = [];
+        foreach ($version->getVersionMetrics() as $vm) {
+            $metricId = $vm->getMetric()?->getId();
+            if ($metricId === null) {
+                continue;
+            }
+            $parentMetricId = $vm->getParent()?->getMetric()?->getId();
+            $vmByMetric[$metricId] = [
+                'position' => $vm->getPosition(),
+                'is_required' => $vm->isRequired(),
+                'parent_metric_id' => $parentMetricId,
+            ];
+        }
+
+        $selectedEntries = [];
+        /** @var AnalyticsMetric[] $unselectedMetrics */
+        $unselectedMetrics = [];
+        foreach ($allMetrics as $metric) {
+            $metricId = $metric->getId();
+            if ($metricId === null) {
+                continue;
+            }
+            if (isset($vmByMetric[$metricId])) {
+                $selectedEntries[] = ['metric' => $metric, 'data' => $vmByMetric[$metricId]];
+            } else {
+                $unselectedMetrics[] = $metric;
+            }
+        }
+
         return $this->render('analytics/admin/board/version_edit.html.twig', [
             'board' => $board,
             'version' => $version,
-            'allMetrics' => $allMetrics,
+            'selectedMetricsFlat' => $metricTreeBuilder->flatten($selectedEntries),
+            'unselectedMetrics' => $unselectedMetrics,
+            'categories' => AnalyticsCategory::cases(),
             'active_tab' => 'analytics_boards',
         ]);
     }
@@ -192,7 +254,7 @@ final class AnalyticsAdminBoardController extends AbstractController
 
         try {
             $newVersion = $cloneService->cloneFromVersion($sourceVersion);
-            $this->addFlash('success', 'Создана новая версия v' . $newVersion->getVersionNumber() . ' (draft).');
+            $this->addFlash('success', 'Создана новая неактивная версия v' . $newVersion->getVersionNumber() . '.');
         } catch (\Throwable $e) {
             $this->addFlash('error', $e->getMessage());
         }
@@ -201,7 +263,7 @@ final class AnalyticsAdminBoardController extends AbstractController
     }
 
     #[Route('/analytics/admin/board/version/{versionId}/publish', name: 'app_analytics_admin_board_publish', methods: ['POST'])]
-    public function publish(
+    public function activate(
         int $versionId,
         Request $request,
         CsrfTokenManagerInterface $csrf,
@@ -221,8 +283,8 @@ final class AnalyticsAdminBoardController extends AbstractController
         }
 
         try {
-            $publishService->publish($version);
-            $this->addFlash('success', 'Версия v' . $version->getVersionNumber() . ' опубликована.');
+            $publishService->activate($version);
+            $this->addFlash('success', 'Версия v' . $version->getVersionNumber() . ' сделана активной.');
         } catch (\Throwable $e) {
             $this->addFlash('error', $e->getMessage());
         }
@@ -260,13 +322,9 @@ final class AnalyticsAdminBoardController extends AbstractController
         }
 
         try {
-            if ($version->getStatus() === AnalyticsBoardVersionStatus::Published) {
-                $this->addFlash('error', 'Нельзя удалить опублированную версию.');
-            } else {
-                $boardService->removeVersion($version);
-                $boardService->flush();
-                $this->addFlash('success', 'Версия удалена.');
-            }
+            $boardService->removeVersion($version);
+            $boardService->flush();
+            $this->addFlash('success', 'Версия удалена.');
         } catch (\Throwable $e) {
             $this->addFlash('error', 'Не удалось удалить версию: ' . $e->getMessage());
         }

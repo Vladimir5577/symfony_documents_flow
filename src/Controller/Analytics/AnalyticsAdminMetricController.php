@@ -6,9 +6,9 @@ namespace App\Controller\Analytics;
 
 use App\Entity\Analytics\AnalyticsMetric;
 use App\Enum\Analytics\AnalyticsMetricAggregationType;
+use App\Enum\Analytics\AnalyticsCategory;
 use App\Repository\Analytics\AnalyticsMetricRepository;
 use App\Service\Analytics\AnalyticsMetricService;
-use Symfony\Bridge\Twig\AppVariable;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,12 +21,31 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 final class AnalyticsAdminMetricController extends AbstractController
 {
     #[Route('/analytics/admin/metric', name: 'app_analytics_admin_metric_index')]
-    public function index(AnalyticsMetricService $metricService): Response
+    public function index(Request $request, AnalyticsMetricService $metricService): Response
     {
-        $metrics = $metricService->findAll();
+        $search   = $request->query->getString('search') ?: null;
+        $category = null;
+        if ($request->query->has('category') && $request->query->getString('category') !== '') {
+            $category = AnalyticsCategory::tryFrom($request->query->getString('category'));
+        }
+        $type     = $request->query->getString('type') ?: null;
+        $isActive = null;
+        if ($request->query->has('is_active') && $request->query->getString('is_active') !== '') {
+            $isActive = (bool) $request->query->getString('is_active');
+        }
+
+        $metrics = $metricService->findFiltered($search, $category, $type, $isActive);
 
         return $this->render('analytics/admin/metric/index.html.twig', [
-            'metrics' => $metrics,
+            'metrics'    => $metrics,
+            'categories' => AnalyticsCategory::cases(),
+            'types'      => $metricService->findDistinctTypes(),
+            'filters'    => [
+                'search'    => $search ?? '',
+                'category'  => $category?->value ?? '',
+                'type'      => $type ?? '',
+                'is_active' => $isActive === null ? '' : (string)(int)$isActive,
+            ],
             'active_tab' => 'analytics_metrics',
         ]);
     }
@@ -48,6 +67,7 @@ final class AnalyticsAdminMetricController extends AbstractController
                     unit: $request->request->getString('unit'),
                     aggregationType: AnalyticsMetricAggregationType::from($request->request->getString('aggregation_type')),
                     inputType: $request->request->getString('input_type') ?: null,
+                    category: AnalyticsCategory::from($request->request->getString('category')),
                     isActive: (bool) $request->request->get('is_active', false),
                 );
                 $this->addFlash('success', 'Метрика создана.');
@@ -61,6 +81,7 @@ final class AnalyticsAdminMetricController extends AbstractController
             'metric' => null,
             'aggregationTypes' => AnalyticsMetricAggregationType::cases(),
             'inputTypes' => ['text', 'number', 'select', 'checkbox'],
+            'categories' => AnalyticsCategory::cases(),
             'active_tab' => 'analytics_metrics',
         ]);
     }
@@ -92,6 +113,7 @@ final class AnalyticsAdminMetricController extends AbstractController
                     unit: $request->request->getString('unit'),
                     aggregationType: AnalyticsMetricAggregationType::from($request->request->getString('aggregation_type')),
                     inputType: $request->request->getString('input_type') ?: null,
+                    category: AnalyticsCategory::from($request->request->getString('category')),
                     isActive: (bool) $request->request->get('is_active', false),
                 );
                 $this->addFlash('success', 'Метрика обновлена.');
@@ -105,6 +127,7 @@ final class AnalyticsAdminMetricController extends AbstractController
             'metric' => $metric,
             'aggregationTypes' => AnalyticsMetricAggregationType::cases(),
             'inputTypes' => ['text', 'number', 'select', 'checkbox'],
+            'categories' => AnalyticsCategory::cases(),
             'active_tab' => 'analytics_metrics',
         ]);
     }

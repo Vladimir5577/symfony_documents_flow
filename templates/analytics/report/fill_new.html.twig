@@ -35,6 +35,8 @@
         Отчёт создаётся автоматически за текущий период ({{ board.periodType.label }}) после нажатия одной из кнопок сохранения.
     </div>
 
+    {% import 'analytics/report/_metric_notes.html.twig' as notes %}
+
     <section id="multiple-column-form">
         <div class="row match-height">
             <div class="col-12">
@@ -48,25 +50,29 @@
                                 <input type="hidden" name="_token" value="{{ csrf_token('report_fill_new_' ~ board.id) }}">
                                 <input type="hidden" name="board_id" value="{{ board.id }}">
 
-                                <table class="table table-bordered">
+                                <style>
+                                    .metrics-fill-table td.metric-cell { vertical-align: middle; }
+                                    .metrics-fill-table .child-indicator { color: #adb5bd; margin-right: 6px; }
+                                </style>
+                                <table class="table table-bordered metrics-fill-table">
                                     <thead>
                                     <tr>
                                         <th>Метрика</th>
-                                        <th>Тип</th>
                                         <th>Ед. изм.</th>
                                         <th>Значение</th>
+                                        <th>Описание</th>
                                     </tr>
                                     </thead>
                                     <tbody>
-                                    {% for vm in boardVersion.versionMetrics %}
-                                        {% set metric = vm.metric %}
-                                        <tr>
-                                            <td>
+                                    {% for entry in versionMetricsFlat %}
+                                        {% set vm = entry.versionMetric %}
+                                        {% set metric = entry.metric %}
+                                        <tr data-depth="{{ entry.depth }}">
+                                            <td class="metric-cell" style="padding-left: {{ 12 + entry.depth * 40 }}px;">
+                                                {% if entry.depth > 0 %}<i class="bi bi-arrow-return-right child-indicator"></i>{% endif %}
                                                 <strong>{{ metric.name }}</strong>
-                                                <br><small class="text-muted"><code>{{ metric.businessKey }}</code></small>
                                                 {% if vm.required %}<span class="text-danger">*</span>{% endif %}
                                             </td>
-                                            <td>{{ metric.type }}</td>
                                             <td>{{ metric.unit }}</td>
                                             <td>
                                                 {% if metric.type == 'bool' %}
@@ -88,7 +94,9 @@
                                                     <input type="number" step="any" name="values[{{ vm.id }}]" class="form-control" value="">
                                                 {% endif %}
                                             </td>
+                                            <td>{{ notes.toggleButton(vm.id) }}</td>
                                         </tr>
+                                        {{ notes.row(vm.id, [], 4) }}
                                     {% endfor %}
                                     </tbody>
                                 </table>
@@ -99,8 +107,8 @@
                                         <button type="submit" name="submit_action" value="draft" class="btn btn-primary">
                                             Сохранить как черновик
                                         </button>
-                                        <button type="submit" name="submit_action" value="approve" class="btn btn-success">
-                                            Сохранить и утвердить
+                                        <button type="submit" name="submit_action" value="confirm" class="btn btn-success">
+                                            Сохранить и подтвердить
                                         </button>
                                     </div>
                                 </div>
@@ -118,30 +126,32 @@
 
             form.addEventListener('submit', function (e) {
                 var submitter = e.submitter;
-                if (!submitter || submitter.value !== 'approve') return;
+                if (!submitter || submitter.value !== 'confirm') return;
 
-                if (form.dataset.approveConfirmed === '1') {
-                    delete form.dataset.approveConfirmed;
+                if (form.dataset.confirmConfirmed === '1') {
+                    delete form.dataset.confirmConfirmed;
                     return;
                 }
 
                 e.preventDefault();
                 Swal.fire({
                     title: 'Вы уверены?',
-                    text: 'Утвержденный отчет нельзя будет редактировать.',
+                    text: 'Подтверждённый отчёт нельзя будет редактировать.',
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#198754',
                     cancelButtonColor: '#6c757d',
-                    confirmButtonText: 'Да, утвердить',
+                    confirmButtonText: 'Да, подтвердить',
                     cancelButtonText: 'Отмена'
                 }).then(function (result) {
                     if (result.isConfirmed) {
-                        form.dataset.approveConfirmed = '1';
+                        form.dataset.confirmConfirmed = '1';
                         form.requestSubmit(submitter);
                     }
                 });
             });
         })();
     </script>
+
+    {% include 'analytics/report/_metric_notes.html.twig' %}
 {% endblock %}

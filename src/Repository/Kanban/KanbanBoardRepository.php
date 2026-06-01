@@ -47,9 +47,39 @@ class KanbanBoardRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('b')
             ->where('b.project = :project')
             ->setParameter('project', $project)
-            ->orderBy('b.id', 'ASC')
+            ->orderBy('b.position', 'ASC')
+            ->addOrderBy('b.id', 'ASC')
             ->getQuery()
             ->getResult();
+    }
+
+    public function getMaxPositionInProject(KanbanProject $project): float
+    {
+        $result = $this->createQueryBuilder('b')
+            ->select('MAX(b.position)')
+            ->where('b.project = :project')
+            ->setParameter('project', $project)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        return (float) ($result ?? 0.0);
+    }
+
+    public function rebalancePositionsInProject(KanbanProject $project): void
+    {
+        $boards = $this->createQueryBuilder('b')
+            ->where('b.project = :project')
+            ->setParameter('project', $project)
+            ->orderBy('b.position', 'ASC')
+            ->addOrderBy('b.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        $pos = 1.0;
+        foreach ($boards as $board) {
+            $board->setPosition($pos);
+            $pos += 1.0;
+        }
     }
 
     /**
@@ -165,13 +195,14 @@ class KanbanBoardRepository extends ServiceEntityRepository
 
     /**
      * Доска со всеми связями (колонки, карточки, чеклист, метки).
+     * Архивные карточки не загружаются — для них есть отдельная страница архива.
      */
     public function findOneWithRelations(int $id): ?KanbanBoard
     {
         return $this->createQueryBuilder('b')
             ->leftJoin('b.project', 'p')->addSelect('p')
             ->leftJoin('b.columns', 'col')->addSelect('col')
-            ->leftJoin('col.cards', 'card')->addSelect('card')
+            ->leftJoin('col.cards', 'card', 'WITH', 'card.isArchived = false')->addSelect('card')
             ->leftJoin('card.labels', 'lbl')->addSelect('lbl')
             ->leftJoin('card.assignees', 'cardAsgn')->addSelect('cardAsgn')
             ->leftJoin('card.subtasks', 'ci')->addSelect('ci')

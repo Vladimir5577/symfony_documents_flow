@@ -472,12 +472,21 @@ final class KanbanCardApiController extends AbstractController
 
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_ADMIN);
 
-        $card->setIsArchived(!$card->isArchived());
+        $nowArchived = !$card->isArchived();
+        $card->setIsArchived($nowArchived);
+        if ($nowArchived) {
+            $card->setArchivedAt(new \DateTimeImmutable());
+            $card->setArchivedBy($user);
+        } else {
+            $card->setArchivedAt(null);
+            $card->setArchivedBy(null);
+        }
         $this->em->flush();
 
         return $this->json([
             'id' => $card->getId(),
             'isArchived' => $card->isArchived(),
+            'archivedAt' => $card->getArchivedAt()?->format('c'),
         ]);
     }
 }

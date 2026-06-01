@@ -12,6 +12,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\UniqueConstraint(name: 'uniq_analytics_board_version_metrics', columns: ['board_version_id', 'metric_id'])]
 #[ORM\Index(name: 'idx_analytics_board_version_metrics_board_version', columns: ['board_version_id'])]
 #[ORM\Index(name: 'idx_analytics_board_version_metrics_metric', columns: ['metric_id'])]
+#[ORM\Index(name: 'idx_analytics_board_version_metrics_parent', columns: ['parent_id'])]
 class AnalyticsBoardVersionMetric
 {
     #[ORM\Id]
@@ -32,6 +33,10 @@ class AnalyticsBoardVersionMetric
 
     #[ORM\Column(name: 'is_required', options: ['default' => false])]
     private bool $isRequired = false;
+
+    #[ORM\ManyToOne(targetEntity: AnalyticsBoardVersionMetric::class)]
+    #[ORM\JoinColumn(name: 'parent_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
+    private ?AnalyticsBoardVersionMetric $parent = null;
 
     public function getId(): ?int
     {
@@ -82,6 +87,18 @@ class AnalyticsBoardVersionMetric
     public function setIsRequired(bool $isRequired): static
     {
         $this->isRequired = $isRequired;
+
+        return $this;
+    }
+
+    public function getParent(): ?AnalyticsBoardVersionMetric
+    {
+        return $this->parent;
+    }
+
+    public function setParent(?AnalyticsBoardVersionMetric $parent): static
+    {
+        $this->parent = $parent;
 
         return $this;
     }

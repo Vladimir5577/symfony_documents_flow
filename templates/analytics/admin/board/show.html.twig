@@ -9,9 +9,14 @@
 {% block main %}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>{{ board.name }}</h1>
-        <a href="{{ path('app_analytics_admin_board') }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left me-1"></i>Назад к списку
-        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ path('app_analytics_admin_board_edit', {id: board.id}) }}" class="btn btn-outline-primary">
+                <i class="bi bi-pencil me-1"></i>Редактировать
+            </a>
+            <a href="{{ path('app_analytics_admin_board') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Назад к списку
+            </a>
+        </div>
     </div>
 
     {% if board.description %}
@@ -25,6 +30,9 @@
             {% elseif board.periodType.value == 'weekly' %}Еженедельно
             {% elseif board.periodType.value == 'monthly' %}Ежемесячно
             {% endif %}
+        </span>
+        <span class="badge bg-secondary ms-1">
+            Категория: {{ board.category.label() }}
         </span>
     </div>
 
@@ -58,33 +66,28 @@
                                 </thead>
                                 <tbody>
                                 {% for version in board.boardVersions|sort((a, b) => b.versionNumber <=> a.versionNumber) %}
+                                    {% set is_active_version = board.activeVersion and board.activeVersion.id == version.id %}
                                     <tr>
                                         <td><strong>v{{ version.versionNumber }}</strong></td>
                                         <td>
-                                            {% if version.status.value == 'published' %}
-                                                <span class="badge bg-success">Опубликована</span>
-                                            {% elseif version.status.value == 'archived' %}
-                                                <span class="badge bg-secondary">Архив</span>
-                                            {% else %}
-                                                <span class="badge bg-info">Черновик</span>
-                                            {% endif %}
+                                            <span class="badge {{ is_active_version ? 'bg-success' : 'bg-secondary' }}">
+                                                {{ is_active_version ? 'Активная' : 'Неактивная' }}
+                                            </span>
                                         </td>
                                         <td>{{ version.versionMetrics|length }}</td>
                                         <td>{{ version.createdAt ? version.createdAt|date('d.m.Y H:i') : '—' }}</td>
                                         <td>{{ version.updatedAt ? version.updatedAt|date('d.m.Y H:i') : '—' }}</td>
                                         <td>
-                                            {% if version.status.value != 'archived' %}
-                                                <a href="{{ path('app_analytics_admin_board_version_edit', {boardId: board.id, versionId: version.id}) }}" class="btn btn-sm btn-outline-primary" title="Редактировать состав метрик">
-                                                    <i class="bi bi-pencil"></i> Состав
-                                                </a>
-                                            {% endif %}
+                                            <a href="{{ path('app_analytics_admin_board_version_edit', {boardId: board.id, versionId: version.id}) }}" class="btn btn-sm btn-outline-primary" title="Редактировать состав метрик">
+                                                <i class="bi bi-pencil"></i> Состав
+                                            </a>
 
-                                            {% if version.status.value == 'draft' %}
+                                            {% if not is_active_version %}
                                                 <form action="{{ path('app_analytics_admin_board_publish', {versionId: version.id}) }}" method="post" class="d-inline"
-                                                      onsubmit="return confirm('Опубликовать версию v{{ version.versionNumber }}? Текущая опубликованная версия будет архивирована.');">
+                                                      onsubmit="return confirm('Сделать версию v{{ version.versionNumber }} активной? Новые отчёты будут создаваться по ней.');">
                                                     <input type="hidden" name="_token" value="{{ csrf_token('version_publish_' ~ version.id) }}">
                                                     <button type="submit" class="btn btn-sm btn-outline-success">
-                                                        <i class="bi bi-check-circle"></i> Опубликовать
+                                                        <i class="bi bi-check-circle"></i> Сделать активной
                                                     </button>
                                                 </form>
                                             {% endif %}
@@ -108,11 +111,6 @@
                         <h4 class="card-title">Создать новую версию</h4>
                     </div>
                     <div class="card-body">
-                        {% set published_version = null %}
-                        {% for v in board.boardVersions %}
-                            {% if v.status.value == 'published' %}{% set published_version = v %}{% endif %}
-                        {% endfor %}
-
                         <form action="{{ path('app_analytics_admin_board_clone', {id: board.id}) }}" method="post">
                             <input type="hidden" name="_token" value="{{ csrf_token('board_clone_' ~ board.id) }}">
 
@@ -121,9 +119,10 @@
                                     <label class="form-label">Копировать состав из версии</label>
                                     <select name="source_version_id" class="form-select">
                                         {% for v in board.boardVersions %}
+                                            {% set is_active_source = board.activeVersion and v.id == board.activeVersion.id %}
                                             <option value="{{ v.id }}"
-                                                {% if published_version and v.id == published_version.id %}selected{% endif %}>
-                                                v{{ v.versionNumber }} ({{ v.status.value }})
+                                                {% if is_active_source %}selected{% endif %}>
+                                                v{{ v.versionNumber }} ({{ is_active_source ? 'активная' : 'неактивная' }})
                                             </option>
                                         {% endfor %}
                                     </select>
