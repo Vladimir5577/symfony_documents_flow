@@ -7,6 +7,9 @@ namespace App\Controller\SpaApi;
 final class SpaApiError
 {
     public const ACCESS_DENIED = 'access_denied';
+    public const ATTACHMENT_LIMIT_REACHED = 'attachment_limit_reached';
+    public const ATTACHMENT_NOT_FOUND = 'attachment_not_found';
+    public const ATTACHMENT_NOT_PREVIEWABLE = 'attachment_not_previewable';
     public const BOARD_HAS_NO_PROJECT = 'board_has_no_project';
     public const BOARD_NOT_FOUND = 'board_not_found';
     public const BOARD_TITLE_REQUIRED = 'board_title_required';
@@ -18,6 +21,8 @@ final class SpaApiError
     public const COLUMN_ID_AND_TITLE_REQUIRED = 'column_id_and_title_required';
     public const COLUMN_NOT_FOUND = 'column_not_found';
     public const DESCRIPTION_INVALID_TYPE = 'description_invalid_type';
+    public const FILE_NOT_FOUND_ON_DISK = 'file_not_found_on_disk';
+    public const FILE_NOT_PROVIDED = 'file_not_provided';
     public const INSUFFICIENT_PERMISSIONS = 'insufficient_permissions';
     public const INVALID_JSON = 'invalid_json';
     public const LABEL_NAME_REQUIRED = 'label_name_required';
