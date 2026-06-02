@@ -1,0 +1,90 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Полигоны{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">Полигоны</h1>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+
+    <section class="section">
+        <div class="row" id="polygons-table-section">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title">Список полигонов</h4>
+                        <p class="text-muted mb-0">Всего: {{ polygons|length }}</p>
+                    </div>
+                    <div class="card-content">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                <tr>
+                                    <th>Название</th>
+                                    <th>GPS</th>
+                                    <th>Контакт</th>
+                                    <th>Телефон</th>
+                                    <th>Статус</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% if polygons|length > 0 %}
+                                    {% for polygon in polygons %}
+                                        <tr data-href="{{ path('app_polygon_view', {id: polygon.id}) }}" role="button" tabindex="0">
+                                            <td>{{ polygon.name }}</td>
+                                            <td>
+                                                {% if polygon.gpsLat is not null and polygon.gpsLng is not null %}
+                                                    {{ polygon.gpsLat }}, {{ polygon.gpsLng }}
+                                                {% else %}-{% endif %}
+                                            </td>
+                                            <td>{{ polygon.contactName ?? '-' }}</td>
+                                            <td>{{ polygon.contactPhone ?? '-' }}</td>
+                                            <td>
+                                                {% if polygon.isActive %}
+                                                    <span class="badge bg-success">Активен</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">Неактивен</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">Полигонов нет.</td>
+                                    </tr>
+                                {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        document.querySelectorAll('#polygons-table-section tr[data-href]').forEach(function (row) {
+            row.addEventListener('click', function () {
+                window.location.href = this.dataset.href;
+            });
+            row.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    window.location.href = this.dataset.href;
+                }
+            });
+        });
+    </script>
+    <style>#polygons-table-section tr[data-href] { cursor: pointer; }</style>
+{% endblock %}

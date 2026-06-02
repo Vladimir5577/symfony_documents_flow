@@ -1,0 +1,73 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}{{ polygon.name }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">{{ polygon.name }}</h1>
+        <a href="{{ path('app_polygons') }}" class="btn btn-light-secondary">
+            <i class="bi bi-arrow-left"></i> К списку
+        </a>
+    </div>
+
+    <section class="section">
+        <div class="row">
+            <div class="col-12 col-lg-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title mb-0">Данные полигона</h4>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless mb-0">
+                            <tbody>
+                            <tr>
+                                <th style="width: 220px;">Название</th>
+                                <td>{{ polygon.name ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>GPS</th>
+                                <td>
+                                    {% if polygon.gpsLat is not null and polygon.gpsLng is not null %}
+                                        {{ polygon.gpsLat }}, {{ polygon.gpsLng }}
+                                        <a href="https://www.google.com/maps/search/?api=1&query={{ polygon.gpsLat }},{{ polygon.gpsLng }}"
+                                           target="_blank" rel="noopener" class="ms-2">
+                                            <i class="bi bi-geo-alt"></i> на карте
+                                        </a>
+                                    {% else %}-{% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Контакт</th>
+                                <td>{{ polygon.contactName ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Телефон</th>
+                                <td>{{ polygon.contactPhone ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Статус</th>
+                                <td>
+                                    {% if polygon.isActive %}
+                                        <span class="badge bg-success">Активен</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Неактивен</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="card-footer">
+                        <a href="{{ path('app_analytics_tko', {polygon_id: polygon.id}) }}" class="btn btn-primary">
+                            <i class="bi bi-table"></i> Аналитика ТКО
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

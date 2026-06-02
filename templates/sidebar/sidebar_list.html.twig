@@ -142,6 +142,15 @@
                 <span>Организации</span>
             </a>
         </li>
+
+        {% if is_granted('ROLE_ADMIN') %}
+            <li class="sidebar-item {% if active_tab == 'polygons' %}active{% endif %}">
+                <a href="{{ path('app_polygons') }}" class="sidebar-link">
+                    <i class="bi bi-geo-alt"></i>
+                    <span>Полигоны</span>
+                </a>
+            </li>
+        {% endif %}
     {% endif %}
 
     <!-- ###############################################################
@@ -245,6 +254,21 @@
             </ul>
         </li>
     {% endif %}
+
+    {# Аналитика ТКО — отдельный модуль, не связан с основной аналитикой #}
+    {% if is_granted('ROLE_ADMIN') %}
+        <li class="sidebar-group-label">Аналитика ТКО</li>
+
+        <li class="sidebar-item {% if active_tab == 'analytics_tko' %}active{% endif %}">
+            <a href="{{ path('app_analytics_tko') }}" class="sidebar-link">
+                <i class="bi bi-trash3"></i>
+                <span>Аналитика ТКО</span>
+            </a>
+        </li>
+    {% endif %}
+
+    <!-- ###############################################################
+     ################################################################## -->
 
     {% if is_granted('ROLE_ADMIN') %}
         <li class="sidebar-item has-sub {% if active_tab in ['analytics_metrics', 'analytics_boards', 'analytics_organizations', 'analytics_org_boards'] %}active{% endif %}">

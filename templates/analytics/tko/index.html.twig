@@ -1,0 +1,149 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Аналитика ТКО{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <style>
+        .tko-polygon-list .list-group-item-action.active {
+            background-color: #ffe600;
+            border-color: #e6cf00;
+            color: #1a1a1a;
+            font-weight: 600;
+        }
+        .tko-grid th, .tko-grid td { vertical-align: middle; white-space: nowrap; }
+        .tko-grid .metric-label { font-weight: 600; }
+        .tko-grid input.form-control { min-width: 90px; }
+        .tko-grid thead th { text-align: center; }
+        .tko-week-label { font-weight: 600; font-size: 1rem; }
+    </style>
+
+    <div class="page-title">
+        <div class="row">
+            <div class="col-12">
+                <h3>Аналитика ТКО</h3>
+                <p class="text-subtitle text-muted">Ввод и просмотр суточной отчётности по полигонам</p>
+            </div>
+        </div>
+    </div>
+
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="alert alert-{{ label == 'error' ? 'danger' : (label == 'warning' ? 'warning' : 'success') }} alert-dismissible">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endfor %}
+
+    <section class="section">
+        <div class="row">
+            {# ===== Слева: список полигонов ===== #}
+            <div class="col-12 col-lg-3 mb-3">
+                <div class="card">
+                    <div class="card-header"><h5 class="mb-0">Полигоны</h5></div>
+                    <div class="card-body p-0">
+                        <div class="list-group list-group-flush tko-polygon-list" style="max-height: 70vh; overflow-y: auto;">
+                            {% for polygon in polygons %}
+                                <a href="{{ path('app_analytics_tko', { polygon_id: polygon.id, week: week }) }}"
+                                   class="list-group-item list-group-item-action {{ selectedPolygon and polygon.id == selectedPolygon.id ? 'active' : '' }}">
+                                    {{ polygon.name }}
+                                </a>
+                            {% else %}
+                                <div class="p-3 text-muted">Нет полигонов.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ===== Справа: неделя + таблица ===== #}
+            <div class="col-12 col-lg-9 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        {# Навигация по неделям #}
+                        <div class="d-flex align-items-center justify-content-center gap-3 mb-4">
+                            <a href="{{ path('app_analytics_tko', { polygon_id: selectedPolygon ? selectedPolygon.id : null, week: prevWeek }) }}"
+                               class="btn btn-light-secondary btn-sm" title="Предыдущая неделя">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                            <span class="tko-week-label">Период {{ weekLabel }}</span>
+                            <a href="{{ path('app_analytics_tko', { polygon_id: selectedPolygon ? selectedPolygon.id : null, week: nextWeek }) }}"
+                               class="btn btn-light-secondary btn-sm" title="Следующая неделя">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </div>
+
+                        {% if selectedPolygon is null %}
+                            <p class="text-muted mb-0">Выберите полигон слева.</p>
+                        {% else %}
+                            {# Отдельная форма на каждый день; поля связываются через атрибут form="" #}
+                            {% for day in days %}
+                                <form id="tko-form-{{ loop.index0 }}" method="post"
+                                      action="{{ path('app_analytics_tko_save') }}" class="d-none">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('analytics_tko_save') }}">
+                                    <input type="hidden" name="polygon_id" value="{{ selectedPolygon.id }}">
+                                    <input type="hidden" name="week" value="{{ week }}">
+                                    <input type="hidden" name="date" value="{{ day.date }}">
+                                </form>
+                            {% endfor %}
+
+                            <div class="table-responsive">
+                                <table class="table table-bordered tko-grid mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="min-width: 180px;">Метрики</th>
+                                            {% for day in days %}
+                                                <th>{{ day.dow }}<br><small class="text-muted">{{ day.short }}</small></th>
+                                            {% endfor %}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for metric in metrics %}
+                                            <tr>
+                                                <td class="metric-label">{{ metric.label }}</td>
+                                                {% for day in days %}
+                                                    <td>
+                                                        {% if metric.type == 'num' %}
+                                                            <input type="number" step="any" min="0"
+                                                                   class="form-control form-control-sm"
+                                                                   form="tko-form-{{ loop.index0 }}"
+                                                                   name="{{ metric.key }}"
+                                                                   value="{{ day.values[metric.key] }}">
+                                                        {% else %}
+                                                            <input type="text"
+                                                                   class="form-control form-control-sm"
+                                                                   form="tko-form-{{ loop.index0 }}"
+                                                                   name="{{ metric.key }}"
+                                                                   value="{{ day.values[metric.key] }}">
+                                                        {% endif %}
+                                                    </td>
+                                                {% endfor %}
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td></td>
+                                            {% for day in days %}
+                                                <td class="text-center">
+                                                    <button type="submit" form="tko-form-{{ loop.index0 }}"
+                                                            class="btn btn-primary btn-sm">
+                                                        Сохранить
+                                                    </button>
+                                                </td>
+                                            {% endfor %}
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}
