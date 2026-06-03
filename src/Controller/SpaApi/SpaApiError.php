@@ -20,6 +20,7 @@ final class SpaApiError
     public const COLUMN_ID_AND_POSITION_REQUIRED = 'column_id_and_position_required';
     public const COLUMN_ID_AND_TITLE_REQUIRED = 'column_id_and_title_required';
     public const COLUMN_NOT_FOUND = 'column_not_found';
+    public const COLUMN_TITLE_REQUIRED = 'column_title_required';
     public const DESCRIPTION_INVALID_TYPE = 'description_invalid_type';
     public const FILE_NOT_FOUND_ON_DISK = 'file_not_found_on_disk';
     public const FILE_NOT_PROVIDED = 'file_not_provided';
