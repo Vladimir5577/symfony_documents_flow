@@ -6,6 +6,7 @@ namespace App\Controller\SpaApi\Kanban;
 
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\KanbanColumnRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
@@ -68,31 +69,49 @@ final class ColumnController extends AbstractController
             return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
         }
 
-        if (!array_key_exists('position', $payload)) {
-            return $this->json(['error' => 'position обязателен'], Response::HTTP_BAD_REQUEST);
+        $hasTitle = isset($payload['title']) && trim((string) $payload['title']) !== '';
+        $hasHeaderColor = isset($payload['headerColor']);
+        $hasPosition = isset($payload['position']);
+
+        if (!$hasTitle && !$hasHeaderColor && !$hasPosition) {
+            return $this->json(['error' => 'Укажите title, headerColor или position'], Response::HTTP_BAD_REQUEST);
         }
 
-        $column->setPosition((float) $payload['position']);
-        $this->entityManager->flush();
-
-        $columns = $this->columnRepository->createQueryBuilder('c')
-            ->where('c.board = :board')
-            ->setParameter('board', $board)
-            ->orderBy('c.position', 'ASC')
-            ->getQuery()
-            ->getResult();
-
-        $needsRebalance = false;
-        for ($i = 1, $count = count($columns); $i < $count; $i++) {
-            if (abs($columns[$i]->getPosition() - $columns[$i - 1]->getPosition()) < 1e-5) {
-                $needsRebalance = true;
-                break;
+        if ($hasTitle) {
+            $column->setTitle(trim((string) $payload['title']));
+        }
+        if ($hasHeaderColor) {
+            $color = KanbanColumnColor::tryFrom((string) $payload['headerColor']);
+            if ($color !== null) {
+                $column->setHeaderColor($color);
             }
         }
+        if ($hasPosition) {
+            $column->setPosition((float) $payload['position']);
+        }
 
-        if ($needsRebalance) {
-            $this->columnRepository->rebalancePositions($board);
-            $this->entityManager->flush();
+        $this->entityManager->flush();
+
+        if ($hasPosition) {
+            $columns = $this->columnRepository->createQueryBuilder('c')
+                ->where('c.board = :board')
+                ->setParameter('board', $board)
+                ->orderBy('c.position', 'ASC')
+                ->getQuery()
+                ->getResult();
+
+            $needsRebalance = false;
+            for ($i = 1, $count = count($columns); $i < $count; $i++) {
+                if (abs($columns[$i]->getPosition() - $columns[$i - 1]->getPosition()) < 1e-5) {
+                    $needsRebalance = true;
+                    break;
+                }
+            }
+
+            if ($needsRebalance) {
+                $this->columnRepository->rebalancePositions($board);
+                $this->entityManager->flush();
+            }
         }
 
         return $this->json([
