@@ -46,4 +46,54 @@ class AnalyticsTKORepository extends ServiceEntityRepository
             ->getQuery()
             ->getOneOrNullResult();
     }
+
+    /**
+     * Суммарная аналитика по полигону с группировкой по периоду (неделя/месяц).
+     * Числовые метрики суммируются (SUM), текстовые — считается число дней с отметкой (COUNT).
+     * Агрегация выполняется средствами БД (date_trunc).
+     *
+     * @param string $unit 'week' | 'month'
+     *
+     * @return array<string, array<string, string|null>> массив строк, ключ — дата начала бакета (Y-m-d)
+     */
+    public function aggregateByPolygon(int $polygonId, \DateTimeImmutable $from, \DateTimeImmutable $to, string $unit): array
+    {
+        $unit = 'month' === $unit ? 'month' : 'week';
+
+        $sql = <<<SQL
+            SELECT
+                to_char(date_trunc(:unit, report_date), 'YYYY-MM-DD')   AS bucket,
+                SUM(garbage_trucks_volume)                              AS garbage_trucks_volume,
+                SUM(garbage_trucks_weight)                              AS garbage_trucks_weight,
+                SUM(containers_volume)                                  AS containers_volume,
+                SUM(scrap_trucks_volume)                               AS scrap_trucks_volume,
+                SUM(containers_scrap_weight)                           AS containers_scrap_weight,
+                SUM(vegetation_volume)                                  AS vegetation_volume,
+                SUM(construction_volume)                                AS construction_volume,
+                SUM(terminal_volume)                                    AS terminal_volume,
+                COUNT(NULLIF(btrim(bulldozer_work), ''))               AS bulldozer_work,
+                COUNT(NULLIF(btrim(equipment_work), ''))               AS equipment_work
+            FROM analytics_tko
+            WHERE polygon_id = :pid
+              AND report_date BETWEEN :from AND :to
+            GROUP BY bucket
+            ORDER BY bucket
+            SQL;
+
+        $rows = $this->getEntityManager()->getConnection()->fetchAllAssociative($sql, [
+            'unit' => $unit,
+            'pid' => $polygonId,
+            'from' => $from->format('Y-m-d'),
+            'to' => $to->format('Y-m-d'),
+        ]);
+
+        $byBucket = [];
+        foreach ($rows as $row) {
+            $bucket = $row['bucket'];
+            unset($row['bucket']);
+            $byBucket[$bucket] = $row;
+        }
+
+        return $byBucket;
+    }
 }
