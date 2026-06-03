@@ -42,4 +42,13 @@ final class SpaApiError
     public const UPDATE_FIELDS_REQUIRED = 'update_fields_required';
     public const USER_NOT_FOUND = 'user_not_found';
     public const USER_NOT_PROJECT_MEMBER = 'user_not_project_member';
+    public const DOCUMENT_NOT_FOUND = 'document_not_found';
+    public const DOCUMENT_TYPE_NOT_FOUND = 'document_type_not_found';
+    public const DOCUMENT_NAME_REQUIRED = 'document_name_required';
+    public const DOCUMENT_INVALID_STATUS = 'document_invalid_status';
+    public const DOCUMENT_INVALID_DEADLINE = 'document_invalid_deadline';
+    public const DOCUMENT_CANNOT_PUBLISH_DRAFT = 'document_cannot_publish_draft';
+    public const DOCUMENT_NO_RECIPIENTS = 'document_no_recipients';
+    public const DOCUMENT_VALIDATION_FAILED = 'document_validation_failed';
+    public const ORGANIZATION_REQUIRED = 'organization_required';
 }
