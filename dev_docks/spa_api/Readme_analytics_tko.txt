@@ -199,10 +199,29 @@ Query-параметры:
                  Поэтому фактические from/to в ответе могут отличаться от
                  переданных (см. поля from/to в ответе).
 
+  limit        (int, опционально, по умолчанию 10, максимум 10)
+                 Сколько периодов (недель или месяцев — см. granularity)
+                 вернуть в buckets. limit <= 0 → 10. limit > 10 → 10.
+
+  offset       (int, опционально, по умолчанию 0)
+                 Сдвиг по периодам. offset < 0 → 0.
+                 Пагинация «от свежих к старым»: limit=10, offset=0 — последние
+                 10 периодов в диапазоне [from, to]; offset=10 — следующие 10
+                 более старых. Внутри ответа buckets всегда по key ASC.
+
+                 Сначала применяется фильтр from/to (полный набор периодов в
+                 диапазоне), затем limit/offset по этому набору.
+
 Примеры URL:
 
-  // понедельные суммы за май 2026
+  // понедельные суммы за май 2026 (последние 10 недель диапазона)
   /spa/api/analytics/tko/summary?polygon_id=11&granularity=week&from=2026-05-01&to=2026-05-31
+
+  // следующая страница недель (более старые)
+  /spa/api/analytics/tko/summary?polygon_id=11&granularity=week&from=2026-01-01&to=2026-05-31&offset=10
+
+  // максимум периодов за один запрос
+  /spa/api/analytics/tko/summary?polygon_id=11&from=2026-04-01&to=2026-05-31&limit=10
 
   // помесячные суммы за апрель–май 2026
   /spa/api/analytics/tko/summary?polygon_id=11&granularity=month&from=2026-04-01&to=2026-05-31
@@ -222,6 +241,8 @@ fetch:
     granularity: 'week',
     from:        '2026-05-01',
     to:          '2026-05-31',
+    limit:       '10',
+    offset:      '0',
   });
   const res = await fetch(`/spa/api/analytics/tko/summary?${params}`,
     { headers: { Authorization: "Bearer " + jwt } });
@@ -241,8 +262,11 @@ HTTP 200, application/json.
   "granularity":       "week" | "month",
   "from":              "YYYY-MM-DD",  // фактическое начало (после расширения)
   "to":                "YYYY-MM-DD",  // фактический конец
+  "limit":             number,        // фактический limit после clamp
+  "offset":            number,
+  "total":             number,        // всего периодов в [from, to] до среза
   "metrics":           Metric[],      // с полем aggregate (sum|days_count)
-  "buckets":           Bucket[]       // периоды по возрастанию даты
+  "buckets":           Bucket[]       // срез периодов (limit/offset), по key ASC
 }
 
 Bucket:
@@ -262,10 +286,11 @@ Bucket:
   была заполнена (непустой текст). Всегда число строкой; нет данных = "0".
 
 Правила формирования buckets:
-- Возвращается ПОЛНЫЙ набор периодов в диапазоне [from, to], включая периоды
-  без данных (у них num = "", days_count = "0"). Это даёт фронту стабильный
-  набор колонок.
-- Периоды отсортированы по key по возрастанию.
+- В диапазоне [from, to] считается полный набор периодов (поле total), затем
+  в buckets попадает срез limit/offset (от свежих к старым), включая периоды
+  без данных (у них num = "", days_count = "0").
+- Периоды в buckets отсортированы по key по возрастанию.
+- offset >= total → buckets: [] при total в ответе сохраняется.
 - Для week бакеты — ISO-недели (Пн–Вс); крайние недели могут захватывать дни
   соседнего месяца (это нормально, недели не «режутся» по границе месяца).
 
@@ -277,6 +302,9 @@ Bucket:
   "granularity": "week",
   "from": "2026-04-27",
   "to": "2026-05-31",
+  "limit": 10,
+  "offset": 0,
+  "total": 5,
   "metrics": [
     { "key": "garbage_trucks_volume", "label": "Мусоровозы", "type": "num", "aggregate": "sum" },
     { "key": "equipment_work", "label": "Работа техники", "type": "text", "aggregate": "days_count" },

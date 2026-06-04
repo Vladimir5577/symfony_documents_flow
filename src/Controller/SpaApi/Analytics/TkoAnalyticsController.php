@@ -38,6 +38,9 @@ final class TkoAnalyticsController extends AbstractController
 
     private const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
+    private const DEFAULT_LIMIT = 10;
+    private const MAX_LIMIT = 10;
+
     /**
      * Недельная сетка аналитики ТКО по полигону.
      * Формат:
@@ -151,14 +154,34 @@ final class TkoAnalyticsController extends AbstractController
             $granularity,
         );
 
-        // Заранее строим полный набор бакетов, чтобы колонки были стабильны даже без данных
+        $limit = $request->query->getInt('limit', self::DEFAULT_LIMIT);
+        $offset = $request->query->getInt('offset', 0);
+        if ($limit < 1) {
+            $limit = self::DEFAULT_LIMIT;
+        } elseif ($limit > self::MAX_LIMIT) {
+            $limit = self::MAX_LIMIT;
+        }
+        if ($offset < 0) {
+            $offset = 0;
+        }
+
+        $allBucketDefs = $this->buildBuckets($from, $to, $granularity);
+        [$pageBucketDefs, $total] = $this->paginateBuckets($allBucketDefs, $limit, $offset);
+
         $buckets = [];
-        foreach ($this->buildBuckets($from, $to, $granularity) as $b) {
+        foreach ($pageBucketDefs as $b) {
             $buckets[$b['key']] = $b + ['values' => $this->emptyValues()];
         }
 
-        if (null !== $selectedPolygon) {
-            $aggregated = $analyticsRepository->aggregateByPolygon($selectedPolygon->getId(), $from, $to, $granularity);
+        if (null !== $selectedPolygon && [] !== $pageBucketDefs) {
+            $sliceFrom = $this->parseDate($pageBucketDefs[0]['start']) ?? $from;
+            $sliceTo = $this->parseDate($pageBucketDefs[array_key_last($pageBucketDefs)]['end']) ?? $to;
+            $aggregated = $analyticsRepository->aggregateByPolygon(
+                $selectedPolygon->getId(),
+                $sliceFrom,
+                $sliceTo,
+                $granularity,
+            );
             foreach ($aggregated as $bucketKey => $row) {
                 if (!isset($buckets[$bucketKey])) {
                     continue;
@@ -181,12 +204,39 @@ final class TkoAnalyticsController extends AbstractController
             'granularity' => $granularity,
             'from' => $from->format('Y-m-d'),
             'to' => $to->format('Y-m-d'),
+            'limit' => $limit,
+            'offset' => $offset,
+            'total' => $total,
             'metrics' => array_map(
                 static fn (array $m) => $m + ['aggregate' => 'num' === $m['type'] ? 'sum' : 'days_count'],
                 self::METRICS,
             ),
             'buckets' => array_values($buckets),
         ]);
+    }
+
+    /**
+     * Пагинация бакетов (недель или месяцев): от свежих к старым, в ответе — ASC.
+     *
+     * @param array<int, array{key: string, label: string, start: string, end: string}> $all
+     *
+     * @return array{0: array<int, array{key: string, label: string, start: string, end: string}>, 1: int}
+     */
+    private function paginateBuckets(array $all, int $limit, int $offset): array
+    {
+        $total = \count($all);
+        if (0 === $total) {
+            return [[], 0];
+        }
+
+        $endIndex = $total - $offset;
+        if ($endIndex <= 0) {
+            return [[], $total];
+        }
+
+        $startIndex = max(0, $endIndex - $limit);
+
+        return [array_slice($all, $startIndex, $endIndex - $startIndex), $total];
     }
 
     /**
