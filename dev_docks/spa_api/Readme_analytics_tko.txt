@@ -11,11 +11,10 @@ SPA API — Analytics TKO (аналитика полигонов ТКО)
 Два эндпоинта:
 
   1. /spa/api/analytics/tko          — недельная сетка по дням (Пн–Вс)
-  2. /spa/api/analytics/tko/summary  — суммы с группировкой по неделям/месяцам
+  2. /spa/api/analytics/tko/summary  — availableWeeks (все недели) + weeks (агрегаты, limit/offset)
 
-Оба отдают один и тот же справочник метрик (metrics) и список полигонов
-(polygons), различаются только тем, как разложены значения (по дням vs по
-бакетам-периодам).
+П.1 — сетка по дням одной недели; п.2 — календарь для выбора периода и
+понедельные суммы/счётчики с разбивкой по полигонам (series).
 
 Авторизация: JWT в заголовке Authorization (как у всех /spa/api/* маршрутов).
 См. dev_docks/spa_api/Readme_spa_auth.txt.
@@ -160,11 +159,11 @@ Day:
 эндпоинт с week = prevWeek / nextWeek.
 
 ================================================================================
-2. СУММАРНАЯ АНАЛИТИКА (НЕДЕЛИ / МЕСЯЦЫ)
+2. СВОДКА ПО НЕДЕЛЯМ (availableWeeks + weeks)
 ================================================================================
 
-Суммы по одному полигону за период с группировкой по неделям или месяцам.
-Агрегация выполняется на стороне БД (PostgreSQL date_trunc) — лёгкий запрос.
+availableWeeks — полный список недель по данным в analytics_tko (для выбора
+периода на фронте). weeks — срез limit/offset с агрегатами за каждую неделю.
 
 --------------------------------------------------------------------------------
 2.1. ЗАПРОС
@@ -175,78 +174,14 @@ Day:
 
 Query-параметры:
 
-  polygon_id   (int, опционально)
-                 ID полигона. Поведение по умолчанию — как в п.1.1
-                 (первый активный, если не передан/не найден).
-
-  granularity  (string, опционально, по умолчанию "week")
-                 "week"  — группировка по неделям (бакет = ISO-неделя, Пн);
-                 "month" — группировка по месяцам (бакет = 1-е число месяца).
-                 Любое иное значение трактуется как "week".
-
-  from         (string YYYY-MM-DD, опционально)
-  to           (string YYYY-MM-DD, опционально)
-                 Границы периода. По умолчанию — текущий месяц
-                 (с 1-го по последнее число).
-                 Невалидное значение игнорируется (берётся дефолт).
-                 Если to < from, to подтягивается к from.
-
-                 Диапазон расширяется до целых периодов:
-                 - week:  from → понедельник своей недели,
-                          to   → воскресенье своей недели;
-                 - month: from → 1-е число своего месяца,
-                          to   → последнее число своего месяца.
-                 Поэтому фактические from/to в ответе могут отличаться от
-                 переданных (см. поля from/to в ответе).
-
-  limit        (int, опционально, по умолчанию 10, максимум 10)
-                 Сколько периодов (недель или месяцев — см. granularity)
-                 вернуть в buckets. limit <= 0 → 10. limit > 10 → 10.
-
-  offset       (int, опционально, по умолчанию 0)
-                 Сдвиг по периодам. offset < 0 → 0.
-                 Пагинация «от свежих к старым»: limit=10, offset=0 — последние
-                 10 периодов в диапазоне [from, to]; offset=10 — следующие 10
-                 более старых. Внутри ответа buckets всегда по key ASC.
-
-                 Сначала применяется фильтр from/to (полный набор периодов в
-                 диапазоне), затем limit/offset по этому набору.
+  limit        (int, по умолчанию 12, макс. 100) — размер среза weeks.
+  offset       (int, по умолчанию 0) — пагинация weeks «от свежих к старым».
 
 Примеры URL:
 
-  // понедельные суммы за май 2026 (последние 10 недель диапазона)
-  /spa/api/analytics/tko/summary?polygon_id=11&granularity=week&from=2026-05-01&to=2026-05-31
-
-  // следующая страница недель (более старые)
-  /spa/api/analytics/tko/summary?polygon_id=11&granularity=week&from=2026-01-01&to=2026-05-31&offset=10
-
-  // максимум периодов за один запрос
-  /spa/api/analytics/tko/summary?polygon_id=11&from=2026-04-01&to=2026-05-31&limit=10
-
-  // помесячные суммы за апрель–май 2026
-  /spa/api/analytics/tko/summary?polygon_id=11&granularity=month&from=2026-04-01&to=2026-05-31
-
-  // недельные суммы за текущий месяц (дефолт)
-  /spa/api/analytics/tko/summary?polygon_id=11
-
-curl:
-
-  curl -H "Authorization: Bearer <token>" \
-       "https://example.local/spa/api/analytics/tko/summary?polygon_id=11&granularity=month&from=2026-04-01&to=2026-05-31"
-
-fetch:
-
-  const params = new URLSearchParams({
-    polygon_id:  '11',
-    granularity: 'week',
-    from:        '2026-05-01',
-    to:          '2026-05-31',
-    limit:       '10',
-    offset:      '0',
-  });
-  const res = await fetch(`/spa/api/analytics/tko/summary?${params}`,
-    { headers: { Authorization: "Bearer " + jwt } });
-  const data = await res.json();
+  /spa/api/analytics/tko/summary
+  /spa/api/analytics/tko/summary?limit=12&offset=0
+  /spa/api/analytics/tko/summary?limit=12&offset=12
 
 --------------------------------------------------------------------------------
 2.2. ФОРМАТ ОТВЕТА
@@ -254,122 +189,67 @@ fetch:
 
 HTTP 200, application/json.
 
-Корневой объект:
-
 {
-  "polygons":          [{ "id": int, "name": string }, ...],  // все активные
-  "selectedPolygonId": int|null,
-  "granularity":       "week" | "month",
-  "from":              "YYYY-MM-DD",  // фактическое начало (после расширения)
-  "to":                "YYYY-MM-DD",  // фактический конец
-  "limit":             number,        // фактический limit после clamp
-  "offset":            number,
-  "total":             number,        // всего периодов в [from, to] до среза
-  "metrics":           Metric[],      // с полем aggregate (sum|days_count)
-  "buckets":           Bucket[]       // срез периодов (limit/offset), по key ASC
-}
-
-Bucket:
-
-{
-  "key":    "YYYY-MM-DD",   // начало периода (Пн для week, 1-е число для month)
-  "label":  string,         // week: "dd.mm — dd.mm"; month: "mm.YYYY"
-  "start":  "YYYY-MM-DD",
-  "end":    "YYYY-MM-DD",
-  "values": { "<metric.key>": string }
-}
-
-Правила агрегации значений:
-- num (aggregate=sum): сумма значений метрики за период. Если данных нет —
-  пустая строка "".
-- text (aggregate=days_count): количество дней периода, в которых метрика
-  была заполнена (непустой текст). Всегда число строкой; нет данных = "0".
-
-Правила формирования buckets:
-- В диапазоне [from, to] считается полный набор периодов (поле total), затем
-  в buckets попадает срез limit/offset (от свежих к старым), включая периоды
-  без данных (у них num = "", days_count = "0").
-- Периоды в buckets отсортированы по key по возрастанию.
-- offset >= total → buckets: [] при total в ответе сохраняется.
-- Для week бакеты — ISO-недели (Пн–Вс); крайние недели могут захватывать дни
-  соседнего месяца (это нормально, недели не «режутся» по границе месяца).
-
-Пример — granularity=week (полигоны и бакеты усечены):
-
-{
-  "polygons": [ { "id": 20, "name": "Волновахский полигон ТКО" }, "…" ],
-  "selectedPolygonId": 11,
-  "granularity": "week",
-  "from": "2026-04-27",
-  "to": "2026-05-31",
-  "limit": 10,
-  "offset": 0,
-  "total": 5,
-  "metrics": [
-    { "key": "garbage_trucks_volume", "label": "Мусоровозы", "type": "num", "aggregate": "sum" },
-    { "key": "equipment_work", "label": "Работа техники", "type": "text", "aggregate": "days_count" },
-    "…"
+  "availableWeeks": [
+    { "startDate": "2026-04-27", "endDate": "2026-05-03" },
+    { "startDate": "2026-05-04", "endDate": "2026-05-10" }
   ],
-  "buckets": [
+  "weeks": [
     {
-      "key": "2026-04-27", "label": "27.04 — 03.05",
-      "start": "2026-04-27", "end": "2026-05-03",
-      "values": {
-        "garbage_trucks_volume": "3458.6",
-        "garbage_trucks_weight": "",
-        "containers_volume": "368",
-        "scrap_trucks_volume": "0",
-        "containers_scrap_weight": "",
-        "vegetation_volume": "0",
-        "construction_volume": "31.45",
-        "terminal_volume": "11911.45",
-        "bulldozer_work": "0",
-        "equipment_work": "1"
-      }
-    },
-    "…"
-  ]
-}
-
-Пример — granularity=month (период без данных + период с данными):
-
-{
-  "selectedPolygonId": 11,
-  "granularity": "month",
-  "from": "2026-04-01",
-  "to": "2026-05-31",
-  "buckets": [
-    {
-      "key": "2026-04-01", "label": "04.2026",
-      "start": "2026-04-01", "end": "2026-04-30",
-      "values": {
-        "garbage_trucks_volume": "",
-        "construction_volume": "",
-        "terminal_volume": "",
-        "bulldozer_work": "0",
-        "equipment_work": "0"
-      }
-    },
-    {
-      "key": "2026-05-01", "label": "05.2026",
-      "start": "2026-05-01", "end": "2026-05-31",
-      "values": {
-        "garbage_trucks_volume": "32786.9",
-        "containers_volume": "3760",
-        "scrap_trucks_volume": "1568",
-        "vegetation_volume": "381.15",
-        "construction_volume": "214.6",
-        "terminal_volume": "156825.41",
-        "bulldozer_work": "0",
-        "equipment_work": "10"
-      }
+      "startDate": "2026-04-27",
+      "endDate": "2026-05-03",
+      "series": [
+        {
+          "metric_key": "terminal_volume",
+          "name": "Терминал",
+          "unit": "м³",
+          "valueNumber": 11911.45,
+          "children": [
+            {
+              "metric_key": "terminal_volume_11",
+              "name": "Волновахский полигон ТКО",
+              "unit": "м³",
+              "valueNumber": 5000.0
+            },
+            {
+              "metric_key": "terminal_volume_20",
+              "name": "…",
+              "unit": "м³",
+              "valueNumber": 6911.45
+            }
+          ]
+        }
+      ]
     }
   ]
 }
 
-Как рисовать таблицу: строки = metrics, колонки = buckets,
-ячейка = buckets[i].values[metric.key]. Для метрик с aggregate=days_count
-значение — число дней (можно подписывать «дн.»), а не сумма.
+availableWeeks — всегда полный список по всей таблице analytics_tko, без limit/offset.
+
+weeks — только страница limit/offset; внутри страницы startDate ASC.
+
+Узел series (на каждую метрику из METRICS контроллера):
+
+  metric_key   — ключ метрики (terminal_volume, …)
+  name         — отображаемое имя (родитель — name метрики, ребёнок — имя полигона)
+  unit         — м³, т или дн. (у детей — как у родителя)
+  valueNumber  — сумма по всем полигонам (num) или сумма дней с отметкой (text);
+                 null если за неделю нет данных ни по одному полигону
+  children     — разбивка по активным полигонам:
+    metric_key   — {metric_key}_{polygon_id}, например terminal_volume_11
+    name         — polygon.name
+    unit         — как у родителя
+    valueNumber  — сумма/счётчик только по этому полигону; null если нет данных
+
+Агрегация в БД: num → SUM, text → COUNT непустых дней.
+
+Правила availableWeeks:
+- MIN(report_date) → понедельник недели, MAX → воскресенье; все недели подряд.
+- Нет записей → availableWeeks: [], weeks: [].
+
+Правила weeks:
+- Пагинация как у finance: limit=12, offset=0 — последние 12 недель из
+  availableWeeks.
 
 ================================================================================
 3. ОШИБКИ
@@ -378,8 +258,8 @@ Bucket:
   401 — нет/невалидный JWT (общая обработка /spa/api/*, см. Readme_spa_auth.txt).
   403 — у пользователя нет роли ROLE_MANAGER.
 
-Прикладных 4xx/5xx нет: невалидные query-параметры (week/from/to/granularity)
-не приводят к ошибке, а заменяются значениями по умолчанию.
+Прикладных 4xx/5xx нет: невалидные limit/offset подставляются дефолтами;
+в п.1 невалидный week — текущая неделя.
 
 ================================================================================
 4. РЕАЛИЗАЦИЯ (для бэкенда)
@@ -388,9 +268,10 @@ Bucket:
   Контроллер : src/Controller/SpaApi/Analytics/TkoAnalyticsController.php
                  ::index()   — /spa/api/analytics/tko
                  ::summary() — /spa/api/analytics/tko/summary
+                 репозиторий (SQL): findAvailableWeeks(), aggregateWeeklyByPolygon()
+                 сервис (сборка): buildWeeksSummary(), buildSeries(), paginateWeeks()
   Репозиторий: src/Repository/Analytics/TKO/AnalyticsTKORepository.php
-                 ::findByPolygonAndDateRange() — данные недели по дням
-                 ::aggregateByPolygon()        — суммы по неделям/месяцам (DBAL)
+                 ::findByPolygonAndDateRange() — данные недели по дням (п.1)
   Сущность   : src/Entity/Analytics/TKO/AnalyticsTKO.php
 
 Заполнение/сохранение из SPA пока не реализовано (только просмотр).

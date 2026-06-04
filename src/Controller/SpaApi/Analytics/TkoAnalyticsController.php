@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\Analytics;
 
+use App\Entity\Polygon\Polygon;
 use App\Repository\Analytics\TKO\AnalyticsTKORepository;
 use App\Repository\Polygon\PolygonRepository;
+use Doctrine\DBAL\Connection;
+use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -21,25 +24,25 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 final class TkoAnalyticsController extends AbstractController
 {
     /**
-     * Метрики таблицы: ключ = колонка сущности, type = num|text.
+     * Метрики таблицы: key, label (для index), name, unit (для summary/series), type.
      */
     private const METRICS = [
-        ['key' => 'garbage_trucks_volume',   'label' => 'Мусоровозы',            'type' => 'num'],
-        ['key' => 'garbage_trucks_weight',   'label' => 'Вес ТКО мусоровозы',    'type' => 'num'],
-        ['key' => 'containers_volume',       'label' => 'Контейнеры',            'type' => 'num'],
-        ['key' => 'scrap_trucks_volume',     'label' => 'Ломовозы',              'type' => 'num'],
-        ['key' => 'containers_scrap_weight', 'label' => 'Вес ТКО конт., ломов',  'type' => 'num'],
-        ['key' => 'vegetation_volume',       'label' => 'Растительные',          'type' => 'num'],
-        ['key' => 'construction_volume',     'label' => 'Строительные',          'type' => 'num'],
-        ['key' => 'terminal_volume',         'label' => 'Терминал',              'type' => 'num'],
-        ['key' => 'bulldozer_work',          'label' => 'Работа бульдозера',     'type' => 'text'],
-        ['key' => 'equipment_work',          'label' => 'Работа техники',        'type' => 'text'],
+        ['key' => 'garbage_trucks_volume',   'label' => 'Мусоровозы',            'name' => 'Мусоровозы',            'unit' => 'м³',  'type' => 'num'],
+        ['key' => 'garbage_trucks_weight',   'label' => 'Вес ТКО мусоровозы',    'name' => 'Вес ТКО мусоровозы',    'unit' => 'т',   'type' => 'num'],
+        ['key' => 'containers_volume',       'label' => 'Контейнеры',            'name' => 'Контейнеры',            'unit' => 'м³',  'type' => 'num'],
+        ['key' => 'scrap_trucks_volume',     'label' => 'Ломовозы',              'name' => 'Ломовозы',              'unit' => 'м³',  'type' => 'num'],
+        ['key' => 'containers_scrap_weight', 'label' => 'Вес ТКО конт., ломов',  'name' => 'Вес ТКО конт., ломов',  'unit' => 'т',   'type' => 'num'],
+        ['key' => 'vegetation_volume',       'label' => 'Растительные',          'name' => 'Растительные',          'unit' => 'м³',  'type' => 'num'],
+        ['key' => 'construction_volume',     'label' => 'Строительные',          'name' => 'Строительные',          'unit' => 'м³',  'type' => 'num'],
+        ['key' => 'terminal_volume',         'label' => 'Терминал',              'name' => 'Терминал',              'unit' => 'м³',  'type' => 'num'],
+        ['key' => 'bulldozer_work',          'label' => 'Работа бульдозера',     'name' => 'Работа бульдозера',     'unit' => 'дн.', 'type' => 'text'],
+        ['key' => 'equipment_work',          'label' => 'Работа техники',        'name' => 'Работа техники',        'unit' => 'дн.', 'type' => 'text'],
     ];
 
     private const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-    private const DEFAULT_LIMIT = 10;
-    private const MAX_LIMIT = 10;
+    private const DEFAULT_LIMIT = 3;
+    private const MAX_LIMIT = 12;
 
     /**
      * Недельная сетка аналитики ТКО по полигону.
@@ -119,43 +122,22 @@ final class TkoAnalyticsController extends AbstractController
     }
 
     /**
-     * Суммарная аналитика ТКО по полигону с группировкой по неделям или месяцам.
-     * Числовые метрики суммируются, текстовые — кол-во дней с отметкой.
+     * Календарь недель + агрегаты по неделям (series с разбивкой по полигонам).
      * Формат:
      *   {
-     *     polygons: [{ id, name }],
-     *     selectedPolygonId,
-     *     granularity, from, to,
-     *     metrics: [{ key, label, type, aggregate }],   // aggregate: sum | days_count
-     *     buckets: [{ key, label, start, end, values: { <metricKey>: string } }]
+     *     availableWeeks: [{ startDate, endDate }],
+     *     weeks: [{ startDate, endDate, series: [{ metric_key, valueNumber, children: [...] }] }]
      *   }
      */
     #[Route('/spa/api/analytics/tko/summary', name: 'spa_api_analytics_tko_summary', methods: ['GET'])]
     public function summary(
         Request $request,
+        ManagerRegistry $managerRegistry,
         PolygonRepository $polygonRepository,
-        AnalyticsTKORepository $analyticsRepository,
     ): JsonResponse {
-        $polygons = $polygonRepository->findBy(['isActive' => true], ['name' => 'ASC']);
-
-        $selectedPolygon = null;
-        $polygonId = $request->query->getInt('polygon_id');
-        if ($polygonId > 0) {
-            $selectedPolygon = $polygonRepository->find($polygonId);
-        }
-        if (null === $selectedPolygon && [] !== $polygons) {
-            $selectedPolygon = $polygons[0];
-        }
-
-        $granularity = 'month' === $request->query->getString('granularity') ? 'month' : 'week';
-        [$from, $to] = $this->resolveRange(
-            $request->query->getString('from'),
-            $request->query->getString('to'),
-            $granularity,
-        );
-
         $limit = $request->query->getInt('limit', self::DEFAULT_LIMIT);
         $offset = $request->query->getInt('offset', 0);
+
         if ($limit < 1) {
             $limit = self::DEFAULT_LIMIT;
         } elseif ($limit > self::MAX_LIMIT) {
@@ -165,64 +147,151 @@ final class TkoAnalyticsController extends AbstractController
             $offset = 0;
         }
 
-        $allBucketDefs = $this->buildBuckets($from, $to, $granularity);
-        [$pageBucketDefs, $total] = $this->paginateBuckets($allBucketDefs, $limit, $offset);
+        $connection = $managerRegistry->getConnection();
 
-        $buckets = [];
-        foreach ($pageBucketDefs as $b) {
-            $buckets[$b['key']] = $b + ['values' => $this->emptyValues()];
+        return $this->json($this->buildWeeksSummary(
+            $connection,
+            $polygonRepository,
+            $limit,
+            $offset,
+            $this->findAvailableWeeks($connection),
+        ));
+    }
+
+    // -------------------------------------------------------------------------
+    // Функции сервиса (сборка availableWeeks + weeks / series)
+    // -------------------------------------------------------------------------
+
+    /**
+     * @param list<array{startDate: string, endDate: string}> $availableWeeks
+     *
+     * @return array{
+     *     availableWeeks: list<array{startDate: string, endDate: string}>,
+     *     weeks: list<array{startDate: string, endDate: string, series: list<array<string, mixed>>}>
+     * }
+     */
+    private function buildWeeksSummary(
+        Connection $connection,
+        PolygonRepository $polygonRepository,
+        int $limit,
+        int $offset,
+        array $availableWeeks,
+    ): array {
+        $polygons = $polygonRepository->findBy(['isActive' => true], ['name' => 'ASC']);
+
+        [$pageWeeks] = $this->paginateWeeks($availableWeeks, $limit, $offset);
+        if ([] === $pageWeeks || [] === $polygons) {
+            return [
+                'availableWeeks' => $availableWeeks,
+                'weeks' => [],
+            ];
         }
 
-        if (null !== $selectedPolygon && [] !== $pageBucketDefs) {
-            $sliceFrom = $this->parseDate($pageBucketDefs[0]['start']) ?? $from;
-            $sliceTo = $this->parseDate($pageBucketDefs[array_key_last($pageBucketDefs)]['end']) ?? $to;
-            $aggregated = $analyticsRepository->aggregateByPolygon(
-                $selectedPolygon->getId(),
-                $sliceFrom,
-                $sliceTo,
-                $granularity,
-            );
-            foreach ($aggregated as $bucketKey => $row) {
-                if (!isset($buckets[$bucketKey])) {
-                    continue;
-                }
-                foreach (self::METRICS as $metric) {
-                    $raw = $row[$metric['key']] ?? null;
-                    $buckets[$bucketKey]['values'][$metric['key']] = 'num' === $metric['type']
-                        ? $this->normalizeNumber(null === $raw ? null : (string) $raw)
-                        : (string) (int) $raw; // кол-во дней с отметкой
-                }
-            }
+        $sliceFrom = new \DateTimeImmutable($pageWeeks[0]['startDate']);
+        $sliceTo = new \DateTimeImmutable($pageWeeks[array_key_last($pageWeeks)]['endDate']);
+        $rows = $this->aggregateWeeklyByPolygon($connection, $sliceFrom, $sliceTo);
+
+        /** @var array<string, array<int, array<string, mixed>>> $byWeekPolygon */
+        $byWeekPolygon = [];
+        foreach ($rows as $row) {
+            $weekStart = $row['week_start'];
+            $pid = (int) $row['polygon_id'];
+            unset($row['week_start'], $row['polygon_id']);
+            $byWeekPolygon[$weekStart][$pid] = $row;
         }
 
-        return $this->json([
-            'polygons' => array_map(
-                static fn ($p) => ['id' => $p->getId(), 'name' => $p->getName()],
-                $polygons,
-            ),
-            'selectedPolygonId' => $selectedPolygon?->getId(),
-            'granularity' => $granularity,
-            'from' => $from->format('Y-m-d'),
-            'to' => $to->format('Y-m-d'),
-            'limit' => $limit,
-            'offset' => $offset,
-            'total' => $total,
-            'metrics' => array_map(
-                static fn (array $m) => $m + ['aggregate' => 'num' === $m['type'] ? 'sum' : 'days_count'],
-                self::METRICS,
-            ),
-            'buckets' => array_values($buckets),
-        ]);
+        $weeks = [];
+        foreach ($pageWeeks as $week) {
+            $weekStart = $week['startDate'];
+            $polygonRows = $byWeekPolygon[$weekStart] ?? [];
+
+            $weeks[] = [
+                'startDate' => $weekStart,
+                'endDate' => $week['endDate'],
+                'series' => $this->buildSeries($polygonRows, $polygons, self::METRICS),
+            ];
+        }
+
+        return [
+            'availableWeeks' => $availableWeeks,
+            'weeks' => $weeks,
+        ];
     }
 
     /**
-     * Пагинация бакетов (недель или месяцев): от свежих к старым, в ответе — ASC.
+     * @param array<int, array<string, mixed>> $polygonRows
+     * @param list<Polygon> $polygons
+     * @param list<array{key: string, label: string, name: string, unit: string, type: string}> $metrics
      *
-     * @param array<int, array{key: string, label: string, start: string, end: string}> $all
-     *
-     * @return array{0: array<int, array{key: string, label: string, start: string, end: string}>, 1: int}
+     * @return list<array<string, mixed>>
      */
-    private function paginateBuckets(array $all, int $limit, int $offset): array
+    private function buildSeries(array $polygonRows, array $polygons, array $metrics): array
+    {
+        $series = [];
+
+        foreach ($metrics as $metric) {
+            $children = [];
+            $parentTotal = 0.0;
+            $hasParent = false;
+
+            foreach ($polygons as $polygon) {
+                $pid = $polygon->getId();
+                $raw = $polygonRows[$pid][$metric['key']] ?? null;
+                $value = $this->toValueNumber($raw, $metric['type']);
+
+                $children[] = [
+                    'metric_key' => $metric['key'] . '_' . $pid,
+                    'name' => $polygon->getName(),
+                    'unit' => $metric['unit'],
+                    'valueNumber' => $value,
+                ];
+
+                if (null !== $value) {
+                    $hasParent = true;
+                    $parentTotal += $value;
+                }
+            }
+
+            $series[] = [
+                'metric_key' => $metric['key'],
+                'name' => $metric['name'],
+                'unit' => $metric['unit'],
+                'valueNumber' => $hasParent ? $parentTotal : null,
+                'children' => $children,
+            ];
+        }
+
+        return $series;
+    }
+
+    private function toValueNumber(string|int|float|null $raw, string $type): ?float
+    {
+        if (null === $raw) {
+            return null;
+        }
+
+        if (\is_string($raw)) {
+            if ('' === $raw) {
+                return null;
+            }
+            if (!is_numeric($raw)) {
+                return null;
+            }
+        }
+
+        if ('text' === $type) {
+            return (float) (int) $raw;
+        }
+
+        return (float) $raw;
+    }
+
+    /**
+     * @param list<array{startDate: string, endDate: string}> $all
+     *
+     * @return array{0: list<array{startDate: string, endDate: string}>, 1: int}
+     */
+    private function paginateWeeks(array $all, int $limit, int $offset): array
     {
         $total = \count($all);
         if (0 === $total) {
@@ -237,90 +306,6 @@ final class TkoAnalyticsController extends AbstractController
         $startIndex = max(0, $endIndex - $limit);
 
         return [array_slice($all, $startIndex, $endIndex - $startIndex), $total];
-    }
-
-    /**
-     * Диапазон [from, to]. По умолчанию — текущий месяц.
-     * Для недельной группировки расширяем до полных недель (Пн–Вс).
-     *
-     * @return array{0: \DateTimeImmutable, 1: \DateTimeImmutable}
-     */
-    private function resolveRange(string $from, string $to, string $granularity): array
-    {
-        $start = $this->parseDate($from) ?? new \DateTimeImmutable('first day of this month');
-        $end = $this->parseDate($to) ?? $start->modify('last day of this month');
-
-        if ($end < $start) {
-            $end = $start;
-        }
-
-        if ('week' === $granularity) {
-            $start = $start->modify('monday this week');
-            $end = $end->modify('sunday this week');
-        } else {
-            $start = $start->modify('first day of this month');
-            $end = $end->modify('last day of this month');
-        }
-
-        return [$start->setTime(0, 0), $end->setTime(0, 0)];
-    }
-
-    /**
-     * Полный список бакетов в диапазоне.
-     *
-     * @return array<int, array{key: string, label: string, start: string, end: string}>
-     */
-    private function buildBuckets(\DateTimeImmutable $from, \DateTimeImmutable $to, string $granularity): array
-    {
-        $buckets = [];
-        $cursor = $from;
-
-        while ($cursor <= $to) {
-            if ('week' === $granularity) {
-                $end = $cursor->modify('+6 days');
-                $buckets[] = [
-                    'key' => $cursor->format('Y-m-d'),
-                    'label' => sprintf('%s — %s', $cursor->format('d.m'), $end->format('d.m')),
-                    'start' => $cursor->format('Y-m-d'),
-                    'end' => $end->format('Y-m-d'),
-                ];
-                $cursor = $cursor->modify('+7 days');
-            } else {
-                $end = $cursor->modify('last day of this month');
-                $buckets[] = [
-                    'key' => $cursor->format('Y-m-d'),
-                    'label' => $cursor->format('m.Y'),
-                    'start' => $cursor->format('Y-m-d'),
-                    'end' => $end->format('Y-m-d'),
-                ];
-                $cursor = $cursor->modify('first day of next month');
-            }
-        }
-
-        return $buckets;
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function emptyValues(): array
-    {
-        $values = [];
-        foreach (self::METRICS as $metric) {
-            $values[$metric['key']] = 'num' === $metric['type'] ? '' : '0';
-        }
-
-        return $values;
-    }
-
-    private function parseDate(string $value): ?\DateTimeImmutable
-    {
-        if ('' === $value) {
-            return null;
-        }
-        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-
-        return false === $date ? null : $date;
     }
 
     private function resolveMonday(string $week): \DateTimeImmutable
@@ -349,5 +334,73 @@ final class TkoAnalyticsController extends AbstractController
     private function getter(string $key): string
     {
         return 'get' . str_replace('_', '', ucwords($key, '_'));
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Функции репозитория (SQL / analytics_tko)
+    // -------------------------------------------------------------------------
+
+    /**
+     * @return list<array{startDate: string, endDate: string}>
+     */
+    private function findAvailableWeeks(Connection $connection): array
+    {
+        $row = $connection->fetchAssociative(
+            'SELECT MIN(report_date) AS min_date, MAX(report_date) AS max_date FROM analytics_tko',
+        );
+        if (false === $row || null === $row['min_date'] || null === $row['max_date']) {
+            return [];
+        }
+
+        $from = new \DateTimeImmutable($row['min_date'])->modify('monday this week')->setTime(0, 0);
+        $to = new \DateTimeImmutable($row['max_date'])->modify('sunday this week')->setTime(0, 0);
+
+        $weeks = [];
+        $cursor = $from;
+        while ($cursor <= $to) {
+            $end = $cursor->modify('+6 days');
+            $weeks[] = [
+                'startDate' => $cursor->format('Y-m-d'),
+                'endDate' => $end->format('Y-m-d'),
+            ];
+            $cursor = $cursor->modify('+7 days');
+        }
+
+        return $weeks;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function aggregateWeeklyByPolygon(
+        Connection $connection,
+        \DateTimeImmutable $from,
+        \DateTimeImmutable $to,
+    ): array {
+        $sql = <<<'SQL'
+            SELECT
+                to_char(date_trunc('week', report_date::timestamp), 'YYYY-MM-DD') AS week_start,
+                polygon_id,
+                SUM(garbage_trucks_volume)                              AS garbage_trucks_volume,
+                SUM(garbage_trucks_weight)                              AS garbage_trucks_weight,
+                SUM(containers_volume)                                  AS containers_volume,
+                SUM(scrap_trucks_volume)                                AS scrap_trucks_volume,
+                SUM(containers_scrap_weight)                            AS containers_scrap_weight,
+                SUM(vegetation_volume)                                  AS vegetation_volume,
+                SUM(construction_volume)                                AS construction_volume,
+                SUM(terminal_volume)                                    AS terminal_volume,
+                COUNT(NULLIF(btrim(bulldozer_work), ''))                AS bulldozer_work,
+                COUNT(NULLIF(btrim(equipment_work), ''))                AS equipment_work
+            FROM analytics_tko
+            WHERE report_date BETWEEN :from AND :to
+            GROUP BY week_start, polygon_id
+            ORDER BY week_start, polygon_id
+            SQL;
+
+        return $connection->fetchAllAssociative($sql, [
+            'from' => $from->format('Y-m-d'),
+            'to' => $to->format('Y-m-d'),
+        ]);
     }
 }
