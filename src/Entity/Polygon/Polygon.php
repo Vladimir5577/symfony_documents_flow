@@ -36,6 +36,10 @@ class Polygon
     #[ORM\Column(name: 'is_active', type: Types::BOOLEAN, options: ['default' => true])]
     private bool $isActive = true;
 
+    /** Порядок отображения (меньше — выше в списке). */
+    #[ORM\Column(name: 'sort_order', type: Types::INTEGER, options: ['default' => 0])]
+    private int $sortOrder = 0;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -109,6 +113,18 @@ class Polygon
     public function setIsActive(bool $isActive): static
     {
         $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function getSortOrder(): int
+    {
+        return $this->sortOrder;
+    }
+
+    public function setSortOrder(int $sortOrder): static
+    {
+        $this->sortOrder = $sortOrder;
 
         return $this;
     }

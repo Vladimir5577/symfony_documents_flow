@@ -32,8 +32,9 @@ final class TkoAnalyticsController extends AbstractController
         ['key' => 'vegetation_volume',       'label' => 'Растительные',          'type' => 'num'],
         ['key' => 'construction_volume',     'label' => 'Строительные',          'type' => 'num'],
         ['key' => 'terminal_volume',         'label' => 'Терминал',              'type' => 'num'],
-        ['key' => 'bulldozer_work',          'label' => 'Работа бульдозера',     'type' => 'text'],
-        ['key' => 'equipment_work',          'label' => 'Работа техники',        'type' => 'text'],
+        ['key' => 'machinery_work',          'label' => 'Работа техники',        'type' => 'text'],
+        ['key' => 'fire_condition',          'label' => 'Пожарное состояние',    'type' => 'text'],
+        ['key' => 'irrigation',              'label' => 'Орошение',              'type' => 'text'],
     ];
 
     private const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -58,7 +59,7 @@ final class TkoAnalyticsController extends AbstractController
         PolygonRepository $polygonRepository,
         AnalyticsTKORepository $analyticsRepository,
     ): JsonResponse {
-        $polygons = $polygonRepository->findBy(['isActive' => true], ['name' => 'ASC']);
+        $polygons = $polygonRepository->findBy(['isActive' => true], ['sortOrder' => 'ASC', 'name' => 'ASC']);
 
         // Выбранный полигон: из запроса либо первый из списка
         $selectedPolygon = null;
@@ -136,7 +137,7 @@ final class TkoAnalyticsController extends AbstractController
         PolygonRepository $polygonRepository,
         AnalyticsTKORepository $analyticsRepository,
     ): JsonResponse {
-        $polygons = $polygonRepository->findBy(['isActive' => true], ['name' => 'ASC']);
+        $polygons = $polygonRepository->findBy(['isActive' => true], ['sortOrder' => 'ASC', 'name' => 'ASC']);
 
         $selectedPolygon = null;
         $polygonId = $request->query->getInt('polygon_id');

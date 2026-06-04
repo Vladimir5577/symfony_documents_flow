@@ -17,7 +17,7 @@ final class PolygonController extends AbstractController
     #[Route('/polygons', name: 'app_polygons', methods: ['GET'])]
     public function index(PolygonRepository $polygonRepository): Response
     {
-        $polygons = $polygonRepository->findBy([], ['name' => 'ASC']);
+        $polygons = $polygonRepository->findBy([], ['sortOrder' => 'ASC', 'name' => 'ASC']);
 
         return $this->render('polygon/index.html.twig', [
             'active_tab' => 'polygons',

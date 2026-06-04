@@ -1,12 +1,22 @@
 ================================================================================
-SPA API — Analytics TKO (аналитика полигонов ТКО)
+SPA API — Analytics TKO (суточная аналитика полигонов ТКО)
 ================================================================================
 
-Вывод суточной отчётности по полигонам ТКО для SPA. Только чтение — заполнение
-и сохранение остаются на серверной (Twig) странице /analytics/tko.
+Чтение суточной отчётности по активным полигонам ТКО для SPA.
+Заполнение и сохранение — только на серверной странице /analytics/tko (Twig).
 
-Данные хранятся в «длинном» формате: одна строка таблицы analytics_tko =
-один полигон за одну дату (см. App\Entity\Analytics\TKO\AnalyticsTKO).
+Модель данных («длинный» формат): одна строка analytics_tko = один полигон
+за одну дату. Сущность: App\Entity\Analytics\TKO\AnalyticsTKO.
+
+Список polygons в ответе: активные полигоны, сортировка sort_order ASC,
+при равном порядке — name ASC (поле sort_order в App\Entity\Polygon\Polygon).
+
+Изменения ключей метрик (для SPA):
+  - equipment_work удалён; вместо него machinery_work (работа техники:
+    погрузчик, бульдозер, самосвал).
+  - bulldozer_work удалён (отдельной метрики больше нет).
+  - добавлены fire_condition, irrigation (текстовые отметки).
+  - в БД не отдаются через API: subbotniki_volume, comment (только бэкенд/Twig).
 
 Два эндпоинта:
 
@@ -37,14 +47,18 @@ SPA API — Analytics TKO (аналитика полигонов ТКО)
   vegetation_volume         Растительные            num    sum
   construction_volume       Строительные            num    sum
   terminal_volume           Терминал                num    sum
-  bulldozer_work            Работа бульдозера       text   days_count
-  equipment_work            Работа техники          text   days_count
+  machinery_work            Работа техники          text   days_count
+  fire_condition            Пожарное состояние      text   days_count
+  irrigation                Орошение                text   days_count
 
-  type      : num  — числовая метрика; text — текстовая отметка.
+  type      : num  — объём/вес (DECIMAL в БД), в JSON — строка;
+              text — произвольная суточная отметка (TEXT в БД), напр.
+              «работал», «Д-12», «норма».
   aggregate : только в /summary. sum — сумма за период; days_count — число
-              дней, в которых метрика была заполнена (см. ниже).
+              дней, в которых текстовая метрика непустая (после trim).
 
 Значения всегда отдаются строками. Для num пустое значение = "" (нет данных).
+Для text в /tko пусто = ""; в /summary без данных = "0" (days_count).
 
 ================================================================================
 1. НЕДЕЛЬНАЯ СЕТКА ПО ДНЯМ
@@ -61,7 +75,7 @@ Query-параметры:
 
   polygon_id  (int, опционально)
                 ID полигона. Если не передан / не найден / неактивен —
-                берётся первый активный полигон из списка (как на Twig-странице).
+                берётся первый в списке polygons (минимальный sort_order, затем name).
 
   week        (string YYYY-MM-DD, опционально)
                 Любая дата нужной недели. Внутри приводится к понедельнику
@@ -96,7 +110,7 @@ HTTP 200, application/json.
 Корневой объект:
 
 {
-  "polygons":          [{ "id": int, "name": string }, ...],  // все активные
+  "polygons":          [{ "id": int, "name": string }, ...],  // активные, sort_order
   "selectedPolygonId": int|null,    // фактически выбранный полигон
   "week":              "YYYY-MM-DD", // понедельник выбранной недели
   "weekLabel":         "dd.mm — dd.mm",
@@ -132,8 +146,9 @@ Day:
   "nextWeek": "2026-05-18",
   "metrics": [
     { "key": "garbage_trucks_volume", "label": "Мусоровозы", "type": "num" },
-    { "key": "bulldozer_work", "label": "Работа бульдозера", "type": "text" },
-    "…"
+    { "key": "machinery_work", "label": "Работа техники", "type": "text" },
+    { "key": "fire_condition", "label": "Пожарное состояние", "type": "text" },
+    { "key": "irrigation", "label": "Орошение", "type": "text" }
   ],
   "days": [
     {
@@ -147,8 +162,9 @@ Day:
         "vegetation_volume": "",
         "construction_volume": "1.15",
         "terminal_volume": "1196.35",
-        "bulldozer_work": "",
-        "equipment_work": "работал"
+        "machinery_work": "работал",
+        "fire_condition": "норма",
+        "irrigation": ""
       }
     },
     "…"
@@ -257,7 +273,7 @@ HTTP 200, application/json.
 Корневой объект:
 
 {
-  "polygons":          [{ "id": int, "name": string }, ...],  // все активные
+  "polygons":          [{ "id": int, "name": string }, ...],  // активные, sort_order
   "selectedPolygonId": int|null,
   "granularity":       "week" | "month",
   "from":              "YYYY-MM-DD",  // фактическое начало (после расширения)
@@ -307,8 +323,9 @@ Bucket:
   "total": 5,
   "metrics": [
     { "key": "garbage_trucks_volume", "label": "Мусоровозы", "type": "num", "aggregate": "sum" },
-    { "key": "equipment_work", "label": "Работа техники", "type": "text", "aggregate": "days_count" },
-    "…"
+    { "key": "machinery_work", "label": "Работа техники", "type": "text", "aggregate": "days_count" },
+    { "key": "fire_condition", "label": "Пожарное состояние", "type": "text", "aggregate": "days_count" },
+    { "key": "irrigation", "label": "Орошение", "type": "text", "aggregate": "days_count" }
   ],
   "buckets": [
     {
@@ -323,8 +340,9 @@ Bucket:
         "vegetation_volume": "0",
         "construction_volume": "31.45",
         "terminal_volume": "11911.45",
-        "bulldozer_work": "0",
-        "equipment_work": "1"
+        "machinery_work": "1",
+        "fire_condition": "2",
+        "irrigation": "3"
       }
     },
     "…"
@@ -346,8 +364,9 @@ Bucket:
         "garbage_trucks_volume": "",
         "construction_volume": "",
         "terminal_volume": "",
-        "bulldozer_work": "0",
-        "equipment_work": "0"
+        "machinery_work": "0",
+        "fire_condition": "0",
+        "irrigation": "0"
       }
     },
     {
@@ -360,8 +379,9 @@ Bucket:
         "vegetation_volume": "381.15",
         "construction_volume": "214.6",
         "terminal_volume": "156825.41",
-        "bulldozer_work": "0",
-        "equipment_work": "10"
+        "machinery_work": "10",
+        "fire_condition": "28",
+        "irrigation": "15"
       }
     }
   ]
@@ -392,5 +412,7 @@ Bucket:
                  ::findByPolygonAndDateRange() — данные недели по дням
                  ::aggregateByPolygon()        — суммы по неделям/месяцам (DBAL)
   Сущность   : src/Entity/Analytics/TKO/AnalyticsTKO.php
+  Полигоны   : src/Entity/Polygon/Polygon.php (sort_order для порядка в polygons)
 
 Заполнение/сохранение из SPA пока не реализовано (только просмотр).
+Twig-форма: src/Controller/Analytics/TKO/AnalyticsTKOController.php (те же ключи metrics).

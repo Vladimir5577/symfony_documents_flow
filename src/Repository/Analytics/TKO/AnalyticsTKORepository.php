@@ -71,8 +71,9 @@ class AnalyticsTKORepository extends ServiceEntityRepository
                 SUM(vegetation_volume)                                  AS vegetation_volume,
                 SUM(construction_volume)                                AS construction_volume,
                 SUM(terminal_volume)                                    AS terminal_volume,
-                COUNT(NULLIF(btrim(bulldozer_work), ''))               AS bulldozer_work,
-                COUNT(NULLIF(btrim(equipment_work), ''))               AS equipment_work
+                COUNT(NULLIF(btrim(machinery_work), ''))                AS machinery_work,
+                COUNT(NULLIF(btrim(fire_condition), ''))               AS fire_condition,
+                COUNT(NULLIF(btrim(irrigation), ''))                    AS irrigation
             FROM analytics_tko
             WHERE polygon_id = :pid
               AND report_date BETWEEN :from AND :to

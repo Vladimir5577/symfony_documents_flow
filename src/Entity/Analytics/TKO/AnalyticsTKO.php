@@ -70,13 +70,17 @@ class AnalyticsTKO
     #[ORM\Column(name: 'subbotniki_volume', type: Types::DECIMAL, precision: 14, scale: 3, nullable: true)]
     private ?string $subbotnikiVolume = null;
 
-    /** Работа бульдозера — текстовая отметка («работал», «Д-12» и т.п.). */
-    #[ORM\Column(name: 'bulldozer_work', type: Types::STRING, length: 255, nullable: true)]
-    private ?string $bulldozerWork = null;
+    /** Работа техники (погрузчик, бульдозер, самосвал) — текстовая отметка. */
+    #[ORM\Column(name: 'machinery_work', type: Types::TEXT, nullable: true)]
+    private ?string $machineryWork = null;
 
-    /** Работа техники — текстовая отметка («работал», «АМКАДОР» и т.п.). */
-    #[ORM\Column(name: 'equipment_work', type: Types::STRING, length: 255, nullable: true)]
-    private ?string $equipmentWork = null;
+    /** Пожарное состояние — текстовая отметка. */
+    #[ORM\Column(name: 'fire_condition', type: Types::TEXT, nullable: true)]
+    private ?string $fireCondition = null;
+
+    /** Орошение — текстовая отметка. */
+    #[ORM\Column(name: 'irrigation', type: Types::TEXT, nullable: true)]
+    private ?string $irrigation = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $comment = null;
@@ -230,26 +234,38 @@ class AnalyticsTKO
         return $this;
     }
 
-    public function getBulldozerWork(): ?string
+    public function getMachineryWork(): ?string
     {
-        return $this->bulldozerWork;
+        return $this->machineryWork;
     }
 
-    public function setBulldozerWork(?string $bulldozerWork): static
+    public function setMachineryWork(?string $machineryWork): static
     {
-        $this->bulldozerWork = $bulldozerWork;
+        $this->machineryWork = $machineryWork;
 
         return $this;
     }
 
-    public function getEquipmentWork(): ?string
+    public function getFireCondition(): ?string
     {
-        return $this->equipmentWork;
+        return $this->fireCondition;
     }
 
-    public function setEquipmentWork(?string $equipmentWork): static
+    public function setFireCondition(?string $fireCondition): static
     {
-        $this->equipmentWork = $equipmentWork;
+        $this->fireCondition = $fireCondition;
+
+        return $this;
+    }
+
+    public function getIrrigation(): ?string
+    {
+        return $this->irrigation;
+    }
+
+    public function setIrrigation(?string $irrigation): static
+    {
+        $this->irrigation = $irrigation;
 
         return $this;
     }
