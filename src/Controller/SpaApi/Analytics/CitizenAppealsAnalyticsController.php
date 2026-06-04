@@ -21,7 +21,7 @@ final class CitizenAppealsAnalyticsController extends AbstractController
     /**
      * Отчёты «Обращение граждан» в виде дерева метрик по неделям.
      * Формат:
-     *   { weeks: [{ startDate, endDate, reports: [{ metric_key, name, unit, valueNumber, valueJSON, children: [...] }] }] }
+     *   { availableWeeks: [{ startDate, endDate }], weeks: [{ startDate, endDate, reports: [...] }] }
      */
     #[Route('/spa/api/analytics/citizen-appeals/reports', name: 'spa_api_analytics_citizen_appeals_reports', methods: ['GET'])]
     public function reports(

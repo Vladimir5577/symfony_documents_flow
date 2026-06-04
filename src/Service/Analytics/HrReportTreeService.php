@@ -10,7 +10,7 @@ use App\Repository\Organization\OrganizationRepository;
 
 /**
  * Формирует данные отчётов «Отдел кадров» в виде:
- *   { weeks: [{ startDate, endDate, reports: [{ metric_key, name, unit, valueNumber, valueJSON, children: [...] }] }] }
+ *   { availableWeeks: [{ startDate, endDate }], weeks: [{ startDate, endDate, reports: [...] }] }
  *
  * Структура идентична FinanceReportTreeService — отличается только категория метрик
  * (analytics_metrics.category = 'hr'). Иерархия строится по
@@ -68,7 +68,10 @@ final class HrReportTreeService
     }
 
     /**
-     * @return array{weeks: list<array{startDate:string, endDate:string, reports: list<array<string, mixed>>}>}
+     * @return array{
+     *     availableWeeks: list<array{startDate: string, endDate: string}>,
+     *     weeks: list<array{startDate: string, endDate: string, reports: list<array<string, mixed>>}>
+     * }
      */
     public function buildWeeks(
         int $organizationId,
@@ -79,8 +82,15 @@ final class HrReportTreeService
     ): array {
         $orgIds = $this->resolveOrganizationIds($organizationId);
         if ($orgIds === []) {
-            return ['weeks' => []];
+            return ['availableWeeks' => [], 'weeks' => []];
         }
+
+        $availableWeeks = $this->reportRepo->findAvailableWeeksByCategory(
+            self::CATEGORY,
+            $orgIds,
+            $from,
+            $to,
+        );
 
         $rows = $this->reportValueRepo->findReportsWithMetricTree(
             $orgIds,
@@ -91,7 +101,7 @@ final class HrReportTreeService
             $offset,
         );
         if ($rows === []) {
-            return ['weeks' => []];
+            return ['availableWeeks' => $availableWeeks, 'weeks' => []];
         }
 
         $grouped = [];
@@ -116,7 +126,7 @@ final class HrReportTreeService
             ];
         }
 
-        return ['weeks' => $weeks];
+        return ['availableWeeks' => $availableWeeks, 'weeks' => $weeks];
     }
 
     /**

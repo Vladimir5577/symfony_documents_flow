@@ -21,7 +21,7 @@ final class FinancialAnalyticsController extends AbstractController
     /**
      * Финансовые отчёты в виде дерева метрик по неделям.
      * Формат:
-     *   { weeks: [{ startDate, endDate, reports: [{ metric_key, name, unit, valueNumber, valueJSON, children: [...] }] }] }
+     *   { availableWeeks: [{ startDate, endDate }], weeks: [{ startDate, endDate, reports: [...] }] }
      */
     #[Route('/spa/api/analytics/finance/reports', name: 'spa_api_analytics_finance_reports', methods: ['GET'])]
     public function financeReports(

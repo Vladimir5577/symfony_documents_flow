@@ -10,7 +10,7 @@ use App\Repository\Organization\OrganizationRepository;
 
 /**
  * Формирует данные отчётов «Обращение граждан» в виде:
- *   { weeks: [{ startDate, endDate, reports: [{ metric_key, name, unit, valueNumber, valueJSON, children: [...] }] }] }
+ *   { availableWeeks: [{ startDate, endDate }], weeks: [{ startDate, endDate, reports: [...] }] }
  *
  * Структура идентична FinanceReportTreeService — отличается только категория метрик
  * (analytics_metrics.category = 'citizen_appeal'). Иерархия строится по
@@ -68,7 +68,10 @@ final class CitizenAppealsReportTreeService
     }
 
     /**
-     * @return array{weeks: list<array{startDate:string, endDate:string, reports: list<array<string, mixed>>}>}
+     * @return array{
+     *     availableWeeks: list<array{startDate: string, endDate: string}>,
+     *     weeks: list<array{startDate: string, endDate: string, reports: list<array<string, mixed>>}>
+     * }
      */
     public function buildWeeks(
         int $organizationId,
@@ -79,8 +82,15 @@ final class CitizenAppealsReportTreeService
     ): array {
         $orgIds = $this->resolveOrganizationIds($organizationId);
         if ($orgIds === []) {
-            return ['weeks' => []];
+            return ['availableWeeks' => [], 'weeks' => []];
         }
+
+        $availableWeeks = $this->reportRepo->findAvailableWeeksByCategory(
+            self::CATEGORY,
+            $orgIds,
+            $from,
+            $to,
+        );
 
         $rows = $this->reportValueRepo->findReportsWithMetricTree(
             $orgIds,
@@ -91,7 +101,7 @@ final class CitizenAppealsReportTreeService
             $offset,
         );
         if ($rows === []) {
-            return ['weeks' => []];
+            return ['availableWeeks' => $availableWeeks, 'weeks' => []];
         }
 
         $grouped = [];
@@ -116,7 +126,7 @@ final class CitizenAppealsReportTreeService
             ];
         }
 
-        return ['weeks' => $weeks];
+        return ['availableWeeks' => $availableWeeks, 'weeks' => $weeks];
     }
 
     /**

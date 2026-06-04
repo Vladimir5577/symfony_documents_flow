@@ -11,6 +11,8 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class AnalyticsReportRepository extends ServiceEntityRepository
 {
+    private const MAX_AVAILABLE_WEEKS = 100;
+
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, AnalyticsReport::class);
@@ -128,5 +130,71 @@ class AnalyticsReportRepository extends ServiceEntityRepository
         }
 
         return ['items' => $items, 'total' => $total];
+    }
+
+    /**
+     * Уникальные периоды с подтверждёнными отчётами доски категории (календарь для пагинации).
+     * Не более {@see self::MAX_AVAILABLE_WEEKS} записей — самые свежие, если периодов больше.
+     *
+     * @param int[] $organizationIds
+     *
+     * @return list<array{startDate: string, endDate: string}>
+     */
+    public function findAvailableWeeksByCategory(
+        string $category,
+        array $organizationIds,
+        ?string $from,
+        ?string $to,
+    ): array {
+        if ($organizationIds === []) {
+            return [];
+        }
+
+        $conn = $this->getEntityManager()->getConnection();
+        $orgPlaceholders = implode(',', array_fill(0, count($organizationIds), '?'));
+
+        $where = "b.category = ?
+                  AND r.status = 'confirmed'
+                  AND r.organization_id IN ($orgPlaceholders)";
+        $params = array_merge([$category], array_map('intval', $organizationIds));
+
+        if ($from !== null) {
+            $where .= ' AND p.start_date >= ?';
+            $params[] = $from;
+        }
+        if ($to !== null) {
+            $where .= ' AND p.end_date <= ?';
+            $params[] = $to;
+        }
+
+        $maxWeeks = self::MAX_AVAILABLE_WEEKS;
+
+        $sql = <<<SQL
+            SELECT start_date, end_date
+            FROM (
+                SELECT DISTINCT
+                    p.start_date AS start_date,
+                    p.end_date   AS end_date
+                FROM analytics_reports r
+                JOIN analytics_boards  b ON b.id = r.board_id
+                JOIN analytics_periods p ON p.id = r.period_id
+                WHERE $where
+                ORDER BY p.start_date DESC
+                LIMIT $maxWeeks
+            ) recent_weeks
+            ORDER BY start_date ASC
+        SQL;
+
+        $rows = $conn->executeQuery($sql, $params)->fetchAllAssociative();
+
+        $weeks = [];
+        foreach ($rows as $row) {
+            $weeks[] = [
+                'startDate' => (string) $row['start_date'],
+                'endDate'   => (string) $row['end_date'],
+            ];
+        }
+
+        return $weeks;
     }
 }

@@ -10,7 +10,7 @@ use App\Repository\Organization\OrganizationRepository;
 
 /**
  * Формирует данные финансовых отчётов в виде:
- *   { weeks: [{ startDate, endDate, reports: [{ metric_key, name, unit, valueNumber, valueJSON, children: [...] }] }] }
+ *   { availableWeeks: [{ startDate, endDate }], weeks: [{ startDate, endDate, reports: [...] }] }
  *
  * Без агрегации и пересчётов — каждая неделя возвращается как отдельный отчёт
  * с иерархией метрик по analytics_board_version_metrics.parent_id.
@@ -67,7 +67,10 @@ final class FinanceReportTreeService
     }
 
     /**
-     * @return array{weeks: list<array{startDate:string, endDate:string, reports: list<array<string, mixed>>}>}
+     * @return array{
+     *     availableWeeks: list<array{startDate: string, endDate: string}>,
+     *     weeks: list<array{startDate: string, endDate: string, reports: list<array<string, mixed>>}>
+     * }
      */
     public function buildWeeks(
         int $organizationId,
@@ -78,19 +81,26 @@ final class FinanceReportTreeService
     ): array {
         $orgIds = $this->resolveOrganizationIds($organizationId);
         if ($orgIds === []) {
-            return ['weeks' => []];
+            return ['availableWeeks' => [], 'weeks' => []];
         }
+
+        $availableWeeks = $this->reportRepo->findAvailableWeeksByCategory(
+            self::CATEGORY,
+            $orgIds,
+            $from,
+            $to,
+        );
 
         $rows = $this->reportValueRepo->findReportsWithMetricTree(
             $orgIds,
-            'finance',
+            self::CATEGORY,
             $from,
             $to,
             $limit,
             $offset,
         );
         if ($rows === []) {
-            return ['weeks' => []];
+            return ['availableWeeks' => $availableWeeks, 'weeks' => []];
         }
 
         // Группировка по периоду (start_date)
@@ -116,7 +126,7 @@ final class FinanceReportTreeService
             ];
         }
 
-        return ['weeks' => $weeks];
+        return ['availableWeeks' => $availableWeeks, 'weeks' => $weeks];
     }
 
     /**

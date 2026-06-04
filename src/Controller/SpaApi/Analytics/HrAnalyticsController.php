@@ -21,7 +21,7 @@ final class HrAnalyticsController extends AbstractController
     /**
      * Отчёты «Отдел кадров» в виде дерева метрик по неделям.
      * Формат:
-     *   { weeks: [{ startDate, endDate, reports: [{ metric_key, name, unit, valueNumber, valueJSON, children: [...] }] }] }
+     *   { availableWeeks: [{ startDate, endDate }], weeks: [{ startDate, endDate, reports: [...] }] }
      */
     #[Route('/spa/api/analytics/hr/reports', name: 'spa_api_analytics_hr_reports', methods: ['GET'])]
     public function reports(
