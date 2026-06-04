@@ -8,6 +8,7 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\KanbanColumn;
 use App\Entity\User\User;
+use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Service\Kanban\KanbanService;
@@ -87,19 +88,27 @@ final class BoardController extends AbstractController
             return $this->json(['error' => SpaApiError::BOARD_TITLE_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
-        $columnsRaw = $payload['columns'] ?? null;
-        $columns = is_array($columnsRaw)
-            ? array_values(array_filter(array_map(static fn ($column) => trim((string) $column), $columnsRaw)))
-            : [];
+        $columns = $this->parseColumnsForCreate($payload['columns'] ?? null);
         if ($columns === []) {
-            $columns = ['Backlog', 'To Do', 'In Progress', 'Done'];
+            $columns = [
+                ['title' => 'Backlog', 'headerColor' => KanbanColumnColor::BG_DARK],
+                ['title' => 'To Do', 'headerColor' => KanbanColumnColor::BG_PRIMARY],
+                ['title' => 'In Progress', 'headerColor' => KanbanColumnColor::BG_WARNING],
+                ['title' => 'Done', 'headerColor' => KanbanColumnColor::BG_SUCCESS],
+            ];
         }
 
         $board = $this->kanbanService->createBoard($project, $title, $user);
-        foreach ($columns as $columnTitle) {
-            if ($columnTitle !== '') {
-                $this->kanbanService->createColumn($board, $columnTitle);
-            }
+        $defaultColors = [
+            KanbanColumnColor::BG_DARK,
+            KanbanColumnColor::BG_PRIMARY,
+            KanbanColumnColor::BG_WARNING,
+            KanbanColumnColor::BG_SUCCESS,
+        ];
+        foreach ($columns as $i => $column) {
+            $color = $column['headerColor']
+                ?? ($defaultColors[$i % count($defaultColors)] ?? KanbanColumnColor::BG_PRIMARY);
+            $this->kanbanService->createColumn($board, $column['title'], $color);
         }
 
         return $this->json($this->formatBoard($board, $projectId), Response::HTTP_CREATED);
@@ -189,6 +198,46 @@ final class BoardController extends AbstractController
     }
 
     /**
+     * @return array<int, array{title: string, headerColor: ?KanbanColumnColor}>
+     */
+    private function parseColumnsForCreate(mixed $columnsRaw): array
+    {
+        if (!is_array($columnsRaw)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($columnsRaw as $column) {
+            if (is_string($column)) {
+                $title = trim($column);
+                if ($title === '') {
+                    continue;
+                }
+                $result[] = ['title' => $title, 'headerColor' => null];
+
+                continue;
+            }
+            if (!is_array($column)) {
+                continue;
+            }
+
+            $title = trim((string) ($column['title'] ?? ''));
+            if ($title === '') {
+                continue;
+            }
+
+            $headerColor = null;
+            if (array_key_exists('headerColor', $column) && $column['headerColor'] !== null && $column['headerColor'] !== '') {
+                $headerColor = KanbanColumnColor::tryFrom((string) $column['headerColor']);
+            }
+
+            $result[] = ['title' => $title, 'headerColor' => $headerColor];
+        }
+
+        return $result;
+    }
+
+    /**
      * @return array{id: int|null, title: string, updatedAt: string|null}
      */
     private function formatBoard(KanbanBoard $board, int $projectId): array
@@ -236,6 +285,7 @@ final class BoardController extends AbstractController
                 'checklistTotal' => $card->getSubtasks()->count(),
                 'checklistDone' => $card->getSubtasks()->filter(fn ($s) => $s->isCompleted())->count(),
                 'commentsCount' => $card->getComments()->count(),
+                'borderColor' => $card->getBorderColor(),
                 'updatedAt' => $card->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
             ];
         }
