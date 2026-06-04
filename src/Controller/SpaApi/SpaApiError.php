@@ -17,6 +17,9 @@ final class SpaApiError
     public const CANNOT_REMOVE_OWNER = 'cannot_remove_owner';
     public const CANNOT_REMOVE_SELF = 'cannot_remove_self';
     public const CARD_NOT_FOUND = 'card_not_found';
+    public const COMMENT_AUTHOR_ONLY = 'comment_author_only';
+    public const COMMENT_BODY_REQUIRED = 'comment_body_required';
+    public const COMMENT_NOT_FOUND = 'comment_not_found';
     public const COLUMN_ID_AND_POSITION_REQUIRED = 'column_id_and_position_required';
     public const COLUMN_ID_AND_TITLE_REQUIRED = 'column_id_and_title_required';
     public const COLUMN_NOT_FOUND = 'column_not_found';
