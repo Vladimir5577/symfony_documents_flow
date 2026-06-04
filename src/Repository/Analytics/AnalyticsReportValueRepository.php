@@ -98,11 +98,16 @@ class AnalyticsReportValueRepository extends ServiceEntityRepository
         $conn = $this->getEntityManager()->getConnection();
         $orgPlaceholders = implode(',', array_fill(0, count($organizationIds), '?'));
 
-        // Подзапрос отбирает period_id, попадающие в диапазон + пагинация по неделям
+        // Подзапрос отбирает period_id с подтверждёнными отчётами доски данной категории
         // (LIMIT/OFFSET применяются к неделям, а не к строкам метрик).
         // Сортировка DESC — чтобы limit брал самые свежие недели.
-        $subWhere = "r2.status = 'confirmed' AND r2.organization_id IN ($orgPlaceholders)";
-        $subParams = array_map('intval', $organizationIds);
+        $subWhere = "b2.category = ?
+                      AND r2.status = 'confirmed'
+                      AND r2.organization_id IN ($orgPlaceholders)";
+        $subParams = array_merge(
+            [$category],
+            array_map('intval', $organizationIds),
+        );
 
         if ($from !== null) {
             $subWhere .= ' AND p2.start_date >= ?';
@@ -146,6 +151,7 @@ class AnalyticsReportValueRepository extends ServiceEntityRepository
               AND p.id IN (
                   SELECT p2.id
                   FROM analytics_reports r2
+                  JOIN analytics_boards b2  ON b2.id = r2.board_id
                   JOIN analytics_periods p2 ON p2.id = r2.period_id
                   WHERE $subWhere
                   GROUP BY p2.id, p2.start_date
