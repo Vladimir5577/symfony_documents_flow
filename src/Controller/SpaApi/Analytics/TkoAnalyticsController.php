@@ -122,11 +122,11 @@ final class TkoAnalyticsController extends AbstractController
     }
 
     /**
-     * Календарь недель + агрегаты по неделям (series с разбивкой по полигонам).
+     * Календарь недель + агрегаты по неделям (reports с разбивкой по полигонам).
      * Формат:
      *   {
      *     availableWeeks: [{ startDate, endDate }],
-     *     weeks: [{ startDate, endDate, series: [{ metric_key, valueNumber, children: [...] }] }]
+     *     weeks: [{ startDate, endDate, reports: [{ metric_key, valueNumber, children: [...] }] }]
      *   }
      */
     #[Route('/spa/api/analytics/tko/summary', name: 'spa_api_analytics_tko_summary', methods: ['GET'])]
@@ -159,7 +159,7 @@ final class TkoAnalyticsController extends AbstractController
     }
 
     // -------------------------------------------------------------------------
-    // Функции сервиса (сборка availableWeeks + weeks / series)
+    // Функции сервиса (сборка availableWeeks + weeks / reports)
     // -------------------------------------------------------------------------
 
     /**
@@ -167,7 +167,7 @@ final class TkoAnalyticsController extends AbstractController
      *
      * @return array{
      *     availableWeeks: list<array{startDate: string, endDate: string}>,
-     *     weeks: list<array{startDate: string, endDate: string, series: list<array<string, mixed>>}>
+     *     weeks: list<array{startDate: string, endDate: string, reports: list<array<string, mixed>>}>
      * }
      */
     private function buildWeeksSummary(
@@ -208,7 +208,7 @@ final class TkoAnalyticsController extends AbstractController
             $weeks[] = [
                 'startDate' => $weekStart,
                 'endDate' => $week['endDate'],
-                'series' => $this->buildSeries($polygonRows, $polygons, self::METRICS),
+                'reports' => $this->buildSeries($polygonRows, $polygons, self::METRICS),
             ];
         }
 
