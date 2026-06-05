@@ -34,7 +34,7 @@ final class TkoAnalyticsController extends AbstractController
         ['key' => 'containers_scrap_weight', 'label' => 'Вес ТКО конт., ломов',  'name' => 'Вес ТКО конт., ломов',  'unit' => 'т',   'type' => 'num'],
         ['key' => 'vegetation_volume',       'label' => 'Растительные',          'name' => 'Растительные',          'unit' => 'м³',  'type' => 'num'],
         ['key' => 'construction_volume',     'label' => 'Строительные',          'name' => 'Строительные',          'unit' => 'м³',  'type' => 'num'],
-        ['key' => 'terminal_volume',         'label' => 'Терминал',              'name' => 'Терминал',              'unit' => 'м³',  'type' => 'num'],
+        ['key' => 'terminal_volume',         'label' => 'Терминал',              'name' => 'Терминал',              'unit' => 'руб.','type' => 'num'],
         ['key' => 'machinery_work',          'label' => 'Работа техники',        'name' => 'Работа техники',        'unit' => 'дн.', 'type' => 'text'],
         ['key' => 'fire_condition',          'label' => 'Пожары',                'name' => 'Пожары',                'unit' => 'дн.', 'type' => 'text'],
     ];
@@ -391,8 +391,8 @@ final class TkoAnalyticsController extends AbstractController
                 SUM(vegetation_volume)                                  AS vegetation_volume,
                 SUM(construction_volume)                                AS construction_volume,
                 SUM(terminal_volume)                                    AS terminal_volume,
-                COUNT(NULLIF(btrim(machinery_work), ''))                AS bulldozer_work,
-                COUNT(NULLIF(btrim(fire_condition), ''))                AS equipment_work
+                COUNT(NULLIF(btrim(machinery_work), ''))                AS machinery_work,
+                COUNT(NULLIF(btrim(fire_condition), ''))                AS fire_condition
             FROM analytics_tko
             WHERE report_date BETWEEN :from AND :to
             GROUP BY week_start, polygon_id
