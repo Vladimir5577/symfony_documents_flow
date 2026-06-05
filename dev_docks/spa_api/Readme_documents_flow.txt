@@ -296,13 +296,30 @@ permissions.canPublish (исходящий):
 
 
 --------------------------------------------------------------------------------
-НЕ РЕАЛИЗОВАНО В SpaApi (есть только в web DocumentController)
+7. КОНТЕКСТ И МУТАЦИИ
 --------------------------------------------------------------------------------
 
-  PATCH /outgoing/{id}              — редактирование полей документа
-  POST  /outgoing/{id}/publish      — публикация
-  PUT   /outgoing/{id}/recipients   — смена исполнителей/получателей
-  PATCH /incoming/{id}/recipient-status — смена статуса получателя
+  GET /context
+  Ответ: { "isAdmin": boolean, "organization": { id, name, path } | null }
+
+  PATCH /outgoing/{id}
+  Body: name, description?, organizationId, status, deadline?, isPublished?
+  Ответ: { "document": DocumentListItem }
+
+  POST /outgoing/{id}/publish
+  Ответ: { "document": DocumentListItem }
+
+  PUT /outgoing/{id}/recipients
+  Body: { "executorUserIds": number[], "recipientUserIds": number[] }
+  Ответ: document + executors + recipients + permissions
+
+  PATCH /incoming/{id}/recipient-status
+  Body: { "status": string }
+  Ответ: как GET /incoming/{id}
+
+--------------------------------------------------------------------------------
+НЕ РЕАЛИЗОВАНО В SpaApi
+--------------------------------------------------------------------------------
 
   Загрузка файлов, комментарии, OnlyOffice — отдельные web/API контуры.
 

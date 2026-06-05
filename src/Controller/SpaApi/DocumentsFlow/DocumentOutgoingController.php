@@ -10,10 +10,15 @@ use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
+use App\Service\SpaApi\Documents\DocumentPublishService;
+use App\Service\SpaApi\Documents\DocumentRecipientsService;
+use App\Service\SpaApi\Documents\DocumentUpdateService;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
@@ -25,6 +30,10 @@ final class DocumentOutgoingController extends AbstractController
         private readonly DocumentTypeRepository $documentTypeRepository,
         private readonly DocumentApiPresenter $presenter,
         private readonly DocumentAccessService $accessService,
+        private readonly DocumentUpdateService $updateService,
+        private readonly DocumentPublishService $publishService,
+        private readonly DocumentRecipientsService $recipientsService,
+        private readonly EntityManagerInterface $entityManager,
     ) {
     }
 
@@ -92,5 +101,136 @@ final class DocumentOutgoingController extends AbstractController
             'permissions' => $this->accessService->presentPermissions($document, $user),
             'statusChoices' => $this->presenter->presentCreationStatusChoices(),
         ]);
+    }
+
+    #[Route('/outgoing/{id}', name: 'spa_api_documents_flow_outgoing_update', requirements: ['id' => '\d+'], methods: ['PATCH'])]
+    public function update(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $document = $this->findOutgoingDocument($id, $user);
+        if ($document instanceof JsonResponse) {
+            return $document;
+        }
+
+        $payload = $this->decodeJsonBody($request);
+        if ($payload instanceof JsonResponse) {
+            return $payload;
+        }
+
+        try {
+            $document = $this->updateService->update($document, $payload, $user);
+        } catch (HttpException $e) {
+            return $this->jsonError($e);
+        }
+
+        return $this->json(['document' => $this->presenter->presentDocumentListItem($document)]);
+    }
+
+    #[Route('/outgoing/{id}/publish', name: 'spa_api_documents_flow_outgoing_publish', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function publish(int $id, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $document = $this->findOutgoingDocument($id, $user);
+        if ($document instanceof JsonResponse) {
+            return $document;
+        }
+
+        try {
+            $document = $this->publishService->publish($document, $user);
+        } catch (HttpException $e) {
+            return $this->jsonError($e);
+        }
+
+        return $this->json(['document' => $this->presenter->presentDocumentListItem($document)]);
+    }
+
+    #[Route('/outgoing/{id}/recipients', name: 'spa_api_documents_flow_outgoing_recipients', requirements: ['id' => '\d+'], methods: ['PUT'])]
+    public function updateRecipients(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $document = $this->findOutgoingDocument($id, $user);
+        if ($document instanceof JsonResponse) {
+            return $document;
+        }
+
+        if (!$this->accessService->canEditOutgoingDocument($document, $user)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $payload = $this->decodeJsonBody($request);
+        if ($payload instanceof JsonResponse) {
+            return $payload;
+        }
+
+        $executorUserIds = $payload['executorUserIds'] ?? [];
+        $recipientUserIds = $payload['recipientUserIds'] ?? [];
+        if (!is_array($executorUserIds)) {
+            $executorUserIds = [];
+        }
+        if (!is_array($recipientUserIds)) {
+            $recipientUserIds = [];
+        }
+
+        $this->recipientsService->replaceRecipients(
+            $document,
+            $this->recipientsService->normalizeUserIds($executorUserIds),
+            $this->recipientsService->normalizeUserIds($recipientUserIds),
+        );
+        $this->entityManager->flush();
+
+        $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
+
+        return $this->json([
+            'document' => $this->presenter->presentDocumentListItem($document),
+            'executors' => $split['executors'],
+            'recipients' => $split['recipients'],
+            'permissions' => $this->accessService->presentPermissions($document, $user),
+        ]);
+    }
+
+    private function findOutgoingDocument(int $id, User $user): \App\Entity\Document\Document|JsonResponse
+    {
+        $document = $this->documentRepository->findOneWithRelations($id);
+        if ($document === null) {
+            return $this->json(['error' => SpaApiError::DOCUMENT_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        if (!$this->accessService->canViewDocument($document, $user)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        return $document;
+    }
+
+    /**
+     * @return array<string, mixed>|JsonResponse
+     */
+    private function decodeJsonBody(Request $request): array|JsonResponse
+    {
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload)) {
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+        }
+
+        return $payload;
+    }
+
+    private function jsonError(HttpException $e): JsonResponse
+    {
+        $message = $e->getMessage();
+
+        return $this->json(
+            ['error' => $message !== '' ? $message : SpaApiError::DOCUMENT_VALIDATION_FAILED],
+            $e->getStatusCode(),
+        );
     }
 }
