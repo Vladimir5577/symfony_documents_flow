@@ -17,6 +17,8 @@
         .tko-grid th, .tko-grid td { vertical-align: middle; white-space: nowrap; }
         .tko-grid .metric-label { font-weight: 600; }
         .tko-grid input.form-control { min-width: 90px; }
+        .tko-grid .machinery-work-input,
+        .tko-grid .timed-event-input { min-width: 180px; }
         .tko-grid thead th { text-align: center; }
         .tko-week-label { font-weight: 600; font-size: 1rem; }
     </style>
@@ -114,11 +116,43 @@
                                                                    name="{{ metric.key }}"
                                                                    value="{{ day.values[metric.key] }}">
                                                         {% else %}
-                                                            <input type="text"
-                                                                   class="form-control form-control-sm"
-                                                                   form="tko-form-{{ loop.index0 }}"
-                                                                   name="{{ metric.key }}"
-                                                                   value="{{ day.values[metric.key] }}">
+                                                            {% if metric.key == 'machinery_work' %}
+                                                                <div class="input-group input-group-sm">
+                                                                    <input type="text"
+                                                                           class="form-control form-control-sm machinery-work-input"
+                                                                           form="tko-form-{{ loop.index0 }}"
+                                                                           name="{{ metric.key }}"
+                                                                           value="{{ day.values[metric.key] }}">
+                                                                    <button type="button"
+                                                                            class="btn btn-outline-secondary machinery-work-open"
+                                                                            data-bs-toggle="modal"
+                                                                            data-bs-target="#machineryWorkModal">
+                                                                        <i class="bi bi-list-ul"></i>
+                                                                    </button>
+                                                                </div>
+                                                            {% elseif metric.key in ['fire_condition', 'irrigation'] %}
+                                                                <div class="input-group input-group-sm">
+                                                                    <input type="text"
+                                                                           class="form-control form-control-sm timed-event-input"
+                                                                           form="tko-form-{{ loop.index0 }}"
+                                                                           name="{{ metric.key }}"
+                                                                           value="{{ day.values[metric.key] }}">
+                                                                    <button type="button"
+                                                                            class="btn btn-outline-secondary timed-event-open"
+                                                                            data-bs-toggle="modal"
+                                                                            data-bs-target="#timedEventModal"
+                                                                            data-title="{{ metric.label }}"
+                                                                            data-placeholder="{{ metric.key == 'fire_condition' ? 'Например, пожар или задымление' : 'Например, орошение карты' }}">
+                                                                        <i class="bi bi-clock"></i>
+                                                                    </button>
+                                                                </div>
+                                                            {% else %}
+                                                                <input type="text"
+                                                                       class="form-control form-control-sm"
+                                                                       form="tko-form-{{ loop.index0 }}"
+                                                                       name="{{ metric.key }}"
+                                                                       value="{{ day.values[metric.key] }}">
+                                                            {% endif %}
                                                         {% endif %}
                                                     </td>
                                                 {% endfor %}
@@ -146,4 +180,318 @@
             </div>
         </div>
     </section>
+
+    <div class="modal fade" id="machineryWorkModal" tabindex="-1" aria-labelledby="machineryWorkModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="machineryWorkModalLabel">Работа техники</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-2">
+                            <thead>
+                                <tr>
+                                    <th>Техника</th>
+                                    <th style="width: 180px;">Моточасы</th>
+                                    <th style="width: 48px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="machineryWorkRows"></tbody>
+                        </table>
+                    </div>
+                    <button type="button" class="btn btn-light-secondary btn-sm" id="machineryWorkAddRow">
+                        Добавить технику
+                    </button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" id="machineryWorkApply">Применить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="timedEventModal" tabindex="-1" aria-labelledby="timedEventModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="timedEventModalLabel">Интервал</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-2">
+                            <thead>
+                                <tr>
+                                    <th>Описание</th>
+                                    <th style="width: 140px;">С</th>
+                                    <th style="width: 140px;">По</th>
+                                    <th style="width: 48px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="timedEventRows"></tbody>
+                        </table>
+                    </div>
+                    <button type="button" class="btn btn-light-secondary btn-sm" id="timedEventAddRow">
+                        Добавить интервал
+                    </button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" id="timedEventApply">Применить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const modalElement = document.getElementById('machineryWorkModal');
+            const rowsElement = document.getElementById('machineryWorkRows');
+            const addRowButton = document.getElementById('machineryWorkAddRow');
+            const applyButton = document.getElementById('machineryWorkApply');
+            const timedEventModalElement = document.getElementById('timedEventModal');
+            const timedEventTitleElement = document.getElementById('timedEventModalLabel');
+            const timedEventRowsElement = document.getElementById('timedEventRows');
+            const timedEventAddRowButton = document.getElementById('timedEventAddRow');
+            const timedEventApplyButton = document.getElementById('timedEventApply');
+            let activeInput = null;
+            let activeTimedEventInput = null;
+            let activeTimedEventPlaceholder = '';
+
+            const addRow = (name = '', hours = '') => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><input type="text" class="form-control form-control-sm machinery-name" value="${escapeHtml(name)}" placeholder="Например, трактор"></td>
+                    <td><input type="number" step="any" min="0" class="form-control form-control-sm machinery-hours" value="${escapeHtml(hours)}" placeholder="0"></td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-light-danger btn-sm machinery-row-remove" title="Удалить">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                `;
+                rowsElement.appendChild(row);
+            };
+
+            const escapeHtml = (value) => String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+
+            const parseValue = (value) => {
+                const normalized = value.trim();
+
+                if (!normalized) {
+                    return [];
+                }
+
+                const rows = [];
+                const pattern = /(.+?)\s*(?:—|-|:)\s*([\d.,]+)\s*(?:моточас(?:а|ов)?|мч)?(?=\s*(?:;|\n|$|.+?\s*(?:—|-|:)\s*[\d.,]+\s*(?:моточас(?:а|ов)?|мч)?))/gi;
+                let match;
+
+                while ((match = pattern.exec(normalized)) !== null) {
+                    rows.push({ name: match[1].replace(/^[;\s]+|[;\s]+$/g, ''), hours: match[2].replace(',', '.') });
+                }
+
+                if (rows.length > 0) {
+                    return rows;
+                }
+
+                return normalized
+                    .split(/[;\n]+/)
+                    .map((part) => part.trim())
+                    .filter(Boolean)
+                    .map((part) => ({ name: part, hours: '' }));
+            };
+
+            document.querySelectorAll('.machinery-work-open').forEach((button) => {
+                button.addEventListener('click', () => {
+                    activeInput = button.closest('.input-group').querySelector('.machinery-work-input');
+                    rowsElement.innerHTML = '';
+
+                    const rows = parseValue(activeInput.value);
+
+                    if (rows.length === 0) {
+                        addRow();
+                        return;
+                    }
+
+                    rows.forEach((row) => addRow(row.name, row.hours));
+                });
+            });
+
+            const addTimedEventRow = (text = '', from = '', to = '') => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><input type="text" class="form-control form-control-sm timed-event-text" value="${escapeHtml(text)}" placeholder="${escapeHtml(activeTimedEventPlaceholder)}"></td>
+                    <td><input type="text" class="form-control form-control-sm timed-event-from" value="${escapeHtml(from)}" placeholder="00:00" inputmode="numeric" maxlength="5" pattern="[0-2][0-9]:[0-5][0-9]"></td>
+                    <td><input type="text" class="form-control form-control-sm timed-event-to" value="${escapeHtml(to)}" placeholder="00:00" inputmode="numeric" maxlength="5" pattern="[0-2][0-9]:[0-5][0-9]"></td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-light-danger btn-sm timed-event-row-remove" title="Удалить">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                `;
+                timedEventRowsElement.appendChild(row);
+            };
+
+            const parseTimedEventValue = (value) => {
+                const normalized = value.trim();
+
+                if (!normalized) {
+                    return [];
+                }
+
+                return normalized
+                    .split(/[;\n]+/)
+                    .map((part) => part.trim())
+                    .filter(Boolean)
+                    .map((part) => {
+                        const match = part.match(/^(.+?)\s*(?:—|-|:)\s*(\d{2}:\d{2})\s*(?:–|—|-|по)\s*(\d{2}:\d{2})\s*$/i);
+
+                        if (!match) {
+                            return { text: part, from: '', to: '' };
+                        }
+
+                        return { text: match[1].trim(), from: match[2], to: match[3] };
+                    });
+            };
+
+            document.querySelectorAll('.timed-event-open').forEach((button) => {
+                button.addEventListener('click', () => {
+                    activeTimedEventInput = button.closest('.input-group').querySelector('.timed-event-input');
+                    activeTimedEventPlaceholder = button.dataset.placeholder || '';
+                    timedEventTitleElement.textContent = button.dataset.title || 'Интервал';
+                    timedEventRowsElement.innerHTML = '';
+
+                    const rows = parseTimedEventValue(activeTimedEventInput.value);
+
+                    if (rows.length === 0) {
+                        addTimedEventRow();
+                        return;
+                    }
+
+                    rows.forEach((row) => addTimedEventRow(row.text, row.from, row.to));
+                });
+            });
+
+            timedEventAddRowButton.addEventListener('click', () => addTimedEventRow());
+
+            const normalizeTimeInput = (input) => {
+                const digits = input.value.replace(/\D/g, '').slice(0, 4);
+
+                if (digits.length <= 2) {
+                    input.value = digits;
+                    return;
+                }
+
+                input.value = `${digits.slice(0, 2)}:${digits.slice(2)}`;
+            };
+
+            timedEventRowsElement.addEventListener('input', (event) => {
+                if (event.target.matches('.timed-event-from, .timed-event-to')) {
+                    normalizeTimeInput(event.target);
+                }
+            });
+
+            timedEventRowsElement.addEventListener('click', (event) => {
+                const removeButton = event.target.closest('.timed-event-row-remove');
+
+                if (!removeButton) {
+                    return;
+                }
+
+                removeButton.closest('tr').remove();
+
+                if (timedEventRowsElement.children.length === 0) {
+                    addTimedEventRow();
+                }
+            });
+
+            timedEventApplyButton.addEventListener('click', () => {
+                if (!activeTimedEventInput) {
+                    return;
+                }
+
+                const value = Array.from(timedEventRowsElement.querySelectorAll('tr'))
+                    .map((row) => {
+                        const text = row.querySelector('.timed-event-text').value.trim();
+                        const from = row.querySelector('.timed-event-from').value.trim();
+                        const to = row.querySelector('.timed-event-to').value.trim();
+
+                        if (!text && !from && !to) {
+                            return null;
+                        }
+
+                        if (!from && !to) {
+                            return text;
+                        }
+
+                        const interval = [from, to].filter(Boolean).join('–');
+
+                        if (!text) {
+                            return interval;
+                        }
+
+                        return `${text}: ${interval}`;
+                    })
+                    .filter(Boolean)
+                    .join('; ');
+
+                activeTimedEventInput.value = value;
+                bootstrap.Modal.getOrCreateInstance(timedEventModalElement).hide();
+            });
+
+            addRowButton.addEventListener('click', () => addRow());
+
+            rowsElement.addEventListener('click', (event) => {
+                const removeButton = event.target.closest('.machinery-row-remove');
+
+                if (!removeButton) {
+                    return;
+                }
+
+                removeButton.closest('tr').remove();
+
+                if (rowsElement.children.length === 0) {
+                    addRow();
+                }
+            });
+
+            applyButton.addEventListener('click', () => {
+                if (!activeInput) {
+                    return;
+                }
+
+                const value = Array.from(rowsElement.querySelectorAll('tr'))
+                    .map((row) => {
+                        const name = row.querySelector('.machinery-name').value.trim();
+                        const hours = row.querySelector('.machinery-hours').value.trim();
+
+                        if (!name && !hours) {
+                            return null;
+                        }
+
+                        if (!hours) {
+                            return name;
+                        }
+
+                        if (!name) {
+                            return `${hours} моточасов`;
+                        }
+
+                        return `${name}: ${hours} моточасов`;
+                    })
+                    .filter(Boolean)
+                    .join('; ');
+
+                activeInput.value = value;
+                bootstrap.Modal.getOrCreateInstance(modalElement).hide();
+            });
+        });
+    </script>
 {% endblock %}
