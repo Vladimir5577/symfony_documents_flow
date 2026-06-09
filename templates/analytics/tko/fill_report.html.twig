@@ -130,7 +130,7 @@
                                                                         <i class="bi bi-list-ul"></i>
                                                                     </button>
                                                                 </div>
-                                                            {% elseif metric.key in ['fire_condition', 'irrigation'] %}
+                                                            {% elseif metric.key in ['smoke', 'fire_without_mchs', 'fire_with_mchs', 'irrigation'] %}
                                                                 <div class="input-group input-group-sm">
                                                                     <input type="text"
                                                                            class="form-control form-control-sm timed-event-input"
@@ -142,7 +142,7 @@
                                                                             data-bs-toggle="modal"
                                                                             data-bs-target="#timedEventModal"
                                                                             data-title="{{ metric.label }}"
-                                                                            data-placeholder="{{ metric.key == 'fire_condition' ? 'Например, пожар или задымление' : 'Например, орошение карты' }}">
+                                                                            data-placeholder="Например, {{ metric.label|lower }}">
                                                                         <i class="bi bi-clock"></i>
                                                                     </button>
                                                                 </div>

@@ -1,0 +1,35 @@
+{# Переключатель уровня + навигация по периоду.
+   Параметры: level ('month'|'week'|'day'), route, period_param,
+   periodLabel, prevPeriod, nextPeriod, selectedPolygon #}
+{% set pid = selectedPolygon ? selectedPolygon.id : null %}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    {# Уровень детализации — как табы, текущий неактивен #}
+    <div class="btn-group" role="group" aria-label="Уровень детализации">
+        <a href="{{ path('app_analytics_tko_view_month', { polygon_id: pid }) }}"
+           class="btn btn-sm {{ level == 'month' ? 'btn-primary' : 'btn-outline-primary' }}">
+            Помесячно
+        </a>
+        <a href="{{ path('app_analytics_tko_view_week', { polygon_id: pid }) }}"
+           class="btn btn-sm {{ level == 'week' ? 'btn-primary' : 'btn-outline-primary' }}">
+            Понедельно
+        </a>
+        <a href="{{ path('app_analytics_tko_view', { polygon_id: pid }) }}"
+           class="btn btn-sm {{ level == 'day' ? 'btn-primary' : 'btn-outline-primary' }}">
+            Детально
+        </a>
+    </div>
+
+    {# Перемещение по периоду #}
+    <div class="d-flex align-items-center gap-3">
+        <a href="{{ path(route, { polygon_id: pid, (period_param): prevPeriod }) }}"
+           class="btn btn-light-secondary btn-sm" title="Предыдущий период">
+            <i class="bi bi-chevron-left"></i>
+        </a>
+        <span class="tko-week-label">{{ periodLabel }}</span>
+        <a href="{{ path(route, { polygon_id: pid, (period_param): nextPeriod }) }}"
+           class="btn btn-light-secondary btn-sm" title="Следующий период">
+            <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
+</div>

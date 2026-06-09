@@ -8,6 +8,7 @@ use App\Entity\Analytics\TKO\AnalyticsTKO;
 use App\Entity\User\User;
 use App\Repository\Analytics\TKO\AnalyticsTKORepository;
 use App\Repository\Polygon\PolygonRepository;
+use App\Service\Analytics\TkoMetrics;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -18,25 +19,6 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_MANAGER')]
 final class AnalyticsTKOController extends AbstractController
 {
-    /**
-     * Метрики таблицы: ключ = колонка сущности, type = num|text.
-     */
-    private const METRICS = [
-        ['key' => 'garbage_trucks_volume',   'label' => 'Мусоровозы',            'type' => 'num'],
-        ['key' => 'garbage_trucks_weight',   'label' => 'Вес ТКО мусоровозы',    'type' => 'num'],
-        ['key' => 'containers_volume',       'label' => 'Контейнеры',            'type' => 'num'],
-        ['key' => 'scrap_trucks_volume',     'label' => 'Ломовозы',              'type' => 'num'],
-        ['key' => 'containers_scrap_weight', 'label' => 'Вес ТКО конт., ломов',  'type' => 'num'],
-        ['key' => 'vegetation_volume',       'label' => 'Растительные',          'type' => 'num'],
-        ['key' => 'construction_volume',     'label' => 'Строительные',          'type' => 'num'],
-        ['key' => 'terminal_volume',         'label' => 'Терминал',              'type' => 'num'],
-        ['key' => 'machinery_work',          'label' => 'Работа техники',        'type' => 'text'],
-        ['key' => 'fire_condition',          'label' => 'Пожарное состояние',    'type' => 'text'],
-        ['key' => 'irrigation',              'label' => 'Орошение',              'type' => 'text'],
-    ];
-
-    private const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-
     #[Route('/analytics/tko', name: 'app_analytics_tko', methods: ['GET'])]
     public function index(
         Request $request,
@@ -73,7 +55,7 @@ final class AnalyticsTKOController extends AbstractController
             $record = $byDate[$key] ?? null;
 
             $values = [];
-            foreach (self::METRICS as $metric) {
+            foreach (TkoMetrics::METRICS as $metric) {
                 $raw = null !== $record ? $record->{$this->getter($metric['key'])}() : null;
                 $values[$metric['key']] = 'num' === $metric['type']
                     ? $this->normalizeNumber($raw)
@@ -82,22 +64,210 @@ final class AnalyticsTKOController extends AbstractController
 
             $days[] = [
                 'date' => $key,
-                'dow' => self::DOW[$i],
+                'dow' => TkoMetrics::DOW[$i],
                 'short' => $date->format('d.m'),
                 'values' => $values,
             ];
         }
 
-        return $this->render('analytics/tko/index.html.twig', [
+        return $this->render('analytics/tko/fill_report.html.twig', [
             'active_tab' => 'analytics_tko',
             'polygons' => $polygons,
             'selectedPolygon' => $selectedPolygon,
-            'metrics' => self::METRICS,
+            'metrics' => TkoMetrics::METRICS,
             'days' => $days,
             'week' => $monday->format('Y-m-d'),
             'weekLabel' => sprintf('%s — %s', $monday->format('d.m'), $sunday->format('d.m')),
             'prevWeek' => $monday->modify('-7 days')->format('Y-m-d'),
             'nextWeek' => $monday->modify('+7 days')->format('Y-m-d'),
+        ]);
+    }
+
+    #[Route('/analytics/tko/view', name: 'app_analytics_tko_view', methods: ['GET'])]
+    public function view(
+        Request $request,
+        PolygonRepository $polygonRepository,
+        AnalyticsTKORepository $analyticsRepository,
+    ): Response {
+        $polygons = $polygonRepository->findBy(['isActive' => true], ['sortOrder' => 'ASC', 'name' => 'ASC']);
+
+        // Выбранный полигон: из запроса либо первый из списка
+        $selectedPolygon = null;
+        $polygonId = $request->query->getInt('polygon_id');
+        if ($polygonId > 0) {
+            $selectedPolygon = $polygonRepository->find($polygonId);
+        }
+        if (null === $selectedPolygon && [] !== $polygons) {
+            $selectedPolygon = $polygons[0];
+        }
+
+        $monday = $this->resolveMonday($request->query->getString('week'));
+        $sunday = $monday->modify('+6 days');
+
+        // Загружаем записи недели и раскладываем по дате
+        $byDate = [];
+        if (null !== $selectedPolygon) {
+            foreach ($analyticsRepository->findByPolygonAndDateRange($selectedPolygon, $monday, $sunday) as $record) {
+                $byDate[$record->getReportDate()->format('Y-m-d')] = $record;
+            }
+        }
+
+        $days = [];
+        $sums = array_fill_keys(array_column(TkoMetrics::METRICS, 'key'), 0.0);
+        $counts = array_fill_keys(array_column(TkoMetrics::METRICS, 'key'), 0);
+        for ($i = 0; $i < 7; ++$i) {
+            $date = $monday->modify(sprintf('+%d days', $i));
+            $key = $date->format('Y-m-d');
+            $record = $byDate[$key] ?? null;
+
+            $values = [];
+            foreach (TkoMetrics::METRICS as $metric) {
+                $raw = null !== $record ? $record->{$this->getter($metric['key'])}() : null;
+
+                if ('num' === $metric['type']) {
+                    $values[$metric['key']] = $this->normalizeNumber($raw);
+                    if (null !== $raw && '' !== $raw && is_numeric($raw)) {
+                        $sums[$metric['key']] += (float) $raw;
+                    }
+                } else {
+                    $text = (string) ($raw ?? '');
+                    $values[$metric['key']] = $text;
+                    if ('' !== trim($text)) {
+                        ++$counts[$metric['key']];
+                    }
+                }
+            }
+
+            $days[] = [
+                'date' => $key,
+                'dow' => TkoMetrics::DOW[$i],
+                'short' => $date->format('d.m'),
+                'values' => $values,
+            ];
+        }
+
+        // Итог за неделю: числовые — сумма, текстовые — число дней с отметкой
+        $totals = [];
+        foreach (TkoMetrics::METRICS as $metric) {
+            $totals[$metric['key']] = 'num' === $metric['type']
+                ? $this->normalizeNumber((string) $sums[$metric['key']])
+                : (string) $counts[$metric['key']];
+        }
+
+        return $this->render('analytics/tko/view_report.html.twig', [
+            'active_tab' => 'analytics_tko_view',
+            'polygons' => $polygons,
+            'selectedPolygon' => $selectedPolygon,
+            'metrics' => TkoMetrics::METRICS,
+            'days' => $days,
+            'totals' => $totals,
+            'period' => $monday->format('Y-m-d'),
+            'periodLabel' => sprintf('Период %s — %s', $monday->format('d.m'), $sunday->format('d.m')),
+            'periodParam' => 'week',
+            'prevPeriod' => $monday->modify('-7 days')->format('Y-m-d'),
+            'nextPeriod' => $monday->modify('+7 days')->format('Y-m-d'),
+        ]);
+    }
+
+    #[Route('/analytics/tko/view/week', name: 'app_analytics_tko_view_week', methods: ['GET'])]
+    public function viewWeek(
+        Request $request,
+        PolygonRepository $polygonRepository,
+        AnalyticsTKORepository $analyticsRepository,
+    ): Response {
+        $polygons = $polygonRepository->findBy(['isActive' => true], ['sortOrder' => 'ASC', 'name' => 'ASC']);
+        $selectedPolygon = $this->resolvePolygon($request, $polygonRepository, $polygons);
+
+        // Месяц, недели которого показываем (обзор по неделям месяца)
+        $month = $this->resolveMonthStart($request->query->getString('month'));
+        $monthEnd = $month->modify('last day of this month')->setTime(0, 0);
+
+        // Календарные недели Пн–Вс, пересекающие месяц (крайние недели целиком)
+        $firstMonday = $month->modify('monday this week')->setTime(0, 0);
+        $lastMonday = $monthEnd->modify('monday this week')->setTime(0, 0);
+
+        $columns = [];
+        for ($cursor = $firstMonday; $cursor <= $lastMonday; $cursor = $cursor->modify('+7 days')) {
+            $weekEnd = $cursor->modify('+6 days');
+            $columns[] = [
+                'key' => $cursor->format('Y-m-d'),
+                'label' => $cursor->format('d.m'),
+                'sublabel' => '— ' . $weekEnd->format('d.m'),
+                // Drill-down: клик по неделе открывает детальный просмотр этой недели
+                'href' => $this->generateUrl('app_analytics_tko_view', [
+                    'polygon_id' => $selectedPolygon?->getId(),
+                    'week' => $cursor->format('Y-m-d'),
+                ]),
+            ];
+        }
+
+        $buckets = null !== $selectedPolygon
+            ? $analyticsRepository->aggregateByPolygon($selectedPolygon->getId(), $firstMonday, $lastMonday->modify('+6 days'), 'week')
+            : [];
+
+        [$columns, $totals] = $this->fillColumns($columns, $buckets);
+
+        return $this->render('analytics/tko/view_week_report.html.twig', [
+            'active_tab' => 'analytics_tko_view_week',
+            'polygons' => $polygons,
+            'selectedPolygon' => $selectedPolygon,
+            'metrics' => TkoMetrics::METRICS,
+            'columns' => $columns,
+            'totals' => $totals,
+            'period' => $month->format('Y-m-d'),
+            'periodLabel' => $this->monthLabel($month),
+            'periodParam' => 'month',
+            'prevPeriod' => $month->modify('-1 month')->format('Y-m-d'),
+            'nextPeriod' => $month->modify('+1 month')->format('Y-m-d'),
+        ]);
+    }
+
+    #[Route('/analytics/tko/view/month', name: 'app_analytics_tko_view_month', methods: ['GET'])]
+    public function viewMonth(
+        Request $request,
+        PolygonRepository $polygonRepository,
+        AnalyticsTKORepository $analyticsRepository,
+    ): Response {
+        $polygons = $polygonRepository->findBy(['isActive' => true], ['sortOrder' => 'ASC', 'name' => 'ASC']);
+        $selectedPolygon = $this->resolvePolygon($request, $polygonRepository, $polygons);
+
+        // Год, месяцы которого показываем (обзор по месяцам года)
+        $yearStart = $this->resolveYearStart($request->query->getString('year'));
+        $yearEnd = $yearStart->modify('+1 year')->modify('-1 day');
+
+        $columns = [];
+        for ($i = 0; $i < 12; ++$i) {
+            $monthStart = $yearStart->modify(sprintf('+%d months', $i));
+            $columns[] = [
+                'key' => $monthStart->format('Y-m-d'),
+                'label' => TkoMetrics::MONTHS[$i],
+                'sublabel' => $monthStart->format('Y'),
+                // Drill-down: клик по месяцу открывает понедельный обзор этого месяца
+                'href' => $this->generateUrl('app_analytics_tko_view_week', [
+                    'polygon_id' => $selectedPolygon?->getId(),
+                    'month' => $monthStart->format('Y-m-d'),
+                ]),
+            ];
+        }
+
+        $buckets = null !== $selectedPolygon
+            ? $analyticsRepository->aggregateByPolygon($selectedPolygon->getId(), $yearStart, $yearEnd, 'month')
+            : [];
+
+        [$columns, $totals] = $this->fillColumns($columns, $buckets);
+
+        return $this->render('analytics/tko/view_month_report.html.twig', [
+            'active_tab' => 'analytics_tko_view_month',
+            'polygons' => $polygons,
+            'selectedPolygon' => $selectedPolygon,
+            'metrics' => TkoMetrics::METRICS,
+            'columns' => $columns,
+            'totals' => $totals,
+            'period' => $yearStart->format('Y-m-d'),
+            'periodLabel' => $yearStart->format('Y') . ' год',
+            'periodParam' => 'year',
+            'prevPeriod' => $yearStart->modify('-1 year')->format('Y-m-d'),
+            'nextPeriod' => $yearStart->modify('+1 year')->format('Y-m-d'),
         ]);
     }
 
@@ -135,7 +305,7 @@ final class AnalyticsTKOController extends AbstractController
 
         $hasValue = false;
         $pending = [];
-        foreach (self::METRICS as $metric) {
+        foreach (TkoMetrics::METRICS as $metric) {
             $raw = trim($request->request->getString($metric['key']));
             $value = null;
 
@@ -210,6 +380,90 @@ final class AnalyticsTKOController extends AbstractController
         }
 
         return $base->modify('monday this week')->setTime(0, 0);
+    }
+
+    /**
+     * Выбранный полигон: из запроса либо первый из списка.
+     *
+     * @param list<\App\Entity\Polygon\Polygon> $polygons
+     */
+    private function resolvePolygon(Request $request, PolygonRepository $polygonRepository, array $polygons): ?object
+    {
+        $selectedPolygon = null;
+        $polygonId = $request->query->getInt('polygon_id');
+        if ($polygonId > 0) {
+            $selectedPolygon = $polygonRepository->find($polygonId);
+        }
+        if (null === $selectedPolygon && [] !== $polygons) {
+            $selectedPolygon = $polygons[0];
+        }
+
+        return $selectedPolygon;
+    }
+
+    private function resolveMonthStart(string $month): \DateTimeImmutable
+    {
+        try {
+            $base = '' !== $month ? new \DateTimeImmutable($month) : new \DateTimeImmutable('today');
+        } catch (\Exception) {
+            $base = new \DateTimeImmutable('today');
+        }
+
+        return $base->modify('first day of this month')->setTime(0, 0);
+    }
+
+    private function resolveYearStart(string $year): \DateTimeImmutable
+    {
+        try {
+            $base = '' !== $year ? new \DateTimeImmutable($year) : new \DateTimeImmutable('today');
+        } catch (\Exception) {
+            $base = new \DateTimeImmutable('today');
+        }
+
+        return $base->modify('first day of January this year')->setTime(0, 0);
+    }
+
+    private function monthLabel(\DateTimeImmutable $month): string
+    {
+        return TkoMetrics::MONTHS[(int) $month->format('n') - 1] . ' ' . $month->format('Y');
+    }
+
+    /**
+     * Раскладывает агрегированные бакеты репозитория по колонкам периода и считает итог за весь диапазон.
+     * Числовые метрики суммируются, текстовые (COUNT по дням) тоже суммируются как число дней с отметкой.
+     *
+     * @param list<array<string, mixed>>            $columns бакеты с ключом 'key' (Y-m-d начала бакета)
+     * @param array<string, array<string, mixed>>   $buckets ключ — Y-m-d начала бакета
+     *
+     * @return array{0: list<array<string, mixed>>, 1: array<string, string>}
+     */
+    private function fillColumns(array $columns, array $buckets): array
+    {
+        $sums = array_fill_keys(array_column(TkoMetrics::METRICS, 'key'), 0.0);
+
+        foreach ($columns as $index => $column) {
+            $bucket = $buckets[$column['key']] ?? [];
+            $values = [];
+
+            foreach (TkoMetrics::METRICS as $metric) {
+                $raw = $bucket[$metric['key']] ?? null;
+                if (null !== $raw && '' !== $raw && is_numeric($raw)) {
+                    $sums[$metric['key']] += (float) $raw;
+                    $values[$metric['key']] = $this->normalizeNumber((string) (float) $raw);
+                } else {
+                    $values[$metric['key']] = '';
+                }
+            }
+
+            $columns[$index]['values'] = $values;
+        }
+
+        $totals = [];
+        foreach (TkoMetrics::METRICS as $metric) {
+            $totals[$metric['key']] = $this->normalizeNumber((string) $sums[$metric['key']]);
+        }
+
+        return [$columns, $totals];
     }
 
     private function normalizeNumber(?string $value): string

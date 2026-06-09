@@ -1,0 +1,18 @@
+{# Список полигонов. Параметры: route, period_param, period_value, selectedPolygon, polygons #}
+<div class="col-12 col-lg-3 mb-3">
+    <div class="card">
+        <div class="card-header"><h5 class="mb-0">Полигоны</h5></div>
+        <div class="card-body p-0">
+            <div class="list-group list-group-flush tko-polygon-list" style="max-height: 70vh; overflow-y: auto;">
+                {% for polygon in polygons %}
+                    <a href="{{ path(route, { polygon_id: polygon.id, (period_param): period_value }) }}"
+                       class="list-group-item list-group-item-action {{ selectedPolygon and polygon.id == selectedPolygon.id ? 'active' : '' }}">
+                        {{ polygon.name }}
+                    </a>
+                {% else %}
+                    <div class="p-3 text-muted">Нет полигонов.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>

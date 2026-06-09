@@ -1,0 +1,48 @@
+{# Обобщённая таблица «метрики × колонки периода» + Итого.
+   Параметры: metrics, columns ([{label, sublabel, href?, values:{metricKey}}]), totals #}
+<div class="table-responsive">
+    <table class="table table-bordered tko-grid mb-0">
+        <thead>
+            <tr>
+                <th style="min-width: 180px;">Метрики</th>
+                {% for column in columns %}
+                    <th>
+                        {% if column.href is defined and column.href %}
+                            <a href="{{ column.href }}" class="tko-col-link">
+                                {{ column.label }}{% if column.sublabel %}<br><small class="text-muted">{{ column.sublabel }}</small>{% endif %}
+                            </a>
+                        {% else %}
+                            {{ column.label }}{% if column.sublabel %}<br><small class="text-muted">{{ column.sublabel }}</small>{% endif %}
+                        {% endif %}
+                    </th>
+                {% endfor %}
+                <th class="total-col">Итого</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for metric in metrics %}
+                <tr>
+                    <td class="metric-label">{{ metric.label }}, {{ metric.unit }}</td>
+                    {% for column in columns %}
+                        {% set value = column.values[metric.key] %}
+                        <td class="metric-value">
+                            {% if value is not empty %}
+                                {{ value|number_format(0, '.', ' ') }}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                    <td class="metric-value total-col">
+                        {% set total = totals[metric.key] %}
+                        {% if total is not empty and total != '0' %}
+                            {{ total|number_format(0, '.', ' ') }}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

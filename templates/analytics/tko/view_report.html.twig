@@ -1,0 +1,106 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Просмотр аналитики ТКО — детально{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <style>
+        .tko-polygon-list .list-group-item-action.active {
+            background-color: #ffe600;
+            border-color: #e6cf00;
+            color: #1a1a1a;
+            font-weight: 600;
+        }
+        .tko-grid th, .tko-grid td { vertical-align: middle; white-space: nowrap; }
+        .tko-grid .metric-label { font-weight: 600; }
+        .tko-grid thead th { text-align: center; }
+        .tko-grid td.metric-value { text-align: right; }
+        .tko-grid .total-col { background-color: #fffbe0; font-weight: 600; }
+        .tko-week-label { font-weight: 600; font-size: 1rem; }
+    </style>
+
+    <div class="page-title">
+        <div class="row">
+            <div class="col-12">
+                <h3>Просмотр аналитики ТКО</h3>
+                <p class="text-subtitle text-muted">Суточная отчётность по полигону с итогом за неделю</p>
+            </div>
+        </div>
+    </div>
+
+    <section class="section">
+        <div class="row">
+            {% include 'analytics/tko/partials/_polygon_list.html.twig' with {
+                route: 'app_analytics_tko_view',
+                period_param: periodParam,
+                period_value: period,
+            } %}
+
+            <div class="col-12 col-lg-9 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        {% include 'analytics/tko/partials/_period_nav.html.twig' with {
+                            level: 'day',
+                            route: 'app_analytics_tko_view',
+                            period_param: periodParam,
+                        } %}
+
+                        {% if selectedPolygon is null %}
+                            <p class="text-muted mb-0">Выберите полигон слева.</p>
+                        {% else %}
+                            <div class="table-responsive">
+                                <table class="table table-bordered tko-grid mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="min-width: 180px;">Метрики</th>
+                                            {% for day in days %}
+                                                <th>{{ day.dow }}<br><small class="text-muted">{{ day.short }}</small></th>
+                                            {% endfor %}
+                                            <th class="total-col">Итого</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for metric in metrics %}
+                                            <tr>
+                                                <td class="metric-label">{{ metric.label }}, {{ metric.unit }}</td>
+                                                {% for day in days %}
+                                                    {% set value = day.values[metric.key] %}
+                                                    <td class="metric-value">
+                                                        {% if value is not empty %}
+                                                            {% if metric.type == 'num' %}
+                                                                {{ value|number_format(0, '.', ' ') }}
+                                                            {% else %}
+                                                                {{ value }}
+                                                            {% endif %}
+                                                        {% else %}
+                                                            <span class="text-muted">—</span>
+                                                        {% endif %}
+                                                    </td>
+                                                {% endfor %}
+                                                <td class="metric-value total-col">
+                                                    {% set total = totals[metric.key] %}
+                                                    {% if total is not empty and total != '0' %}
+                                                        {% if metric.type == 'num' %}
+                                                            {{ total|number_format(0, '.', ' ') }}
+                                                        {% else %}
+                                                            {{ total }}
+                                                        {% endif %}
+                                                    {% else %}
+                                                        <span class="text-muted">—</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

@@ -74,9 +74,17 @@ class AnalyticsTKO
     #[ORM\Column(name: 'machinery_work', type: Types::TEXT, nullable: true)]
     private ?string $machineryWork = null;
 
-    /** Пожарное состояние — текстовая отметка. */
-    #[ORM\Column(name: 'fire_condition', type: Types::TEXT, nullable: true)]
-    private ?string $fireCondition = null;
+    /** Задымление — текстовая отметка. */
+    #[ORM\Column(name: 'smoke', type: Types::STRING, length: 255, nullable: true)]
+    private ?string $smoke = null;
+
+    /** Пожар без вызова МЧС — текстовая отметка. */
+    #[ORM\Column(name: 'fire_without_mchs', type: Types::STRING, length: 255, nullable: true)]
+    private ?string $fireWithoutMchs = null;
+
+    /** Пожар с вызовом МЧС — текстовая отметка. */
+    #[ORM\Column(name: 'fire_with_mchs', type: Types::STRING, length: 255, nullable: true)]
+    private ?string $fireWithMchs = null;
 
     /** Орошение — текстовая отметка. */
     #[ORM\Column(name: 'irrigation', type: Types::TEXT, nullable: true)]
@@ -246,14 +254,38 @@ class AnalyticsTKO
         return $this;
     }
 
-    public function getFireCondition(): ?string
+    public function getSmoke(): ?string
     {
-        return $this->fireCondition;
+        return $this->smoke;
     }
 
-    public function setFireCondition(?string $fireCondition): static
+    public function setSmoke(?string $smoke): static
     {
-        $this->fireCondition = $fireCondition;
+        $this->smoke = $smoke;
+
+        return $this;
+    }
+
+    public function getFireWithoutMchs(): ?string
+    {
+        return $this->fireWithoutMchs;
+    }
+
+    public function setFireWithoutMchs(?string $fireWithoutMchs): static
+    {
+        $this->fireWithoutMchs = $fireWithoutMchs;
+
+        return $this;
+    }
+
+    public function getFireWithMchs(): ?string
+    {
+        return $this->fireWithMchs;
+    }
+
+    public function setFireWithMchs(?string $fireWithMchs): static
+    {
+        $this->fireWithMchs = $fireWithMchs;
 
         return $this;
     }
