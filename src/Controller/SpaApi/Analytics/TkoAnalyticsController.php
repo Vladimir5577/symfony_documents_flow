@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\Analytics;
 
+use App\Repository\Analytics\TKO\AnalyticsTKORepository;
+use App\Repository\Polygon\PolygonRepository;
 use App\Service\Analytics\TkoAnalyticsService;
 use App\Service\Analytics\TkoMetrics;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -160,4 +162,20 @@ final class TkoAnalyticsController extends AbstractController
         return $days;
     }
 
+    private function normalizeNumber(?string $value): string
+    {
+        if (null === $value || '' === $value) {
+            return '';
+        }
+        if (str_contains($value, '.')) {
+            $value = rtrim(rtrim($value, '0'), '.');
+        }
+
+        return $value;
+    }
+
+    private function getter(string $key): string
+    {
+        return 'get' . str_replace('_', '', ucwords($key, '_'));
+    }
 }
