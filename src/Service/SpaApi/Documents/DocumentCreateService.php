@@ -7,14 +7,11 @@ namespace App\Service\SpaApi\Documents;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Document\DocumentType;
-use App\Entity\Document\DocumentUserRecipient;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
-use App\Enum\DocumentRecipientRole;
 use App\Enum\DocumentStatus;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Organization\OrganizationRepository;
-use App\Repository\User\UserRepository;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -27,11 +24,11 @@ final class DocumentCreateService
     public function __construct(
         private readonly DocumentTypeRepository $documentTypeRepository,
         private readonly OrganizationRepository $organizationRepository,
-        private readonly UserRepository $userRepository,
         private readonly EntityManagerInterface $entityManager,
         private readonly ValidatorInterface $validator,
         private readonly NotificationService $notificationService,
         private readonly DocumentAccessService $documentAccessService,
+        private readonly DocumentRecipientsService $recipientsService,
         private readonly UrlGeneratorInterface $urlGenerator,
     ) {
     }
@@ -71,8 +68,8 @@ final class DocumentCreateService
             throw new BadRequestHttpException(SpaApiError::DOCUMENT_CANNOT_PUBLISH_DRAFT);
         }
 
-        $executorUserIds = $this->normalizeUserIds($payload['executorUserIds'] ?? []);
-        $recipientUserIds = $this->normalizeUserIds($payload['recipientUserIds'] ?? []);
+        $executorUserIds = $this->recipientsService->normalizeUserIds($payload['executorUserIds'] ?? []);
+        $recipientUserIds = $this->recipientsService->normalizeUserIds($payload['recipientUserIds'] ?? []);
 
         if ($wantsPublish && $executorUserIds === [] && $recipientUserIds === []) {
             throw new BadRequestHttpException(SpaApiError::DOCUMENT_NO_RECIPIENTS);
@@ -103,7 +100,7 @@ final class DocumentCreateService
         }
 
         $this->entityManager->persist($document);
-        $this->attachRecipients($document, $executorUserIds, $recipientUserIds);
+        $this->recipientsService->attachRecipients($document, $executorUserIds, $recipientUserIds);
         $this->entityManager->flush();
 
         if ($wantsPublish) {
@@ -153,59 +150,6 @@ final class DocumentCreateService
             return DocumentStatus::from($statusStr);
         } catch (\ValueError) {
             throw new BadRequestHttpException(SpaApiError::DOCUMENT_INVALID_STATUS);
-        }
-    }
-
-    /**
-     * @param list<mixed> $ids
-     *
-     * @return list<int>
-     */
-    private function normalizeUserIds(array $ids): array
-    {
-        return array_values(array_unique(array_filter(array_map(static fn ($id) => (int) $id, $ids), static fn (int $id) => $id > 0)));
-    }
-
-    /**
-     * @param list<int> $executorUserIds
-     * @param list<int> $recipientUserIds
-     */
-    private function attachRecipients(Document $document, array $executorUserIds, array $recipientUserIds): void
-    {
-        $now = new \DateTimeImmutable();
-
-        foreach ($executorUserIds as $userId) {
-            $user = $this->userRepository->findActive($userId);
-            if ($user === null) {
-                continue;
-            }
-
-            $recipient = new DocumentUserRecipient();
-            $recipient->setDocument($document);
-            $recipient->setUser($user);
-            $recipient->setRole(DocumentRecipientRole::EXECUTOR);
-            $recipient->setStatus(DocumentStatus::NEW);
-            $recipient->setCreatedAt($now);
-            $recipient->setUpdatedAt($now);
-            $document->addUserRecipient($recipient);
-            $this->entityManager->persist($recipient);
-        }
-
-        foreach ($recipientUserIds as $userId) {
-            $user = $this->userRepository->findActive($userId);
-            if ($user === null) {
-                continue;
-            }
-
-            $recipient = new DocumentUserRecipient();
-            $recipient->setDocument($document);
-            $recipient->setUser($user);
-            $recipient->setRole(DocumentRecipientRole::RECIPIENT);
-            $recipient->setStatus(DocumentStatus::NEW);
-            $recipient->setCreatedAt($now);
-            $recipient->setUpdatedAt($now);
-            $document->addUserRecipient($recipient);
-            $this->entityManager->persist($recipient);
         }
     }
 
