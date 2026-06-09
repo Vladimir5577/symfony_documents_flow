@@ -284,7 +284,8 @@ final class BoardController extends AbstractController
                 'assignees' => $assignees,
                 'checklistTotal' => $card->getSubtasks()->count(),
                 'checklistDone' => $card->getSubtasks()->filter(fn ($s) => $s->isCompleted())->count(),
-                'commentsCount' => $card->getComments()->count() + $card->getAttachments()->count(),
+                'commentsCount' => $card->getComments()->count()
+                    + $card->getAttachments()->filter(fn ($att) => $att->getContext() === 'chat')->count(),
                 'borderColor' => $card->getBorderColor(),
                 'updatedAt' => $card->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
             ];
