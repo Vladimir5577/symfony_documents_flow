@@ -1,0 +1,104 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Сводка ТКО за неделю{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <style>
+        .tko-grid th, .tko-grid td { vertical-align: middle; white-space: nowrap; }
+        .tko-grid .polygon-label { font-weight: 600; white-space: normal; min-width: 180px; }
+        .tko-grid thead th { text-align: center; }
+        .tko-grid td.metric-value { text-align: right; }
+        .tko-grid tr.totals-row { background-color: rgba(255, 230, 0, 0.18); font-weight: 600; }
+        .tko-grid tr.totals-row td { border-top: 2px solid #e6cf00; border-bottom: 2px solid #e6cf00; }
+        [data-bs-theme=dark] .tko-grid tr.totals-row { background-color: rgba(255, 230, 0, 0.12); }
+        [data-bs-theme=dark] .tko-grid tr.totals-row td { border-top-color: rgba(255, 230, 0, 0.55); border-bottom-color: rgba(255, 230, 0, 0.55); }
+        .tko-week-label { font-weight: 600; font-size: 1rem; }
+    </style>
+
+    <div class="page-title">
+        <div class="row">
+            <div class="col-12">
+                <h3>Сводка ТКО за неделю</h3>
+                <p class="text-subtitle text-muted">Суммарные данные по всем полигонам за выбранную неделю</p>
+            </div>
+        </div>
+    </div>
+
+    <section class="section">
+        <div class="card">
+            <div class="card-body">
+                {# Навигация по неделям + переход к детальному просмотру #}
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                    <a href="{{ path('app_analytics_tko_view', { week: week }) }}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-eye"></i> Детальный просмотр
+                    </a>
+
+                    <div class="d-flex align-items-center gap-3">
+                        <a href="{{ path('app_analytics_tko_view_summary', { week: prevWeek }) }}"
+                           class="btn btn-light-secondary btn-sm" title="Предыдущая неделя">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                        <span class="tko-week-label">{{ weekLabel }}</span>
+                        <a href="{{ path('app_analytics_tko_view_summary', { week: nextWeek }) }}"
+                           class="btn btn-light-secondary btn-sm" title="Следующая неделя">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </div>
+                </div>
+
+                {% if rows is empty %}
+                    <p class="text-muted mb-0">Нет активных полигонов.</p>
+                {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-bordered tko-grid mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="polygon-label">Полигон</th>
+                                    {% for metric in metrics %}
+                                        <th>{{ metric.label }}<br><small class="text-muted">{{ metric.unit }}</small></th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {# Итог по всем полигонам — первой строкой #}
+                                <tr class="totals-row">
+                                    <td class="polygon-label">Итого по всем</td>
+                                    {% for metric in metrics %}
+                                        {% set total = totalsRow[metric.key] %}
+                                        <td class="metric-value">
+                                            {% if total is not empty and total != '0' %}
+                                                {{ total|number_format(0, '.', ' ') }}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endfor %}
+                                </tr>
+
+                                {% for row in rows %}
+                                    <tr>
+                                        <td class="polygon-label">{{ row.name }}</td>
+                                        {% for metric in metrics %}
+                                            {% set value = row.values[metric.key] %}
+                                            <td class="metric-value">
+                                                {% if value is not empty %}
+                                                    {{ value|number_format(0, '.', ' ') }}
+                                                {% else %}
+                                                    <span class="text-muted">—</span>
+                                                {% endif %}
+                                            </td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+{% endblock %}

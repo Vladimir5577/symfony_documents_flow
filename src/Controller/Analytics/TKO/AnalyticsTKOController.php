@@ -271,6 +271,62 @@ final class AnalyticsTKOController extends AbstractController
         ]);
     }
 
+    #[Route('/analytics/tko/view/summary', name: 'app_analytics_tko_view_summary', methods: ['GET'])]
+    public function viewSummary(
+        Request $request,
+        PolygonRepository $polygonRepository,
+        AnalyticsTKORepository $analyticsRepository,
+    ): Response {
+        $polygons = $polygonRepository->findBy(['isActive' => true], ['sortOrder' => 'ASC', 'name' => 'ASC']);
+
+        $monday = $this->resolveMonday($request->query->getString('week'));
+        $sunday = $monday->modify('+6 days');
+
+        // Недельные агрегаты по всем полигонам за выбранную неделю
+        $byPolygon = [];
+        foreach ($analyticsRepository->aggregateWeeklyByPolygon($monday, $sunday) as $row) {
+            $byPolygon[(int) $row['polygon_id']] = $row;
+        }
+
+        // Строка на каждый активный полигон + итог по всем (числовые суммируются, текстовые — дни с отметкой)
+        $rows = [];
+        $totals = array_fill_keys(array_column(TkoMetrics::METRICS, 'key'), 0.0);
+        foreach ($polygons as $polygon) {
+            $agg = $byPolygon[$polygon->getId()] ?? [];
+            $values = [];
+            foreach (TkoMetrics::METRICS as $metric) {
+                $raw = $agg[$metric['key']] ?? null;
+                if (null !== $raw && '' !== $raw && is_numeric($raw)) {
+                    $totals[$metric['key']] += (float) $raw;
+                    $values[$metric['key']] = $this->normalizeNumber((string) (float) $raw);
+                } else {
+                    $values[$metric['key']] = '';
+                }
+            }
+
+            $rows[] = [
+                'name' => $polygon->getName(),
+                'values' => $values,
+            ];
+        }
+
+        $totalsRow = [];
+        foreach (TkoMetrics::METRICS as $metric) {
+            $totalsRow[$metric['key']] = $this->normalizeNumber((string) $totals[$metric['key']]);
+        }
+
+        return $this->render('analytics/tko/view_summary_report.html.twig', [
+            'active_tab' => 'analytics_tko_view_summary',
+            'metrics' => TkoMetrics::METRICS,
+            'rows' => $rows,
+            'totalsRow' => $totalsRow,
+            'week' => $monday->format('Y-m-d'),
+            'weekLabel' => sprintf('Период %s — %s', $monday->format('d.m'), $sunday->format('d.m')),
+            'prevWeek' => $monday->modify('-7 days')->format('Y-m-d'),
+            'nextWeek' => $monday->modify('+7 days')->format('Y-m-d'),
+        ]);
+    }
+
     #[Route('/analytics/tko/save', name: 'app_analytics_tko_save', methods: ['POST'])]
     public function save(
         Request $request,

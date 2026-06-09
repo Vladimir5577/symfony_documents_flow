@@ -259,7 +259,7 @@
     {% if is_granted('ROLE_ADMIN') %}
         <li class="sidebar-group-label">Аналитика ТКО</li>
 
-        <li class="sidebar-item has-sub {% if active_tab in ['analytics_tko', 'analytics_tko_view', 'analytics_tko_view_week', 'analytics_tko_view_month'] %}active{% endif %}">
+        <li class="sidebar-item has-sub {% if active_tab in ['analytics_tko', 'analytics_tko_view', 'analytics_tko_view_week', 'analytics_tko_view_month', 'analytics_tko_view_summary'] %}active{% endif %}">
             <a href="#" class="sidebar-link">
                 <i class="bi bi-trash3"></i>
                 <span>Аналитика ТКО</span>
@@ -272,6 +272,10 @@
 
                 <li class="submenu-item {% if active_tab in ['analytics_tko_view', 'analytics_tko_view_week', 'analytics_tko_view_month'] %}active{% endif %}">
                     <a href="{{ path('app_analytics_tko_view') }}" class="submenu-link"><i class="bi bi-eye"></i> Просмотр</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_tko_view_summary' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_tko_view_summary') }}" class="submenu-link"><i class="bi bi-table"></i> Сводка за неделю</a>
                 </li>
             </ul>
         </li>
