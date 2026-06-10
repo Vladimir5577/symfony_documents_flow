@@ -51,4 +51,7 @@ final class SpaApiError
     public const DOCUMENT_NO_RECIPIENTS = 'document_no_recipients';
     public const DOCUMENT_VALIDATION_FAILED = 'document_validation_failed';
     public const ORGANIZATION_REQUIRED = 'organization_required';
+    public const COMMENT_NOT_FOUND = 'comment_not_found';
+    public const COMMENT_FILE_NOT_FOUND = 'comment_file_not_found';
+    public const COMMENT_VALIDATION_FAILED = 'comment_validation_failed';
 }

@@ -14,6 +14,7 @@ final class DocumentDetailResponseBuilder
         private readonly DocumentApiPresenter $presenter,
         private readonly DocumentAccessService $accessService,
         private readonly DocumentAttachmentService $attachmentService,
+        private readonly DocumentCommentService $commentService,
     ) {
     }
 
@@ -30,6 +31,7 @@ final class DocumentDetailResponseBuilder
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
             'files' => $this->attachmentService->presentAttachments($document->getFiles()),
+            'comments' => $this->commentService->presentComments($document->getComments(), $user),
             'permissions' => $this->accessService->presentPermissions($document, $user),
             'allowedDocumentStatuses' => $this->presenter->presentStatusChoiceDtos($statusChoices),
             'statusChoices' => $statusChoices,
@@ -49,6 +51,7 @@ final class DocumentDetailResponseBuilder
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
             'files' => $this->attachmentService->presentAttachments($document->getFiles()),
+            'comments' => $this->commentService->presentComments($document->getComments(), $user),
             'userRecipient' => $userRecipient !== null ? [
                 'recipientId' => $userRecipient->getId(),
                 'status' => $userRecipient->getStatus()?->value,
