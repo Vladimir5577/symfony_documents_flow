@@ -4,7 +4,7 @@ namespace App\Repository\User;
 
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
-use App\Enum\WorkerStatus;
+use App\Enum\User\WorkerStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Security\Core\Exception\UnsupportedUserException;

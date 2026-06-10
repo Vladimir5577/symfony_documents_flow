@@ -3,7 +3,7 @@
 namespace App\Repository\User;
 
 use App\Entity\User\Role;
-use App\Enum\UserRole;
+use App\Enum\User\UserRole;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 

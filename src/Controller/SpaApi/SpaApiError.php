@@ -43,6 +43,8 @@ final class SpaApiError
     public const PROJECT_NAME_REQUIRED = 'project_name_required';
     public const PROJECT_NAME_TOO_LONG = 'project_name_too_long';
     public const PROJECT_NOT_FOUND = 'project_not_found';
+    public const SUBTASK_NOT_FOUND = 'subtask_not_found';
+    public const SUBTASK_TITLE_REQUIRED = 'subtask_title_required';
     public const UPDATE_FIELDS_REQUIRED = 'update_fields_required';
     public const USER_NOT_FOUND = 'user_not_found';
     public const USER_NOT_PROJECT_MEMBER = 'user_not_project_member';

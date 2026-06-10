@@ -4,7 +4,7 @@ namespace App\Service\Notification;
 
 use App\Entity\Notification\Notification;
 use App\Entity\User\User;
-use App\Enum\NotificationType;
+use App\Enum\Notification\NotificationType;
 use Doctrine\ORM\EntityManagerInterface;
 
 class NotificationService

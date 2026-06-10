@@ -2,7 +2,7 @@
 
 namespace App\Entity\Organization;
 
-use App\Enum\TaxType;
+use App\Enum\Organization\TaxType;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Validator\Constraints as Assert;

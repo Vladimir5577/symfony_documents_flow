@@ -3,7 +3,7 @@
 namespace App\Command;
 
 use App\Entity\User\Role;
-use App\Enum\UserRole;
+use App\Enum\User\UserRole;
 use App\Repository\User\RoleRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;

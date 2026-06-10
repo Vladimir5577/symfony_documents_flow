@@ -8,7 +8,7 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Document\DocumentHistory;
 use App\Entity\User\User;
-use App\Enum\DocumentStatus;
+use App\Enum\Document\DocumentStatus;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;

@@ -8,7 +8,7 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\Organization\Department;
 use App\Entity\Organization\Filial;
-use App\Enum\OrganizationType;
+use App\Enum\Organization\OrganizationType;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;

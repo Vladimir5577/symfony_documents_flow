@@ -6,7 +6,7 @@ use App\Entity\Organization\AbstractOrganizationWithDetails;
 use App\Entity\Organization\Department;
 use App\Entity\Organization\Filial;
 use App\Entity\Organization\Organization;
-use App\Enum\TaxType;
+use App\Enum\Organization\TaxType;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Persistence\ObjectManager;
 

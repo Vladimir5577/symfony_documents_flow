@@ -2,7 +2,7 @@
 
 namespace App\Entity\User;
 
-use App\Enum\UserRole;
+use App\Enum\User\UserRole;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]

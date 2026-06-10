@@ -3,7 +3,7 @@
 namespace App\Entity\Notification;
 
 use App\Entity\User\User;
-use App\Enum\NotificationType;
+use App\Enum\Notification\NotificationType;
 use App\Repository\Notification\NotificationRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;

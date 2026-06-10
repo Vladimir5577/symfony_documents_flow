@@ -9,8 +9,8 @@ use App\Entity\Document\DocumentType;
 use App\Entity\Document\DocumentUserRecipient;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
-use App\Enum\DocumentRecipientRole;
-use App\Enum\DocumentStatus;
+use App\Enum\Document\DocumentRecipientRole;
+use App\Enum\Document\DocumentStatus;
 
 final class DocumentApiPresenter
 {

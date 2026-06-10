@@ -3,8 +3,8 @@
 namespace App\Entity\Document;
 
 use App\Entity\User\User;
-use App\Enum\DocumentRecipientRole;
-use App\Enum\DocumentStatus;
+use App\Enum\Document\DocumentRecipientRole;
+use App\Enum\Document\DocumentStatus;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;

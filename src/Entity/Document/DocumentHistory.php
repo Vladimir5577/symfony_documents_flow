@@ -3,7 +3,7 @@
 namespace App\Entity\Document;
 
 use App\Entity\User\User;
-use App\Enum\DocumentStatus;
+use App\Enum\Document\DocumentStatus;
 use App\Repository\Document\DocumentHistoryRepository;
 use Doctrine\ORM\Mapping as ORM;
 

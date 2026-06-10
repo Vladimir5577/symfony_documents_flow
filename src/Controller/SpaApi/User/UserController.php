@@ -6,7 +6,7 @@ namespace App\Controller\SpaApi\User;
 
 use App\Entity\User\Role;
 use App\Entity\User\User;
-use App\Enum\WorkerStatus;
+use App\Enum\User\WorkerStatus;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\RoleRepository;
 use App\Repository\User\UserRepository;

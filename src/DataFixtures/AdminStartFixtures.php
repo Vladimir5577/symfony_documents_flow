@@ -2,11 +2,9 @@
 
 namespace App\DataFixtures;
 
-use App\Entity\Organization\Organization;
 use App\Entity\User\Role;
 use App\Entity\User\User;
-use App\Enum\UserRole;
-use App\Repository\Organization\OrganizationRepository;
+use App\Enum\User\UserRole;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Persistence\ObjectManager;

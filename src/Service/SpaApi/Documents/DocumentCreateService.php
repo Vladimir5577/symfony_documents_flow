@@ -9,7 +9,7 @@ use App\Entity\Document\Document;
 use App\Entity\Document\DocumentType;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
-use App\Enum\DocumentStatus;
+use App\Enum\Document\DocumentStatus;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Service\Notification\NotificationService;

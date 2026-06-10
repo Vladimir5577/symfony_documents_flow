@@ -6,7 +6,7 @@ namespace App\Controller\SpaApi\DocumentsFlow;
 
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\User\User;
-use App\Enum\DocumentStatus;
+use App\Enum\Document\DocumentStatus;
 use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;

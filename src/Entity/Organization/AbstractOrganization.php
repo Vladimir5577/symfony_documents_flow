@@ -346,12 +346,12 @@ abstract class AbstractOrganization
         return $this;
     }
 
-    public function getTaxType(): ?\App\Enum\TaxType
+    public function getTaxType(): ?\App\Enum\Organization\TaxType
     {
         return null;
     }
 
-    public function setTaxType(?\App\Enum\TaxType $taxType): static
+    public function setTaxType(?\App\Enum\Organization\TaxType $taxType): static
     {
         return $this;
     }

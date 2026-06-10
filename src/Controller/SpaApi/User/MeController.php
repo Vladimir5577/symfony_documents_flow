@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Controller\SpaApi;
+namespace App\Controller\SpaApi\User;
 
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
@@ -12,6 +12,7 @@ use App\Service\Kanban\KanbanService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 final class MeController extends AbstractController
@@ -20,6 +21,7 @@ final class MeController extends AbstractController
         private readonly KanbanProjectRepository $projectRepository,
         private readonly KanbanBoardRepository $boardRepository,
         private readonly KanbanService $kanbanService,
+        private readonly RoleHierarchyInterface $roleHierarchy,
     ) {
     }
 
@@ -33,7 +35,7 @@ final class MeController extends AbstractController
         return $this->json([
             'id' => $user->getId(),
             'login' => $user->getUserIdentifier(),
-            'roles' => $user->getRoles(),
+            'roles' => array_values($this->roleHierarchy->getReachableRoleNames($user->getRoles())),
             'lastname' => $user->getLastname(),
             'firstname' => $user->getFirstname(),
             'patronymic' => $user->getPatronymic(),

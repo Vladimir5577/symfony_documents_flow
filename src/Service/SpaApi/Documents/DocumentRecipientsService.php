@@ -6,8 +6,8 @@ namespace App\Service\SpaApi\Documents;
 
 use App\Entity\Document\Document;
 use App\Entity\Document\DocumentUserRecipient;
-use App\Enum\DocumentRecipientRole;
-use App\Enum\DocumentStatus;
+use App\Enum\Document\DocumentRecipientRole;
+use App\Enum\Document\DocumentStatus;
 use App\Repository\User\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 

@@ -4,7 +4,7 @@ namespace App\Entity\Document;
 
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
-use App\Enum\DocumentStatus;
+use App\Enum\Document\DocumentStatus;
 use App\Repository\Document\DocumentRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;

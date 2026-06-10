@@ -2,7 +2,7 @@
 
 namespace App\Entity\User;
 
-use App\Enum\WorkerStatus;
+use App\Enum\User\WorkerStatus;
 use App\Repository\User\WorkerRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;

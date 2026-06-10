@@ -4,7 +4,7 @@ namespace App\Repository\Document;
 
 use App\Entity\Document\DocumentUserRecipient;
 use App\Entity\User\User;
-use App\Enum\DocumentStatus;
+use App\Enum\Document\DocumentStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
