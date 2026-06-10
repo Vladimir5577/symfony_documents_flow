@@ -180,7 +180,7 @@
     <!-- ###############################################################
      ################################################################## -->
 
-    {% if is_granted('ROLE_WORK_CITIZEN_APPEAL') %}
+    {% if is_granted('ROLE_CITIZEN_APPEAL') %}
         <li class="sidebar-group-label">Обращения граждан</li>
 
         <li class="sidebar-item {% if active_tab == 'citizen_appeal' %}active{% endif %}">
@@ -240,7 +240,7 @@
             </a>
 
             <ul class="submenu">
-                {% if is_granted('ROLE_MANAGER_ANALYTIC') %}
+                {% if is_granted('ROLE_ADMIN') %}
                     <li class="submenu-item {% if active_tab == 'analytics_dashboard' %}active{% endif %}">
                         <a href="{{ path('app_analytics_dashboard') }}" class="submenu-link"><i class="bi bi-speedometer2"></i> Дашборд</a>
                     </li>

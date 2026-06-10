@@ -79,19 +79,19 @@
                                     {% if roles is defined and roles %}
                                     <div class="col-12">
                                         <div class="form-group">
-                                            <label>Роль</label>
+                                            <label>Роли</label>
                                             <div>
-                                                {% set selectedRoleId = form_data.role|default('') %}
+                                                {% set selectedRoleIds = form_data.roles|default([]) %}
                                                 {% for role in roles %}
                                                     <div class="form-check">
-                                                        <input class="form-check-input" type="radio" name="role" id="role-{{ role.id }}" value="{{ role.id }}" {% if selectedRoleId == role.id %}checked{% endif %}>
+                                                        <input class="form-check-input" type="checkbox" name="roles[]" id="role-{{ role.id }}" value="{{ role.id }}" {% if selectedRoleIds|filter(id => id == role.id)|length %}checked{% endif %}>
                                                         <label class="form-check-label" for="role-{{ role.id }}">
                                                             {{ role.label|default(role.name) }}
                                                         </label>
                                                     </div>
                                                 {% endfor %}
                                             </div>
-                                            <small class="form-text text-muted">Выберите роль. Если роль не выбрана, будет назначена роль ROLE_USER по умолчанию.</small>
+                                            <small class="form-text text-muted">Выберите одну или несколько ролей. Если ничего не выбрано, будет действовать ROLE_USER по умолчанию.</small>
                                         </div>
                                     </div>
                                     {% endif %}

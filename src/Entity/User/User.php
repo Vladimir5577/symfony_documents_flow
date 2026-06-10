@@ -351,7 +351,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     /**
      * Symfony Security требует массив строк — только из связи user_roles.
      * Без записей возвращаем ROLE_USER (минимальная роль).
-     * Расширенные права (MODERATOR и т.д.) не дублируют ROLE_USER в массиве:
+     * Расширенные права (MANAGER и т.д.) не дублируют ROLE_USER в массиве:
      * для проверок доступа используется role_hierarchy в security.yaml.
      */
     public function getRoles(): array

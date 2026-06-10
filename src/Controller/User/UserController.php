@@ -170,21 +170,10 @@ final class UserController extends AbstractController
             }
         }
 
-        // Обрабатываем выбранную роль
-        $selectedRoleId = isset($formData['role']) && $formData['role'] !== '' ? (int) $formData['role'] : null;
-
-        if ($selectedRoleId !== null && $selectedRoleId > 0) {
-            $role = $roleRepository->find($selectedRoleId);
+        foreach ($this->parseSelectedRoleIds($formData) as $roleId) {
+            $role = $roleRepository->find($roleId);
             if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
                 $user->addRoleEntity($role);
-            }
-        }
-
-        // Если роль не выбрана, добавляем ROLE_USER по умолчанию
-        if ($selectedRoleId === null || $selectedRoleId === 0) {
-            $defaultRole = $roleRepository->findOneByName(UserRole::ROLE_USER);
-            if ($defaultRole) {
-                $user->addRoleEntity($defaultRole);
             }
         }
 
@@ -467,30 +456,7 @@ final class UserController extends AbstractController
 
         $roles = $roleRepository->findAllExceptAdmin();
 
-        // Получаем выбранную роль пользователя (первая не-админская из user_roles).
-        // Если записей нет, в форме показываем ROLE_USER по умолчанию (как в getRoles() при пустой связи).
-        $selectedRoleId = null;
-        foreach ($user->getRolesRel() as $userRole) {
-            $role = $userRole->getRole();
-            if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
-                $selectedRoleId = $role->getId();
-                break;
-            }
-        }
-
-        if ($selectedRoleId === null) {
-            $hasAdminOnlyAssignment = false;
-            foreach ($user->getRolesRel() as $userRole) {
-                $role = $userRole->getRole();
-                if ($role && $role->getName() === UserRole::ROLE_ADMIN->value) {
-                    $hasAdminOnlyAssignment = true;
-                    break;
-                }
-            }
-            if (!$hasAdminOnlyAssignment) {
-                $selectedRoleId = $roleRepository->findOneByName(UserRole::ROLE_USER)?->getId();
-            }
-        }
+        $selectedRoleIds = $this->getNonAdminRoleIds($user);
 
         return $this->render('user/edit_user.html.twig', [
             'active_tab' => 'edit_user',
@@ -499,7 +465,7 @@ final class UserController extends AbstractController
             'is_admin' => $isAdmin,
             'organizations' => $organizationsWithChildren,
             'roles' => $roles,
-            'selected_role_id' => $selectedRoleId,
+            'selected_role_ids' => $selectedRoleIds,
             'user_employee_status_choices' => WorkerStatus::getChoices(),
         ]);
     }
@@ -735,48 +701,12 @@ final class UserController extends AbstractController
                 }
             }
 
-            // Обновляем роль (radio button, одна роль)
-            $selectedRoleId = isset($formData['role']) && $formData['role'] !== '' ? (int) $formData['role'] : null;
-
-            // Получаем текущую роль (не админскую)
-            $currentRoleId = null;
-            foreach ($user->getRolesRel() as $userRole) {
-                $role = $userRole->getRole();
-                if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
-                    $currentRoleId = $role->getId();
-                    break;
-                }
-            }
-
-            // Обновляем роль только если она изменилась
-            if ($selectedRoleId !== $currentRoleId) {
-                // Удаляем все роли кроме админской
-                $rolesToRemove = [];
-                foreach ($user->getRolesRel() as $userRole) {
-                    $role = $userRole->getRole();
-                    if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
-                        $rolesToRemove[] = $userRole;
-                    }
-                }
-                foreach ($rolesToRemove as $userRole) {
-                    $user->getRolesRel()->removeElement($userRole);
-                    $entityManager->remove($userRole);
-                }
-
-                // Добавляем новую роль, если она выбрана
-                if ($selectedRoleId !== null && $selectedRoleId > 0) {
-                    $role = $roleRepository->find($selectedRoleId);
-                    if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
-                        $user->addRoleEntity($role);
-                    }
-                } else {
-                    // Если роль не выбрана, добавляем ROLE_USER по умолчанию
-                    $defaultRole = $roleRepository->findOneByName(UserRole::ROLE_USER);
-                    if ($defaultRole) {
-                        $user->addRoleEntity($defaultRole);
-                    }
-                }
-            }
+            $this->syncUserRoles(
+                $user,
+                $this->parseSelectedRoleIds($formData),
+                $roleRepository,
+                $entityManager,
+            );
         }
 
         // Устанавливаем updated_by текущим залогиненным пользователем
@@ -871,5 +801,79 @@ final class UserController extends AbstractController
 
         $this->addFlash('success', 'Пользователь удалён.');
         return $this->redirectToRoute('app_all_users');
+    }
+
+    /** @return int[] */
+    private function parseSelectedRoleIds(array $formData): array
+    {
+        $raw = $formData['roles'] ?? [];
+        if (!is_array($raw)) {
+            $raw = $raw !== '' && $raw !== null ? [$raw] : [];
+        }
+
+        $ids = [];
+        foreach ($raw as $value) {
+            $id = (int) $value;
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /** @return int[] */
+    private function getNonAdminRoleIds(User $user): array
+    {
+        $ids = [];
+        foreach ($user->getRolesRel() as $userRole) {
+            $role = $userRole->getRole();
+            if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
+                $ids[] = (int) $role->getId();
+            }
+        }
+
+        return $ids;
+    }
+
+    /** @param int[] $selectedRoleIds */
+    private function syncUserRoles(
+        User $user,
+        array $selectedRoleIds,
+        RoleRepository $roleRepository,
+        EntityManagerInterface $entityManager,
+    ): void {
+        $selectedSet = array_flip($selectedRoleIds);
+        $existingNonAdminIds = [];
+        $rolesToRemove = [];
+
+        foreach ($user->getRolesRel() as $userRole) {
+            $role = $userRole->getRole();
+            if (!$role || $role->getName() === UserRole::ROLE_ADMIN->value) {
+                continue;
+            }
+
+            $roleId = (int) $role->getId();
+            $existingNonAdminIds[$roleId] = true;
+            if (!isset($selectedSet[$roleId])) {
+                $rolesToRemove[] = $userRole;
+            }
+        }
+
+        foreach ($rolesToRemove as $userRole) {
+            $user->getRolesRel()->removeElement($userRole);
+            $entityManager->remove($userRole);
+        }
+
+        foreach ($selectedRoleIds as $roleId) {
+            if (isset($existingNonAdminIds[$roleId])) {
+                continue;
+            }
+
+            $role = $roleRepository->find($roleId);
+            if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
+                $user->addRoleEntity($role);
+            }
+        }
     }
 }
