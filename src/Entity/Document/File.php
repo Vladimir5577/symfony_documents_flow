@@ -5,6 +5,7 @@ namespace App\Entity\Document;
 use App\Repository\Document\FileRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use Gedmo\Mapping\Annotation as Gedmo;
 use Symfony\Component\HttpFoundation\File\File as SymfonyFile;
 use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
@@ -33,6 +34,10 @@ class File
 
     #[ORM\Column(type: Types::STRING, length: 255, nullable: true)]
     private ?string $filePath = null;
+
+    #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    #[Gedmo\Timestampable(on: 'create')]
+    private ?\DateTimeImmutable $createdAt = null;
 
     public function getId(): ?int
     {
@@ -98,6 +103,18 @@ class File
     public function setFilePath(?string $filePath): static
     {
         $this->filePath = $filePath;
+
+        return $this;
+    }
+
+    public function getCreatedAt(): ?\DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function setCreatedAt(?\DateTimeImmutable $createdAt): static
+    {
+        $this->createdAt = $createdAt;
 
         return $this;
     }

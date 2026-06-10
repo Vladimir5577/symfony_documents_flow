@@ -12,6 +12,7 @@ use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
+use App\Service\SpaApi\Documents\DocumentDetailResponseBuilder;
 use App\Service\SpaApi\Documents\DocumentRecipientStatusService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -31,6 +32,7 @@ final class DocumentIncomingController extends AbstractController
         private readonly DocumentApiPresenter $presenter,
         private readonly DocumentAccessService $accessService,
         private readonly DocumentRecipientStatusService $recipientStatusService,
+        private readonly DocumentDetailResponseBuilder $detailResponseBuilder,
     ) {
     }
 
@@ -97,27 +99,7 @@ final class DocumentIncomingController extends AbstractController
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
-        $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
-        $userRecipient = $this->accessService->findUserRecipient($document, $user);
-
-        return $this->json([
-            'document' => $this->presenter->presentDocumentListItem($document),
-            'executors' => $split['executors'],
-            'recipients' => $split['recipients'],
-            'userRecipient' => $userRecipient !== null ? [
-                'recipientId' => $userRecipient->getId(),
-                'status' => $userRecipient->getStatus()?->value,
-                'statusLabel' => $userRecipient->getStatus()?->getLabel(),
-            ] : null,
-            'allowedRecipientStatuses' => array_map(
-                static fn (DocumentStatus $case) => [
-                    'value' => $case->value,
-                    'label' => $case->getLabel(),
-                ],
-                DocumentStatus::getReceiverAllowedStatuses(),
-            ),
-            'permissions' => $this->accessService->presentPermissions($document, $user),
-        ]);
+        return $this->json($this->detailResponseBuilder->buildIncomingDetail($document, $user));
     }
 
     #[Route('/incoming/{id}/recipient-status', name: 'spa_api_documents_flow_incoming_recipient_status', requirements: ['id' => '\d+'], methods: ['PATCH'])]
@@ -152,27 +134,7 @@ final class DocumentIncomingController extends AbstractController
             );
         }
 
-        $userRecipient = $this->accessService->findUserRecipient($document, $user);
-        $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
-
-        return $this->json([
-            'document' => $this->presenter->presentDocumentListItem($document),
-            'executors' => $split['executors'],
-            'recipients' => $split['recipients'],
-            'userRecipient' => $userRecipient !== null ? [
-                'recipientId' => $userRecipient->getId(),
-                'status' => $userRecipient->getStatus()?->value,
-                'statusLabel' => $userRecipient->getStatus()?->getLabel(),
-            ] : null,
-            'allowedRecipientStatuses' => array_map(
-                static fn (DocumentStatus $case) => [
-                    'value' => $case->value,
-                    'label' => $case->getLabel(),
-                ],
-                DocumentStatus::getReceiverAllowedStatuses(),
-            ),
-            'permissions' => $this->accessService->presentPermissions($document, $user),
-        ]);
+        return $this->json($this->detailResponseBuilder->buildIncomingDetail($document, $user));
     }
 
     private function parseDate(mixed $value): ?\DateTimeImmutable

@@ -8,9 +8,12 @@ use App\Entity\Document\Document;
 use App\Entity\Document\DocumentType;
 use App\Entity\Document\DocumentUserRecipient;
 use App\Entity\Organization\AbstractOrganization;
+use App\Entity\Organization\Department;
+use App\Entity\Organization\Filial;
 use App\Entity\User\User;
 use App\Enum\DocumentRecipientRole;
 use App\Enum\DocumentStatus;
+use App\Enum\OrganizationType;
 
 final class DocumentApiPresenter
 {
@@ -128,6 +131,60 @@ final class DocumentApiPresenter
     public function presentCreationStatusChoices(): array
     {
         return DocumentStatus::getCreationChoices();
+    }
+
+    /**
+     * @param array<string, string> $choices
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    public function presentStatusChoiceDtos(array $choices): array
+    {
+        $rows = [];
+        foreach ($choices as $value => $label) {
+            $rows[] = [
+                'value' => (string) $value,
+                'label' => (string) $label,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return array{
+     *     id: int|null,
+     *     name: string|null,
+     *     type: string,
+     *     children: list<array>
+     * }
+     */
+    public function presentOrganizationTreeNode(AbstractOrganization $organization): array
+    {
+        $children = [];
+        foreach ($organization->getChildOrganizations() as $child) {
+            $children[] = $this->presentOrganizationTreeNode($child);
+        }
+
+        return [
+            'id' => $organization->getId(),
+            'name' => $organization->getName(),
+            'type' => $this->resolveOrganizationType($organization)->value,
+            'children' => $children,
+        ];
+    }
+
+    private function resolveOrganizationType(AbstractOrganization $organization): OrganizationType
+    {
+        if ($organization instanceof Filial) {
+            return OrganizationType::FILIAL;
+        }
+
+        if ($organization instanceof Department) {
+            return OrganizationType::DEPARTMENT;
+        }
+
+        return OrganizationType::ORGANIZATION;
     }
 
     public function presentPagination(int $page, int $limit, int $total): array

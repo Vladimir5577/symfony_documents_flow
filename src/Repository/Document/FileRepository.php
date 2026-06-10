@@ -2,6 +2,7 @@
 
 namespace App\Repository\Document;
 
+use App\Entity\Document\Document;
 use App\Entity\Document\File;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -14,6 +15,16 @@ class FileRepository extends ServiceEntityRepository
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, File::class);
+    }
+
+    public function countByDocument(Document $document): int
+    {
+        return (int) $this->createQueryBuilder('f')
+            ->select('COUNT(f.id)')
+            ->andWhere('f.document = :document')
+            ->setParameter('document', $document)
+            ->getQuery()
+            ->getSingleScalarResult();
     }
 
     //    /**

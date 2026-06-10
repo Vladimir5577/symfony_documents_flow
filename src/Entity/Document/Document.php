@@ -88,6 +88,7 @@ class Document
 
     /** @var Collection<int, File> */
     #[ORM\OneToMany(mappedBy: 'document', targetEntity: File::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[ORM\OrderBy(['id' => 'ASC'])]
     private Collection $files;
 
     /** @var Collection<int, DocumentComment> */

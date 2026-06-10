@@ -10,6 +10,7 @@ use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
+use App\Service\SpaApi\Documents\DocumentDetailResponseBuilder;
 use App\Service\SpaApi\Documents\DocumentPublishService;
 use App\Service\SpaApi\Documents\DocumentRecipientsService;
 use App\Service\SpaApi\Documents\DocumentUpdateService;
@@ -33,6 +34,7 @@ final class DocumentOutgoingController extends AbstractController
         private readonly DocumentUpdateService $updateService,
         private readonly DocumentPublishService $publishService,
         private readonly DocumentRecipientsService $recipientsService,
+        private readonly DocumentDetailResponseBuilder $detailResponseBuilder,
         private readonly EntityManagerInterface $entityManager,
     ) {
     }
@@ -92,15 +94,7 @@ final class DocumentOutgoingController extends AbstractController
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
-        $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
-
-        return $this->json([
-            'document' => $this->presenter->presentDocumentListItem($document),
-            'executors' => $split['executors'],
-            'recipients' => $split['recipients'],
-            'permissions' => $this->accessService->presentPermissions($document, $user),
-            'statusChoices' => $this->presenter->presentCreationStatusChoices(),
-        ]);
+        return $this->json($this->detailResponseBuilder->buildOutgoingDetail($document, $user));
     }
 
     #[Route('/outgoing/{id}', name: 'spa_api_documents_flow_outgoing_update', requirements: ['id' => '\d+'], methods: ['PATCH'])]
@@ -187,14 +181,7 @@ final class DocumentOutgoingController extends AbstractController
         );
         $this->entityManager->flush();
 
-        $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
-
-        return $this->json([
-            'document' => $this->presenter->presentDocumentListItem($document),
-            'executors' => $split['executors'],
-            'recipients' => $split['recipients'],
-            'permissions' => $this->accessService->presentPermissions($document, $user),
-        ]);
+        return $this->json($this->detailResponseBuilder->buildOutgoingDetail($document, $user));
     }
 
     private function findOutgoingDocument(int $id, User $user): \App\Entity\Document\Document|JsonResponse
