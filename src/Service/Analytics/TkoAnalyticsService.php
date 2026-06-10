@@ -99,6 +99,89 @@ final class TkoAnalyticsService
     }
 
     /**
+     * Недельная сводка по всем полигонам (строки = полигоны, колонки = метрики) + итог.
+     * API-формат для SPA: значения — числа или null, даты — ISO (Y-m-d), без презентации.
+     * Формат:
+     *   {
+     *     week: { start, end, prev, next },
+     *     metrics: [{ key, name, unit, agg }],
+     *     rows: [{ polygonId, name, values: { <metricKey>: number|null } }],
+     *     totals: { <metricKey>: number|null }
+     *   }
+     *
+     * agg описывает семантику колонки: 'sum' — сумма за неделю (num-метрики),
+     * 'daysCount' — число дней недели с заполненным значением (text-метрики).
+     *
+     * @return array<string, mixed>
+     */
+    public function buildWeekSummary(string $week): array
+    {
+        $polygons = $this->polygonRepository->findBy(['isActive' => true], ['sortOrder' => 'ASC', 'name' => 'ASC']);
+
+        $monday = $this->resolveMonday($week);
+        $sunday = $monday->modify('+6 days');
+
+        // Недельные агрегаты по всем полигонам за выбранную неделю
+        $byPolygon = [];
+        foreach ($this->analyticsRepository->aggregateWeeklyByPolygon($monday, $sunday) as $row) {
+            $byPolygon[(int) $row['polygon_id']] = $row;
+        }
+
+        // Строка на каждый активный полигон + итог по всем (числовые суммируются, текстовые — дни с отметкой)
+        $metricKeys = array_column(TkoMetrics::METRICS, 'key');
+        $rows = [];
+        $totalsSum = array_fill_keys($metricKeys, 0.0);
+        $totalsHas = array_fill_keys($metricKeys, false);
+        foreach ($polygons as $polygon) {
+            $agg = $byPolygon[$polygon->getId()] ?? [];
+            $values = [];
+            foreach ($metricKeys as $key) {
+                $raw = $agg[$key] ?? null;
+                if (null !== $raw && '' !== $raw && is_numeric($raw)) {
+                    $value = (float) $raw;
+                    $totalsSum[$key] += $value;
+                    $totalsHas[$key] = true;
+                    $values[$key] = $this->toNumber($value);
+                } else {
+                    $values[$key] = null;
+                }
+            }
+
+            $rows[] = [
+                'polygonId' => $polygon->getId(),
+                'name' => $polygon->getName(),
+                'values' => $values,
+            ];
+        }
+
+        // Итог: null, если ни у одного полигона не было значения по метрике
+        $totals = [];
+        foreach ($metricKeys as $key) {
+            $totals[$key] = $totalsHas[$key] ? $this->toNumber($totalsSum[$key]) : null;
+        }
+
+        return [
+            'week' => [
+                'start' => $monday->format('Y-m-d'),
+                'end' => $sunday->format('Y-m-d'),
+                'prev' => $monday->modify('-7 days')->format('Y-m-d'),
+                'next' => $monday->modify('+7 days')->format('Y-m-d'),
+            ],
+            'metrics' => array_map(
+                static fn (array $m): array => [
+                    'key' => $m['key'],
+                    'name' => $m['name'],
+                    'unit' => $m['unit'],
+                    'agg' => 'text' === $m['type'] ? 'daysCount' : 'sum',
+                ],
+                TkoMetrics::METRICS,
+            ),
+            'rows' => $rows,
+            'totals' => $totals,
+        ];
+    }
+
+    /**
      * Календарь недель + агрегаты по неделям (reports с разбивкой по полигонам).
      * Формат:
      *   {
@@ -275,6 +358,14 @@ final class TkoAnalyticsService
         }
 
         return $value;
+    }
+
+    /**
+     * Приводит число к int (если целое) или float — чтобы в JSON не было лишнего «.0».
+     */
+    private function toNumber(float $value): int|float
+    {
+        return $value == (int) $value ? (int) $value : $value;
     }
 
     private function getter(string $key): string

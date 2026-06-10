@@ -42,4 +42,16 @@ final class TkoAnalyticsController extends AbstractController
             $request->query->getInt('offset'),
         ));
     }
+
+    /**
+     * Недельная сводка по всем полигонам (строки = полигоны, колонки = метрики) + итог.
+     * API-формат для SPA: значения — числа или null, даты — ISO; см. Readme_tko_analytics_api.md.
+     */
+    #[Route('/spa/api/analytics/tko/week', name: 'spa_api_analytics_tko_view_summary', methods: ['GET'])]
+    public function viewSummary(Request $request, TkoAnalyticsService $service): JsonResponse
+    {
+        return $this->json($service->buildWeekSummary(
+            $request->query->getString('week'),
+        ));
+    }
 }
