@@ -24,13 +24,18 @@
                 <div class="card">
                     <div class="card-header">
                         <h4 class="card-title">Список полигонов</h4>
-                        <p class="text-muted mb-0">Всего: {{ polygons|length }}</p>
+                        <p class="text-muted mb-0">Всего: {{ polygons|length }}. Перетаскивайте строки за иконку <i class="bi bi-grip-vertical"></i>, чтобы изменить порядок. Сохранение происходит автоматически.</p>
                     </div>
                     <div class="card-content">
+                        <div id="polygons-reorder-alert" class="alert alert-danger m-3" style="display:none;"></div>
                         <div class="table-responsive">
-                            <table class="table table-hover mb-0">
+                            <table class="table table-hover mb-0" id="polygons-table"
+                                   data-reorder-url="{{ path('app_polygons_reorder') }}"
+                                   data-csrf-token="{{ csrf_token('polygons_reorder') }}">
                                 <thead>
                                 <tr>
+                                    <th style="width:40px"></th>
+                                    <th style="width:60px">№</th>
                                     <th>Название</th>
                                     <th>GPS</th>
                                     <th>Контакт</th>
@@ -38,19 +43,23 @@
                                     <th>Статус</th>
                                 </tr>
                                 </thead>
-                                <tbody>
+                                <tbody id="polygons-sortable">
                                 {% if polygons|length > 0 %}
                                     {% for polygon in polygons %}
-                                        <tr data-href="{{ path('app_polygon_view', {id: polygon.id}) }}" role="button" tabindex="0">
-                                            <td>{{ polygon.name }}</td>
-                                            <td>
+                                        <tr data-polygon-id="{{ polygon.id }}" data-href="{{ path('app_polygon_view', {id: polygon.id}) }}">
+                                            <td class="drag-handle" style="cursor: grab; text-align: center; vertical-align: middle;">
+                                                <i class="bi bi-grip-vertical" style="font-size: 1.2rem; color: #999;"></i>
+                                            </td>
+                                            <td class="polygon-link" role="button" tabindex="0"><span class="position-label">{{ loop.index }}</span></td>
+                                            <td class="polygon-link" role="button" tabindex="0">{{ polygon.name }}</td>
+                                            <td class="polygon-link" role="button" tabindex="0">
                                                 {% if polygon.gpsLat is not null and polygon.gpsLng is not null %}
                                                     {{ polygon.gpsLat }}, {{ polygon.gpsLng }}
                                                 {% else %}-{% endif %}
                                             </td>
-                                            <td>{{ polygon.contactName ?? '-' }}</td>
-                                            <td>{{ polygon.contactPhone ?? '-' }}</td>
-                                            <td>
+                                            <td class="polygon-link" role="button" tabindex="0">{{ polygon.contactName ?? '-' }}</td>
+                                            <td class="polygon-link" role="button" tabindex="0">{{ polygon.contactPhone ?? '-' }}</td>
+                                            <td class="polygon-link" role="button" tabindex="0">
                                                 {% if polygon.isActive %}
                                                     <span class="badge bg-success">Активен</span>
                                                 {% else %}
@@ -61,7 +70,7 @@
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted py-4">Полигонов нет.</td>
+                                        <td colspan="7" class="text-center text-muted py-4">Полигонов нет.</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>
@@ -73,18 +82,84 @@
         </div>
     </section>
 
+    <script src="/front_end/assets/extensions/sortablejs/Sortable.min.js"></script>
     <script>
-        document.querySelectorAll('#polygons-table-section tr[data-href]').forEach(function (row) {
-            row.addEventListener('click', function () {
-                window.location.href = this.dataset.href;
+        (function () {
+            function navigate(row) {
+                if (row && row.dataset.href) window.location.href = row.dataset.href;
+            }
+
+            document.querySelectorAll('#polygons-table-section td.polygon-link').forEach(function (cell) {
+                cell.addEventListener('click', function () {
+                    navigate(this.closest('tr[data-href]'));
+                });
+                cell.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(this.closest('tr[data-href]'));
+                    }
+                });
             });
-            row.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    window.location.href = this.dataset.href;
+
+            var table = document.getElementById('polygons-table');
+            var tbody = document.getElementById('polygons-sortable');
+            if (!table || !tbody) return;
+
+            var url = table.dataset.reorderUrl;
+            var token = table.dataset.csrfToken;
+            var alertBox = document.getElementById('polygons-reorder-alert');
+
+            function showError(message) {
+                if (!alertBox) return;
+                alertBox.textContent = message;
+                alertBox.style.display = 'block';
+                setTimeout(function () { alertBox.style.display = 'none'; }, 4000);
+            }
+
+            function relabel() {
+                tbody.querySelectorAll('tr').forEach(function (row, idx) {
+                    var label = row.querySelector('.position-label');
+                    if (label) label.textContent = idx + 1;
+                });
+            }
+
+            function collectOrder() {
+                var rows = tbody.querySelectorAll('tr[data-polygon-id]');
+                var order = [];
+                rows.forEach(function (row, idx) {
+                    order.push({ id: parseInt(row.dataset.polygonId, 10), position: idx + 1 });
+                });
+                return order;
+            }
+
+            Sortable.create(tbody, {
+                handle: '.drag-handle',
+                animation: 150,
+                ghostClass: 'table-active',
+                onEnd: function (evt) {
+                    if (evt.oldIndex === evt.newIndex) return;
+
+                    relabel();
+                    var order = collectOrder();
+
+                    fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: JSON.stringify({ _token: token, order: order })
+                    })
+                    .then(function (response) {
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        if (!data.ok) throw new Error(data.error || 'unknown');
+                    })
+                    .catch(function (err) {
+                        showError('Не удалось сохранить порядок: ' + err.message + '. Перезагрузите страницу.');
+                    });
                 }
             });
-        });
+        })();
     </script>
-    <style>#polygons-table-section tr[data-href] { cursor: pointer; }</style>
+    <style>#polygons-table-section td.polygon-link { cursor: pointer; }</style>
 {% endblock %}

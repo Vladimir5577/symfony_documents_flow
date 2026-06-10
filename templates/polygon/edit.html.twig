@@ -1,0 +1,85 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Редактирование: {{ polygon.name }}{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">Редактирование полигона</h1>
+        <a href="{{ path('app_polygon_view', {id: polygon.id}) }}" class="btn btn-light-secondary">
+            <i class="bi bi-arrow-left"></i> К полигону
+        </a>
+    </div>
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+
+    <section class="section">
+        <div class="row">
+            <div class="col-12 col-lg-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title mb-0">Данные полигона</h4>
+                    </div>
+                    <form method="post" action="{{ path('app_polygon_edit', {id: polygon.id}) }}">
+                        <div class="card-body">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_polygon_' ~ polygon.id) }}">
+
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Название</label>
+                                <input type="text" class="form-control" id="name" name="name"
+                                       value="{{ polygon.name }}" maxlength="255">
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="gps_lat" class="form-label">GPS широта (lat)</label>
+                                    <input type="text" inputmode="decimal" class="form-control" id="gps_lat" name="gps_lat"
+                                           value="{{ polygon.gpsLat }}" placeholder="55.751244">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="gps_lng" class="form-label">GPS долгота (lng)</label>
+                                    <input type="text" inputmode="decimal" class="form-control" id="gps_lng" name="gps_lng"
+                                           value="{{ polygon.gpsLng }}" placeholder="37.618423">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="contact_name" class="form-label">Контакт</label>
+                                <input type="text" class="form-control" id="contact_name" name="contact_name"
+                                       value="{{ polygon.contactName }}" maxlength="255">
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="contact_phone" class="form-label">Телефон</label>
+                                <input type="text" class="form-control" id="contact_phone" name="contact_phone"
+                                       value="{{ polygon.contactPhone }}" maxlength="64">
+                            </div>
+
+                            <div class="form-check form-switch mb-0">
+                                <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1"
+                                       {{ polygon.isActive ? 'checked' }}>
+                                <label class="form-check-label" for="is_active">Активен</label>
+                            </div>
+                        </div>
+                        <div class="card-footer d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg"></i> Сохранить
+                            </button>
+                            <a href="{{ path('app_polygon_view', {id: polygon.id}) }}" class="btn btn-light-secondary">
+                                Отмена
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}
