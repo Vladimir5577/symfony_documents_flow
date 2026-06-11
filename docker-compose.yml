@@ -1,0 +1,98 @@
+services:
+    php:
+        build:
+            context: .
+            dockerfile: ./docker_env/php/Dockerfile
+        container_name: php_container
+        # no need 9000 by default
+        #    ports:
+        #      - "9000:9000"   # Expose PHP-FPM port
+        # need to work xdebug from CLI
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+        volumes:
+            - ./:/var/www/html
+            - ./../uploads:/uploads
+            - ./../uploads/documents/updated:/uploads/documents/updated
+            - ./../uploads/documents/originals:/uploads/documents/originals
+            - ./docker_env/php/conf.d/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+            - ./docker_env/php/conf.d/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+            - ./docker_env/php/conf.d/error_reporting.ini:/usr/local/etc/php/conf.d/error_reporting.ini
+            # Pre-built gRPC extension (path for PHP 8.5: no-debug-non-zts-20250925)
+            - ./docker_env/php/grpc.so:/usr/local/lib/php/extensions/no-debug-non-zts-20250925/grpc.so
+            - ./docker_env/php/conf.d/grpc.ini:/usr/local/etc/php/conf.d/grpc.ini
+            # PHP-FPM pool overrides (max_children и т.д.)
+            - ./docker_env/php/fpm.d/zz-pool.conf:/usr/local/etc/php-fpm.d/zz-pool.conf
+        environment:
+            PHP_IDE_CONFIG: serverName=don_stroy
+            XDEBUG_CONFIG: client_host=host.docker.internal client_port=9003
+        networks:
+            - project-net
+
+    nginx:
+        build:
+            context: .
+            dockerfile: ./docker_env/nginx/Dockerfile
+        container_name: nginx_web
+        ports:
+            - "${NGINX_PORT:-8080}:80"
+        volumes:
+            - ./docker_env/nginx/config/default.conf:/etc/nginx/conf.d/default.conf
+            - ./:/var/www/html
+            - ./../uploads:/uploads
+        networks:
+            - project-net
+
+    postgres:
+        container_name: postgres
+        image: postgres:16.4
+        environment:
+            POSTGRES_DB: ${DB_DATABASE}
+            POSTGRES_USER: ${DB_USERNAME}
+            POSTGRES_PASSWORD: ${DB_PASSWORD}
+            PGDATA: /data/postgres
+        volumes:
+            - ./../postgres_data:/data/postgres
+        ports:
+            - 5432:5432
+        networks:
+            - project-net
+
+    #  onlyoffice:
+    #    image: onlyoffice/documentserver:9.2.1
+    #    container_name: onlyoffice
+    #    ports:
+    #        - "${ONLYOFFICE_DOCUMENT_SERVER_PORT}:80"       # доступ к OnlyOffice DocumentServer с хоста
+    #    environment:
+    #        - JWT_ENABLED=false
+    #        - ALLOW_PRIVATE_IP_ADDRESS=true   # ВАЖНО
+    #    networks:
+    #        - project-net
+    #    volumes:
+    #        - ./../onlyoffice_data:/var/www/onlyoffice/Data
+
+    mercure:
+        image: dunglas/mercure
+        container_name: mercure
+        restart: unless-stopped
+        environment:
+            SERVER_NAME: ":80"
+            MERCURE_PUBLISHER_JWT_KEY: "${MERCURE_JWT_SECRET}"
+            MERCURE_SUBSCRIBER_JWT_KEY: "${MERCURE_JWT_SECRET}"
+            MERCURE_EXTRA_DIRECTIVES: |
+                cors_origins ${MERCURE_CORS_ORIGINS:-http://localhost:${NGINX_PORT:-8080}}
+                anonymous
+        ports:
+            - "${MERCURE_PORT:-3000}:80"
+        networks:
+            - project-net
+
+networks:
+    project-net:
+        name: project-net
+        driver: bridge
+
+volumes:
+    ###> doctrine/doctrine-bundle ###
+    database_data:
+###< doctrine/doctrine-bundle ###
