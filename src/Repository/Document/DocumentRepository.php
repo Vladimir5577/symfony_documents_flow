@@ -28,6 +28,7 @@ class DocumentRepository extends ServiceEntityRepository
             ->leftJoin('d.createdBy', 'cb')->addSelect('cb')
             ->leftJoin('d.userRecipients', 'ur')->addSelect('ur')
             ->leftJoin('ur.user', 'u')->addSelect('u')
+            ->leftJoin('d.files', 'f')->addSelect('f')
             ->where('d.id = :id')
             ->setParameter('id', $id)
             ->getQuery()
