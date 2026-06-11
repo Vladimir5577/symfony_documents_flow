@@ -1224,6 +1224,11 @@ var KanbanApp = (function () {
                 if (!fileInput.files.length || !currentCardId) return;
 
                 var file = fileInput.files[0];
+                if (file.size > 50 * 1024 * 1024) {
+                    showToast("Файл больше 50 МБ. Уменьшите размер.");
+                    fileInput.value = "";
+                    return;
+                }
                 // [KANBAN: валидация расширения — ВРЕМЕННО ОТКЛЮЧЕНА]
                 /*
                 var ext = file.name.split(".").pop().toLowerCase();
