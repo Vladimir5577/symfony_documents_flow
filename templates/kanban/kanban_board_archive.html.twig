@@ -24,6 +24,36 @@
     </div>
 
     <section class="section">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Фильтры</h5>
+            </div>
+            <div class="card-body">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label mb-1">Название</label>
+                        <input type="text" name="title" class="form-control form-control-sm" placeholder="Поиск по названию" value="{{ filters.title }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label mb-1">Описание</label>
+                        <input type="text" name="description" class="form-control form-control-sm" placeholder="Поиск по описанию" value="{{ filters.description }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label mb-1">Архив. с</label>
+                        <input type="date" name="dateFrom" class="form-control form-control-sm" value="{{ filters.dateFrom }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label mb-1">Архив. по</label>
+                        <input type="date" name="dateTo" class="form-control form-control-sm" value="{{ filters.dateTo }}">
+                    </div>
+                    <div class="col-12 d-flex gap-2 justify-content-end">
+                        <a href="{{ path('app_kanban_board_archive', {id: board.id}) }}" class="btn btn-outline-secondary btn-sm">Сбросить</a>
+                        <button type="submit" class="btn btn-primary btn-sm">Применить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-body">
                 {% if pagination.total_items == 0 %}

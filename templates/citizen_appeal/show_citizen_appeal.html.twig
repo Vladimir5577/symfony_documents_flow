@@ -40,6 +40,9 @@
             )|e('html_attr') }}">
         <i class="bi bi-clipboard"></i> Скопировать содержимое обращения
     </button>
+    <a href="{{ path('app_citizen_appeal_pdf', {id: appeal.id}) }}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener">
+        <i class="bi bi-file-earmark-pdf"></i> Скачать PDF
+    </a>
 </div>
 
 <section class="section">

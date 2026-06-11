@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller\ApiExternal\CitizenAppeal;
 
 use App\Service\ApiExternal\CitizenAppeal\CitizenAppealApiService;
+use App\Service\ApiExternal\CitizenAppeal\CitizenAppealPdfService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,6 +15,7 @@ final class CitizenAppealController extends AbstractController
 {
     public function __construct(
         private readonly CitizenAppealApiService $citizenAppealApiService,
+        private readonly CitizenAppealPdfService $citizenAppealPdfService,
     ) {
     }
 
@@ -61,6 +63,26 @@ final class CitizenAppealController extends AbstractController
         return $this->render('citizen_appeal/show_citizen_appeal.html.twig', [
             'active_tab' => 'citizen_appeal',
             'appeal'     => $appeal,
+        ]);
+    }
+
+    #[Route('/citizen-appeal/{id}/pdf', name: 'app_citizen_appeal_pdf', requirements: ['id' => '\d+'])]
+    public function pdf(int $id): Response
+    {
+        try {
+            $appeal = $this->citizenAppealApiService->getOne($id);
+        } catch (\Throwable $e) {
+            $this->addFlash('error', $e->getMessage());
+            return $this->redirectToRoute('app_citizen_appeal');
+        }
+
+        $pdfContent = $this->citizenAppealPdfService->generate($appeal);
+        $filename   = 'appeal-' . $appeal->publicId . '.pdf';
+
+        return new Response($pdfContent, Response::HTTP_OK, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
+            'Content-Length'      => (string) \strlen($pdfContent),
         ]);
     }
 

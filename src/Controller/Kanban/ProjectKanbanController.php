@@ -834,7 +834,17 @@ final class ProjectKanbanController extends AbstractController
         $page = max(1, (int) $request->query->get('page', 1));
         $limit = 10;
 
-        $pagination = $this->cardRepo->findArchivedByBoardPaginated($board, $page, $limit);
+        $filters = [
+            'title' => trim((string) $request->query->get('title', '')),
+            'description' => trim((string) $request->query->get('description', '')),
+            'dateFrom' => trim((string) $request->query->get('dateFrom', '')),
+            'dateTo' => trim((string) $request->query->get('dateTo', '')),
+        ];
+
+        $pagination = $this->cardRepo->findArchivedByBoardPaginated($board, $page, $limit, $filters);
+
+        // Только непустые значения попадают в ссылки пагинации.
+        $filterQuery = array_filter($filters, static fn ($v) => $v !== '');
 
         return $this->render('kanban/kanban_board_archive.html.twig', [
             'active_tab' => 'kanban_boards',
@@ -848,7 +858,8 @@ final class ProjectKanbanController extends AbstractController
                 'total_items' => $pagination['total'],
                 'items_per_page' => $pagination['limit'],
             ],
-            'filter_query' => [],
+            'filters' => $filters,
+            'filter_query' => $filterQuery,
         ]);
     }
 

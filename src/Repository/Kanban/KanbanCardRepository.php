@@ -8,6 +8,7 @@ use App\Entity\Kanban\KanbanColumn;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\User\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -113,27 +114,22 @@ class KanbanCardRepository extends ServiceEntityRepository
     /**
      * Архивные карточки доски (постранично), отсортированные по дате архивации.
      *
+     * @param array{title?: ?string, description?: ?string, dateFrom?: ?string, dateTo?: ?string} $filters
+     *
      * @return array{cards: KanbanCard[], total: int, page: int, limit: int, totalPages: int}
      */
-    public function findArchivedByBoardPaginated(KanbanBoard $board, int $page = 1, int $limit = 10): array
+    public function findArchivedByBoardPaginated(KanbanBoard $board, int $page = 1, int $limit = 10, array $filters = []): array
     {
         $offset = ($page - 1) * $limit;
 
-        $total = (int) $this->createQueryBuilder('c')
+        $total = (int) $this->createArchivedQuery($board, $filters)
             ->select('COUNT(c.id)')
-            ->innerJoin('c.column', 'col')
-            ->where('col.board = :board')
-            ->andWhere('c.isArchived = true')
-            ->setParameter('board', $board)
             ->getQuery()
             ->getSingleScalarResult();
 
-        $cards = $this->createQueryBuilder('c')
-            ->innerJoin('c.column', 'col')->addSelect('col')
+        $cards = $this->createArchivedQuery($board, $filters)
+            ->addSelect('col')
             ->leftJoin('c.archivedBy', 'ab')->addSelect('ab')
-            ->where('col.board = :board')
-            ->andWhere('c.isArchived = true')
-            ->setParameter('board', $board)
             ->orderBy('c.archivedAt', 'DESC')
             ->addOrderBy('c.id', 'DESC')
             ->setFirstResult($offset)
@@ -148,6 +144,50 @@ class KanbanCardRepository extends ServiceEntityRepository
             'limit' => $limit,
             'totalPages' => (int) ceil($total / $limit),
         ];
+    }
+
+    /**
+     * Базовый запрос архивных карточек доски с применёнными фильтрами.
+     *
+     * @param array{title?: ?string, description?: ?string, dateFrom?: ?string, dateTo?: ?string} $filters
+     */
+    private function createArchivedQuery(KanbanBoard $board, array $filters): QueryBuilder
+    {
+        $qb = $this->createQueryBuilder('c')
+            ->innerJoin('c.column', 'col')
+            ->where('col.board = :board')
+            ->andWhere('c.isArchived = true')
+            ->setParameter('board', $board);
+
+        $title = trim((string) ($filters['title'] ?? ''));
+        if ($title !== '') {
+            $qb->andWhere('c.title LIKE :title')
+                ->setParameter('title', '%' . $title . '%');
+        }
+
+        $description = trim((string) ($filters['description'] ?? ''));
+        if ($description !== '') {
+            $qb->andWhere('c.description LIKE :description')
+                ->setParameter('description', '%' . $description . '%');
+        }
+
+        if (!empty($filters['dateFrom'])) {
+            $from = \DateTimeImmutable::createFromFormat('Y-m-d', $filters['dateFrom']);
+            if ($from instanceof \DateTimeImmutable) {
+                $qb->andWhere('c.archivedAt >= :dateFrom')
+                    ->setParameter('dateFrom', $from->setTime(0, 0, 0));
+            }
+        }
+
+        if (!empty($filters['dateTo'])) {
+            $to = \DateTimeImmutable::createFromFormat('Y-m-d', $filters['dateTo']);
+            if ($to instanceof \DateTimeImmutable) {
+                $qb->andWhere('c.archivedAt <= :dateTo')
+                    ->setParameter('dateTo', $to->setTime(23, 59, 59));
+            }
+        }
+
+        return $qb;
     }
 
     /**
