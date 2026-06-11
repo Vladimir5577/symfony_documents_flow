@@ -11,6 +11,7 @@ use App\Repository\Document\DocumentTypeRepository;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
 use App\Service\SpaApi\Documents\DocumentAttachmentService;
+use App\Service\SpaApi\Documents\DocumentCommentService;
 use App\Service\SpaApi\Documents\DocumentPublishService;
 use App\Service\SpaApi\Documents\DocumentRecipientsService;
 use App\Service\SpaApi\Documents\DocumentUpdateService;
@@ -35,6 +36,7 @@ final class DocumentOutgoingController extends AbstractController
         private readonly DocumentPublishService $publishService,
         private readonly DocumentRecipientsService $recipientsService,
         private readonly DocumentAttachmentService $attachmentService,
+        private readonly DocumentCommentService $commentService,
         private readonly EntityManagerInterface $entityManager,
     ) {
     }
@@ -101,7 +103,7 @@ final class DocumentOutgoingController extends AbstractController
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
             'files' => $this->attachmentService->presentAttachments($document->getFiles()),
-            'comments' => [],
+            'comments' => $this->commentService->presentComments($document->getComments(), $user),
             'permissions' => $this->accessService->presentPermissions($document, $user),
             'statusChoices' => $this->presenter->presentCreationStatusChoices(),
         ]);

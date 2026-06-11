@@ -13,6 +13,7 @@ use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
 use App\Service\SpaApi\Documents\DocumentAttachmentService;
+use App\Service\SpaApi\Documents\DocumentCommentService;
 use App\Service\SpaApi\Documents\DocumentRecipientStatusService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -33,6 +34,7 @@ final class DocumentIncomingController extends AbstractController
         private readonly DocumentAccessService $accessService,
         private readonly DocumentRecipientStatusService $recipientStatusService,
         private readonly DocumentAttachmentService $attachmentService,
+        private readonly DocumentCommentService $commentService,
     ) {
     }
 
@@ -107,7 +109,7 @@ final class DocumentIncomingController extends AbstractController
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
             'files' => $this->attachmentService->presentAttachments($document->getFiles()),
-            'comments' => [],
+            'comments' => $this->commentService->presentComments($document->getComments(), $user),
             'userRecipient' => $userRecipient !== null ? [
                 'recipientId' => $userRecipient->getId(),
                 'status' => $userRecipient->getStatus()?->value,

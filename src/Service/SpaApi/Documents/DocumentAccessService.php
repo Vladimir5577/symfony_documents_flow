@@ -55,21 +55,23 @@ final class DocumentAccessService
     }
 
     /**
-     * @return array{canView: bool, canEdit: bool, canPublish: bool, canChangeRecipientStatus: bool}
+     * @return array{canView: bool, canEdit: bool, canPublish: bool, canChangeRecipientStatus: bool, canComment: bool}
      */
     public function presentPermissions(Document $document, User $user): array
     {
         $recipient = $this->findUserRecipient($document, $user);
         $canEdit = $this->canEditOutgoingDocument($document, $user);
+        $canView = $this->canViewDocument($document, $user);
 
         return [
-            'canView' => $this->canViewDocument($document, $user),
+            'canView' => $canView,
             'canEdit' => $canEdit,
             'canPublish' => $canEdit
                 && $document->getStatus() !== null
                 && !$document->isPublished()
                 && !$document->getUserRecipients()->isEmpty(),
             'canChangeRecipientStatus' => $recipient !== null,
+            'canComment' => $canView,
         ];
     }
 }
