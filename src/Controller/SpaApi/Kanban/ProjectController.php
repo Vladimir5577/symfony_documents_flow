@@ -6,6 +6,8 @@ namespace App\Controller\SpaApi\Kanban;
 
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Kanban\KanbanBoard;
+use App\Entity\Kanban\KanbanColumn;
+use App\Enum\Kanban\KanbanColumnColor;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\Kanban\Project\KanbanProjectUser;
 use App\Entity\User\User;
@@ -26,6 +28,13 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
 #[Route('/spa/api/projects')]
 final class ProjectController extends AbstractController
 {
+    private const DEFAULT_BOARD_COLUMNS = [
+        'К выполнению' => KanbanColumnColor::BG_SUCCESS,
+        'В работе' => KanbanColumnColor::BG_PRIMARY,
+        'Сделаны' => KanbanColumnColor::BG_WARNING,
+        'Проверены' => KanbanColumnColor::BG_DANGER,
+    ];
+
     public function __construct(
         private readonly KanbanProjectRepository $projectRepository,
         private readonly KanbanProjectUserRepository $projectUserRepository,
@@ -70,9 +79,22 @@ final class ProjectController extends AbstractController
             ? array_values(array_filter(array_map(static fn ($id) => (int) $id, $memberUserIdsRaw), static fn (int $id) => $id > 0))
             : [];
 
-        $boardsConfig = $this->parseBoardsConfig(is_array($payload['boards'] ?? null) ? $payload['boards'] : []);
+        $useDefaultBoards = !is_array($payload['boards'] ?? null) || $payload['boards'] === [];
+        if ($useDefaultBoards) {
+            $payload['boards'] = [
+                [
+                    'title' => 'Главная доска',
+                    'columns' => array_keys(self::DEFAULT_BOARD_COLUMNS),
+                ],
+            ];
+        }
+
+        $boardsConfig = $this->parseBoardsConfig($payload['boards']);
 
         $firstBoard = $this->kanbanService->createProject($name, $description, $user, $memberUserIds, $boardsConfig);
+        if ($useDefaultBoards) {
+            $this->applyDefaultColumnColors($firstBoard);
+        }
         $project = $firstBoard->getProject();
         $projectId = $project?->getId();
         if ($project === null || $projectId === null) {
@@ -317,6 +339,24 @@ final class ProjectController extends AbstractController
             'firstname' => $user->getFirstname(),
             'patronymic' => $user->getPatronymic(),
         ];
+    }
+
+    private function applyDefaultColumnColors(KanbanBoard $board): void
+    {
+        $columns = $this->entityManager->getRepository(KanbanColumn::class)->findBy(
+            ['board' => $board],
+            ['position' => 'ASC'],
+        );
+
+        foreach ($columns as $column) {
+            $color = self::DEFAULT_BOARD_COLUMNS[$column->getTitle()] ?? null;
+            if ($color === null) {
+                continue;
+            }
+            $column->setHeaderColor($color);
+        }
+
+        $this->entityManager->flush();
     }
 
     /**

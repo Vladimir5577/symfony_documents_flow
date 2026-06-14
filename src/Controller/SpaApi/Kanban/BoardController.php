@@ -93,21 +93,21 @@ final class BoardController extends AbstractController
         }
 
         $columns = $this->parseColumnsForCreate($payload['columns'] ?? null);
-        if ($columns === []) {
+        if ($columns === [] || $columns === null) {
             $columns = [
-                ['title' => 'Backlog', 'headerColor' => KanbanColumnColor::BG_DARK],
-                ['title' => 'To Do', 'headerColor' => KanbanColumnColor::BG_PRIMARY],
-                ['title' => 'In Progress', 'headerColor' => KanbanColumnColor::BG_WARNING],
-                ['title' => 'Done', 'headerColor' => KanbanColumnColor::BG_SUCCESS],
+                ['title' => 'К выполнению', 'headerColor' => KanbanColumnColor::BG_SUCCESS],
+                ['title' => 'В работе', 'headerColor' => KanbanColumnColor::BG_PRIMARY],
+                ['title' => 'Сделаны', 'headerColor' => KanbanColumnColor::BG_WARNING],
+                ['title' => 'Проверены', 'headerColor' => KanbanColumnColor::BG_DANGER],
             ];
         }
 
         $board = $this->kanbanService->createBoard($project, $title, $user);
         $defaultColors = [
-            KanbanColumnColor::BG_DARK,
+            KanbanColumnColor::BG_SUCCESS,
             KanbanColumnColor::BG_PRIMARY,
             KanbanColumnColor::BG_WARNING,
-            KanbanColumnColor::BG_SUCCESS,
+            KanbanColumnColor::BG_DANGER,
         ];
         foreach ($columns as $i => $column) {
             $color = $column['headerColor']
