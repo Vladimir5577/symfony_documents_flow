@@ -279,6 +279,7 @@ final class ProjectController extends AbstractController
      * @return array{
      *     id: int|null,
      *     title: string,
+     *     position: float,
      *     updatedAt: string|null
      * }
      */
@@ -289,6 +290,7 @@ final class ProjectController extends AbstractController
         return [
             'id' => $boardId,
             'title' => $board->getTitle(),
+            'position' => $board->getPosition(),
             'updatedAt' => $board->getUpdatedAt()?->format(\DateTimeInterface::ATOM)
         ];
     }

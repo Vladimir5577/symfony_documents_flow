@@ -7,7 +7,9 @@ namespace App\Controller\SpaApi\Kanban;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Kanban\KanbanBoard;
 use App\Entity\Kanban\KanbanColumn;
+use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\User\User;
+use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
@@ -136,29 +138,34 @@ final class BoardController extends AbstractController
             return $this->json(['error' => SpaApiError::BOARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $payload = json_decode($request->getContent(), true);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
+
+        $payload = json_decode($request->getContent(), true) ?? [];
         if (!is_array($payload)) {
             return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
-        if (!array_key_exists('title', $payload)) {
-            return $this->json(['error' => SpaApiError::BOARD_TITLE_REQUIRED], Response::HTTP_BAD_REQUEST);
+        if (isset($payload['title']) && trim((string) $payload['title']) !== '') {
+            $title = trim((string) $payload['title']);
+            if (mb_strlen($title) > 200) {
+                return $this->json(
+                    ['error' => SpaApiError::BOARD_TITLE_TOO_LONG],
+                    Response::HTTP_BAD_REQUEST,
+                );
+            }
+
+            $board->setTitle($title);
         }
 
-        $title = trim((string) $payload['title']);
-        if ($title === '') {
-            return $this->json(['error' => SpaApiError::BOARD_TITLE_REQUIRED], Response::HTTP_BAD_REQUEST);
+        if (isset($payload['position'])) {
+            $board->setPosition((float) $payload['position']);
         }
 
-        if (mb_strlen($title) > 200) {
-            return $this->json(
-                ['error' => SpaApiError::BOARD_TITLE_TOO_LONG],
-                Response::HTTP_BAD_REQUEST,
-            );
-        }
-
-        $board->setTitle($title);
         $this->entityManager->flush();
+
+        if (isset($payload['position']) && $board->getProject() instanceof KanbanProject) {
+            $this->rebalanceBoardPositionsIfNeeded($board->getProject());
+        }
 
         return $this->json($this->formatBoard($board, $projectId));
     }
@@ -195,6 +202,31 @@ final class BoardController extends AbstractController
             'success' => true,
             'nextBoardId' => $nextBoardId,
         ]);
+    }
+
+    /** Rebalance board positions if neighbours are too close (same as KanbanBoardApiController). */
+    private function rebalanceBoardPositionsIfNeeded(KanbanProject $project): void
+    {
+        $boards = $this->boardRepository->createQueryBuilder('b')
+            ->where('b.project = :project')
+            ->setParameter('project', $project)
+            ->orderBy('b.position', 'ASC')
+            ->addOrderBy('b.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        $needsRebalance = false;
+        for ($i = 1, $count = count($boards); $i < $count; $i++) {
+            if (abs($boards[$i]->getPosition() - $boards[$i - 1]->getPosition()) < 1e-5) {
+                $needsRebalance = true;
+                break;
+            }
+        }
+
+        if ($needsRebalance) {
+            $this->boardRepository->rebalancePositionsInProject($project);
+            $this->entityManager->flush();
+        }
     }
 
     /**
@@ -238,13 +270,14 @@ final class BoardController extends AbstractController
     }
 
     /**
-     * @return array{id: int|null, title: string, updatedAt: string|null}
+     * @return array{id: int|null, title: string, position: float, updatedAt: string|null}
      */
     private function formatBoard(KanbanBoard $board, int $projectId): array
     {
         return [
             'id' => $board->getId(),
             'title' => $board->getTitle(),
+            'position' => $board->getPosition(),
             'updatedAt' => $board->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
         ];
     }
