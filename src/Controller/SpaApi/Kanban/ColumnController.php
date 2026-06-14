@@ -17,6 +17,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
@@ -202,7 +203,11 @@ final class ColumnController extends AbstractController
             return $this->json(['error' => SpaApiError::COLUMN_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->deleteColumn($column);
+        try {
+            $this->kanbanService->deleteColumn($column);
+        } catch (ConflictHttpException) {
+            return $this->json(['error' => SpaApiError::COLUMN_HAS_CARDS], Response::HTTP_CONFLICT);
+        }
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }
