@@ -59,6 +59,18 @@ class KanbanCardRepository extends ServiceEntityRepository
         return (float) ($result ?? 0.0);
     }
 
+    public function countActiveCardsOnBoard(KanbanBoard $board): int
+    {
+        return (int) $this->createQueryBuilder('c')
+            ->select('COUNT(c.id)')
+            ->innerJoin('c.column', 'col')
+            ->where('col.board = :board')
+            ->andWhere('c.isArchived = false')
+            ->setParameter('board', $board)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     /**
      * Карточка со всеми связями.
      */

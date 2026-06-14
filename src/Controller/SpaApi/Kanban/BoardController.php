@@ -12,6 +12,7 @@ use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanBoardRepository;
+use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -30,6 +31,7 @@ final class BoardController extends AbstractController
         private readonly KanbanBoardRepository $boardRepository,
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $entityManager,
+        private readonly KanbanCardRepository $cardRepository,
     ) {
     }
 
@@ -185,6 +187,12 @@ final class BoardController extends AbstractController
         $board = $this->boardRepository->find($boardId);
         if ($board === null || $board->getProject()?->getId() !== $project->getId()) {
             return $this->json(['error' => SpaApiError::BOARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_ADMIN);
+
+        if ($this->cardRepository->countActiveCardsOnBoard($board) > 0) {
+            return $this->json(['error' => SpaApiError::BOARD_HAS_CARDS], Response::HTTP_CONFLICT);
         }
 
         $nextBoardId = null;
