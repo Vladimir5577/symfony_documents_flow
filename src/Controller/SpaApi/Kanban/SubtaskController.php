@@ -15,6 +15,7 @@ use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanChecklistItemRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
+use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -36,6 +37,7 @@ final class SubtaskController extends AbstractController
         private readonly UserRepository $userRepo,
         private readonly KanbanProjectUserRepository $projectUserRepo,
         private readonly NotificationService $notificationService,
+        private readonly KanbanCardActivityLogger $activityLogger,
     ) {
     }
 
@@ -89,6 +91,8 @@ final class SubtaskController extends AbstractController
         $this->em->persist($subtask);
         $this->em->flush();
 
+        $this->activityLogger->logSubtaskAdded($card, $subtask->getTitle());
+
         return $this->json($this->formatSubtask($subtask), Response::HTTP_CREATED);
     }
 
@@ -113,6 +117,8 @@ final class SubtaskController extends AbstractController
 
         $payload = json_decode($request->getContent(), true) ?? [];
 
+        $wasCompleted = $subtask->isCompleted();
+
         if (isset($payload['title']) && trim((string) $payload['title']) !== '') {
             $subtask->setTitle(trim((string) $payload['title']));
         }
@@ -126,6 +132,7 @@ final class SubtaskController extends AbstractController
             $subtask->setIsCompleted((bool) $payload['isCompleted']);
         }
 
+        $oldSubtaskAssignee = $subtask->getUser();
         $assigneeAddedToProject = false;
         $assignedUser = null;
         if (array_key_exists('user_id', $payload)) {
@@ -153,6 +160,20 @@ final class SubtaskController extends AbstractController
         }
 
         $this->em->flush();
+
+        if ($subtask->isCompleted() !== $wasCompleted) {
+            $this->activityLogger->logSubtaskCompleted($card, $subtask->getTitle(), $subtask->isCompleted());
+        }
+
+        $newSubtaskAssignee = $subtask->getUser();
+        if (($oldSubtaskAssignee?->getId()) !== ($newSubtaskAssignee?->getId())) {
+            if ($oldSubtaskAssignee !== null) {
+                $this->activityLogger->logSubtaskUnassigned($card, $subtask->getTitle(), $this->assigneeName($oldSubtaskAssignee));
+            }
+            if ($newSubtaskAssignee !== null) {
+                $this->activityLogger->logSubtaskAssigned($card, $subtask->getTitle(), $this->assigneeName($newSubtaskAssignee));
+            }
+        }
 
         if ($assignedUser !== null && $assignedUser->getId() !== $user->getId()) {
             $board = $card->getColumn()->getBoard();
@@ -188,10 +209,19 @@ final class SubtaskController extends AbstractController
             return $this->json(['error' => SpaApiError::SUBTASK_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
+        $subtaskTitle = $subtask->getTitle();
+
         $this->em->remove($subtask);
         $this->em->flush();
 
+        $this->activityLogger->logSubtaskRemoved($card, $subtaskTitle);
+
         return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    private function assigneeName(User $u): string
+    {
+        return trim($u->getLastname() . ' ' . $u->getFirstname()) ?: ($u->getLogin() ?? (string) $u->getId());
     }
 
     /**

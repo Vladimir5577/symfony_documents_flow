@@ -9,6 +9,7 @@ use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanLabelRepository;
+use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -26,6 +27,7 @@ final class KanbanLabelApiController extends AbstractController
         private readonly KanbanCardRepository $cardRepo,
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $em,
+        private readonly KanbanCardActivityLogger $activityLogger,
     ) {
     }
 
@@ -145,6 +147,12 @@ final class KanbanLabelApiController extends AbstractController
         }
 
         $this->em->flush();
+
+        if ($action === 'attached') {
+            $this->activityLogger->logLabelAdded($card, $label->getName());
+        } else {
+            $this->activityLogger->logLabelRemoved($card, $label->getName());
+        }
 
         return $this->json(['action' => $action, 'labelId' => $label->getId()]);
     }

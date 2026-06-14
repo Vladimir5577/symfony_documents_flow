@@ -11,6 +11,7 @@ use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanChecklistItemRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
+use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,6 +32,7 @@ final class KanbanChecklistApiController extends AbstractController
         private readonly UserRepository $userRepo,
         private readonly KanbanProjectUserRepository $projectUserRepo,
         private readonly NotificationService $notificationService,
+        private readonly KanbanCardActivityLogger $activityLogger,
     ) {
     }
 
@@ -63,6 +65,8 @@ final class KanbanChecklistApiController extends AbstractController
         $this->em->persist($item);
         $this->em->flush();
 
+        $this->activityLogger->logSubtaskAdded($card, $item->getTitle());
+
         return $this->json([
             'id' => $item->getId(),
             'title' => $item->getTitle(),
@@ -94,6 +98,8 @@ final class KanbanChecklistApiController extends AbstractController
 
         $payload = json_decode($request->getContent(), true) ?? [];
 
+        $wasCompleted = $item->isCompleted();
+
         if (isset($payload['title']) && trim($payload['title']) !== '') {
             $item->setTitle(trim($payload['title']));
         }
@@ -106,6 +112,7 @@ final class KanbanChecklistApiController extends AbstractController
         if (array_key_exists('isCompleted', $payload)) {
             $item->setIsCompleted((bool) $payload['isCompleted']);
         }
+        $oldSubtaskAssignee = $item->getUser();
         $assigneeAddedToProject = false;
         $assignedUser = null;
         if (array_key_exists('user_id', $payload)) {
@@ -131,6 +138,20 @@ final class KanbanChecklistApiController extends AbstractController
         }
 
         $this->em->flush();
+
+        if ($item->isCompleted() !== $wasCompleted) {
+            $this->activityLogger->logSubtaskCompleted($card, $item->getTitle(), $item->isCompleted());
+        }
+
+        $newSubtaskAssignee = $item->getUser();
+        if (($oldSubtaskAssignee?->getId()) !== ($newSubtaskAssignee?->getId())) {
+            if ($oldSubtaskAssignee !== null) {
+                $this->activityLogger->logSubtaskUnassigned($card, $item->getTitle(), $this->assigneeName($oldSubtaskAssignee));
+            }
+            if ($newSubtaskAssignee !== null) {
+                $this->activityLogger->logSubtaskAssigned($card, $item->getTitle(), $this->assigneeName($newSubtaskAssignee));
+            }
+        }
 
         if ($assignedUser !== null && $assignedUser->getId() !== $user->getId()) {
             $board = $card->getColumn()->getBoard();
@@ -173,9 +194,18 @@ final class KanbanChecklistApiController extends AbstractController
             return $this->json(['error' => 'Элемент не найден.'], Response::HTTP_NOT_FOUND);
         }
 
+        $subtaskTitle = $item->getTitle();
+
         $this->em->remove($item);
         $this->em->flush();
 
+        $this->activityLogger->logSubtaskRemoved($card, $subtaskTitle);
+
         return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    private function assigneeName(User $u): string
+    {
+        return trim($u->getLastname() . ' ' . $u->getFirstname()) ?: ($u->getLogin() ?? (string) $u->getId());
     }
 }
