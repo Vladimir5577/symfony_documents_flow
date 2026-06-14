@@ -17,6 +17,9 @@ liip_imagine:
         kanban_attachment:
             filesystem:
                 data_root: '%private_upload_kanban_dir%'
+        post_uploads:
+            filesystem:
+                data_root: '%private_upload_dir_posts%'
     data_loader: default
     filter_sets:
         avatar_thumbnail:
@@ -34,6 +37,13 @@ liip_imagine:
                     mode: outbound
         kanban_attachment_preview:
             data_loader: kanban_attachment
+            quality: 85
+            filters:
+                thumbnail:
+                    size: [400, 400]
+                    mode: inbound
+        post_image_preview:
+            data_loader: post_uploads
             quality: 85
             filters:
                 thumbnail:
