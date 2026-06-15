@@ -69,7 +69,7 @@ final class CommentController extends AbstractController
             return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_VIEWER);
 
         $payload = json_decode($request->getContent(), true) ?? [];
         $body = trim((string) ($payload['body'] ?? ''));
@@ -102,7 +102,7 @@ final class CommentController extends AbstractController
             return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_VIEWER);
 
         $comment = $this->commentRepo->find($commentId);
         if ($comment === null || $comment->getCard()->getId() !== $cardId) {
@@ -137,7 +137,7 @@ final class CommentController extends AbstractController
             return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_VIEWER);
 
         $comment = $this->commentRepo->find($commentId);
         if ($comment === null || $comment->getCard()->getId() !== $cardId) {
