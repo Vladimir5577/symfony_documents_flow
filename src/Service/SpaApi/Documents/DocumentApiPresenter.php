@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Service\SpaApi\Documents;
 
 use App\Entity\Document\Document;
+use App\Entity\Document\DocumentComment;
+use App\Entity\Document\DocumentCommentFile;
 use App\Entity\Document\DocumentType;
 use App\Entity\Document\DocumentUserRecipient;
 use App\Entity\Organization\AbstractOrganization;
@@ -176,5 +178,60 @@ final class DocumentApiPresenter
         }
 
         return implode(' / ', array_reverse($parts));
+    }
+
+    /**
+     * @param iterable<DocumentComment> $comments
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function presentDocumentComments(iterable $comments, User $viewer, bool $isAdmin): array
+    {
+        $rows = [];
+        foreach ($comments as $comment) {
+            if ($comment instanceof DocumentComment) {
+                $rows[] = $this->presentDocumentComment($comment, $viewer, $isAdmin);
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function presentDocumentComment(DocumentComment $comment, User $viewer, bool $isAdmin): array
+    {
+        $author = $comment->getAuthor();
+        $canManage = $isAdmin || $author->getId() === $viewer->getId();
+
+        return [
+            'id' => $comment->getId(),
+            'body' => $comment->getBody(),
+            'author' => $this->presentUserBrief($author),
+            'authorId' => $author->getId(),
+            'createdAt' => $comment->getCreatedAt()->format(\DateTimeInterface::ATOM),
+            'updatedAt' => $comment->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
+            'canEdit' => $canManage,
+            'canDelete' => $canManage,
+            'files' => array_map(
+                fn (DocumentCommentFile $file): array => $this->presentDocumentCommentFile($file),
+                $comment->getFiles()->toArray(),
+            ),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function presentDocumentCommentFile(DocumentCommentFile $file): array
+    {
+        return [
+            'id' => $file->getId(),
+            'filename' => $file->getFilename() ?? '',
+            'contentType' => $file->getContentType(),
+            'size' => $file->getSizeBytes(),
+            'createdAt' => $file->getCreatedAt()->format(\DateTimeInterface::ATOM),
+        ];
     }
 }

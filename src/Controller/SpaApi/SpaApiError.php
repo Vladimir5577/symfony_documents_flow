@@ -20,7 +20,9 @@ final class SpaApiError
     public const CARD_NOT_FOUND = 'card_not_found';
     public const COMMENT_AUTHOR_ONLY = 'comment_author_only';
     public const COMMENT_BODY_REQUIRED = 'comment_body_required';
+    public const COMMENT_FILE_NOT_FOUND = 'comment_file_not_found';
     public const COMMENT_NOT_FOUND = 'comment_not_found';
+    public const COMMENT_VALIDATION_FAILED = 'comment_validation_failed';
     public const COLUMN_ID_AND_POSITION_REQUIRED = 'column_id_and_position_required';
     public const COLUMN_ID_AND_TITLE_REQUIRED = 'column_id_and_title_required';
     public const COLUMN_HAS_CARDS = 'column_has_cards';

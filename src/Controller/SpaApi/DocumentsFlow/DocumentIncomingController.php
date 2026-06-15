@@ -12,6 +12,7 @@ use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
+use App\Service\SpaApi\Documents\DocumentCommentService;
 use App\Service\SpaApi\Documents\DocumentRecipientStatusService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,6 +31,7 @@ final class DocumentIncomingController extends AbstractController
         private readonly DocumentRepository $documentRepository,
         private readonly DocumentApiPresenter $presenter,
         private readonly DocumentAccessService $accessService,
+        private readonly DocumentCommentService $commentService,
         private readonly DocumentRecipientStatusService $recipientStatusService,
     ) {
     }
@@ -104,6 +106,7 @@ final class DocumentIncomingController extends AbstractController
             'document' => $this->presenter->presentDocumentListItem($document),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
+            'comments' => $this->commentService->presentCommentsForDocument($document->getId(), $user),
             'userRecipient' => $userRecipient !== null ? [
                 'recipientId' => $userRecipient->getId(),
                 'status' => $userRecipient->getStatus()?->value,
@@ -159,6 +162,7 @@ final class DocumentIncomingController extends AbstractController
             'document' => $this->presenter->presentDocumentListItem($document),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
+            'comments' => $this->commentService->presentCommentsForDocument($document->getId(), $user),
             'userRecipient' => $userRecipient !== null ? [
                 'recipientId' => $userRecipient->getId(),
                 'status' => $userRecipient->getStatus()?->value,
