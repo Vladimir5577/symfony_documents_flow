@@ -206,10 +206,9 @@ final class CardController extends AbstractController
         }
 
         $board = $card->getColumn()->getBoard();
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
 
         $payload = json_decode($request->getContent(), true) ?? [];
-        $memberRole = $this->kanbanService->getMemberRole($board, $user);
 
         // Фиксируем значения до изменений — для записи в историю.
         $oldTitle = $card->getTitle();
@@ -224,27 +223,30 @@ final class CardController extends AbstractController
         $dueDateChanged = false;
         $colorChanged = false;
 
-        if (isset($payload['title']) && trim($payload['title']) !== '') {
-            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
-                $newTitle = trim($payload['title']);
-                $titleChanged = $newTitle !== $oldTitle;
-                $card->setTitle($newTitle);
-            }
+        if (isset($payload['title']) && trim((string) $payload['title']) !== '') {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+            $newTitle = trim((string) $payload['title']);
+            $titleChanged = $newTitle !== $oldTitle;
+            $card->setTitle($newTitle);
         }
         if (array_key_exists('description', $payload)) {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $card->setDescription($payload['description']);
             $descriptionChanged = $card->getDescription() !== $oldDescription;
         }
         if (array_key_exists('priority', $payload)) {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $card->setPriority($payload['priority'] !== null && $payload['priority'] !== '' ? KanbanCardPriority::tryFrom((string) $payload['priority']) : null);
             $priorityChanged = $card->getPriority() !== $oldPriority;
         }
         if (array_key_exists('dueDate', $payload)) {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $card->setDueDate($payload['dueDate'] ? new \DateTimeImmutable($payload['dueDate']) : null);
             $dueDateChanged = ($card->getDueDate()?->getTimestamp()) !== ($oldDueDate?->getTimestamp());
         }
         $allowedColors = ['primary', 'success', 'warning', 'danger', 'info', 'dark'];
         if (array_key_exists('borderColor', $payload)) {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $color = $payload['borderColor'];
             $card->setBorderColor(
                 ($color !== null && $color !== '' && in_array($color, $allowedColors, true)) ? $color : null
