@@ -223,12 +223,11 @@ final class CardController extends AbstractController
         $dueDateChanged = false;
         $colorChanged = false;
 
-        if (isset($payload['title']) && trim($payload['title']) !== '') {
-            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
-                $newTitle = trim($payload['title']);
-                $titleChanged = $newTitle !== $oldTitle;
-                $card->setTitle($newTitle);
-            }
+        if (isset($payload['title']) && trim((string) $payload['title']) !== '') {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+            $newTitle = trim((string) $payload['title']);
+            $titleChanged = $newTitle !== $oldTitle;
+            $card->setTitle($newTitle);
         }
         if (array_key_exists('description', $payload)) {
             $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
