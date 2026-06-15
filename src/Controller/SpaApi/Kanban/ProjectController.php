@@ -130,8 +130,6 @@ final class ProjectController extends AbstractController
             return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], 404);
         }
 
-        $memberRole = KanbanBoardMemberRole::KANBAN_ADMIN;
-
         try {
             if ($project->getOwner() !== $user && $this->projectUserRepository->findByProjectAndUser($project, $user) === null) {
                 return $this->json(['error' => SpaApiError::PROJECT_ACCESS_DENIED], 403);
@@ -142,6 +140,15 @@ final class ProjectController extends AbstractController
 
         $owner = $project->getOwner();
         $boards = $this->boardRepository->findByProject($project);
+        $firstBoard = $boards[0] ?? null;
+        $memberRole = $firstBoard !== null
+            ? $this->kanbanService->getMemberRole($firstBoard, $user)
+            : KanbanBoardMemberRole::KANBAN_ADMIN;
+
+        if ($memberRole === null) {
+            return $this->json(['error' => SpaApiError::PROJECT_ACCESS_DENIED], 403);
+        }
+
         $projectUsers = $this->projectUserRepository->findByProject($project);
 
         return $this->json([
