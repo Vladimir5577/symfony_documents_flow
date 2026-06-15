@@ -201,27 +201,29 @@ final class CardController extends AbstractController
         }
 
         $board = $card->getColumn()->getBoard();
-        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
 
         $payload = json_decode($request->getContent(), true) ?? [];
-        $memberRole = $this->kanbanService->getMemberRole($board, $user);
 
-        if (isset($payload['title']) && trim($payload['title']) !== '') {
-            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
-                $card->setTitle(trim($payload['title']));
-            }
+        if (isset($payload['title']) && trim((string) $payload['title']) !== '') {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+            $card->setTitle(trim((string) $payload['title']));
         }
         if (array_key_exists('description', $payload)) {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $card->setDescription($payload['description']);
         }
         if (array_key_exists('priority', $payload)) {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $card->setPriority($payload['priority'] !== null && $payload['priority'] !== '' ? KanbanCardPriority::tryFrom((string) $payload['priority']) : null);
         }
         if (array_key_exists('dueDate', $payload)) {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $card->setDueDate($payload['dueDate'] ? new \DateTimeImmutable($payload['dueDate']) : null);
         }
         $allowedColors = ['primary', 'success', 'warning', 'danger', 'info', 'dark'];
         if (array_key_exists('borderColor', $payload)) {
+            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $color = $payload['borderColor'];
             $card->setBorderColor(
                 ($color !== null && $color !== '' && in_array($color, $allowedColors, true)) ? $color : null
