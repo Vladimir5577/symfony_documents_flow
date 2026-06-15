@@ -14,6 +14,7 @@ use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanLabelRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
+use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -33,6 +34,7 @@ final class LabelController extends AbstractController
         private readonly KanbanCardRepository $cardRepository,
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $entityManager,
+        private readonly KanbanCardActivityLogger $activityLogger,
     ) {
     }
 
@@ -150,6 +152,12 @@ final class LabelController extends AbstractController
         }
 
         $this->entityManager->flush();
+
+        if ($action === 'attached') {
+            $this->activityLogger->logLabelAdded($card, $label->getName());
+        } else {
+            $this->activityLogger->logLabelRemoved($card, $label->getName());
+        }
 
         return $this->json(['action' => $action, 'labelId' => $label->getId()]);
     }

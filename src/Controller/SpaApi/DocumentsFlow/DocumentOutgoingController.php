@@ -10,6 +10,7 @@ use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
+use App\Service\SpaApi\Documents\DocumentCommentService;
 use App\Service\SpaApi\Documents\DocumentPublishService;
 use App\Service\SpaApi\Documents\DocumentRecipientsService;
 use App\Service\SpaApi\Documents\DocumentUpdateService;
@@ -30,6 +31,7 @@ final class DocumentOutgoingController extends AbstractController
         private readonly DocumentTypeRepository $documentTypeRepository,
         private readonly DocumentApiPresenter $presenter,
         private readonly DocumentAccessService $accessService,
+        private readonly DocumentCommentService $commentService,
         private readonly DocumentUpdateService $updateService,
         private readonly DocumentPublishService $publishService,
         private readonly DocumentRecipientsService $recipientsService,
@@ -98,6 +100,7 @@ final class DocumentOutgoingController extends AbstractController
             'document' => $this->presenter->presentDocumentListItem($document),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
+            'comments' => $this->commentService->presentCommentsForDocument($document->getId(), $user),
             'permissions' => $this->accessService->presentPermissions($document, $user),
             'statusChoices' => $this->presenter->presentCreationStatusChoices(),
         ]);

@@ -20,7 +20,9 @@ final class SpaApiError
     public const CARD_NOT_FOUND = 'card_not_found';
     public const COMMENT_AUTHOR_ONLY = 'comment_author_only';
     public const COMMENT_BODY_REQUIRED = 'comment_body_required';
+    public const COMMENT_FILE_NOT_FOUND = 'comment_file_not_found';
     public const COMMENT_NOT_FOUND = 'comment_not_found';
+    public const COMMENT_VALIDATION_FAILED = 'comment_validation_failed';
     public const COLUMN_ID_AND_POSITION_REQUIRED = 'column_id_and_position_required';
     public const COLUMN_ID_AND_TITLE_REQUIRED = 'column_id_and_title_required';
     public const COLUMN_HAS_CARDS = 'column_has_cards';
@@ -59,4 +61,15 @@ final class SpaApiError
     public const DOCUMENT_NO_RECIPIENTS = 'document_no_recipients';
     public const DOCUMENT_VALIDATION_FAILED = 'document_validation_failed';
     public const ORGANIZATION_REQUIRED = 'organization_required';
+    public const POST_NOT_FOUND = 'post_not_found';
+    public const POST_TITLE_REQUIRED = 'post_title_required';
+    public const POST_TYPE_REQUIRED = 'post_type_required';
+    public const POST_INVALID_TYPE = 'post_invalid_type';
+    public const POST_COVER_INVALID_IMAGE = 'post_cover_invalid_image';
+    public const POST_COVER_TOO_LARGE = 'post_cover_too_large';
+    public const POST_FILE_TOO_LARGE = 'post_file_too_large';
+    public const POST_FILE_UPLOAD_ERROR = 'post_file_upload_error';
+    public const POST_COMMENT_EMPTY = 'post_comment_empty';
+    public const POST_FILE_NOT_FOUND = 'post_file_not_found';
+    public const POST_FILE_NOT_FOUND_ON_DISK = 'post_file_not_found_on_disk';
 }

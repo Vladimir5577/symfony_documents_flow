@@ -780,6 +780,9 @@ var KanbanApp = (function () {
         var chatPane = document.getElementById("pane-chat");
         if (chatPane) { chatPane.classList.add("active"); chatPane.hidden = false; }
 
+        // Сброс ленты истории — при открытии другой карточки.
+        resetTaskHistory();
+
         apiFetch("/api/kanban/cards/" + cardId).then(function (data) {
             currentCardData = data;
 
@@ -2299,6 +2302,111 @@ select.addEventListener("change", function () {
         });
     }
 
+    // ── Task History (lazy, on-demand under "Посмотреть историю") ──
+
+    var historyState = { loaded: false, expanded: false, nextOffset: 0, hasMore: false };
+
+    function resetTaskHistory() {
+        historyState = { loaded: false, expanded: false, nextOffset: 0, hasMore: false };
+        var body = document.getElementById("task-history-body");
+        if (body) body.hidden = true;
+        var list = document.getElementById("task-history-list");
+        if (list) list.innerHTML = "";
+        var empty = document.getElementById("task-history-empty");
+        if (empty) empty.hidden = true;
+        var more = document.getElementById("task-history-more");
+        if (more) more.hidden = true;
+        var toggleBtn = document.getElementById("task-history-toggle");
+        if (toggleBtn) {
+            toggleBtn.disabled = false;
+            var label = toggleBtn.querySelector(".task-history-toggle-label");
+            if (label) label.textContent = "Посмотреть историю";
+        }
+    }
+
+    function renderHistoryItem(it) {
+        var icon = it.icon || "bi-dot";
+        var html = '<li class="task-history-item">';
+        html += '<span class="task-history-icon"><i class="bi ' + escapeHtml(icon) + '"></i></span>';
+        html += '<div class="task-history-content">';
+        html += '<div class="task-history-label">' + escapeHtml(it.label || "") + "</div>";
+
+        var hasOld = it.oldValue !== null && it.oldValue !== undefined && it.oldValue !== "";
+        var hasNew = it.newValue !== null && it.newValue !== undefined && it.newValue !== "";
+        if (hasOld && hasNew) {
+            html += '<div class="task-history-change"><span class="task-history-old">' + escapeHtml(it.oldValue) +
+                '</span><span class="task-history-arrow">→</span><span class="task-history-new">' + escapeHtml(it.newValue) + "</span></div>";
+        } else if (hasNew) {
+            html += '<div class="task-history-change">' + escapeHtml(it.newValue) + "</div>";
+        } else if (hasOld) {
+            html += '<div class="task-history-change">' + escapeHtml(it.oldValue) + "</div>";
+        }
+
+        var author = (it.user && it.user.name) ? it.user.name : "Система";
+        html += '<div class="task-history-meta"><span class="task-history-author">' + escapeHtml(author) +
+            "</span> · " + escapeHtml(formatDate(it.createdAt)) + "</div>";
+        html += "</div></li>";
+        return html;
+    }
+
+    function loadHistory(append) {
+        if (!currentCardId) return;
+        var reqCardId = currentCardId;
+        var offset = append ? historyState.nextOffset : 0;
+        var listEl = document.getElementById("task-history-list");
+        var moreBtn = document.getElementById("task-history-more");
+        var emptyEl = document.getElementById("task-history-empty");
+
+        if (moreBtn) moreBtn.disabled = true;
+
+        apiFetch("/api/kanban/cards/" + reqCardId + "/activities?offset=" + offset)
+            .then(function (data) {
+                // Карточку могли переключить, пока шёл запрос — игнорируем устаревший ответ.
+                if (String(reqCardId) !== String(currentCardId)) return;
+                if (!listEl) return;
+                if (!append) listEl.innerHTML = "";
+                (data.items || []).forEach(function (it) {
+                    listEl.insertAdjacentHTML("beforeend", renderHistoryItem(it));
+                });
+                historyState.nextOffset = data.nextOffset || 0;
+                historyState.hasMore = !!data.hasMore;
+                historyState.loaded = true;
+                if (moreBtn) {
+                    moreBtn.hidden = !historyState.hasMore;
+                    moreBtn.disabled = false;
+                }
+                if (emptyEl) emptyEl.hidden = listEl.children.length !== 0;
+            })
+            .catch(function (err) {
+                if (moreBtn) moreBtn.disabled = false;
+                showToast(err.message);
+            });
+    }
+
+    function initTaskHistory() {
+        var toggleBtn = document.getElementById("task-history-toggle");
+        if (toggleBtn) {
+            toggleBtn.addEventListener("click", function () {
+                var body = document.getElementById("task-history-body");
+                var label = toggleBtn.querySelector(".task-history-toggle-label");
+                if (historyState.expanded) {
+                    historyState.expanded = false;
+                    if (body) body.hidden = true;
+                    if (label) label.textContent = "Посмотреть историю";
+                    return;
+                }
+                historyState.expanded = true;
+                if (body) body.hidden = false;
+                if (label) label.textContent = "Скрыть историю";
+                if (!historyState.loaded) loadHistory(false);
+            });
+        }
+        var moreBtn = document.getElementById("task-history-more");
+        if (moreBtn) {
+            moreBtn.addEventListener("click", function () { loadHistory(true); });
+        }
+    }
+
     // ── Init ──
 
     function init(cfg) {
@@ -2309,6 +2417,7 @@ select.addEventListener("change", function () {
         initColumnColors();
         initColumnRename();
         initCardSidebar();
+        initTaskHistory();
 
         var params = new URLSearchParams(window.location.search);
         var cardId = params.get("card");

@@ -7,12 +7,14 @@ namespace App\Controller\SpaApi\Kanban;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
+use App\Enum\Kanban\KanbanCardActivityType;
 use App\Enum\Kanban\KanbanCardPriority;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanColumnRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
+use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -35,6 +37,7 @@ final class CardController extends AbstractController
         private readonly UserRepository $userRepo,
         private readonly NotificationService $notificationService,
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
+        private readonly KanbanCardActivityLogger $activityLogger,
     ) {
     }
 
@@ -61,6 +64,8 @@ final class CardController extends AbstractController
         $this->kanbanService->requireRole($column->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
 
         $card = $this->kanbanService->createCard($column, $title, $user);
+
+        $this->activityLogger->log($card, KanbanCardActivityType::CREATED);
 
         $board = $column->getBoard();
         $project = $board->getProject();
@@ -205,21 +210,40 @@ final class CardController extends AbstractController
 
         $payload = json_decode($request->getContent(), true) ?? [];
 
-        if (isset($payload['title']) && trim((string) $payload['title']) !== '') {
-            $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
-            $card->setTitle(trim((string) $payload['title']));
+        // Фиксируем значения до изменений — для записи в историю.
+        $oldTitle = $card->getTitle();
+        $oldDescription = $card->getDescription();
+        $oldPriority = $card->getPriority();
+        $oldDueDate = $card->getDueDate();
+        $oldColor = $card->getBorderColor();
+
+        $titleChanged = false;
+        $descriptionChanged = false;
+        $priorityChanged = false;
+        $dueDateChanged = false;
+        $colorChanged = false;
+
+        if (isset($payload['title']) && trim($payload['title']) !== '') {
+            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
+                $newTitle = trim($payload['title']);
+                $titleChanged = $newTitle !== $oldTitle;
+                $card->setTitle($newTitle);
+            }
         }
         if (array_key_exists('description', $payload)) {
             $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $card->setDescription($payload['description']);
+            $descriptionChanged = $card->getDescription() !== $oldDescription;
         }
         if (array_key_exists('priority', $payload)) {
             $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $card->setPriority($payload['priority'] !== null && $payload['priority'] !== '' ? KanbanCardPriority::tryFrom((string) $payload['priority']) : null);
+            $priorityChanged = $card->getPriority() !== $oldPriority;
         }
         if (array_key_exists('dueDate', $payload)) {
             $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_EDITOR);
             $card->setDueDate($payload['dueDate'] ? new \DateTimeImmutable($payload['dueDate']) : null);
+            $dueDateChanged = ($card->getDueDate()?->getTimestamp()) !== ($oldDueDate?->getTimestamp());
         }
         $allowedColors = ['primary', 'success', 'warning', 'danger', 'info', 'dark'];
         if (array_key_exists('borderColor', $payload)) {
@@ -228,9 +252,27 @@ final class CardController extends AbstractController
             $card->setBorderColor(
                 ($color !== null && $color !== '' && in_array($color, $allowedColors, true)) ? $color : null
             );
+            $colorChanged = $card->getBorderColor() !== $oldColor;
         }
 
         $this->em->flush();
+
+        if ($titleChanged) {
+            $this->activityLogger->logRename($card, $oldTitle, $card->getTitle());
+        }
+        if ($descriptionChanged) {
+            $this->activityLogger->logDescriptionChange($card);
+        }
+        if ($priorityChanged) {
+            $this->activityLogger->logPriorityChange($card, $oldPriority, $card->getPriority());
+        }
+        if ($dueDateChanged) {
+            $this->activityLogger->logDueDateChange($card, $oldDueDate, $card->getDueDate());
+        }
+        if ($colorChanged) {
+            $this->activityLogger->logColorChange($card, $oldColor, $card->getBorderColor());
+        }
+
 
         return $this->json([
             'id' => $card->getId(),
@@ -279,7 +321,8 @@ final class CardController extends AbstractController
             }
         }
 
-        $previousAssigneeIds = array_map(static fn (User $u) => $u->getId(), $card->getAssignees()->toArray());
+        $previousAssignees = $card->getAssignees()->toArray();
+        $previousAssigneeIds = array_map(static fn (User $u) => $u->getId(), $previousAssignees);
         foreach ($card->getAssignees() as $existing) {
             $card->removeAssignee($existing);
         }
@@ -293,6 +336,16 @@ final class CardController extends AbstractController
         }
 
         $this->em->flush();
+
+        $finalAssigneeIds = array_map(static fn (User $u) => $u->getId(), $card->getAssignees()->toArray());
+        foreach ($newAssignees as $assignee) {
+            $this->activityLogger->logAssigneeAdded($card, $this->userDisplayName($assignee));
+        }
+        foreach ($previousAssignees as $removed) {
+            if (!in_array($removed->getId(), $finalAssigneeIds, true)) {
+                $this->activityLogger->logAssigneeRemoved($card, $this->userDisplayName($removed));
+            }
+        }
 
         $boardLink = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]);
         foreach ($newAssignees as $assignee) {
@@ -353,6 +406,8 @@ final class CardController extends AbstractController
         $this->kanbanService->moveCard($card, $targetColumn, (float) $position, $prevUpdatedAt);
 
         if ($columnChanged) {
+            $this->activityLogger->logMove($card, $oldColumnTitle, $targetColumn->getTitle());
+
             $board = $targetColumn->getBoard();
             $project = $board->getProject();
             $recipientsById = [];
@@ -429,9 +484,16 @@ final class CardController extends AbstractController
         $card->setIsArchived(!$card->isArchived());
         $this->em->flush();
 
+        $this->activityLogger->logArchived($card, $card->isArchived());
+
         return $this->json([
             'id' => $card->getId(),
             'isArchived' => $card->isArchived(),
         ]);
+    }
+
+    private function userDisplayName(User $u): string
+    {
+        return trim($u->getLastname() . ' ' . $u->getFirstname()) ?: ($u->getLogin() ?? (string) $u->getId());
     }
 }

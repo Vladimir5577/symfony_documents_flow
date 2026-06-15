@@ -8,6 +8,7 @@ use App\Repository\Kanban\KanbanAttachmentRepository;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
 use App\Service\Kanban\KanbanAttachmentService;
+use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -26,6 +27,7 @@ final class KanbanAttachmentApiController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly KanbanAttachmentService $attachmentService,
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
+        private readonly KanbanCardActivityLogger $activityLogger,
     ) {
     }
 
@@ -56,6 +58,10 @@ final class KanbanAttachmentApiController extends AbstractController
         }
         $attachment->setContext($context);
         $this->attachmentService->flush();
+
+        if ($context !== 'chat') {
+            $this->activityLogger->logAttachmentAdded($card, $attachment->getFilename());
+        }
 
         return $this->json([
             'id' => $attachment->getId(),
@@ -120,7 +126,14 @@ final class KanbanAttachmentApiController extends AbstractController
             return $this->json(['error' => 'Вложение не найдено.'], Response::HTTP_NOT_FOUND);
         }
 
+        $filename = $attachment->getFilename();
+        $context = $attachment->getContext();
+
         $this->attachmentService->delete($attachment);
+
+        if ($context !== 'chat') {
+            $this->activityLogger->logAttachmentRemoved($card, $filename);
+        }
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }
