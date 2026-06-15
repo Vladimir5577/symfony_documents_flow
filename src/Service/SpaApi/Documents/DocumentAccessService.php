@@ -75,7 +75,8 @@ final class DocumentAccessService
      *     canEdit: bool,
      *     canPublish: bool,
      *     canChangeRecipientStatus: bool,
-     *     canComment: bool
+     *     canComment: bool,
+     *     canViewRecipientHistory: bool
      * }
      */
     public function presentPermissions(Document $document, User $user): array
@@ -93,6 +94,7 @@ final class DocumentAccessService
                 && !$document->getUserRecipients()->isEmpty(),
             'canChangeRecipientStatus' => $recipient !== null,
             'canComment' => $this->canCommentDocument($document, $user),
+            'canViewRecipientHistory' => $canView || $canEdit,
         ];
     }
 }

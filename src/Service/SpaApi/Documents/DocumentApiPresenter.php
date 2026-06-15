@@ -6,7 +6,9 @@ namespace App\Service\SpaApi\Documents;
 
 use App\Entity\Document\Document;
 use App\Entity\Document\DocumentComment;
+use App\Entity\Document\DocumentHistory;
 use App\Entity\Document\DocumentCommentFile;
+use App\Entity\Document\File;
 use App\Entity\Document\DocumentType;
 use App\Entity\Document\DocumentUserRecipient;
 use App\Entity\Organization\AbstractOrganization;
@@ -200,6 +202,26 @@ final class DocumentApiPresenter
     /**
      * @return array<string, mixed>
      */
+    public function presentHistoryItem(DocumentHistory $item): array
+    {
+        $oldStatus = $item->getOldStatus();
+        $newStatus = $item->getNewStatus();
+
+        return [
+            'id' => $item->getId(),
+            'createdAt' => $item->getCreatedAt()?->format(\DateTimeInterface::ATOM),
+            'action' => $item->getAction(),
+            'changedBy' => $this->presentUserBrief($item->getUser()),
+            'oldStatus' => $oldStatus?->value,
+            'oldStatusLabel' => $oldStatus?->getLabel(),
+            'newStatus' => $newStatus?->value,
+            'newStatusLabel' => $newStatus?->getLabel(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     public function presentDocumentComment(DocumentComment $comment, User $viewer, bool $isAdmin): array
     {
         $author = $comment->getAuthor();
@@ -233,5 +255,35 @@ final class DocumentApiPresenter
             'size' => $file->getSizeBytes(),
             'createdAt' => $file->getCreatedAt()->format(\DateTimeInterface::ATOM),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function presentDocumentFile(File $file, ?int $size = null, ?string $contentType = null): array
+    {
+        return [
+            'id' => $file->getId(),
+            'filename' => $this->buildDocumentFileDisplayName($file),
+            'contentType' => $contentType,
+            'size' => $size,
+            'createdAt' => null,
+        ];
+    }
+
+    private function buildDocumentFileDisplayName(File $file): string
+    {
+        $path = $file->getFilePath();
+        $title = $file->getTitle();
+        if ($title !== null && $title !== '') {
+            $ext = $path ? pathinfo($path, PATHINFO_EXTENSION) : '';
+            if ($ext !== '') {
+                return $title . '.' . $ext;
+            }
+
+            return $title;
+        }
+
+        return $path ?? 'file';
     }
 }
