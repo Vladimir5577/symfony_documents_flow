@@ -16,6 +16,7 @@ use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
+use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -32,6 +33,7 @@ final class BoardController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $entityManager,
         private readonly KanbanCardRepository $cardRepository,
+        private readonly CacheManager $imagineCacheManager,
     ) {
     }
 
@@ -308,10 +310,7 @@ final class BoardController extends AbstractController
 
             $assignees = [];
             foreach ($card->getAssignees() as $u) {
-                $assignees[] = [
-                    'id' => $u->getId(),
-                    'name' => trim($u->getLastname() . ' ' . $u->getFirstname()) ?: (string) $u->getId(),
-                ];
+                $assignees[] = $this->formatAssignee($u);
             }
 
             $cards[] = [
@@ -338,6 +337,20 @@ final class BoardController extends AbstractController
             'headerColor' => $col->getHeaderColor()->value,
             'position' => $col->getPosition(),
             'cards' => $cards,
+        ];
+    }
+
+    /**
+     * @return array{id: int|null, name: string, avatarUrl: string|null}
+     */
+    private function formatAssignee(User $user): array
+    {
+        return [
+            'id' => $user->getId(),
+            'name' => trim($user->getLastname() . ' ' . $user->getFirstname()) ?: (string) $user->getId(),
+            'avatarUrl' => $user->getAvatarName()
+                ? $this->imagineCacheManager->getBrowserPath($user->getId() . '/' . $user->getAvatarName(), 'avatar_medium')
+                : null,
         ];
     }
 }
