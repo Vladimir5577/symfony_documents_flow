@@ -18,6 +18,7 @@ use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
+use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -38,6 +39,7 @@ final class CardController extends AbstractController
         private readonly NotificationService $notificationService,
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
         private readonly KanbanCardActivityLogger $activityLogger,
+        private readonly CacheManager $imagineCacheManager,
     ) {
     }
 
@@ -156,12 +158,7 @@ final class CardController extends AbstractController
 
         $assignees = [];
         foreach ($card->getAssignees() as $u) {
-            $assignees[] = [
-                'id' => $u->getId(),
-                'name' => trim($u->getLastname() . ' ' . $u->getFirstname()) ?: (string) $u->getId(),
-                'firstname' => $u->getFirstname(),
-                'lastname' => $u->getLastname(),
-            ];
+            $assignees[] = $this->formatAssignee($u);
         }
 
         return $this->json([
@@ -355,12 +352,7 @@ final class CardController extends AbstractController
 
         $assignees = [];
         foreach ($card->getAssignees() as $u) {
-            $assignees[] = [
-                'id' => $u->getId(),
-                'name' => trim($u->getLastname() . ' ' . $u->getFirstname()) ?: (string) $u->getId(),
-                'firstname' => $u->getFirstname(),
-                'lastname' => $u->getLastname(),
-            ];
+            $assignees[] = $this->formatAssignee($u);
         }
 
         return $this->json(['assignees' => $assignees]);
@@ -494,5 +486,21 @@ final class CardController extends AbstractController
     private function userDisplayName(User $u): string
     {
         return trim($u->getLastname() . ' ' . $u->getFirstname()) ?: ($u->getLogin() ?? (string) $u->getId());
+    }
+
+    /**
+     * @return array{id: int|null, name: string, firstname: string|null, lastname: string|null, avatarUrl: string|null}
+     */
+    private function formatAssignee(User $user): array
+    {
+        return [
+            'id' => $user->getId(),
+            'name' => trim($user->getLastname() . ' ' . $user->getFirstname()) ?: (string) $user->getId(),
+            'firstname' => $user->getFirstname(),
+            'lastname' => $user->getLastname(),
+            'avatarUrl' => $user->getAvatarName()
+                ? $this->imagineCacheManager->getBrowserPath($user->getId() . '/' . $user->getAvatarName(), 'avatar_medium')
+                : null,
+        ];
     }
 }
