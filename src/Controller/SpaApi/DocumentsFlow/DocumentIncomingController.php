@@ -12,8 +12,10 @@ use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
+use App\Service\SpaApi\Documents\DocumentAttachmentService;
 use App\Service\SpaApi\Documents\DocumentCommentService;
 use App\Service\SpaApi\Documents\DocumentRecipientStatusService;
+use App\Service\SpaApi\Documents\DocumentRecipientViewService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -32,7 +34,9 @@ final class DocumentIncomingController extends AbstractController
         private readonly DocumentApiPresenter $presenter,
         private readonly DocumentAccessService $accessService,
         private readonly DocumentCommentService $commentService,
+        private readonly DocumentAttachmentService $attachmentService,
         private readonly DocumentRecipientStatusService $recipientStatusService,
+        private readonly DocumentRecipientViewService $recipientViewService,
     ) {
     }
 
@@ -99,6 +103,8 @@ final class DocumentIncomingController extends AbstractController
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
+        $this->recipientViewService->markViewedIfNeeded($document, $user);
+
         $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
         $userRecipient = $this->accessService->findUserRecipient($document, $user);
 
@@ -106,6 +112,7 @@ final class DocumentIncomingController extends AbstractController
             'document' => $this->presenter->presentDocumentListItem($document),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
+            'files' => $this->attachmentService->presentFilesForDocument($document),
             'comments' => $this->commentService->presentCommentsForDocument($document->getId(), $user),
             'userRecipient' => $userRecipient !== null ? [
                 'recipientId' => $userRecipient->getId(),
@@ -162,6 +169,7 @@ final class DocumentIncomingController extends AbstractController
             'document' => $this->presenter->presentDocumentListItem($document),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
+            'files' => $this->attachmentService->presentFilesForDocument($document),
             'comments' => $this->commentService->presentCommentsForDocument($document->getId(), $user),
             'userRecipient' => $userRecipient !== null ? [
                 'recipientId' => $userRecipient->getId(),
