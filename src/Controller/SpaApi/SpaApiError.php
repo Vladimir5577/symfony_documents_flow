@@ -72,4 +72,5 @@ final class SpaApiError
     public const POST_COMMENT_EMPTY = 'post_comment_empty';
     public const POST_FILE_NOT_FOUND = 'post_file_not_found';
     public const POST_FILE_NOT_FOUND_ON_DISK = 'post_file_not_found_on_disk';
+    public const NOTIFICATION_NOT_FOUND = 'notification_not_found';
 }
