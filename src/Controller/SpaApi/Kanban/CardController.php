@@ -19,6 +19,7 @@ use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Liip\ImagineBundle\Imagine\Cache\CacheManager;
+use Liip\ImagineBundle\Service\FilterService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -40,6 +41,7 @@ final class CardController extends AbstractController
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
         private readonly KanbanCardActivityLogger $activityLogger,
         private readonly CacheManager $imagineCacheManager,
+        private readonly FilterService $filterService,
     ) {
     }
 
@@ -498,9 +500,22 @@ final class CardController extends AbstractController
             'name' => trim($user->getLastname() . ' ' . $user->getFirstname()) ?: (string) $user->getId(),
             'firstname' => $user->getFirstname(),
             'lastname' => $user->getLastname(),
-            'avatarUrl' => $user->getAvatarName()
-                ? $this->imagineCacheManager->getBrowserPath($user->getId() . '/' . $user->getAvatarName(), 'avatar_medium')
-                : null,
+            'avatarUrl' => $this->buildAvatarUrl($user),
         ];
+    }
+
+    private function buildAvatarUrl(User $user): ?string
+    {
+        $avatarName = $user->getAvatarName();
+        $userId = $user->getId();
+        if ($avatarName === null || $avatarName === '' || $userId === null) {
+            return null;
+        }
+
+        $storageKey = $userId . '/' . $avatarName;
+
+        $this->filterService->warmUpCache($storageKey, 'avatar_medium');
+
+        return $this->imagineCacheManager->getBrowserPath($storageKey, 'avatar_medium');
     }
 }

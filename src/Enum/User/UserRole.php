@@ -7,6 +7,7 @@ namespace App\Enum\User;
 enum UserRole: string
 {
     case ROLE_ADMIN = 'ROLE_ADMIN';
+    case ROLE_ANALYTIC = 'ROLE_ANALYTIC';
     case ROLE_MANAGER = 'ROLE_MANAGER';
     case ROLE_CITIZEN_APPEAL = 'ROLE_CITIZEN_APPEAL';
     case ROLE_HR = 'ROLE_HR';
@@ -18,6 +19,7 @@ enum UserRole: string
     {
         return match ($this) {
             self::ROLE_ADMIN => 'Администратор',
+            self::ROLE_ANALYTIC => 'Аналитик',
             self::ROLE_MANAGER => 'Менеджер',
             self::ROLE_CITIZEN_APPEAL => 'Роль работа с обращениями граждан',
             self::ROLE_HR => 'Роль кадровика',
