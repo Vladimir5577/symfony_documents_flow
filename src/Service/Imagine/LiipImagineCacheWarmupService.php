@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Imagine;
 
+use Liip\ImagineBundle\Imagine\Cache\Helper\PathHelper;
 use Liip\ImagineBundle\Service\FilterService;
 
 /**
@@ -16,6 +17,9 @@ final class LiipImagineCacheWarmupService
 
     public const MAX_EXECUTION_TIME = '120';
 
+    /** @see config/packages/liip_imagine.yaml → resolvers.default.web_path.cache_prefix */
+    private const CACHE_PREFIX = 'media/cache';
+
     public function __construct(
         private readonly FilterService $filterService,
     ) {
@@ -27,5 +31,12 @@ final class LiipImagineCacheWarmupService
         ini_set('max_execution_time', self::MAX_EXECUTION_TIME);
 
         return $this->filterService->warmUpCache($path, $filter, $resolver, $forced);
+    }
+
+    public function getRelativeBrowserPath(string $path, string $filter, ?string $resolver = null): string
+    {
+        $this->warmUp($path, $filter, $resolver);
+
+        return '/' . self::CACHE_PREFIX . '/' . $filter . '/' . PathHelper::filePathToUrlPath(ltrim($path, '/'));
     }
 }

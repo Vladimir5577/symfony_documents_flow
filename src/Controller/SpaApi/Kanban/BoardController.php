@@ -17,7 +17,6 @@ use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Service\Imagine\LiipImagineCacheWarmupService;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -34,7 +33,6 @@ final class BoardController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $entityManager,
         private readonly KanbanCardRepository $cardRepository,
-        private readonly CacheManager $imagineCacheManager,
         private readonly LiipImagineCacheWarmupService $imagineCacheWarmupService,
     ) {
     }
@@ -364,8 +362,6 @@ final class BoardController extends AbstractController
 
         $storageKey = $userId . '/' . $avatarName;
 
-        $this->imagineCacheWarmupService->warmUp($storageKey, 'avatar_medium');
-
-        return $this->imagineCacheManager->getBrowserPath($storageKey, 'avatar_medium');
+        return $this->imagineCacheWarmupService->getRelativeBrowserPath($storageKey, 'avatar_medium');
     }
 }

@@ -19,7 +19,6 @@ use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -40,7 +39,6 @@ final class CardController extends AbstractController
         private readonly NotificationService $notificationService,
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
         private readonly KanbanCardActivityLogger $activityLogger,
-        private readonly CacheManager $imagineCacheManager,
         private readonly LiipImagineCacheWarmupService $imagineCacheWarmupService,
     ) {
     }
@@ -514,8 +512,6 @@ final class CardController extends AbstractController
 
         $storageKey = $userId . '/' . $avatarName;
 
-        $this->imagineCacheWarmupService->warmUp($storageKey, 'avatar_medium');
-
-        return $this->imagineCacheManager->getBrowserPath($storageKey, 'avatar_medium');
+        return $this->imagineCacheWarmupService->getRelativeBrowserPath($storageKey, 'avatar_medium');
     }
 }
