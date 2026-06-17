@@ -13,13 +13,13 @@ use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanColumnRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
+use App\Service\Imagine\LiipImagineCacheWarmupService;
 use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
 use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Liip\ImagineBundle\Imagine\Cache\CacheManager;
-use Liip\ImagineBundle\Service\FilterService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -41,7 +41,7 @@ final class CardController extends AbstractController
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
         private readonly KanbanCardActivityLogger $activityLogger,
         private readonly CacheManager $imagineCacheManager,
-        private readonly FilterService $filterService,
+        private readonly LiipImagineCacheWarmupService $imagineCacheWarmupService,
     ) {
     }
 
@@ -514,7 +514,7 @@ final class CardController extends AbstractController
 
         $storageKey = $userId . '/' . $avatarName;
 
-        $this->filterService->warmUpCache($storageKey, 'avatar_medium');
+        $this->imagineCacheWarmupService->warmUp($storageKey, 'avatar_medium');
 
         return $this->imagineCacheManager->getBrowserPath($storageKey, 'avatar_medium');
     }

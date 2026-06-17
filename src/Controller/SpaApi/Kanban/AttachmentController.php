@@ -10,11 +10,11 @@ use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanAttachmentRepository;
 use App\Repository\Kanban\KanbanCardRepository;
+use App\Service\Imagine\LiipImagineCacheWarmupService;
 use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
 use App\Service\Kanban\KanbanAttachmentService;
 use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
-use Liip\ImagineBundle\Service\FilterService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -38,7 +38,7 @@ final class AttachmentController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly KanbanAttachmentService $attachmentService,
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
-        private readonly FilterService $filterService,
+        private readonly LiipImagineCacheWarmupService $imagineCacheWarmupService,
         private readonly KanbanCardActivityLogger $activityLogger,
         #[Autowire('%kernel.project_dir%')]
         private readonly string $projectDir,
@@ -226,7 +226,7 @@ final class AttachmentController extends AbstractController
             return null;
         }
 
-        $this->filterService->warmUpCache($storageKey, self::PREVIEW_FILTER);
+        $this->imagineCacheWarmupService->warmUp($storageKey, self::PREVIEW_FILTER);
 
         $path = \sprintf(
             '%s/public/media/cache/%s/%s',

@@ -15,6 +15,7 @@ use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
+use App\Service\Imagine\LiipImagineCacheWarmupService;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
 use Liip\ImagineBundle\Imagine\Cache\CacheManager;
@@ -43,6 +44,7 @@ final class ProjectController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $entityManager,
         private readonly CacheManager $imagineCacheManager,
+        private readonly LiipImagineCacheWarmupService $imagineCacheWarmupService,
     ) {
     }
 
@@ -179,8 +181,8 @@ final class ProjectController extends AbstractController
                         'firstname' => $member?->getFirstname(),
                         'patronymic' => $member?->getPatronymic(),
                         'profession' => $member?->getWorker()?->getProfession(),
-                        'avatarUrl' => ($member?->getId() !== null && $member?->getAvatarName())
-                            ? $this->imagineCacheManager->getBrowserPath($member->getId() . '/' . $member->getAvatarName(), 'avatar_medium')
+                        'avatarUrl' => $member !== null
+                            ? $this->buildAvatarUrl($member)
                             : null,
                         'role' => $role?->value,
                         'roleLabel' => $role?->getLabel(),
@@ -391,5 +393,20 @@ final class ProjectController extends AbstractController
         }
 
         return $result;
+    }
+
+    private function buildAvatarUrl(User $user): ?string
+    {
+        $avatarName = $user->getAvatarName();
+        $userId = $user->getId();
+        if ($avatarName === null || $avatarName === '' || $userId === null) {
+            return null;
+        }
+
+        $storageKey = $userId . '/' . $avatarName;
+
+        $this->imagineCacheWarmupService->warmUp($storageKey, 'avatar_medium');
+
+        return $this->imagineCacheManager->getBrowserPath($storageKey, 'avatar_medium');
     }
 }

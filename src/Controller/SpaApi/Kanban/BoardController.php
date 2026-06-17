@@ -14,6 +14,7 @@ use App\Enum\Kanban\KanbanColumnColor;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
+use App\Service\Imagine\LiipImagineCacheWarmupService;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
 use Liip\ImagineBundle\Imagine\Cache\CacheManager;
@@ -34,6 +35,7 @@ final class BoardController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly KanbanCardRepository $cardRepository,
         private readonly CacheManager $imagineCacheManager,
+        private readonly LiipImagineCacheWarmupService $imagineCacheWarmupService,
     ) {
     }
 
@@ -348,9 +350,22 @@ final class BoardController extends AbstractController
         return [
             'id' => $user->getId(),
             'name' => trim($user->getLastname() . ' ' . $user->getFirstname()) ?: (string) $user->getId(),
-            'avatarUrl' => $user->getAvatarName()
-                ? $this->imagineCacheManager->getBrowserPath($user->getId() . '/' . $user->getAvatarName(), 'avatar_medium')
-                : null,
+            'avatarUrl' => $this->buildAvatarUrl($user),
         ];
+    }
+
+    private function buildAvatarUrl(User $user): ?string
+    {
+        $avatarName = $user->getAvatarName();
+        $userId = $user->getId();
+        if ($avatarName === null || $avatarName === '' || $userId === null) {
+            return null;
+        }
+
+        $storageKey = $userId . '/' . $avatarName;
+
+        $this->imagineCacheWarmupService->warmUp($storageKey, 'avatar_medium');
+
+        return $this->imagineCacheManager->getBrowserPath($storageKey, 'avatar_medium');
     }
 }
