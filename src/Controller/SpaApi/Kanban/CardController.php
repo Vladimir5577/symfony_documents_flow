@@ -66,6 +66,18 @@ final class CardController extends AbstractController
         $this->kanbanService->requireRole($column->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
 
         $card = $this->kanbanService->createCard($column, $title, $user);
+        $newTopPosition = 1.0;
+        foreach ($column->getCards() as $columnCard) {
+            if ($columnCard->getId() === $card->getId()) {
+                continue;
+            }
+            $position = $columnCard->getPosition();
+            if ($position <= 0) {
+                continue;
+            }
+            $newTopPosition = min($newTopPosition, $position / 2.0);
+        }
+        $this->kanbanService->moveCard($card, $column, $newTopPosition);
 
         $this->activityLogger->log($card, KanbanCardActivityType::CREATED);
 
