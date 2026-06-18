@@ -25,6 +25,9 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
 #[Route('/spa/api/cards/{cardId}/comments')]
 final class CommentController extends AbstractController
 {
+    private const MAX_COMMENT_BODY_LENGTH = 10000;
+    private const MAX_COMMENTS_PER_CARD = 300;
+
     public function __construct(
         private readonly KanbanCardRepository $cardRepo,
         private readonly KanbanCardCommentRepository $commentRepo,
@@ -77,6 +80,14 @@ final class CommentController extends AbstractController
             return $this->json(['error' => SpaApiError::COMMENT_BODY_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
+        if (mb_strlen($body) > self::MAX_COMMENT_BODY_LENGTH) {
+            return $this->json(['error' => SpaApiError::COMMENT_BODY_TOO_LONG], Response::HTTP_BAD_REQUEST);
+        }
+
+        if ($this->commentRepo->countByCard($card) >= self::MAX_COMMENTS_PER_CARD) {
+            return $this->json(['error' => SpaApiError::COMMENT_LIMIT_REACHED], Response::HTTP_CONFLICT);
+        }
+
         $comment = new KanbanCardComment();
         $comment->setBody($body);
         $comment->setCard($card);
@@ -117,6 +128,10 @@ final class CommentController extends AbstractController
         $body = trim((string) ($payload['body'] ?? ''));
         if ($body === '') {
             return $this->json(['error' => SpaApiError::COMMENT_BODY_REQUIRED], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (mb_strlen($body) > self::MAX_COMMENT_BODY_LENGTH) {
+            return $this->json(['error' => SpaApiError::COMMENT_BODY_TOO_LONG], Response::HTTP_BAD_REQUEST);
         }
 
         $comment->setBody($body);

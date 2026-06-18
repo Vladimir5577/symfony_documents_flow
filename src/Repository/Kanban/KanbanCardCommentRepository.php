@@ -17,6 +17,16 @@ class KanbanCardCommentRepository extends ServiceEntityRepository
         parent::__construct($registry, KanbanCardComment::class);
     }
 
+    public function countByCard(KanbanCard $card): int
+    {
+        return (int) $this->createQueryBuilder('c')
+            ->select('COUNT(c.id)')
+            ->where('c.card = :card')
+            ->setParameter('card', $card)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
     /**
      * @return KanbanCardComment[]
      */

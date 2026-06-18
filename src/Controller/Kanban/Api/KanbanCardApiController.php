@@ -311,13 +311,13 @@ final class KanbanCardApiController extends AbstractController
         $this->em->flush();
 
         $finalAssigneeIds = array_map(static fn (User $u) => $u->getId(), $card->getAssignees()->toArray());
-        foreach ($newAssignees as $assignee) {
-            $this->activityLogger->logAssigneeAdded($card, $this->userDisplayName($assignee));
-        }
         foreach ($previousAssignees as $removed) {
             if (!in_array($removed->getId(), $finalAssigneeIds, true)) {
                 $this->activityLogger->logAssigneeRemoved($card, $this->userDisplayName($removed));
             }
+        }
+        foreach ($newAssignees as $assignee) {
+            $this->activityLogger->logAssigneeAdded($card, $this->userDisplayName($assignee));
         }
 
         $board = $card->getColumn()->getBoard();

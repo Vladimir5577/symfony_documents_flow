@@ -29,6 +29,8 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
 #[Route('/spa/api/cards')]
 final class CardController extends AbstractController
 {
+    private const MAX_ACTIVE_CARDS_PER_BOARD = 300;
+
     public function __construct(
         private readonly KanbanCardRepository $cardRepo,
         private readonly KanbanColumnRepository $columnRepo,
@@ -64,6 +66,10 @@ final class CardController extends AbstractController
         }
 
         $this->kanbanService->requireRole($column->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+
+        if ($this->cardRepo->countActiveCardsOnBoard($column->getBoard()) >= self::MAX_ACTIVE_CARDS_PER_BOARD) {
+            return $this->json(['error' => SpaApiError::BOARD_CARD_LIMIT_REACHED], Response::HTTP_CONFLICT);
+        }
 
         $card = $this->kanbanService->createCard($column, $title, $user);
 
@@ -334,13 +340,13 @@ final class CardController extends AbstractController
         $this->em->flush();
 
         $finalAssigneeIds = array_map(static fn (User $u) => $u->getId(), $card->getAssignees()->toArray());
-        foreach ($newAssignees as $assignee) {
-            $this->activityLogger->logAssigneeAdded($card, $this->userDisplayName($assignee));
-        }
         foreach ($previousAssignees as $removed) {
             if (!in_array($removed->getId(), $finalAssigneeIds, true)) {
                 $this->activityLogger->logAssigneeRemoved($card, $this->userDisplayName($removed));
             }
+        }
+        foreach ($newAssignees as $assignee) {
+            $this->activityLogger->logAssigneeAdded($card, $this->userDisplayName($assignee));
         }
 
         $boardLink = $this->generateUrl('app_kanban_board', ['id' => $board->getId()]);

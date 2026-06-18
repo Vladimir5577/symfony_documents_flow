@@ -256,7 +256,7 @@
     {% endif %}
 
     {# Аналитика ТКО — отдельный модуль, не связан с основной аналитикой #}
-    {% if is_granted('ROLE_ADMIN') %}
+    {% if is_granted('ROLE_TKO') %}
         <li class="sidebar-group-label">Аналитика ТКО</li>
 
         <li class="sidebar-item has-sub {% if active_tab in ['analytics_tko', 'analytics_tko_view', 'analytics_tko_view_week', 'analytics_tko_view_month', 'analytics_tko_view_summary'] %}active{% endif %}">

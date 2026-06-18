@@ -10,6 +10,7 @@ final class SpaApiError
     public const ATTACHMENT_LIMIT_REACHED = 'attachment_limit_reached';
     public const ATTACHMENT_NOT_FOUND = 'attachment_not_found';
     public const ATTACHMENT_NOT_PREVIEWABLE = 'attachment_not_previewable';
+    public const BOARD_CARD_LIMIT_REACHED = 'board_card_limit_reached';
     public const BOARD_HAS_CARDS = 'board_has_cards';
     public const BOARD_HAS_NO_PROJECT = 'board_has_no_project';
     public const BOARD_NOT_FOUND = 'board_not_found';
@@ -20,6 +21,8 @@ final class SpaApiError
     public const CARD_NOT_FOUND = 'card_not_found';
     public const COMMENT_AUTHOR_ONLY = 'comment_author_only';
     public const COMMENT_BODY_REQUIRED = 'comment_body_required';
+    public const COMMENT_BODY_TOO_LONG = 'comment_body_too_long';
+    public const COMMENT_LIMIT_REACHED = 'comment_limit_reached';
     public const COMMENT_FILE_NOT_FOUND = 'comment_file_not_found';
     public const COMMENT_NOT_FOUND = 'comment_not_found';
     public const COMMENT_VALIDATION_FAILED = 'comment_validation_failed';
