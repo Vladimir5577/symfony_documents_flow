@@ -498,7 +498,7 @@ final class CardController extends AbstractController
             'name' => trim($user->getLastname() . ' ' . $user->getFirstname()) ?: (string) $user->getId(),
             'firstname' => $user->getFirstname(),
             'lastname' => $user->getLastname(),
-            'avatarUrl' => $this->userAvatarUrlGenerator->getAvatarUrl($user),
+            'avatarUrl' => $this->userAvatarUrlGenerator->getAvatarUrl($user, UserAvatarUrlGenerator::FILTER_THUMBNAIL),
         ];
     }
 }

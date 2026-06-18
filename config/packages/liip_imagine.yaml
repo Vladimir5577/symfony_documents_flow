@@ -23,6 +23,7 @@ liip_imagine:
     data_loader: default
     filter_sets:
         avatar_thumbnail:
+            data_loader: user_avatar
             quality: 85
             filters:
                 thumbnail:

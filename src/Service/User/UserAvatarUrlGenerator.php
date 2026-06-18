@@ -9,12 +9,16 @@ use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 
 final class UserAvatarUrlGenerator
 {
+    public const FILTER_THUMBNAIL = 'avatar_thumbnail';
+
+    public const FILTER_MEDIUM = 'avatar_medium';
+
     public function __construct(
         private readonly CacheManager $imagineCacheManager,
     ) {
     }
 
-    public function getAvatarUrl(User $user, string $filter = 'avatar_medium'): ?string
+    public function getAvatarUrl(User $user, string $filter = self::FILTER_MEDIUM): ?string
     {
         $avatarName = $user->getAvatarName();
         $userId = $user->getId();

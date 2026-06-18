@@ -180,7 +180,7 @@ final class ProjectController extends AbstractController
                         'patronymic' => $member?->getPatronymic(),
                         'profession' => $member?->getWorker()?->getProfession(),
                         'avatarUrl' => $member !== null
-                            ? $this->userAvatarUrlGenerator->getAvatarUrl($member)
+                            ? $this->userAvatarUrlGenerator->getAvatarUrl($member, UserAvatarUrlGenerator::FILTER_THUMBNAIL)
                             : null,
                         'role' => $role?->value,
                         'roleLabel' => $role?->getLabel(),

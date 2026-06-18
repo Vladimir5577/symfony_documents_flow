@@ -348,7 +348,7 @@ final class BoardController extends AbstractController
         return [
             'id' => $user->getId(),
             'name' => trim($user->getLastname() . ' ' . $user->getFirstname()) ?: (string) $user->getId(),
-            'avatarUrl' => $this->userAvatarUrlGenerator->getAvatarUrl($user),
+            'avatarUrl' => $this->userAvatarUrlGenerator->getAvatarUrl($user, UserAvatarUrlGenerator::FILTER_THUMBNAIL),
         ];
     }
 }
