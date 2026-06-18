@@ -16,6 +16,10 @@ security:
             # Ensure dev tools and static assets are always allowed
             pattern: ^/(_profiler|_wdt|assets|build)/
             security: false
+        # LiipImagine: /media/cache/resolve/… — без JWT (запросы из <img> и т.п.)
+        media_cache:
+            pattern: ^/media/cache
+            security: false
         refresh_jwt:
             pattern: ^/spa/api/(token/refresh|logout)
             stateless: true

@@ -15,8 +15,8 @@ use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Service\Kanban\KanbanService;
+use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\ORM\EntityManagerInterface;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -33,7 +33,7 @@ final class BoardController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $entityManager,
         private readonly KanbanCardRepository $cardRepository,
-        private readonly CacheManager $imagineCacheManager,
+        private readonly UserAvatarUrlGenerator $userAvatarUrlGenerator,
     ) {
     }
 
@@ -348,9 +348,7 @@ final class BoardController extends AbstractController
         return [
             'id' => $user->getId(),
             'name' => trim($user->getLastname() . ' ' . $user->getFirstname()) ?: (string) $user->getId(),
-            'avatarUrl' => $user->getAvatarName()
-                ? $this->imagineCacheManager->getBrowserPath($user->getId() . '/' . $user->getAvatarName(), 'avatar_medium')
-                : null,
+            'avatarUrl' => $this->userAvatarUrlGenerator->getAvatarUrl($user),
         ];
     }
 }

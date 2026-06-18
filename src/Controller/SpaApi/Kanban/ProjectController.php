@@ -17,7 +17,7 @@ use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
+use App\Service\User\UserAvatarUrlGenerator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -42,7 +42,7 @@ final class ProjectController extends AbstractController
         private readonly KanbanBoardRepository $boardRepository,
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $entityManager,
-        private readonly CacheManager $imagineCacheManager,
+        private readonly UserAvatarUrlGenerator $userAvatarUrlGenerator,
     ) {
     }
 
@@ -179,8 +179,8 @@ final class ProjectController extends AbstractController
                         'firstname' => $member?->getFirstname(),
                         'patronymic' => $member?->getPatronymic(),
                         'profession' => $member?->getWorker()?->getProfession(),
-                        'avatarUrl' => ($member?->getId() !== null && $member?->getAvatarName())
-                            ? $this->imagineCacheManager->getBrowserPath($member->getId() . '/' . $member->getAvatarName(), 'avatar_medium')
+                        'avatarUrl' => $member !== null
+                            ? $this->userAvatarUrlGenerator->getAvatarUrl($member)
                             : null,
                         'role' => $role?->value,
                         'roleLabel' => $role?->getLabel(),
