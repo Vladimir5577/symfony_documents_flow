@@ -6,6 +6,7 @@ namespace App\Controller\SpaApi\Kanban;
 
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Kanban\KanbanBoard;
+use App\Entity\Kanban\KanbanCard;
 use App\Entity\Kanban\KanbanColumn;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\User\User;
@@ -64,6 +65,54 @@ final class BoardController extends AbstractController
             'title' => $board->getTitle(),
             'updatedAt' => $board->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
             'columns' => $columns,
+        ]);
+    }
+
+    #[Route('/{id}/boards/{boardId}/archive', name: 'spa_api_project_board_archive', requirements: ['id' => '\d+', 'boardId' => '\d+'], methods: ['GET'])]
+    public function boardArchive(int $id, int $boardId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $project = $this->projectRepository->find($id);
+        if ($project === null) {
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $board = $this->boardRepository->find($boardId);
+        if ($board === null || $board->getProject()?->getId() !== $project->getId()) {
+            return $this->json(['error' => SpaApiError::BOARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($board, $user, KanbanBoardMemberRole::KANBAN_VIEWER);
+
+        $page = max(1, (int) $request->query->get('page', 1));
+        $limit = 10;
+
+        $filters = [
+            'title' => trim((string) $request->query->get('title', '')),
+            'description' => trim((string) $request->query->get('description', '')),
+            'dateFrom' => trim((string) $request->query->get('dateFrom', '')),
+            'dateTo' => trim((string) $request->query->get('dateTo', '')),
+        ];
+
+        $pagination = $this->cardRepository->findArchivedByBoardPaginated($board, $page, $limit, $filters);
+
+        $cards = [];
+        foreach ($pagination['cards'] as $card) {
+            $cards[] = $this->formatArchivedCard($card);
+        }
+
+        return $this->json([
+            'cards' => $cards,
+            'pagination' => [
+                'currentPage' => $pagination['page'],
+                'totalPages' => $pagination['totalPages'],
+                'total' => $pagination['total'],
+                'limit' => $pagination['limit'],
+            ],
+            'archivedCount' => $this->cardRepository->countArchivedByBoard($board),
         ]);
     }
 
@@ -337,6 +386,24 @@ final class BoardController extends AbstractController
             'headerColor' => $col->getHeaderColor()->value,
             'position' => $col->getPosition(),
             'cards' => $cards,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatArchivedCard(KanbanCard $card): array
+    {
+        $archivedBy = $card->getArchivedBy();
+
+        return [
+            'id' => $card->getId(),
+            'title' => $card->getTitle(),
+            'description' => $card->getDescription(),
+            'columnTitle' => $card->getColumn()->getTitle(),
+            'borderColor' => $card->getBorderColor(),
+            'archivedAt' => $card->getArchivedAt()?->format(\DateTimeInterface::ATOM),
+            'archivedBy' => $archivedBy instanceof User ? $this->formatAssignee($archivedBy) : null,
         ];
     }
 
