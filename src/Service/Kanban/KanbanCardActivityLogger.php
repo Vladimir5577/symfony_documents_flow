@@ -189,7 +189,10 @@ class KanbanCardActivityLogger
 
     private function formatDate(?\DateTimeImmutable $date): string
     {
-        return $date?->format('d.m.Y H:i') ?? 'не задан';
+        if ($date === null) {
+            return 'не задан';
+        }
+        return $date->setTimezone(new \DateTimeZone(date_default_timezone_get()))->format('d.m.Y H:i');
     }
 
     /**
