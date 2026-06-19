@@ -234,7 +234,12 @@ final class KanbanCardApiController extends AbstractController
             $priorityChanged = $card->getPriority() !== $oldPriority;
         }
         if (array_key_exists('dueDate', $payload)) {
-            $card->setDueDate($payload['dueDate'] ? new \DateTimeImmutable($payload['dueDate']) : null);
+            $dueDate = null;
+            if ($payload['dueDate']) {
+                $dueDate = new \DateTimeImmutable($payload['dueDate']);
+                $dueDate = $dueDate->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+            }
+            $card->setDueDate($dueDate);
             $dueDateChanged = ($card->getDueDate()?->getTimestamp()) !== ($oldDueDate?->getTimestamp());
         }
         $allowedColors = ['primary', 'success', 'warning', 'danger', 'info', 'dark'];
