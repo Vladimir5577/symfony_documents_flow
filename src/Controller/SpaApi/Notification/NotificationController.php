@@ -153,14 +153,23 @@ final class NotificationController extends AbstractController
         ];
     }
 
+    /**
+     * Преобразует legacy-ссылки уведомлений в SPA-маршруты.
+     */
     private function getLink(?string $rawLink): ?string
     {
-        if ($rawLink === null || $rawLink === '') {
-            return $rawLink;
+        if ($rawLink === null || $rawLink === '' || $rawLink === '#') {
+            return null;
         }
 
-        if (str_starts_with($rawLink, '/view_incoming_document')) {
-            return '/document-in';
+        $incomingSpaLink = $this->mapDocumentViewLink($rawLink, '/view_incoming_document', '/document-in');
+        if ($incomingSpaLink !== null) {
+            return $incomingSpaLink;
+        }
+
+        $outgoingSpaLink = $this->mapDocumentViewLink($rawLink, '/view_outgoing_document', '/document-out');
+        if ($outgoingSpaLink !== null) {
+            return $outgoingSpaLink;
         }
 
         if (!str_starts_with($rawLink, '/kanban_board/')) {
@@ -200,5 +209,28 @@ final class NotificationController extends AbstractController
         }
 
         return '/projects/' . $projectId . '?' . $spaQuery;
+    }
+
+    private function mapDocumentViewLink(string $rawLink, string $legacySegment, string $spaBasePath): ?string
+    {
+        if (!str_contains($rawLink, $legacySegment)) {
+            return null;
+        }
+
+        $parts = parse_url($rawLink);
+        $fragment = isset($parts['fragment']) && $parts['fragment'] !== ''
+            ? '#' . $parts['fragment']
+            : '';
+
+        if (!preg_match('#' . preg_quote($legacySegment, '#') . '/(\d+)#', $rawLink, $matches)) {
+            return null;
+        }
+
+        $documentId = (int) $matches[1];
+        if ($documentId <= 0) {
+            return null;
+        }
+
+        return $spaBasePath . '?doc=' . $documentId . $fragment;
     }
 }

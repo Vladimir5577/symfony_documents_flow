@@ -12,9 +12,12 @@ use App\Entity\Document\File;
 use App\Entity\Document\DocumentType;
 use App\Entity\Document\DocumentUserRecipient;
 use App\Entity\Organization\AbstractOrganization;
+use App\Entity\Organization\Department;
+use App\Entity\Organization\Filial;
 use App\Entity\User\User;
 use App\Enum\Document\DocumentRecipientRole;
 use App\Enum\Document\DocumentStatus;
+use App\Enum\Organization\OrganizationType;
 
 final class DocumentApiPresenter
 {
@@ -51,6 +54,34 @@ final class DocumentApiPresenter
             'name' => $organization->getName(),
             'path' => $this->buildOrganizationPath($organization),
         ];
+    }
+
+    /**
+     * @return array{id: int|null, name: string, type: string, children: list<array<string, mixed>>}
+     */
+    public function presentOrganizationTreeNode(AbstractOrganization $organization): array
+    {
+        return [
+            'id' => $organization->getId(),
+            'name' => $organization->getName(),
+            'type' => $this->resolveOrganizationType($organization)->value,
+            'children' => $organization->getChildOrganizations()
+                ->map(fn (AbstractOrganization $child) => $this->presentOrganizationTreeNode($child))
+                ->getValues(),
+        ];
+    }
+
+    private function resolveOrganizationType(AbstractOrganization $organization): OrganizationType
+    {
+        if ($organization instanceof Filial) {
+            return OrganizationType::FILIAL;
+        }
+
+        if ($organization instanceof Department) {
+            return OrganizationType::DEPARTMENT;
+        }
+
+        return OrganizationType::ORGANIZATION;
     }
 
     public function presentDocumentListItem(Document $document): array
