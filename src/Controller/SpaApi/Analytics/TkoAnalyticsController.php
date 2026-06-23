@@ -19,7 +19,7 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * Отдаёт недельную сетку по одному полигону: строки = метрики, колонки = 7 дней (Пн–Вс).
  * JSON-зеркало App\Controller\Analytics\TKO\AnalyticsTKOController::index().
  */
-#[IsGranted('ROLE_MANAGER')]
+#[IsGranted('ROLE_TKO')]
 final class TkoAnalyticsController extends AbstractController
 {
     private const MAX_PERIOD_DAYS = 84;
