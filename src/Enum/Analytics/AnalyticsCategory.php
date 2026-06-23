@@ -12,6 +12,7 @@ enum AnalyticsCategory: string
     case Hr = 'hr';
     case Tko = 'tko';
     case CitizenAppeal = 'citizen_appeal';
+    case ClientsDepartment = 'clients_department';
 
     public function label(): string
     {
@@ -22,6 +23,7 @@ enum AnalyticsCategory: string
             self::Hr => 'Отдел кадров',
             self::Tko => 'ТКО',
             self::CitizenAppeal => 'Обращение граждан',
+            self::ClientsDepartment => 'Абонентский отдел',
         };
     }
 }

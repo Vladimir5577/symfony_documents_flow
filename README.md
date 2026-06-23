@@ -28,7 +28,7 @@ $  docker exec -it php_container bash
 
 5. Inside container install dependancies
 ```bash
-$ composer install
+$ composer install --no-scripts
 $ php bin/console importmap:install
 ```
 
