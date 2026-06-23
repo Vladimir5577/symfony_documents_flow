@@ -590,6 +590,8 @@ final class AnalyticsReportController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
+        $report = $reportService->findByIdForUser($id, $user);
+
         $currentValues = [];
         $currentNotes = [];
         foreach ($report->getValues() as $v) {
