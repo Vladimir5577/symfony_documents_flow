@@ -93,7 +93,7 @@ final class CreateReportService
     }
 
     /**
-     * Список периодов доски: дозаполняет пропуски от самого раннего до текущего.
+     * Список периодов доски: дозаполняет пропуски от самого позднего до текущего.
      *
      * @return AnalyticsPeriod[]
      */
@@ -182,13 +182,11 @@ final class CreateReportService
             return;
         }
 
-        $minStart = $existing[0]->getStartDate();
-        $maxStart = $existing[array_key_last($existing)]->getStartDate();
-        if ($currentStart > $maxStart) {
-            $maxStart = $currentStart;
-        }
+        $latestStart = $existing[array_key_last($existing)]->getStartDate();
 
-        $this->ensurePeriodsInRange($type, $minStart, $maxStart);
+        if ($currentStart > $latestStart) {
+            $this->ensurePeriodsInRange($type, $latestStart, $currentStart);
+        }
     }
 
     private function ensurePeriodsInRange(
