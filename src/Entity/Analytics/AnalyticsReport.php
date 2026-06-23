@@ -49,6 +49,13 @@ class AnalyticsReport
     #[ORM\JoinColumn(name: 'created_by', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?User $createdBy = null;
 
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'approved_by', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $approvedBy = null;
+
+    #[ORM\Column(name: 'approved_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $approvedAt = null;
+
     #[ORM\Column(type: Types::STRING, length: 16, enumType: AnalyticsReportStatus::class)]
     private ?AnalyticsReportStatus $status = null;
 
@@ -135,6 +142,30 @@ class AnalyticsReport
     public function setCreatedBy(?User $createdBy): static
     {
         $this->createdBy = $createdBy;
+
+        return $this;
+    }
+
+    public function getApprovedBy(): ?User
+    {
+        return $this->approvedBy;
+    }
+
+    public function setApprovedBy(?User $approvedBy): static
+    {
+        $this->approvedBy = $approvedBy;
+
+        return $this;
+    }
+
+    public function getApprovedAt(): ?\DateTimeImmutable
+    {
+        return $this->approvedAt;
+    }
+
+    public function setApprovedAt(?\DateTimeImmutable $approvedAt): static
+    {
+        $this->approvedAt = $approvedAt;
 
         return $this;
     }

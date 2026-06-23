@@ -32,7 +32,7 @@
         {% else %}
             Период отчёта: <strong>{{ currentIsoLabel }}</strong> (будет создан автоматически при первом сохранении).
         {% endif %}
-        Отчёт создаётся автоматически за текущий период ({{ board.periodType.label }}) после нажатия одной из кнопок сохранения.
+        Отчёт создаётся автоматически за текущий период ({{ board.periodType.label }}) после сохранения.
     </div>
 
     {% import 'analytics/report/_metric_notes.html.twig' as notes %}
@@ -103,14 +103,9 @@
 
                                 <div class="d-flex justify-content-between gap-2">
                                     <a href="{{ path('app_analytics_report_new') }}" class="btn btn-outline-secondary">Отмена</a>
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" name="submit_action" value="draft" class="btn btn-primary">
-                                            Сохранить как черновик
-                                        </button>
-                                        <button type="submit" name="submit_action" value="confirm" class="btn btn-success">
-                                            Сохранить и подтвердить
-                                        </button>
-                                    </div>
+                                    <button type="submit" class="btn btn-primary">
+                                        Сохранить неподтвержденным
+                                    </button>
                                 </div>
                             </form>
                         </div>
@@ -119,39 +114,6 @@
             </div>
         </div>
     </section>
-    <script>
-        (function () {
-            var form = document.getElementById('report-fill-new-form');
-            if (!form || typeof Swal === 'undefined') return;
-
-            form.addEventListener('submit', function (e) {
-                var submitter = e.submitter;
-                if (!submitter || submitter.value !== 'confirm') return;
-
-                if (form.dataset.confirmConfirmed === '1') {
-                    delete form.dataset.confirmConfirmed;
-                    return;
-                }
-
-                e.preventDefault();
-                Swal.fire({
-                    title: 'Вы уверены?',
-                    text: 'Подтверждённый отчёт нельзя будет редактировать.',
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonColor: '#198754',
-                    cancelButtonColor: '#6c757d',
-                    confirmButtonText: 'Да, подтвердить',
-                    cancelButtonText: 'Отмена'
-                }).then(function (result) {
-                    if (result.isConfirmed) {
-                        form.dataset.confirmConfirmed = '1';
-                        form.requestSubmit(submitter);
-                    }
-                });
-            });
-        })();
-    </script>
 
     {% include 'analytics/report/_metric_notes.html.twig' %}
 {% endblock %}

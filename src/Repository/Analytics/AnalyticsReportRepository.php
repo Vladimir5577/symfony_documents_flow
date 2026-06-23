@@ -3,6 +3,7 @@
 namespace App\Repository\Analytics;
 
 use App\Entity\Analytics\AnalyticsReport;
+use App\Entity\User\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -16,6 +17,25 @@ class AnalyticsReportRepository extends ServiceEntityRepository
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, AnalyticsReport::class);
+    }
+
+    /**
+     * @return AnalyticsReport[]
+     */
+    public function findForIndex(?User $createdBy = null): array
+    {
+        $qb = $this->createQueryBuilder('r')
+            ->addSelect('cb', 'ab')
+            ->join('r.createdBy', 'cb')
+            ->leftJoin('r.approvedBy', 'ab')
+            ->orderBy('r.createdAt', 'DESC');
+
+        if ($createdBy !== null) {
+            $qb->andWhere('r.createdBy = :createdBy')
+                ->setParameter('createdBy', $createdBy);
+        }
+
+        return $qb->getQuery()->getResult();
     }
 
     /**
