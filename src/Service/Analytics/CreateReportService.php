@@ -7,10 +7,8 @@ namespace App\Service\Analytics;
 use App\Entity\Analytics\AnalyticsBoard;
 use App\Entity\Analytics\AnalyticsPeriod;
 use App\Entity\Analytics\AnalyticsReport;
-use App\Entity\Analytics\AnalyticsReportValue;
 use App\Entity\Organization\AbstractOrganization;
 use App\Enum\Analytics\AnalyticsPeriodType;
-use App\Enum\Analytics\AnalyticsReportStatus;
 use App\Repository\Analytics\AnalyticsReportRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -40,7 +38,7 @@ final class CreateReportService
     }
 
     /**
-     * Получить отчёт по id с проверкой доступа: админ — любой отчёт, иначе только если текущий пользователь автор.
+     * Получить отчёт по id с проверкой доступа: админ/аналитик — любой отчёт, иначе только если текущий пользователь автор.
      */
     public function findByIdForUser(int $id, object $user): ?AnalyticsReport
     {
@@ -49,7 +47,7 @@ final class CreateReportService
             return null;
         }
 
-        if (method_exists($user, 'getRoles') && in_array('ROLE_ADMIN', (array) $user->getRoles(), true)) {
+        if ($this->hasFullReportAccess($user)) {
             return $report;
         }
 
@@ -65,6 +63,48 @@ final class CreateReportService
     public function findById(int $id): ?AnalyticsReport
     {
         return $this->reportRepository->find($id);
+    }
+
+    /**
+     * Текущий период доски (без создания в БД).
+     */
+    public function findCurrentPeriodForBoard(AnalyticsBoard $board): ?AnalyticsPeriod
+    {
+        $type = $board->getPeriodType();
+        $currentStart = $this->currentPeriodStartDate($type, $this->nowInReportTimezone());
+
+        return $this->em->getRepository(AnalyticsPeriod::class)->findOneBy([
+            'type' => $type,
+            'startDate' => $currentStart,
+        ]);
+    }
+
+    /**
+     * Подпись текущего периода для формы нового отчёта.
+     */
+    public function getCurrentPeriodDisplayLabel(AnalyticsBoard $board): string
+    {
+        $period = $this->findCurrentPeriodForBoard($board);
+        if ($period !== null) {
+            return $period->getDisplayLabel();
+        }
+
+        return $this->nowInReportTimezone()->format('d.m.Y');
+    }
+
+    /**
+     * Список периодов доски: дозаполняет пропуски от самого позднего до текущего.
+     *
+     * @return AnalyticsPeriod[]
+     */
+    public function getAvailablePeriodsForBoard(AnalyticsBoard $board): array
+    {
+        $this->ensurePeriodsUpToCurrent($board);
+
+        return $this->em->getRepository(AnalyticsPeriod::class)->findBy(
+            ['type' => $board->getPeriodType()],
+            ['startDate' => 'DESC'],
+        );
     }
 
     /**
@@ -107,29 +147,137 @@ final class CreateReportService
         return $report;
     }
 
+    private function hasFullReportAccess(object $user): bool
+    {
+        if (!method_exists($user, 'getRoles')) {
+            return false;
+        }
+
+        $roles = (array) $user->getRoles();
+
+        return in_array('ROLE_ADMIN', $roles, true) || in_array('ROLE_ANALYTIC', $roles, true);
+    }
+
     private function getOrCreateCurrentPeriod(AnalyticsBoard $board): AnalyticsPeriod
     {
-        $tz = new \DateTimeZone(self::REPORT_TIMEZONE);
-        $now = new \DateTimeImmutable('now', $tz);
+        $this->ensurePeriodsUpToCurrent($board);
 
-        $periodToCreate = match ($board->getPeriodType()) {
-            AnalyticsPeriodType::Daily => AnalyticsPeriod::forDate($now),
-            AnalyticsPeriodType::Weekly => AnalyticsPeriod::forIsoWeek((int) $now->format('o'), (int) $now->format('W')),
-            AnalyticsPeriodType::Monthly => AnalyticsPeriod::forMonth((int) $now->format('Y'), (int) $now->format('n')),
-        };
+        $type = $board->getPeriodType();
+        $currentStart = $this->currentPeriodStartDate($type, $this->nowInReportTimezone());
 
+        return $this->ensurePeriodExists($type, $currentStart);
+    }
+
+    private function ensurePeriodsUpToCurrent(AnalyticsBoard $board): void
+    {
+        $type = $board->getPeriodType();
         $periodRepo = $this->em->getRepository(AnalyticsPeriod::class);
-        $existing = $periodRepo->findOneBy([
-            'type' => $periodToCreate->getType(),
-            'startDate' => $periodToCreate->getStartDate(),
+        $existing = $periodRepo->findBy(['type' => $type], ['startDate' => 'ASC']);
+
+        $currentStart = $this->currentPeriodStartDate($type, $this->nowInReportTimezone());
+
+        if ($existing === []) {
+            $this->ensurePeriodExists($type, $currentStart);
+
+            return;
+        }
+
+        $latestStart = $existing[array_key_last($existing)]->getStartDate();
+
+        if ($currentStart > $latestStart) {
+            $this->ensurePeriodsInRange($type, $latestStart, $currentStart);
+        }
+    }
+
+    private function ensurePeriodsInRange(
+        AnalyticsPeriodType $type,
+        \DateTimeImmutable $minStart,
+        \DateTimeImmutable $maxStart,
+    ): void {
+        $periodRepo = $this->em->getRepository(AnalyticsPeriod::class);
+        $cursor = $minStart;
+        $dirty = false;
+
+        while ($cursor <= $maxStart) {
+            $candidate = $this->makePeriodForStartDate($type, $cursor);
+            $existing = $periodRepo->findOneBy([
+                'type' => $candidate->getType(),
+                'startDate' => $candidate->getStartDate(),
+            ]);
+            if (!$existing instanceof AnalyticsPeriod) {
+                $this->em->persist($candidate);
+                $dirty = true;
+            }
+
+            $cursor = $this->nextPeriodStartDate($type, $candidate->getStartDate());
+        }
+
+        if ($dirty) {
+            $this->em->flush();
+        }
+    }
+
+    private function ensurePeriodExists(
+        AnalyticsPeriodType $type,
+        \DateTimeImmutable $startDate,
+    ): AnalyticsPeriod {
+        $candidate = $this->makePeriodForStartDate($type, $startDate);
+        $existing = $this->em->getRepository(AnalyticsPeriod::class)->findOneBy([
+            'type' => $candidate->getType(),
+            'startDate' => $candidate->getStartDate(),
         ]);
         if ($existing instanceof AnalyticsPeriod) {
             return $existing;
         }
 
-        $this->em->persist($periodToCreate);
+        $this->em->persist($candidate);
         $this->em->flush();
 
-        return $periodToCreate;
+        return $candidate;
+    }
+
+    private function makePeriodForStartDate(
+        AnalyticsPeriodType $type,
+        \DateTimeImmutable $startDate,
+    ): AnalyticsPeriod {
+        return match ($type) {
+            AnalyticsPeriodType::Daily => AnalyticsPeriod::forDate($startDate),
+            AnalyticsPeriodType::Weekly => AnalyticsPeriod::forIsoWeek(
+                (int) $startDate->format('o'),
+                (int) $startDate->format('W'),
+            ),
+            AnalyticsPeriodType::Monthly => AnalyticsPeriod::forMonth(
+                (int) $startDate->format('Y'),
+                (int) $startDate->format('n'),
+            ),
+        };
+    }
+
+    private function nextPeriodStartDate(
+        AnalyticsPeriodType $type,
+        \DateTimeImmutable $startDate,
+    ): \DateTimeImmutable {
+        return match ($type) {
+            AnalyticsPeriodType::Daily => $startDate->modify('+1 day'),
+            AnalyticsPeriodType::Weekly => $startDate->modify('+7 days'),
+            AnalyticsPeriodType::Monthly => $startDate->modify('first day of next month'),
+        };
+    }
+
+    private function currentPeriodStartDate(AnalyticsPeriodType $type, \DateTimeImmutable $now): \DateTimeImmutable
+    {
+        return match ($type) {
+            AnalyticsPeriodType::Daily => $now->setTime(0, 0, 0),
+            AnalyticsPeriodType::Weekly => (new \DateTimeImmutable())->setISODate(
+                (int) $now->format('o'),
+                (int) $now->format('W'),
+            ),
+            AnalyticsPeriodType::Monthly => new \DateTimeImmutable(sprintf('%s-%s-01', $now->format('Y'), $now->format('m'))),
+        };
+    }
+
+    private function nowInReportTimezone(): \DateTimeImmutable
+    {
+        return new \DateTimeImmutable('now', new \DateTimeZone(self::REPORT_TIMEZONE));
     }
 }

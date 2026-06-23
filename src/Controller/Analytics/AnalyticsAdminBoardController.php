@@ -9,6 +9,8 @@ use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardVersionRepository;
 use App\Repository\Analytics\AnalyticsMetricRepository;
 use App\Entity\Analytics\AnalyticsMetric;
+use App\Entity\User\Role;
+use App\Repository\User\RoleRepository;
 use App\Service\Analytics\BoardService;
 use App\Service\Analytics\CloneBoardVersionService;
 use App\Service\Analytics\PublishBoardVersionService;
@@ -24,6 +26,21 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_ADMIN')]
 final class AnalyticsAdminBoardController extends AbstractController
 {
+    private function resolveBelongsToRoleFromRequest(Request $request, RoleRepository $roleRepository): ?Role
+    {
+        $roleId = $request->request->getInt('belongs_to_role_id');
+        if ($roleId <= 0) {
+            return null;
+        }
+
+        $role = $roleRepository->find($roleId);
+        if ($role === null) {
+            throw new \RuntimeException('Выбранная роль не найдена.');
+        }
+
+        return $role;
+    }
+
     #[Route('/analytics/admin/board', name: 'app_analytics_admin_board')]
     public function index(BoardService $boardService): Response
     {
@@ -36,8 +53,12 @@ final class AnalyticsAdminBoardController extends AbstractController
     }
 
     #[Route('/analytics/admin/board/new', name: 'app_analytics_admin_board_new')]
-    public function new(Request $request, CsrfTokenManagerInterface $csrf, BoardService $boardService): Response
-    {
+    public function new(
+        Request $request,
+        CsrfTokenManagerInterface $csrf,
+        BoardService $boardService,
+        RoleRepository $roleRepository,
+    ): Response {
         if ($request->isMethod('POST')) {
             if (!$csrf->isTokenValid(new CsrfToken('board_new', $request->request->getString('_token')))) {
                 $this->addFlash('error', 'Неверный CSRF-токен.');
@@ -59,6 +80,7 @@ final class AnalyticsAdminBoardController extends AbstractController
                     description: $request->request->getString('description') ?: null,
                     category: $category,
                     periodType: $periodType,
+                    belongsToRole: $this->resolveBelongsToRoleFromRequest($request, $roleRepository),
                 );
                 $this->addFlash('success', 'Доска создана. Первая активная версия создана автоматически.');
                 return $this->redirectToRoute('app_analytics_admin_board');
@@ -69,6 +91,7 @@ final class AnalyticsAdminBoardController extends AbstractController
 
         return $this->render('analytics/admin/board/new.html.twig', [
             'categories' => AnalyticsCategory::cases(),
+            'roles' => $roleRepository->findAllExceptAdmin(),
             'active_tab' => 'analytics_boards',
         ]);
     }
@@ -93,6 +116,7 @@ final class AnalyticsAdminBoardController extends AbstractController
         Request $request,
         CsrfTokenManagerInterface $csrf,
         BoardService $boardService,
+        RoleRepository $roleRepository,
     ): Response {
         $board = $boardService->findById($id);
         if (!$board) {
@@ -118,6 +142,7 @@ final class AnalyticsAdminBoardController extends AbstractController
                     description: $request->request->getString('description') ?: null,
                     periodType: $periodType,
                     category: $category,
+                    belongsToRole: $this->resolveBelongsToRoleFromRequest($request, $roleRepository),
                 );
                 $this->addFlash('success', 'Доска обновлена.');
                 return $this->redirectToRoute('app_analytics_admin_board_show', ['id' => $id]);
@@ -129,6 +154,7 @@ final class AnalyticsAdminBoardController extends AbstractController
         return $this->render('analytics/admin/board/edit.html.twig', [
             'board' => $board,
             'categories' => AnalyticsCategory::cases(),
+            'roles' => $roleRepository->findAllExceptAdmin(),
             'can_change_category' => $boardService->canChangeCategory($board),
             'can_change_period_type' => $boardService->canChangePeriodType($board),
             'active_tab' => 'analytics_boards',

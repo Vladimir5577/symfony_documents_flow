@@ -6,6 +6,7 @@ namespace App\Service\Analytics;
 
 use App\Entity\Analytics\AnalyticsReport;
 use App\Entity\Organization\AbstractOrganization;
+use App\Entity\User\User;
 use App\Enum\Analytics\AnalyticsReportStatus;
 use App\Repository\Analytics\AnalyticsReportRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -96,17 +97,19 @@ final class ApproveReportService
      * Подтвердить отчёт: draft -> confirmed.
      * Проверяет полноту по required-метрикам.
      */
-    public function confirm(AnalyticsReport $report): void
+    public function confirm(AnalyticsReport $report, User $approvedBy): void
     {
         if ($report->getStatus() !== AnalyticsReportStatus::Draft) {
             throw new \RuntimeException('Подтвердить можно только черновик.');
         }
 
         if (!$this->fillService->checkComplete($report)) {
-            throw new \RuntimeException('Отчёт неполный: не все обязательные метрики заполнены.');
+            throw new \RuntimeException('Отчёт неполный и был сохранен как черновик: не все обязательные метрики заполнены.');
         }
 
         $report->setStatus(AnalyticsReportStatus::Confirmed);
+        $report->setApprovedBy($approvedBy);
+        $report->setApprovedAt(new \DateTimeImmutable());
         $this->em->flush();
 
         $this->recalculateService->recalculateForReport($report);

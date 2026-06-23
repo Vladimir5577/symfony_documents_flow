@@ -16,6 +16,7 @@ use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
+use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -37,6 +38,7 @@ final class ProjectMemberController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly NotificationService $notificationService,
         private readonly EntityManagerInterface $entityManager,
+        private readonly UserAvatarUrlGenerator $userAvatarUrlGenerator,
     ) {
     }
 
@@ -325,6 +327,7 @@ final class ProjectMemberController extends AbstractController
      *     firstname: string|null,
      *     patronymic: string|null,
      *     profession: string|null,
+     *     avatarUrl: string|null,
      *     role: string|null,
      *     roleLabel: string|null,
      *     isOwner: bool
@@ -349,6 +352,7 @@ final class ProjectMemberController extends AbstractController
      *     firstname: string|null,
      *     patronymic: string|null,
      *     profession: string|null,
+     *     avatarUrl: string|null,
      *     role: string|null,
      *     roleLabel: string|null,
      *     isOwner: bool
@@ -366,6 +370,9 @@ final class ProjectMemberController extends AbstractController
             'firstname' => $member?->getFirstname(),
             'patronymic' => $member?->getPatronymic(),
             'profession' => $member?->getWorker()?->getProfession(),
+            'avatarUrl' => $member !== null
+                ? $this->userAvatarUrlGenerator->getAvatarUrl($member, UserAvatarUrlGenerator::FILTER_THUMBNAIL)
+                : null,
             'role' => $role?->value,
             'roleLabel' => $role?->getLabel(),
             'isOwner' => $owner !== null && $member === $owner,

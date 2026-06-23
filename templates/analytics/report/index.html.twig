@@ -45,6 +45,9 @@
                                     <th>Период</th>
                                     <th>Версия</th>
                                     <th>Статус</th>
+                                    <th>Кем создан</th>
+                                    <th>Кем утверждён</th>
+                                    <th>Утверждён</th>
                                     <th>Создан</th>
                                     <th>Действия</th>
                                 </tr>
@@ -64,6 +67,21 @@
                                                     <span class="badge bg-success">Подтверждён</span>
                                                 {% endif %}
                                             </td>
+                                            <td>
+                                                {% if report.createdBy %}
+                                                    {{ report.createdBy.lastname }} {{ report.createdBy.firstname }}{% if report.createdBy.patronymic %} {{ report.createdBy.patronymic }}{% endif %}
+                                                {% else %}
+                                                    —
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if report.approvedBy %}
+                                                    {{ report.approvedBy.lastname }} {{ report.approvedBy.firstname }}{% if report.approvedBy.patronymic %} {{ report.approvedBy.patronymic }}{% endif %}
+                                                {% else %}
+                                                    —
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ report.approvedAt ? report.approvedAt|date('d.m.Y H:i') : '—' }}</td>
                                             <td>{{ report.createdAt ? report.createdAt|date('d.m.Y H:i') : '—' }}</td>
                                             <td onclick="event.stopPropagation();">
                                                 {% if report.status.value == 'draft' %}
@@ -85,7 +103,7 @@
                                                         </form>
                                                     {% endif %}
                                                 {% else %}
-                                                    {% if is_granted('ROLE_ADMIN') %}
+                                                    {% if is_granted('ROLE_ADMIN') or is_granted('ROLE_ANALYTIC') %}
                                                         <a href="{{ path('app_analytics_report_fill', {id: report.id}) }}" class="btn btn-sm btn-outline-primary">
                                                             <i class="bi bi-pencil"></i> Редактировать
                                                         </a>
@@ -104,7 +122,7 @@
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-4">Отчётов пока нет</td>
+                                        <td colspan="10" class="text-center text-muted py-4">Отчётов пока нет</td>
                                     </tr>
                                 {% endif %}
                                 </tbody>

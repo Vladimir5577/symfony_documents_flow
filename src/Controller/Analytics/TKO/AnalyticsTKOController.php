@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
-#[IsGranted('ROLE_MANAGER')]
+#[IsGranted('ROLE_TKO')]
 final class AnalyticsTKOController extends AbstractController
 {
     #[Route('/analytics/tko', name: 'app_analytics_tko', methods: ['GET'])]
