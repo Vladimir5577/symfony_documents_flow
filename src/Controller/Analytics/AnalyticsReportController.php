@@ -590,11 +590,6 @@ final class AnalyticsReportController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $report = $reportService->findByIdForUser($id, $user);
-        if (!$report) {
-            throw $this->createNotFoundException('Отчёт не найден.');
-        }
-
         $currentValues = [];
         $currentNotes = [];
         foreach ($report->getValues() as $v) {
