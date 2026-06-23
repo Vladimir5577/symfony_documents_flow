@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity\Analytics;
 
+use App\Entity\User\Role;
 use App\Enum\Analytics\AnalyticsCategory;
 use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardRepository;
@@ -16,6 +17,7 @@ use Gedmo\Mapping\Annotation as Gedmo;
 #[ORM\Entity(repositoryClass: AnalyticsBoardRepository::class)]
 #[ORM\Table(name: 'analytics_boards')]
 #[ORM\Index(name: 'idx_analytics_boards_category', columns: ['category'])]
+#[ORM\Index(name: 'idx_analytics_boards_belongs_to_role_id', columns: ['belongs_to_role_id'])]
 class AnalyticsBoard
 {
     #[ORM\Id]
@@ -31,6 +33,10 @@ class AnalyticsBoard
 
     #[ORM\Column(name: 'category', type: Types::STRING, length: 32, enumType: AnalyticsCategory::class)]
     private AnalyticsCategory $category;
+
+    #[ORM\ManyToOne(targetEntity: Role::class)]
+    #[ORM\JoinColumn(name: 'belongs_to_role_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
+    private ?Role $belongsToRole = null;
 
     #[ORM\Column(name: 'period_type', length: 16, enumType: AnalyticsPeriodType::class)]
     private AnalyticsPeriodType $periodType = AnalyticsPeriodType::Weekly;
@@ -169,6 +175,18 @@ class AnalyticsBoard
     public function setCategory(AnalyticsCategory $category): static
     {
         $this->category = $category;
+
+        return $this;
+    }
+
+    public function getBelongsToRole(): ?Role
+    {
+        return $this->belongsToRole;
+    }
+
+    public function setBelongsToRole(?Role $belongsToRole): static
+    {
+        $this->belongsToRole = $belongsToRole;
 
         return $this;
     }

@@ -9,6 +9,7 @@ use App\Entity\Analytics\AnalyticsBoardVersion;
 use App\Entity\Analytics\AnalyticsBoardVersionMetric;
 use App\Entity\Analytics\AnalyticsMetric;
 use App\Entity\Analytics\AnalyticsReportValue;
+use App\Entity\User\Role;
 use App\Enum\Analytics\AnalyticsCategory;
 use App\Enum\Analytics\AnalyticsPeriodType;
 use App\Repository\Analytics\AnalyticsBoardRepository;
@@ -45,11 +46,13 @@ final class BoardService
         ?string $description,
         AnalyticsCategory $category,
         ?AnalyticsPeriodType $periodType = null,
+        ?Role $belongsToRole = null,
     ): AnalyticsBoard {
         $board = new AnalyticsBoard();
         $board->setName(trim($name));
         $board->setDescription(trim($description ?? ''));
         $board->setCategory($category);
+        $board->setBelongsToRole($belongsToRole);
         if ($periodType !== null) {
             $board->setPeriodType($periodType);
         }
@@ -82,9 +85,11 @@ final class BoardService
         ?string $description,
         ?AnalyticsPeriodType $periodType = null,
         ?AnalyticsCategory $category = null,
+        ?Role $belongsToRole = null,
     ): void {
         $board->setName(trim($name));
         $board->setDescription(trim($description ?? ''));
+        $board->setBelongsToRole($belongsToRole);
 
         if ($periodType !== null && $periodType !== $board->getPeriodType()) {
             if (!$this->canChangePeriodType($board)) {

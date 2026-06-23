@@ -64,6 +64,20 @@
                                             <small class="text-muted">Все метрики на доске должны принадлежать этой категории</small>
                                         </div>
                                     </div>
+                                    <div class="col-md-6 col-12">
+                                        <div class="form-group">
+                                            <label for="belongs_to_role_id">Роль доступа</label>
+                                            <select id="belongs_to_role_id" name="belongs_to_role_id" class="form-select">
+                                                <option value="" selected>— не выбрано —</option>
+                                                {% for role in roles %}
+                                                    <option value="{{ role.id }}">{{ role.label ?: role.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <small class="text-muted">
+                                                Пользователи с этой ролью смогут работать с отчётами по данной доске
+                                            </small>
+                                        </div>
+                                    </div>
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="description">Описание</label>

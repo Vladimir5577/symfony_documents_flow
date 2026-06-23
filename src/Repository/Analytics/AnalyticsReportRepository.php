@@ -3,7 +3,6 @@
 namespace App\Repository\Analytics;
 
 use App\Entity\Analytics\AnalyticsReport;
-use App\Entity\User\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -20,19 +19,27 @@ class AnalyticsReportRepository extends ServiceEntityRepository
     }
 
     /**
+     * @param int[]|null $belongsToRoleIds null — все отчёты; непустой массив — по роли на доске
+     *
      * @return AnalyticsReport[]
      */
-    public function findForIndex(?User $createdBy = null): array
+    public function findForIndex(?array $belongsToRoleIds = null): array
     {
+        if ($belongsToRoleIds !== null && $belongsToRoleIds === []) {
+            return [];
+        }
+
         $qb = $this->createQueryBuilder('r')
-            ->addSelect('cb', 'ab')
+            ->addSelect('cb', 'ab', 'b')
             ->join('r.createdBy', 'cb')
             ->leftJoin('r.approvedBy', 'ab')
+            ->join('r.board', 'b')
             ->orderBy('r.createdAt', 'DESC');
 
-        if ($createdBy !== null) {
-            $qb->andWhere('r.createdBy = :createdBy')
-                ->setParameter('createdBy', $createdBy);
+        if ($belongsToRoleIds !== null) {
+            $qb->join('b.belongsToRole', 'boardRole')
+                ->andWhere('boardRole.id IN (:roleIds)')
+                ->setParameter('roleIds', $belongsToRoleIds);
         }
 
         return $qb->getQuery()->getResult();

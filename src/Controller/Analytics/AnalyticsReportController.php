@@ -6,7 +6,9 @@ namespace App\Controller\Analytics;
 
 use App\Entity\Analytics\AnalyticsPeriod;
 use App\Entity\Analytics\AnalyticsReport;
+use App\Entity\Analytics\AnalyticsOrganizationBoard;
 use App\Entity\Organization\AbstractOrganization;
+use App\Entity\User\User;
 use App\Enum\Analytics\AnalyticsReportStatus;
 use App\Repository\Analytics\AnalyticsBoardRepository;
 use App\Repository\Analytics\AnalyticsReportRepository;
@@ -60,6 +62,44 @@ final class AnalyticsReportController extends AbstractController
     private function hasAnalyticsFullAccess(): bool
     {
         return $this->isGranted('ROLE_ADMIN') || $this->isGranted('ROLE_ANALYTIC');
+    }
+
+    /**
+     * @return int[]
+     */
+    private function resolveUserRoleIds(User $user): array
+    {
+        $ids = [];
+        foreach ($user->getRolesRel() as $userRole) {
+            $roleId = $userRole->getRole()?->getId();
+            if ($roleId !== null) {
+                $ids[] = $roleId;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * @param array<int|string, AnalyticsOrganizationBoard> $orgBoards
+     * @param int[] $roleIds
+     *
+     * @return array<int|string, AnalyticsOrganizationBoard>
+     */
+    private function filterOrgBoardsByRoleIds(array $orgBoards, array $roleIds): array
+    {
+        if ($roleIds === []) {
+            return [];
+        }
+
+        return array_filter(
+            $orgBoards,
+            static function (AnalyticsOrganizationBoard $orgBoard) use ($roleIds): bool {
+                $boardRoleId = $orgBoard->getBoard()?->getBelongsToRole()?->getId();
+
+                return $boardRoleId !== null && in_array($boardRoleId, $roleIds, true);
+            },
+        );
     }
 
     /**
@@ -144,7 +184,7 @@ final class AnalyticsReportController extends AbstractController
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
-        if (!$user) {
+        if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
 
@@ -171,7 +211,7 @@ final class AnalyticsReportController extends AbstractController
                 ->orderBy('ob.id', 'DESC')
                 ->getQuery()
                 ->getResult();
-            $reports = $reportRepository->findForIndex($user);
+            $reports = $reportRepository->findForIndex($this->resolveUserRoleIds($user));
         }
 
         return $this->render('analytics/report/index.html.twig', [
@@ -186,7 +226,7 @@ final class AnalyticsReportController extends AbstractController
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
-        if (!$user) {
+        if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
 
@@ -198,7 +238,10 @@ final class AnalyticsReportController extends AbstractController
         } elseif (!$organization) {
             throw $this->createAccessDeniedException('Вам не назначена организация.');
         } else {
-            $availableBoards = array_values($this->getAvailableBoardMapForOrganization($organization, $em));
+            $availableBoards = array_values($this->filterOrgBoardsByRoleIds(
+                $this->getAvailableBoardMapForOrganization($organization, $em),
+                $this->resolveUserRoleIds($user),
+            ));
         }
 
         return $this->render('analytics/report/new.html.twig', [
@@ -217,7 +260,7 @@ final class AnalyticsReportController extends AbstractController
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
-        if (!$user) {
+        if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
 
@@ -229,7 +272,10 @@ final class AnalyticsReportController extends AbstractController
         } elseif (!$organization) {
             throw $this->createAccessDeniedException('Вам не назначена организация.');
         } else {
-            $availableBoardMap = $this->getAvailableBoardMapForOrganization($organization, $em);
+            $availableBoardMap = $this->filterOrgBoardsByRoleIds(
+                $this->getAvailableBoardMapForOrganization($organization, $em),
+                $this->resolveUserRoleIds($user),
+            );
         }
 
         $boardId = (int) $request->query->get('board_id', $request->request->getInt('board_id'));
@@ -336,7 +382,7 @@ final class AnalyticsReportController extends AbstractController
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
-        if (!$user) {
+        if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
         $isAdmin = $this->hasAnalyticsFullAccess();
@@ -462,7 +508,7 @@ final class AnalyticsReportController extends AbstractController
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
-        if (!$user) {
+        if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
         if (!$this->hasAnalyticsFullAccess()) {
@@ -540,7 +586,7 @@ final class AnalyticsReportController extends AbstractController
         VersionMetricTreeBuilder $metricTreeBuilder,
     ): Response {
         $user = $this->getUser();
-        if (!$user) {
+        if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
 
@@ -601,7 +647,7 @@ final class AnalyticsReportController extends AbstractController
         ApproveReportService $approveService,
     ): Response {
         $user = $this->getUser();
-        if (!$user) {
+        if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
 
@@ -636,7 +682,7 @@ final class AnalyticsReportController extends AbstractController
         EntityManagerInterface $em,
     ): Response {
         $user = $this->getUser();
-        if (!$user) {
+        if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
 
