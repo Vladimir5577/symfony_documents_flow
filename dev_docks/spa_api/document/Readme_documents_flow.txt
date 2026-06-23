@@ -11,6 +11,7 @@ SPA API — Документооборот (documents-flow)
   DocumentOutgoingController
   DocumentCreateController
   DocumentUsersController
+  DocumentOrganizationTreeController
 
 Сервисы (бизнес-логика и JSON): App\Service\SpaApi\Documents\*
   DocumentAccessService   — права доступа, permissions для фронта
@@ -278,6 +279,30 @@ permissions.canPublish (исходящий):
 --------------------------------------------------------------------------------
 6. ПОЛЬЗОВАТЕЛИ ДЛЯ ФОРМ
 --------------------------------------------------------------------------------
+
+  Method : GET
+  URL    : /spa/api/documents-flow/organizations/tree
+
+Дерево организаций для picker получателей (один запрос вместо list + N view).
+Полное дерево для всех ROLE_USER — как web-форма создания документа.
+Получателей/исполнителей можно выбирать из любого подразделения.
+
+Права:
+  ROLE_USER — все корневые организации (parent IS NULL) с дочерними до 5 уровней.
+
+Ответ 200:
+
+  {
+    "organizations": [
+      {
+        "id": number,
+        "name": string,
+        "type": "organization" | "filial" | "department",
+        "children": [ ... ]
+      }
+    ]
+  }
+
 
   Method : GET
   URL    : /spa/api/documents-flow/organizations/{id}/users
