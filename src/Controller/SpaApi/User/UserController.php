@@ -62,6 +62,15 @@ final class UserController extends AbstractController
             $status = null;
         }
 
+        $orderBy = (string) $request->query->get('order_by', 'lastname');
+        $allowedOrderBy = ['lastname', 'created_at', 'last_seen_at'];
+        if (!\in_array($orderBy, $allowedOrderBy, true)) {
+            $orderBy = 'lastname';
+        }
+
+        $order = strtoupper((string) $request->query->get('order', 'ASC'));
+        $order = $order === 'DESC' ? 'DESC' : 'ASC';
+
         $organizationIds = null;
         if ($organizationId !== null && $organizationId > 0) {
             $organizationIds = $this->organizationRepository->findOrganizationWithChildrenIds($organizationId);
@@ -81,7 +90,7 @@ final class UserController extends AbstractController
             }
         }
 
-        $pagination = $this->findPaginated($page, $pageSize, $search, $organizationIds, $status);
+        $pagination = $this->findPaginated($page, $pageSize, $search, $organizationIds, $status, $orderBy, $order);
 
         return $this->json([
             'users' => array_map(
@@ -105,6 +114,8 @@ final class UserController extends AbstractController
                             'name' => $organization->getName(),
                             'fullName' => $organization->getFullName(),
                         ] : null,
+                        'lastSeenAt' => $user->getLastSeenAt()?->format(\DateTimeInterface::ATOM),
+                        'createdAt' => $user->getCreatedAt()?->format(\DateTimeInterface::ATOM),
                     ];
                 },
                 $pagination['users'],
@@ -133,12 +144,35 @@ final class UserController extends AbstractController
         string $search,
         ?array $organizationIds,
         ?string $status,
+        string $orderBy,
+        string $order,
     ): array {
         $offset = ($page - 1) * $limit;
 
-        $qb = $this->userRepository->createQueryBuilder('u')
-            ->orderBy('u.lastname', 'ASC')
-            ->addOrderBy('u.firstname', 'ASC');
+        $orderField = match ($orderBy) {
+            'created_at' => 'u.createdAt',
+            'last_seen_at' => 'u.lastSeenAt',
+            default => 'u.lastname',
+        };
+
+        $qb = $this->userRepository->createQueryBuilder('u');
+
+        if (\in_array($orderBy, ['created_at', 'last_seen_at'], true)) {
+            // null трактуем как самую раннюю дату: ASC — в начале, DESC — в конце
+            $nullSort = $order === 'DESC'
+                ? sprintf('CASE WHEN %s IS NULL THEN 1 ELSE 0 END', $orderField)
+                : sprintf('CASE WHEN %s IS NULL THEN 0 ELSE 1 END', $orderField);
+
+            $qb
+                ->orderBy($nullSort, 'ASC')
+                ->addOrderBy($orderField, $order);
+        } else {
+            $qb->orderBy($orderField, $order);
+        }
+
+        if ($orderBy === 'lastname') {
+            $qb->addOrderBy('u.firstname', $order);
+        }
 
         $countQb = $this->userRepository->createQueryBuilder('u')
             ->select('COUNT(u.id)');
