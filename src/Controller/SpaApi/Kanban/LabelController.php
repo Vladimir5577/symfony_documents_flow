@@ -15,6 +15,7 @@ use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\KanbanLabelRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Service\Kanban\KanbanCardActivityLogger;
+use App\Service\Kanban\KanbanRealtimePublisher;
 use App\Service\Kanban\KanbanService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -35,6 +36,7 @@ final class LabelController extends AbstractController
         private readonly KanbanService $kanbanService,
         private readonly EntityManagerInterface $entityManager,
         private readonly KanbanCardActivityLogger $activityLogger,
+        private readonly KanbanRealtimePublisher $realtimePublisher,
     ) {
     }
 
@@ -158,6 +160,13 @@ final class LabelController extends AbstractController
         } else {
             $this->activityLogger->logLabelRemoved($card, $label->getName());
         }
+
+        // Realtime: обновляем теги на карточке доски.
+        $this->realtimePublisher->publishCardPatch(
+            $card,
+            $this->realtimePublisher->buildLabels($card),
+            $user->getId(),
+        );
 
         return $this->json(['action' => $action, 'labelId' => $label->getId()]);
     }

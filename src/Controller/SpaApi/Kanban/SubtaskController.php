@@ -16,6 +16,7 @@ use App\Repository\Kanban\KanbanChecklistItemRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanCardActivityLogger;
+use App\Service\Kanban\KanbanRealtimePublisher;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -38,6 +39,7 @@ final class SubtaskController extends AbstractController
         private readonly KanbanProjectUserRepository $projectUserRepo,
         private readonly NotificationService $notificationService,
         private readonly KanbanCardActivityLogger $activityLogger,
+        private readonly KanbanRealtimePublisher $realtimePublisher,
     ) {
     }
 
@@ -92,6 +94,13 @@ final class SubtaskController extends AbstractController
         $this->em->flush();
 
         $this->activityLogger->logSubtaskAdded($card, $subtask->getTitle());
+
+        // Realtime: обновляем счётчики подзадач на карточке доски.
+        $this->realtimePublisher->publishCardPatch(
+            $card,
+            $this->realtimePublisher->buildChecklistCounters($card),
+            $user->getId(),
+        );
 
         return $this->json($this->formatSubtask($subtask), Response::HTTP_CREATED);
     }
@@ -163,6 +172,13 @@ final class SubtaskController extends AbstractController
 
         if ($subtask->isCompleted() !== $wasCompleted) {
             $this->activityLogger->logSubtaskCompleted($card, $subtask->getTitle(), $subtask->isCompleted());
+            // Realtime: изменилось число выполненных — обновляем счётчики на карточке доски.
+            // Смена только названия/исполнителя подзадачи счётчики не меняет, поэтому не публикуем.
+            $this->realtimePublisher->publishCardPatch(
+                $card,
+                $this->realtimePublisher->buildChecklistCounters($card),
+                $user->getId(),
+            );
         }
 
         $newSubtaskAssignee = $subtask->getUser();
@@ -211,10 +227,20 @@ final class SubtaskController extends AbstractController
 
         $subtaskTitle = $subtask->getTitle();
 
+        // Снимаем подзадачу с карточки, чтобы in-memory коллекция (и счётчики ниже)
+        // отражали состояние после удаления; orphanRemoval удалит запись из БД.
+        $card->getSubtasks()->removeElement($subtask);
         $this->em->remove($subtask);
         $this->em->flush();
 
         $this->activityLogger->logSubtaskRemoved($card, $subtaskTitle);
+
+        // Realtime: подзадача удалена — обновляем счётчики на карточке доски.
+        $this->realtimePublisher->publishCardPatch(
+            $card,
+            $this->realtimePublisher->buildChecklistCounters($card),
+            $user->getId(),
+        );
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }

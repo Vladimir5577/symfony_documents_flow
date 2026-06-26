@@ -15,6 +15,7 @@ use App\Repository\Kanban\Project\KanbanProjectUserRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
 use App\Service\Kanban\KanbanCardActivityLogger;
+use App\Service\Kanban\KanbanRealtimePublisher;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use App\Service\User\UserAvatarUrlGenerator;
@@ -42,6 +43,7 @@ final class CardController extends AbstractController
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
         private readonly KanbanCardActivityLogger $activityLogger,
         private readonly UserAvatarUrlGenerator $userAvatarUrlGenerator,
+        private readonly KanbanRealtimePublisher $realtimePublisher,
     ) {
     }
 
@@ -102,6 +104,23 @@ final class CardController extends AbstractController
                 );
             }
         }
+
+        $this->realtimePublisher->publishCardCreated($board->getId(), [
+            'id' => $card->getId(),
+            'borderColor' => null,
+            'title' => $card->getTitle(),
+            'description' => null,
+            'position' => $card->getPosition(),
+            'priority' => null,
+            'dueDate' => null,
+            'labels' => [],
+            'assignees' => [],
+            'checklistTotal' => 0,
+            'checklistDone' => 0,
+            'commentsCount' => 0,
+            'updatedAt' => null,
+            'status' => (string) $column->getId(),
+        ], $user->getId());
 
         return $this->json([
             'id' => $card->getId(),
@@ -292,6 +311,24 @@ final class CardController extends AbstractController
             $this->activityLogger->logColorChange($card, $oldColor, $card->getBorderColor());
         }
 
+        // Realtime: публикуем в доску только реально изменённые поля (description не шлём —
+        // оно не отображается на карточке списка и правится в модалке).
+        $patch = [];
+        if ($titleChanged) {
+            $patch['title'] = $card->getTitle();
+        }
+        if ($priorityChanged) {
+            $patch['priority'] = $card->getPriority()?->value;
+        }
+        if ($dueDateChanged) {
+            $patch['dueDate'] = $this->realtimePublisher->formatDate($card->getDueDate());
+        }
+        if ($colorChanged) {
+            $patch['borderColor'] = $card->getBorderColor();
+        }
+        if ($patch !== []) {
+            $this->realtimePublisher->publishCardPatch($card, $patch, $user->getId());
+        }
 
         return $this->json([
             'id' => $card->getId(),
@@ -378,6 +415,9 @@ final class CardController extends AbstractController
             $assignees[] = $this->formatAssignee($u);
         }
 
+        // Realtime: обновляем исполнителей на карточке доски.
+        $this->realtimePublisher->publishCardPatch($card, ['assignees' => $assignees], $user->getId());
+
         return $this->json(['assignees' => $assignees]);
     }
 
@@ -453,6 +493,23 @@ final class CardController extends AbstractController
             }
         }
 
+        // Перемещение публикуется как частичное обновление карточки (card_updated):
+        // position всегда, плюс columnId/columnTitle/status при смене колонки.
+        $movePatch = [
+            'position' => $card->getPosition(),
+            'updatedAt' => $this->realtimePublisher->formatDate($card->getUpdatedAt()),
+        ];
+        if ($columnChanged) {
+            $movePatch['columnId'] = $targetColumn->getId();
+            $movePatch['columnTitle'] = $targetColumn->getTitle();
+            $movePatch['status'] = (string) $targetColumn->getId();
+        }
+        $this->realtimePublisher->publishCardUpdated(
+            $targetColumn->getBoard()->getId(),
+            ['id' => $card->getId()] + $movePatch,
+            $user->getId(),
+        );
+
         return $this->json([
             'id' => $card->getId(),
             'columnId' => $targetColumn->getId(),
@@ -475,8 +532,13 @@ final class CardController extends AbstractController
 
         $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_ADMIN);
 
+        $boardId = $card->getColumn()->getBoard()->getId();
+        $cardId = $card->getId();
+
         $this->em->remove($card);
         $this->em->flush();
+
+        $this->realtimePublisher->publishCardDeleted($boardId, $cardId, $user->getId());
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }

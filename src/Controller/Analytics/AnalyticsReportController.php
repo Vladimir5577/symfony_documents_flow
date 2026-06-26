@@ -18,9 +18,15 @@ use App\Service\Analytics\ApproveReportService;
 use App\Service\Analytics\RecalculateAggregatesService;
 use App\Service\Analytics\VersionMetricTreeBuilder;
 use Doctrine\ORM\EntityManagerInterface;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
@@ -62,6 +68,78 @@ final class AnalyticsReportController extends AbstractController
     private function hasAnalyticsFullAccess(): bool
     {
         return $this->isGranted('ROLE_ADMIN') || $this->isGranted('ROLE_ANALYTIC');
+    }
+
+    /**
+     * Доступ к отчёту по роли: админ/аналитик — любой отчёт,
+     * иначе роль доски (belongsToRole) должна входить в роли пользователя.
+     */
+    private function canAccessReport(User $user, AnalyticsReport $report): bool
+    {
+        if ($this->hasAnalyticsFullAccess()) {
+            return true;
+        }
+
+        $boardRoleId = $report->getBoard()?->getBelongsToRole()?->getId();
+        if ($boardRoleId === null) {
+            return false;
+        }
+
+        return in_array($boardRoleId, $this->resolveUserRoleIds($user), true);
+    }
+
+    /**
+     * Сбор данных отчёта для просмотра/выгрузки: текущие значения и примечания по id метрики версии.
+     *
+     * @return array{values: array<int, mixed>, notes: array<int, array<int, mixed>>}
+     */
+    private function collectReportData(AnalyticsReport $report): array
+    {
+        $currentValues = [];
+        $currentNotes = [];
+        foreach ($report->getValues() as $v) {
+            $mid = $v->getBoardVersionMetric()->getId();
+            if ($v->getValueNumber() !== null) {
+                $currentValues[$mid] = $v->getValueNumber();
+            } elseif ($v->getValueText() !== null) {
+                $currentValues[$mid] = $v->getValueText();
+            } elseif ($v->getValueBool() !== null) {
+                $currentValues[$mid] = $v->getValueBool() ? '1' : '0';
+            }
+            $json = $v->getValueJson();
+            if (is_array($json) && $json !== []) {
+                $currentNotes[$mid] = $json;
+            }
+        }
+
+        return ['values' => $currentValues, 'notes' => $currentNotes];
+    }
+
+    /**
+     * Плоское дерево метрик версии отчёта (с полем depth).
+     *
+     * @return list<array{metric: mixed, versionMetric: mixed, data: array, depth: int}>
+     */
+    private function buildVersionMetricsFlat(AnalyticsReport $report, VersionMetricTreeBuilder $metricTreeBuilder): array
+    {
+        $versionMetricEntries = [];
+        foreach ($report->getBoardVersion()->getVersionMetrics() as $vm) {
+            $metric = $vm->getMetric();
+            if (!$metric || $metric->getId() === null) {
+                continue;
+            }
+            $versionMetricEntries[] = [
+                'metric' => $metric,
+                'versionMetric' => $vm,
+                'data' => [
+                    'position' => $vm->getPosition(),
+                    'is_required' => $vm->isRequired(),
+                    'parent_metric_id' => $vm->getParent()?->getMetric()?->getId(),
+                ],
+            ];
+        }
+
+        return $metricTreeBuilder->flatten($versionMetricEntries);
     }
 
     /**
@@ -434,39 +512,9 @@ final class AnalyticsReportController extends AbstractController
         }
 
         // Собираем текущие значения для шаблона
-        $currentValues = [];
-        $currentNotes = [];
-        foreach ($report->getValues() as $v) {
-            $mid = $v->getBoardVersionMetric()->getId();
-            if ($v->getValueNumber() !== null) {
-                $currentValues[$mid] = $v->getValueNumber();
-            } elseif ($v->getValueText() !== null) {
-                $currentValues[$mid] = $v->getValueText();
-            } elseif ($v->getValueBool() !== null) {
-                $currentValues[$mid] = $v->getValueBool() ? '1' : '0';
-            }
-            $json = $v->getValueJson();
-            if (is_array($json) && $json !== []) {
-                $currentNotes[$mid] = $json;
-            }
-        }
-
-        $versionMetricEntries = [];
-        foreach ($report->getBoardVersion()->getVersionMetrics() as $vm) {
-            $metric = $vm->getMetric();
-            if (!$metric || $metric->getId() === null) {
-                continue;
-            }
-            $versionMetricEntries[] = [
-                'metric' => $metric,
-                'versionMetric' => $vm,
-                'data' => [
-                    'position' => $vm->getPosition(),
-                    'is_required' => $vm->isRequired(),
-                    'parent_metric_id' => $vm->getParent()?->getMetric()?->getId(),
-                ],
-            ];
-        }
+        $data = $this->collectReportData($report);
+        $currentValues = $data['values'];
+        $currentNotes = $data['notes'];
 
         $availablePeriods = [];
         $takenPeriodIds = [];
@@ -493,7 +541,7 @@ final class AnalyticsReportController extends AbstractController
             'isAdmin' => $isAdmin,
             'availablePeriods' => $availablePeriods,
             'takenPeriodIds' => $takenPeriodIds,
-            'versionMetricsFlat' => $metricTreeBuilder->flatten($versionMetricEntries),
+            'versionMetricsFlat' => $this->buildVersionMetricsFlat($report, $metricTreeBuilder),
             'active_tab' => 'analytics_reports',
         ]);
     }
@@ -595,47 +643,179 @@ final class AnalyticsReportController extends AbstractController
             throw $this->createNotFoundException('Отчёт не найден.');
         }
 
-        $currentValues = [];
-        $currentNotes = [];
-        foreach ($report->getValues() as $v) {
-            $mid = $v->getBoardVersionMetric()->getId();
-            if ($v->getValueNumber() !== null) {
-                $currentValues[$mid] = $v->getValueNumber();
-            } elseif ($v->getValueText() !== null) {
-                $currentValues[$mid] = $v->getValueText();
-            } elseif ($v->getValueBool() !== null) {
-                $currentValues[$mid] = $v->getValueBool() ? '1' : '0';
-            }
-            $json = $v->getValueJson();
-            if (is_array($json) && $json !== []) {
-                $currentNotes[$mid] = $json;
-            }
+        if (!$this->canAccessReport($user, $report)) {
+            throw $this->createNotFoundException('Отчёт не найден.');
         }
 
-        $versionMetricEntries = [];
-        foreach ($report->getBoardVersion()->getVersionMetrics() as $vm) {
-            $metric = $vm->getMetric();
-            if (!$metric || $metric->getId() === null) {
-                continue;
-            }
-            $versionMetricEntries[] = [
-                'metric' => $metric,
-                'versionMetric' => $vm,
-                'data' => [
-                    'position' => $vm->getPosition(),
-                    'is_required' => $vm->isRequired(),
-                    'parent_metric_id' => $vm->getParent()?->getMetric()?->getId(),
-                ],
-            ];
-        }
+        $data = $this->collectReportData($report);
 
         return $this->render('analytics/report/view.html.twig', [
             'report' => $report,
-            'currentValues' => $currentValues,
-            'currentNotes' => $currentNotes,
-            'versionMetricsFlat' => $metricTreeBuilder->flatten($versionMetricEntries),
+            'currentValues' => $data['values'],
+            'currentNotes' => $data['notes'],
+            'versionMetricsFlat' => $this->buildVersionMetricsFlat($report, $metricTreeBuilder),
             'active_tab' => 'analytics_reports',
         ]);
+    }
+
+    #[Route('/analytics/report/{id}/export-excel', name: 'app_analytics_report_export_excel')]
+    public function exportExcel(
+        int $id,
+        CreateReportService $reportService,
+        VersionMetricTreeBuilder $metricTreeBuilder,
+    ): Response {
+        $user = $this->getUser();
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $report = $reportService->findById($id);
+        if (!$report) {
+            throw $this->createNotFoundException('Отчёт не найден.');
+        }
+
+        if (!$this->canAccessReport($user, $report)) {
+            throw $this->createNotFoundException('Отчёт не найден.');
+        }
+
+        $data = $this->collectReportData($report);
+        $currentValues = $data['values'];
+        $currentNotes = $data['notes'];
+        $versionMetricsFlat = $this->buildVersionMetricsFlat($report, $metricTreeBuilder);
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Отчёт');
+
+        // Шапка-заголовок отчёта
+        $boardName = $report->getBoard()?->getName() ?? '';
+        $periodLabel = $report->getPeriod()?->getHumanLabel() ?? '—';
+        $versionNumber = $report->getBoardVersion()->getVersionNumber();
+        $sheet->setCellValue('A1', sprintf('%s — %s (v%s)', $boardName, $periodLabel, $versionNumber));
+        $sheet->mergeCells('A1:C1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+
+        // Заголовки таблицы
+        $headerRow = 3;
+        $sheet->fromArray(['Метрика', 'Ед. изм.', 'Значение'], null, 'A' . $headerRow);
+        $sheet->getStyle('A' . $headerRow . ':C' . $headerRow)->getFont()->setBold(true);
+        $sheet->getStyle('A' . $headerRow . ':C' . $headerRow)->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setRGB('E9ECEF');
+
+        $row = $headerRow + 1;
+        foreach ($versionMetricsFlat as $entry) {
+            $vm = $entry['versionMetric'];
+            $metric = $entry['metric'];
+            $depth = $entry['depth'] ?? 0;
+            $vmId = $vm->getId();
+
+            $value = $currentValues[$vmId] ?? '';
+            $type = (string) $metric->getType();
+
+            // Значение: bool → Да/Нет/—, числа → нормализуем (без хвостовых нулей) и пишем числом, иначе текст или —
+            $isNumericValue = false;
+            if ($type === 'bool') { // тип не выводится отдельной колонкой, но определяет формат значения
+                $displayValue = $value === '1' ? 'Да' : ($value === '0' ? 'Нет' : '—');
+            } elseif ($value === '' || $value === null) {
+                $displayValue = '—';
+            } elseif (is_numeric($value)) {
+                // Нормализация по строке (без float-погрешностей): "10.00" → "10", "2.50" → "2.5".
+                $normalized = (string) $value;
+                if (str_contains($normalized, '.')) {
+                    $normalized = rtrim(rtrim($normalized, '0'), '.');
+                }
+                $displayValue = $normalized;
+                $isNumericValue = true;
+            } else {
+                $displayValue = (string) $value;
+            }
+
+            $name = $metric->getName();
+            if ($vm->isRequired()) {
+                $name .= ' *';
+            }
+
+            // Визуальная вложенность: отступ по глубине + маркер «└ » для дочерних метрик.
+            $depthInt = (int) $depth;
+            if ($depthInt > 0) {
+                $name = str_repeat('    ', $depthInt) . '└ ' . $name;
+            }
+
+            $sheet->setCellValueExplicit('A' . $row, $name, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->getStyle('A' . $row)->getAlignment()->setIndent($depthInt);
+            $sheet->setCellValue('B' . $row, (string) $metric->getUnit());
+            $sheet->setCellValueExplicit(
+                'C' . $row,
+                $displayValue,
+                $isNumericValue
+                    ? \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC
+                    : \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING,
+            );
+            $row++;
+
+            // Примечания (дерево) — отдельными строками под метрикой
+            $notes = $currentNotes[$vmId] ?? [];
+            if (is_array($notes) && $notes !== []) {
+                $row = $this->writeNotesRows($sheet, $notes, $row, (int) $depth + 1);
+            }
+        }
+
+        foreach (['A' => 60, 'B' => 14, 'C' => 30] as $col => $width) {
+            $sheet->getColumnDimension($col)->setWidth($width);
+        }
+
+        $filename = sprintf('report_%d.xlsx', $id);
+
+        $response = new StreamedResponse(function () use ($spreadsheet): void {
+            (new Xlsx($spreadsheet))->save('php://output');
+        });
+        $response->headers->set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $response->headers->set(
+            'Content-Disposition',
+            HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_ATTACHMENT, $filename),
+        );
+        $response->headers->set('Cache-Control', 'max-age=0');
+
+        return $response;
+    }
+
+    /**
+     * Рекурсивно выводит дерево примечаний в колонку «Значение», по строке на узел.
+     * Формат узла: { key, value, children[] } — как в _metric_notes_view.html.twig.
+     *
+     * @param array<int, mixed> $nodes
+     */
+    private function writeNotesRows(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet, array $nodes, int $row, int $indent): int
+    {
+        foreach ($nodes as $node) {
+            if (!is_array($node)) {
+                continue;
+            }
+            $key = (string) ($node['key'] ?? '');
+            $value = (string) ($node['value'] ?? '');
+            $children = $node['children'] ?? [];
+
+            $text = $key;
+            if ($key !== '' && $value !== '') {
+                $text .= ' — ';
+            }
+            $text .= $value;
+
+            if ($text !== '' || (is_array($children) && $children !== [])) {
+                if ($text !== '') {
+                    $sheet->setCellValueExplicit('C' . $row, $text, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->getStyle('C' . $row)->getAlignment()->setIndent($indent);
+                    $sheet->getStyle('A' . $row . ':C' . $row)->getFont()->setItalic(true);
+                    $row++;
+                }
+                if (is_array($children) && $children !== []) {
+                    $row = $this->writeNotesRows($sheet, $children, $row, $indent + 1);
+                }
+            }
+        }
+
+        return $row;
     }
 
     #[Route('/analytics/report/{id}/confirm', name: 'app_analytics_report_confirm', methods: ['POST'])]

@@ -14,9 +14,14 @@
             <h1>Просмотр отчёта</h1>
             <p class="text-muted mb-0">{{ report.board.name }} — {{ report.period ? report.period.displayLabel : '—' }} (v{{ report.boardVersion.versionNumber }})</p>
         </div>
-        <a href="{{ path('app_analytics_report') }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left me-1"></i>Назад к списку
-        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ path('app_analytics_report_export_excel', {id: report.id}) }}" class="btn btn-success">
+                <i class="bi bi-file-earmark-excel me-1"></i>Выгрузить в Excel
+            </a>
+            <a href="{{ path('app_analytics_report') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Назад к списку
+            </a>
+        </div>
     </div>
 
     {% for message in app.flashes('success') %}

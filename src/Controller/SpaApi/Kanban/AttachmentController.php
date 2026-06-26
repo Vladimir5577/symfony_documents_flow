@@ -13,6 +13,7 @@ use App\Repository\Kanban\KanbanCardRepository;
 use App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator;
 use App\Service\Kanban\KanbanAttachmentService;
 use App\Service\Kanban\KanbanCardActivityLogger;
+use App\Service\Kanban\KanbanRealtimePublisher;
 use App\Service\Kanban\KanbanService;
 use Liip\ImagineBundle\Service\FilterService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -40,6 +41,7 @@ final class AttachmentController extends AbstractController
         private readonly KanbanAttachmentPreviewUrlGenerator $kanbanAttachmentPreviewUrlGenerator,
         private readonly FilterService $filterService,
         private readonly KanbanCardActivityLogger $activityLogger,
+        private readonly KanbanRealtimePublisher $realtimePublisher,
         #[Autowire('%kernel.project_dir%')]
         private readonly string $projectDir,
     ) {
@@ -80,6 +82,15 @@ final class AttachmentController extends AbstractController
 
         if ($context !== 'chat') {
             $this->activityLogger->logAttachmentAdded($card, $attachment->getFilename());
+        }
+
+        // Realtime доски: chat-вложения входят в commentsCount карточки списка.
+        if ($context === 'chat') {
+            $this->realtimePublisher->publishCardPatch(
+                $card,
+                $this->realtimePublisher->buildCommentsCount($card),
+                $user->getId(),
+            );
         }
 
         return $this->json($this->formatAttachment($attachment), Response::HTTP_CREATED);
@@ -178,10 +189,22 @@ final class AttachmentController extends AbstractController
         $filename = $attachment->getFilename();
         $context = $attachment->getContext();
 
+        // Снимаем вложение с карточки, чтобы commentsCount ниже отражал состояние
+        // после удаления (delete() удаляет запись из БД, но не из in-memory коллекции).
+        $card->getAttachments()->removeElement($attachment);
         $this->attachmentService->delete($attachment);
 
         if ($context !== 'chat') {
             $this->activityLogger->logAttachmentRemoved($card, $filename);
+        }
+
+        // Realtime доски: chat-вложения входят в commentsCount карточки списка.
+        if ($context === 'chat') {
+            $this->realtimePublisher->publishCardPatch(
+                $card,
+                $this->realtimePublisher->buildCommentsCount($card),
+                $user->getId(),
+            );
         }
 
         return $this->json(null, Response::HTTP_NO_CONTENT);

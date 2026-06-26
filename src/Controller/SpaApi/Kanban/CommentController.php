@@ -12,6 +12,7 @@ use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanCardCommentRepository;
 use App\Repository\Kanban\KanbanCardRepository;
 use App\Repository\Kanban\Project\KanbanProjectUserRepository;
+use App\Service\Kanban\KanbanRealtimePublisher;
 use App\Service\Kanban\KanbanService;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -35,6 +36,7 @@ final class CommentController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly NotificationService $notificationService,
         private readonly KanbanProjectUserRepository $projectUserRepo,
+        private readonly KanbanRealtimePublisher $realtimePublisher,
     ) {
     }
 
@@ -97,6 +99,13 @@ final class CommentController extends AbstractController
         $this->em->flush();
 
         $this->sendCommentNotifications($card, $user);
+
+        // Realtime доски: обновляем счётчик комментариев на карточке списка.
+        $this->realtimePublisher->publishCardPatch(
+            $card,
+            $this->realtimePublisher->buildCommentsCount($card),
+            $user->getId(),
+        );
 
         return $this->json($this->formatComment($comment), Response::HTTP_CREATED);
     }
@@ -163,8 +172,18 @@ final class CommentController extends AbstractController
             return $this->json(['error' => SpaApiError::COMMENT_AUTHOR_ONLY], Response::HTTP_FORBIDDEN);
         }
 
+        // Снимаем комментарий с карточки, чтобы счётчик ниже отражал состояние
+        // после удаления; orphanRemoval удалит запись из БД.
+        $card->getComments()->removeElement($comment);
         $this->em->remove($comment);
         $this->em->flush();
+
+        // Realtime доски: обновляем счётчик комментариев на карточке списка.
+        $this->realtimePublisher->publishCardPatch(
+            $card,
+            $this->realtimePublisher->buildCommentsCount($card),
+            $user->getId(),
+        );
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }
