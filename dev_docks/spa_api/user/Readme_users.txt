@@ -95,7 +95,8 @@ fetch:
         "id":       number,
         "name":     string,
         "fullName": string
-      } | null
+      } | null,
+      "lastSeenAt": string | null   // ISO 8601, дата последнего входа / активности
     }
   ],
   "pagination": {
