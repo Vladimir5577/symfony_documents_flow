@@ -1,0 +1,106 @@
+# Файловое хранилище проекта: MinIO (S3) + imgproxy (ресайз) + nginx-кэш.
+#
+# Это единый связанный стек (общий жизненный цикл): imgproxy читает исходники
+# из MinIO, nginx кэширует ответы imgproxy. Всё хранилище вынесено в папку
+# file_storage/. См. dev_docks/microservices/Readme_kanban_to_do.txt, 8.7-8.9.
+#
+# Назначение:
+#   - MinIO   — единое S3-хранилище файлов. Канбан-сервис (Go) — первый
+#               потребитель; остальной проект мигрирует на MinIO постепенно.
+#   - imgproxy — общепроектная замена LiipImagine: ресайз картинок на лету.
+#   - nginx   — кэш перед imgproxy (imgproxy сам ничего не кэширует).
+#
+# Сеть: общая external-сеть (SHARED_NETWORK, по умолч. project-net).
+#   - MinIO S3 API (:9000)   — ВНУТРЕННИЙ (файлы клиенту отдаёт Go проксированием).
+#   - MinIO Console (:9001)  — только localhost (админка).
+#   - imgproxy (:8080)       — ВНУТРЕННИЙ (берёт из minio:9000).
+#   - nginx-кэш (:8082)      — ПУБЛИЧНАЯ дверь, его URL попадает в <img src>.
+#     браузер -> nginx(кэш) -> imgproxy -> MinIO
+#
+# Volume'ы — в ./../ (рядом с этой папкой): ./../minio_data, ./../imgproxy_cache.
+# nginx -> build из ./docker_env/nginx/Dockerfile + config/ (зеркалит корень).
+#
+# Старт: см. README.md (создать .env, общую сеть и bucket — bucket создаётся
+# ОДИН РАЗ вручную, авто-init убран). Запуск:
+#   автономно:  docker compose up -d
+#   с ядром:    docker compose -f docker-compose.yml -f file_storage/docker-compose.yml up -d
+
+services:
+  # --- Хранилище ---
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    env_file: .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - ./../minio_data:/data
+    ports:
+      # S3 API — ВНУТРЕННИЙ. Раскомментировать только для локальной отладки:
+      # - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      # Console (веб-админка) — только localhost:
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    networks:
+      - shared
+
+  # --- Ресайз картинок ---
+  imgproxy:
+    image: darthsim/imgproxy:v4.0.8
+    container_name: imgproxy
+    restart: unless-stopped
+    # depends_on на minio НЕ нужен: imgproxy обращается к MinIO только при
+    # запросе картинки (не на старте); недоступность MinIO не роняет imgproxy.
+    env_file: .env
+    environment:
+      # --- Подпись URL (защита от подбора параметров ресайза) ---
+      # Сгенерировать: openssl rand -hex 32  (для каждого ключа)
+      IMGPROXY_KEY: ${IMGPROXY_KEY:-}
+      IMGPROXY_SALT: ${IMGPROXY_SALT:-}
+      # Если ключ/соль пустые — подпись отключена (ТОЛЬКО для локальной отладки).
+      IMGPROXY_ALLOW_UNSAFE_URL: ${IMGPROXY_ALLOW_UNSAFE_URL:-1}
+
+      # --- Источник исходников: MinIO (S3) ---
+      IMGPROXY_USE_S3: "1"
+      IMGPROXY_S3_ENDPOINT: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      IMGPROXY_S3_REGION: ${MINIO_REGION:-us-east-1}
+
+      # --- Прочее ---
+      IMGPROXY_BIND: ":8080"
+      IMGPROXY_MAX_SRC_RESOLUTION: ${IMGPROXY_MAX_SRC_RESOLUTION:-50}
+      IMGPROXY_LOG_LEVEL: ${IMGPROXY_LOG_LEVEL:-info}
+    # Порт наружу НЕ публикуем — доступ только через nginx-кэш.
+    networks:
+      - shared
+
+  # nginx-кэш перед imgproxy — публичная дверь медиа-стека.
+  # Оформлен как основной nginx проекта: build из docker_env/nginx/Dockerfile
+  # (база nginx:1.27.0-alpine-slim) + конфиг монтируется volume'ом.
+  nginx_imgproxy:
+    build:
+      context: .
+      dockerfile: ./docker_env/nginx/Dockerfile
+    container_name: imgproxy_cache
+    restart: unless-stopped
+    volumes:
+      - ./docker_env/nginx/config/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./../imgproxy_cache:/var/cache/nginx/imgproxy
+    ports:
+      # Публичная дверь. Этот адрес попадает в <img src>.
+      - "${IMGPROXY_CACHE_PORT:-8082}:80"
+    networks:
+      - shared
+
+# Общая сеть. external: true — сеть создаётся СНАРУЖИ:
+#   - в материнском проекте: основным docker-compose.yml (name: project-net);
+#   - в отдельном репозитории (после переезда): создать вручную один раз:
+#       docker network create ${SHARED_NETWORK}
+# Имя берётся из .env (SHARED_NETWORK), чтобы папка была автономной.
+networks:
+  shared:
+    external: true
+    name: ${SHARED_NETWORK:-project-net}
