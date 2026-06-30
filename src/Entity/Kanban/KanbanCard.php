@@ -45,6 +45,13 @@ class KanbanCard
     #[ORM\JoinColumn(name: 'archived_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?User $archivedBy = null;
 
+    #[ORM\Column(name: 'completed_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $completedAt = null;
+
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'completed_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $completedBy = null;
+
     #[ORM\ManyToOne(targetEntity: KanbanColumn::class, inversedBy: 'cards')]
     #[ORM\JoinColumn(name: 'column_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private KanbanColumn $column;
@@ -189,6 +196,28 @@ class KanbanCard
     public function setArchivedBy(?User $archivedBy): static
     {
         $this->archivedBy = $archivedBy;
+        return $this;
+    }
+
+    public function getCompletedAt(): ?\DateTimeImmutable
+    {
+        return $this->completedAt;
+    }
+
+    public function setCompletedAt(?\DateTimeImmutable $completedAt): static
+    {
+        $this->completedAt = $completedAt;
+        return $this;
+    }
+
+    public function getCompletedBy(): ?User
+    {
+        return $this->completedBy;
+    }
+
+    public function setCompletedBy(?User $completedBy): static
+    {
+        $this->completedBy = $completedBy;
         return $this;
     }
 

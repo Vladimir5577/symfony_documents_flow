@@ -28,6 +28,8 @@ enum KanbanCardActivityType: string
     case SUBTASK_UNASSIGNED = 'subtask_unassigned';
     case ARCHIVED = 'archived';
     case RESTORED = 'restored';
+    case COMPLETED = 'completed';
+    case REOPENED = 'reopened';
 
     public function getLabel(): string
     {
@@ -54,6 +56,8 @@ enum KanbanCardActivityType: string
             self::SUBTASK_UNASSIGNED => 'Снят исполнитель подзадачи',
             self::ARCHIVED => 'Задача архивирована',
             self::RESTORED => 'Задача восстановлена из архива',
+            self::COMPLETED => 'Задача выполнена',
+            self::REOPENED => 'Задача снова открыта',
         };
     }
 
@@ -82,6 +86,8 @@ enum KanbanCardActivityType: string
             self::SUBTASK_UNASSIGNED => 'bi-person-dash',
             self::ARCHIVED => 'bi-archive',
             self::RESTORED => 'bi-arrow-counterclockwise',
+            self::COMPLETED => 'bi-check-circle',
+            self::REOPENED => 'bi-arrow-counterclockwise',
         };
     }
 }

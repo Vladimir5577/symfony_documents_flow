@@ -10,6 +10,7 @@ use App\Entity\Kanban\KanbanColumn;
 use App\Enum\Kanban\KanbanColumnColor;
 use App\Entity\Kanban\Project\KanbanProject;
 use App\Entity\Kanban\Project\KanbanProjectUser;
+use App\Entity\Kanban\Project\KanbanProjectUserFolder;
 use App\Entity\User\User;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Repository\Kanban\KanbanBoardRepository;
@@ -288,6 +289,87 @@ final class ProjectController extends AbstractController
         $this->entityManager->flush();
 
         return $this->json(['success' => true]);
+    }
+
+    #[Route('/{id}/move', name: 'spa_api_project_move', requirements: ['id' => '\d+'], methods: ['PATCH'])]
+    public function move(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $project = $this->projectRepository->find($id);
+        if ($project === null) {
+            return $this->json(['error' => SpaApiError::PROJECT_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $projectUser = $this->projectUserRepository->findByProjectAndUser($project, $user);
+        if ($projectUser === null) {
+            if ($project->getOwner() === $user) {
+                // Handle legacy project without KanbanProjectUser link for the owner
+                $projectUser = new KanbanProjectUser();
+                $projectUser->setKanbanProject($project);
+                $projectUser->setUser($user);
+                $projectUser->setRole(KanbanBoardMemberRole::KANBAN_ADMIN);
+                $this->entityManager->persist($projectUser);
+            } else {
+                return $this->json(['error' => SpaApiError::PROJECT_ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+            }
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload) || !isset($payload['position'])) {
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+        }
+
+        $folderId = isset($payload['folderId']) && $payload['folderId'] !== null ? (int) $payload['folderId'] : null;
+        $folder = null;
+        if ($folderId !== null) {
+            $folder = $this->entityManager->getRepository(KanbanProjectUserFolder::class)->find($folderId);
+            if ($folder === null) {
+                return $this->json(['error' => SpaApiError::FOLDER_NOT_FOUND], Response::HTTP_NOT_FOUND);
+            }
+            if ($folder->getUser() !== $user) {
+                return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+            }
+        }
+
+        $projectUser->setFolder($folder);
+        $projectUser->setPosition((float) $payload['position']);
+        $this->entityManager->flush();
+
+        $this->checkRebalanceProjects($user, $folder);
+
+        return $this->json([
+            'id' => $project->getId(),
+            'folderId' => $folder?->getId(),
+            'position' => $projectUser->getPosition(),
+        ]);
+    }
+
+    private function checkRebalanceProjects(User $user, ?KanbanProjectUserFolder $folder): void
+    {
+        $projectUsers = $this->projectUserRepository->findBy([
+            'user' => $user,
+            'folder' => $folder
+        ], ['position' => 'ASC']);
+
+        $needsRebalance = false;
+        for ($i = 1; $i < count($projectUsers); $i++) {
+            if (($projectUsers[$i]->getPosition() - $projectUsers[$i - 1]->getPosition()) < 0.0001) {
+                $needsRebalance = true;
+                break;
+            }
+        }
+
+        if ($needsRebalance) {
+            $pos = 1.0;
+            foreach ($projectUsers as $pu) {
+                $pu->setPosition($pos);
+                $pos += 1.0;
+            }
+            $this->entityManager->flush();
+        }
     }
 
     /**
