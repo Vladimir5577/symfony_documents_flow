@@ -119,6 +119,7 @@ final class CardController extends AbstractController
             'checklistDone' => 0,
             'commentsCount' => 0,
             'updatedAt' => null,
+            'completedAt' => null,
             'status' => (string) $column->getId(),
         ], $user->getId());
 
@@ -223,6 +224,12 @@ final class CardController extends AbstractController
                 'id' => $card->getCreatedBy()->getId(),
                 'firstname' => $card->getCreatedBy()->getFirstname(),
                 'lastname' => $card->getCreatedBy()->getLastname(),
+            ] : null,
+            'completedAt' => $card->getCompletedAt()?->format('c'),
+            'completedBy' => $card->getCompletedBy() ? [
+                'id' => $card->getCompletedBy()->getId(),
+                'firstname' => $card->getCompletedBy()->getFirstname(),
+                'lastname' => $card->getCompletedBy()->getLastname(),
             ] : null,
         ]);
     }
@@ -565,6 +572,50 @@ final class CardController extends AbstractController
         return $this->json([
             'id' => $card->getId(),
             'isArchived' => $card->isArchived(),
+        ]);
+    }
+
+    #[Route('/{id}/complete', name: 'spa_api_cards_complete', requirements: ['id' => '\d+'], methods: ['PATCH'])]
+    public function complete(int $id, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $card = $this->cardRepo->find($id);
+        if (!$card) {
+            return $this->json(['error' => SpaApiError::CARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->kanbanService->requireRole($card->getColumn()->getBoard(), $user, KanbanBoardMemberRole::KANBAN_EDITOR);
+
+        $wasCompleted = $card->getCompletedAt() !== null;
+
+        if ($wasCompleted) {
+            $card->setCompletedAt(null);
+            $card->setCompletedBy(null);
+        } else {
+            $card->setCompletedAt(new \DateTimeImmutable());
+            $card->setCompletedBy($user);
+        }
+
+        $this->em->flush();
+
+        $isCompleted = $card->getCompletedAt() !== null;
+        $this->activityLogger->logCompleted($card, $isCompleted);
+
+        $this->realtimePublisher->publishCardPatch($card, [
+            'completedAt' => $card->getCompletedAt()?->format('c'),
+        ], $user->getId());
+
+        return $this->json([
+            'id' => $card->getId(),
+            'completedAt' => $card->getCompletedAt()?->format('c'),
+            'completedBy' => $card->getCompletedBy() ? [
+                'id' => $card->getCompletedBy()->getId(),
+                'firstname' => $card->getCompletedBy()->getFirstname(),
+                'lastname' => $card->getCompletedBy()->getLastname(),
+            ] : null,
         ]);
     }
 

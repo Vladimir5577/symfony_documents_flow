@@ -6,6 +6,8 @@ namespace App\Controller\SpaApi\User;
 
 use App\Entity\User\User;
 use App\Entity\User\Worker;
+use App\Entity\Kanban\Project\KanbanProjectUser;
+use App\Entity\Kanban\Project\KanbanProjectUserFolder;
 use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Enum\User\WorkerStatus;
 use App\Repository\Kanban\KanbanBoardRepository;
@@ -177,6 +179,8 @@ final class MeController extends AbstractController
      *     isOwner: bool,
      *     isProjectAdmin: bool,
      *     entryBoardId: int|null,
+     *     folderId: int|null,
+     *     position: float,
      * }>
      */
     private function buildProjectsList(User $user): array
@@ -192,6 +196,12 @@ final class MeController extends AbstractController
             if ($pid !== null && !isset($projectIdToFirstBoardWithCards[$pid])) {
                 $projectIdToFirstBoardWithCards[$pid] = $board;
             }
+        }
+
+        $projectUsers = $this->entityManager->getRepository(KanbanProjectUser::class)->findBy(['user' => $user]);
+        $projectUserMap = [];
+        foreach ($projectUsers as $pu) {
+            $projectUserMap[$pu->getKanbanProject()->getId()] = $pu;
         }
 
         $result = [];
@@ -211,13 +221,19 @@ final class MeController extends AbstractController
             }
 
             $entryBoardId = $entryBoard?->getId();
+            $pu = $projectUserMap[$pid] ?? null;
+            $folderId = $pu?->getFolder()?->getId();
+            $position = $pu?->getPosition() ?? 0.0;
+
             $result[] = [
                 'id' => $pid,
                 'name' => $project->getName() ?? 'Проект',
                 'description' => $project->getDescription(),
                 'isOwner' => $project->getOwner() === $user,
                 'isProjectAdmin' => $isProjectAdmin,
-                'entryBoardId' => $entryBoardId
+                'entryBoardId' => $entryBoardId,
+                'folderId' => $folderId,
+                'position' => $position,
             ];
         }
 
@@ -238,7 +254,10 @@ final class MeController extends AbstractController
      *   avatar: string|null,
      *   avatarUrl: string|null,
      *   projects: list<array{
-     *      id:int,name:string,description:string|null,isOwner:bool,isProjectAdmin:bool,entryBoardId:int|null
+     *      id:int,name:string,description:string|null,isOwner:bool,isProjectAdmin:bool,entryBoardId:int|null,folderId:int|null,position:float
+     *   }>,
+     *   projectFolders: list<array{
+     *      id:int,name:string,position:float
      *   }>
      * }
      */
@@ -257,6 +276,16 @@ final class MeController extends AbstractController
             );
         }
 
+        $folders = $this->entityManager->getRepository(KanbanProjectUserFolder::class)->findBy(
+            ['user' => $user],
+            ['position' => 'ASC']
+        );
+        $projectFolders = array_map(static fn ($f) => [
+            'id' => $f->getId(),
+            'name' => $f->getName(),
+            'position' => $f->getPosition()
+        ], $folders);
+
         return [
             'id' => $user->getId(),
             'login' => $user->getUserIdentifier(),
@@ -269,6 +298,7 @@ final class MeController extends AbstractController
             'statusLabel' => $workerStatus?->getLabel(),
             'avatarUrl' => $avatarUrl,
             'projects' => $this->buildProjectsList($user),
+            'projectFolders' => $projectFolders,
         ];
     }
 }

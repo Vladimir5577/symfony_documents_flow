@@ -76,4 +76,7 @@ final class SpaApiError
     public const POST_FILE_NOT_FOUND = 'post_file_not_found';
     public const POST_FILE_NOT_FOUND_ON_DISK = 'post_file_not_found_on_disk';
     public const NOTIFICATION_NOT_FOUND = 'notification_not_found';
+    public const FOLDER_NOT_FOUND = 'folder_not_found';
+    public const FOLDER_NAME_REQUIRED = 'folder_name_required';
+    public const FOLDER_NAME_TOO_LONG = 'folder_name_too_long';
 }

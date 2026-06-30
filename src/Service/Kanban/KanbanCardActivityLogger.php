@@ -132,6 +132,11 @@ class KanbanCardActivityLogger
         $this->log($card, $archived ? KanbanCardActivityType::ARCHIVED : KanbanCardActivityType::RESTORED);
     }
 
+    public function logCompleted(KanbanCard $card, bool $completed): void
+    {
+        $this->log($card, $completed ? KanbanCardActivityType::COMPLETED : KanbanCardActivityType::REOPENED);
+    }
+
     public function logComment(KanbanCard $card): void
     {
         $this->log($card, KanbanCardActivityType::COMMENT_ADDED);

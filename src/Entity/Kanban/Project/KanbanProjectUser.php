@@ -9,6 +9,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: KanbanProjectUserRepository::class)]
 #[ORM\UniqueConstraint(name: 'uniq_project_user', columns: ['kanban_project_id', 'user_id'])]
+#[ORM\Index(name: 'idx_project_user_folder_position', columns: ['user_id', 'folder_id', 'position'])]
 class KanbanProjectUser
 {
     #[ORM\Id]
@@ -26,6 +27,13 @@ class KanbanProjectUser
 
     #[ORM\Column(enumType: KanbanBoardMemberRole::class)]
     private ?KanbanBoardMemberRole $role = null;
+
+    #[ORM\ManyToOne(targetEntity: KanbanProjectUserFolder::class, inversedBy: 'projectUsers')]
+    #[ORM\JoinColumn(name: 'folder_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?KanbanProjectUserFolder $folder = null;
+
+    #[ORM\Column(type: \Doctrine\DBAL\Types\Types::FLOAT, options: ['default' => 0])]
+    private float $position = 0.0;
 
     public function getId(): ?int
     {
@@ -64,6 +72,30 @@ class KanbanProjectUser
     public function setRole(KanbanBoardMemberRole $role): static
     {
         $this->role = $role;
+
+        return $this;
+    }
+
+    public function getFolder(): ?KanbanProjectUserFolder
+    {
+        return $this->folder;
+    }
+
+    public function setFolder(?KanbanProjectUserFolder $folder): static
+    {
+        $this->folder = $folder;
+
+        return $this;
+    }
+
+    public function getPosition(): float
+    {
+        return $this->position;
+    }
+
+    public function setPosition(float $position): static
+    {
+        $this->position = $position;
 
         return $this;
     }

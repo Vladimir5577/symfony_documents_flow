@@ -377,6 +377,7 @@ final class BoardController extends AbstractController
                     + $card->getAttachments()->filter(fn ($att) => $att->getContext() === 'chat')->count(),
                 'borderColor' => $card->getBorderColor(),
                 'updatedAt' => $card->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
+                'completedAt' => $card->getCompletedAt()?->format(\DateTimeInterface::ATOM),
             ];
         }
 
