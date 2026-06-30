@@ -11,11 +11,10 @@ use App\Service\Kanban\KanbanAttachmentService;
 use App\Service\Kanban\KanbanCardActivityLogger;
 use App\Service\Kanban\KanbanService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/kanban/cards/{cardId}/attachments')]
@@ -94,16 +93,23 @@ final class KanbanAttachmentApiController extends AbstractController
             return $this->json(['error' => 'Вложение не найдено.'], Response::HTTP_NOT_FOUND);
         }
 
-        $filePath = $this->attachmentService->getFilePath($attachment);
-        if (!file_exists($filePath)) {
-            return $this->json(['error' => 'Файл не найден на диске.'], Response::HTTP_NOT_FOUND);
+        if (!$this->attachmentService->exists($attachment)) {
+            return $this->json(['error' => 'Файл не найден в хранилище.'], Response::HTTP_NOT_FOUND);
         }
 
-        $response = new BinaryFileResponse($filePath);
-        $disposition = $request->query->getBoolean('inline', false)
-            ? ResponseHeaderBag::DISPOSITION_INLINE
-            : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
-        $response->setContentDisposition($disposition, $attachment->getFilename());
+        $stream = $this->attachmentService->getObjectStream($attachment);
+        $disposition = $request->query->getBoolean('inline', false) ? 'inline' : 'attachment';
+
+        $response = new StreamedResponse(function () use ($stream) {
+            while (!$stream->eof()) {
+                echo $stream->read(8192);
+                flush();
+            }
+            $stream->close();
+        });
+
+        $response->headers->set('Content-Type', $attachment->getContentType());
+        $response->headers->set('Content-Disposition', sprintf('%s; filename="%s"', $disposition, $attachment->getFilename()));
 
         return $response;
     }

@@ -3,12 +3,20 @@
 namespace App\Service\Kanban;
 
 use App\Entity\Kanban\KanbanAttachment;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 
+/**
+ * Генерирует URL превью картинок через imgproxy (файловое хранилище file_storage).
+ *
+ * imgproxy берёт исходник из MinIO (S3) и ресайзит на лету.
+ * nginx-кэш перед imgproxy хранит готовые превью на диске (замена LiipImagine).
+ *
+ * Поток: браузер → nginx-кэш (:8082) → imgproxy → MinIO
+ */
 final class KanbanAttachmentPreviewUrlGenerator
 {
     public function __construct(
-        private readonly CacheManager $imagineCacheManager,
+        private readonly string $imgproxyCacheBaseUrl,
+        private readonly string $minioBucket,
     ) {
     }
 
@@ -30,23 +38,13 @@ final class KanbanAttachmentPreviewUrlGenerator
             return null;
         }
 
-        $browserPath = $this->imagineCacheManager->getBrowserPath($key, 'kanban_attachment_preview');
-
-        return $this->toRelativePath($browserPath);
-    }
-
-    private function toRelativePath(string $url): string
-    {
-        // Keep URLs same-origin on the client to avoid CORS caused by absolute host:port generation.
-        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
-            $parts = parse_url($url);
-            $path = $parts['path'] ?? '/';
-            $query = isset($parts['query']) ? '?' . $parts['query'] : '';
-            $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
-
-            return $path . $query . $fragment;
-        }
-
-        return $url;
+        // imgproxy unsafe URL (локальная разработка; для прода — подписанные URL).
+        // Формат: /unsafe/{processing}/{source_url}
+        return sprintf(
+            '%s/unsafe/rs:fit:400:400/plain/s3://%s/%s',
+            rtrim($this->imgproxyCacheBaseUrl, '/'),
+            $this->minioBucket,
+            $key,
+        );
     }
 }
