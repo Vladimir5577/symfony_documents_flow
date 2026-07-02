@@ -183,62 +183,7 @@ final class MeController extends AbstractController
      *     position: float,
      * }>
      */
-    private function buildProjectsList(User $user): array
-    {
-        $projects = $this->projectRepository->findByMemberWithAccessibleBoards($user);
-        $projectIds = array_map(static fn ($p) => $p->getId(), $projects);
 
-        $firstBoardsByProject = $this->boardRepository->findFirstBoardByProjectIds($projectIds);
-        $boardsWithAssignedCards = $this->boardRepository->findAllByUserWithAssignedCards($user);
-        $projectIdToFirstBoardWithCards = [];
-        foreach ($boardsWithAssignedCards as $board) {
-            $pid = $board->getProject()?->getId();
-            if ($pid !== null && !isset($projectIdToFirstBoardWithCards[$pid])) {
-                $projectIdToFirstBoardWithCards[$pid] = $board;
-            }
-        }
-
-        $projectUsers = $this->entityManager->getRepository(KanbanProjectUser::class)->findBy(['user' => $user]);
-        $projectUserMap = [];
-        foreach ($projectUsers as $pu) {
-            $projectUserMap[$pu->getKanbanProject()->getId()] = $pu;
-        }
-
-        $result = [];
-        foreach ($projects as $project) {
-            $pid = $project->getId();
-            $firstBoard = $firstBoardsByProject[$pid] ?? null;
-            $memberRole = $firstBoard
-                ? $this->kanbanService->getMemberRole($firstBoard, $user)
-                : KanbanBoardMemberRole::KANBAN_ADMIN;
-
-            $isProjectAdmin = false;
-            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
-                $isProjectAdmin = true;
-                $entryBoard = $firstBoard ?? $projectIdToFirstBoardWithCards[$pid] ?? null;
-            } else {
-                $entryBoard = $projectIdToFirstBoardWithCards[$pid] ?? null;
-            }
-
-            $entryBoardId = $entryBoard?->getId();
-            $pu = $projectUserMap[$pid] ?? null;
-            $folderId = $pu?->getFolder()?->getId();
-            $position = $pu?->getPosition() ?? 0.0;
-
-            $result[] = [
-                'id' => $pid,
-                'name' => $project->getName() ?? 'Проект',
-                'description' => $project->getDescription(),
-                'isOwner' => $project->getOwner() === $user,
-                'isProjectAdmin' => $isProjectAdmin,
-                'entryBoardId' => $entryBoardId,
-                'folderId' => $folderId,
-                'position' => $position,
-            ];
-        }
-
-        return $result;
-    }
 
     /**
      * @return array{
@@ -297,7 +242,7 @@ final class MeController extends AbstractController
             'status' => $workerStatus?->value,
             'statusLabel' => $workerStatus?->getLabel(),
             'avatarUrl' => $avatarUrl,
-            'projects' => $this->buildProjectsList($user),
+            'projects' => $this->kanbanService->getProjectsListForUser($user),
             'projectFolders' => $projectFolders,
         ];
     }
