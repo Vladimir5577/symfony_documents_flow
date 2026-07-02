@@ -338,16 +338,17 @@ final class ProjectController extends AbstractController
         $projectUser->setPosition((float) $payload['position']);
         $this->entityManager->flush();
 
-        $this->checkRebalanceProjects($user, $folder);
+        $rebalanced = $this->checkRebalanceProjects($user, $folder);
 
         return $this->json([
             'id' => $project->getId(),
             'folderId' => $folder?->getId(),
             'position' => $projectUser->getPosition(),
+            'rebalancedProjects' => $rebalanced ? $this->kanbanService->getProjectsListForUser($user) : null,
         ]);
     }
 
-    private function checkRebalanceProjects(User $user, ?KanbanProjectUserFolder $folder): void
+    private function checkRebalanceProjects(User $user, ?KanbanProjectUserFolder $folder): bool
     {
         $projectUsers = $this->projectUserRepository->findBy([
             'user' => $user,
@@ -370,6 +371,8 @@ final class ProjectController extends AbstractController
             }
             $this->entityManager->flush();
         }
+
+        return $needsRebalance;
     }
 
     /**

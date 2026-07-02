@@ -26,6 +26,7 @@ class KanbanService
         private readonly KanbanProjectUserRepository $projectUserRepo,
         private readonly KanbanColumnRepository $columnRepo,
         private readonly KanbanCardRepository $cardRepo,
+        private readonly \App\Repository\Kanban\Project\KanbanProjectRepository $projectRepo,
     ) {
     }
 
@@ -279,5 +280,65 @@ class KanbanService
             $this->cardRepo->rebalancePositions($column);
             $this->em->flush();
         }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function getProjectsListForUser(User $user): array
+    {
+        $projects = $this->projectRepo->findByMemberWithAccessibleBoards($user);
+        $projectIds = array_map(static fn ($p) => $p->getId(), $projects);
+
+        $firstBoardsByProject = $this->boardRepo->findFirstBoardByProjectIds($projectIds);
+        $boardsWithAssignedCards = $this->boardRepo->findAllByUserWithAssignedCards($user);
+        $projectIdToFirstBoardWithCards = [];
+        foreach ($boardsWithAssignedCards as $board) {
+            $pid = $board->getProject()?->getId();
+            if ($pid !== null && !isset($projectIdToFirstBoardWithCards[$pid])) {
+                $projectIdToFirstBoardWithCards[$pid] = $board;
+            }
+        }
+
+        $projectUsers = $this->em->getRepository(KanbanProjectUser::class)->findBy(['user' => $user]);
+        $projectUserMap = [];
+        foreach ($projectUsers as $pu) {
+            $projectUserMap[$pu->getKanbanProject()->getId()] = $pu;
+        }
+
+        $result = [];
+        foreach ($projects as $project) {
+            $pid = $project->getId();
+            $firstBoard = $firstBoardsByProject[$pid] ?? null;
+            $memberRole = $firstBoard
+                ? $this->getMemberRole($firstBoard, $user)
+                : KanbanBoardMemberRole::KANBAN_ADMIN;
+
+            $isProjectAdmin = false;
+            if ($memberRole === KanbanBoardMemberRole::KANBAN_ADMIN) {
+                $isProjectAdmin = true;
+                $entryBoard = $firstBoard ?? $projectIdToFirstBoardWithCards[$pid] ?? null;
+            } else {
+                $entryBoard = $projectIdToFirstBoardWithCards[$pid] ?? null;
+            }
+
+            $entryBoardId = $entryBoard?->getId();
+            $pu = $projectUserMap[$pid] ?? null;
+            $folderId = $pu?->getFolder()?->getId();
+            $position = $pu?->getPosition() ?? 0.0;
+
+            $result[] = [
+                'id' => $pid,
+                'name' => $project->getName() ?? 'Проект',
+                'description' => $project->getDescription(),
+                'isOwner' => $project->getOwner() === $user,
+                'isProjectAdmin' => $isProjectAdmin,
+                'entryBoardId' => $entryBoardId,
+                'folderId' => $folderId,
+                'position' => $position,
+            ];
+        }
+
+        return $result;
     }
 }
