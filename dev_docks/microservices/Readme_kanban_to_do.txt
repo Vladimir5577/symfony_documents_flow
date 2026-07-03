@@ -7,19 +7,10 @@
   Стек источника: Symfony 8, Doctrine, Twig (SSR) + React SPA (отдельный API)
   Цель: вырезать канбан из Symfony и вынести в самостоятельный сервис на Golang
 ================================================================================
-ТЕКУЩИЙ СТАТУС ВНЕДРЕНИЯ (2026-06-30):
-[V] Инфраструктура file_storage (MinIO + imgproxy + Nginx cache) развернута и настроена.
-[V] Symfony-код обновлен для работы с S3/imgproxy.
-[V] Добавлены системные зависимости amqp в Dockerfile, контейнер пересобран.
-[V] Установлен пакет symfony/amqp-messenger в Symfony.
-[V] JWTCreatedListener: claim `id` (User.id) добавлен в JWT payload (src/EventListener/JWTCreatedListener.php).
-[V] UserSyncEntityListener: Doctrine entity listener на User → RabbitMQ (src/EntityListener/UserSyncEntityListener.php).
-    Транспорт event_bus (AMQP, topic exchange 'events'), routing keys user.upserted/user.deleted.
-    Message DTO: src/Message/UserSyncMessage.php. Конфиг: messenger.yaml, .env (RABBITMQ_TRANSPORT_DSN).
-
-БЛИЖАЙШИЕ ЗАДАЧИ:
-1. Запустить перенос старых файлов в бакет MinIO (команда в разделе 8.7 / README.md).
-2. Поднять Go-сервис: layout проекта, JWT-middleware, первые CRUD-эндпоинты.
+ТЕКУЩИЙ СТАТУС ВНЕДРЕНИЯ (2026-07-03):
+[V] Инфраструктура file_storage, S3, amqp, messenger настроены.
+[V] JWT payload обновлён (добавлен id), UserSyncEntityListener добавлен.
+4. Настроить бизнес-правила (только 1 assignee, запрет удаления непустых досок и колонок).
 ================================================================================
 
 
