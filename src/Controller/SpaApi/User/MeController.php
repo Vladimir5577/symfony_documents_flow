@@ -13,6 +13,7 @@ use App\Enum\User\WorkerStatus;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Service\Kanban\KanbanService;
+use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -25,7 +26,6 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
@@ -38,6 +38,7 @@ final class MeController extends AbstractController
         private readonly RoleHierarchyInterface $roleHierarchy,
         private readonly EntityManagerInterface $entityManager,
         private readonly UserPasswordHasherInterface $passwordHasher,
+        private readonly UserAvatarUrlGenerator $userAvatarUrlGenerator,
     ) {
     }
 
@@ -209,17 +210,7 @@ final class MeController extends AbstractController
     private function buildMePayload(User $user): array
     {
         $workerStatus = $user->getWorker()?->getWorkerStatus();
-        $avatarUrl = null;
-
-        if ($user->getAvatarName() !== null && $user->getAvatarName() !== '') {
-            $avatarVersion = $user->getUpdatedAt()?->getTimestamp() ?? time();
-            // Relative path — same-origin on SPA client (Next proxy), avoids cross-port CORS.
-            $avatarUrl = $this->generateUrl(
-                'spa_api_me_avatar',
-                ['inline' => 1, 'v' => $avatarVersion],
-                UrlGeneratorInterface::ABSOLUTE_PATH
-            );
-        }
+        $avatarUrl = $this->userAvatarUrlGenerator->getAvatarUrl($user, UserAvatarUrlGenerator::FILTER_MEDIUM);
 
         $folders = $this->entityManager->getRepository(KanbanProjectUserFolder::class)->findBy(
             ['user' => $user],
