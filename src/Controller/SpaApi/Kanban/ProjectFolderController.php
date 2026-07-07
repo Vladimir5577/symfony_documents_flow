@@ -15,7 +15,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
-#[Route('/spa/api/project-folders')]
+// DISABLED KANBAN MODULE
+// #[Route('/spa/api/project-folders')]
 final class ProjectFolderController extends AbstractController
 {
     public function __construct(
