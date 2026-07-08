@@ -11,28 +11,11 @@ liip_imagine:
         default:
             filesystem:
                 data_root: '%kernel.project_dir%/public'
-        user_avatar:
-            filesystem:
-                data_root: '%private_upload_dir_users%'
         post_uploads:
             filesystem:
                 data_root: '%private_upload_dir_posts%'
     data_loader: default
     filter_sets:
-        avatar_thumbnail:
-            data_loader: user_avatar
-            quality: 85
-            filters:
-                thumbnail:
-                    size: [50, 50]
-                    mode: outbound
-        avatar_medium:
-            data_loader: user_avatar
-            quality: 85
-            filters:
-                thumbnail:
-                    size: [200, 200]
-                    mode: outbound
         post_image_preview:
             data_loader: post_uploads
             quality: 85

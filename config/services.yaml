@@ -68,6 +68,16 @@ services:
             $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
             $minioBucket: '%env(MINIO_KANBAN_BUCKET)%'
 
+    App\Service\User\UserAvatarStorageService:
+        arguments:
+            $s3: '@Aws\S3\S3Client'
+            $bucket: '%env(MINIO_USER_BUCKET)%'
+
+    App\Service\User\UserAvatarUrlGenerator:
+        arguments:
+            $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
+            $minioUserBucket: '%env(MINIO_USER_BUCKET)%'
+
     App\Service\ApiExternal\CitizenAppeal\CitizenAppealApiService:
         arguments:
             $apiUrl: '%don_snab_api_url%'

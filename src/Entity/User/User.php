@@ -12,9 +12,7 @@ use Gedmo\Mapping\Annotation as Gedmo;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
-use Symfony\Component\HttpFoundation\File\File as SymfonyFile;
 use Symfony\Component\Validator\Constraints as Assert;
-use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: '`user`')]
@@ -26,7 +24,6 @@ use Vich\UploaderBundle\Mapping\Attribute as Vich;
     repositoryMethod: 'findOneByLogin',
     ignoreNull: false
 )]
-#[Vich\Uploadable]
 class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
@@ -152,9 +149,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     /** @var Collection<int, UserRole> */
     #[ORM\OneToMany(mappedBy: 'user', targetEntity: UserRole::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $userRoles;
-
-    #[Vich\UploadableField(mapping: 'user_avatar', fileNameProperty: 'avatarName')]
-    private ?SymfonyFile $avatarFile = null;
 
     #[ORM\Column(name: 'avatar_name', type: Types::STRING, length: 255, nullable: true)]
     private ?string $avatarName = null;
@@ -475,18 +469,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setUpdatedBy(?self $updatedBy): static
     {
         $this->updatedBy = $updatedBy;
-
-        return $this;
-    }
-
-    public function getAvatarFile(): ?SymfonyFile
-    {
-        return $this->avatarFile;
-    }
-
-    public function setAvatarFile(?SymfonyFile $avatarFile = null): static
-    {
-        $this->avatarFile = $avatarFile;
 
         return $this;
     }

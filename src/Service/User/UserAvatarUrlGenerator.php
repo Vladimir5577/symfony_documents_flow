@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\User;
 
 use App\Entity\User\User;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 
 final class UserAvatarUrlGenerator
 {
@@ -14,36 +13,30 @@ final class UserAvatarUrlGenerator
     public const FILTER_MEDIUM = 'avatar_medium';
 
     public function __construct(
-        private readonly CacheManager $imagineCacheManager,
+        private readonly string $imgproxyCacheBaseUrl,
+        private readonly string $minioUserBucket,
     ) {
     }
 
     public function getAvatarUrl(User $user, string $filter = self::FILTER_MEDIUM): ?string
     {
-        $avatarName = $user->getAvatarName();
-        $userId = $user->getId();
-        if ($avatarName === null || $avatarName === '' || $userId === null) {
+        $storageKey = $user->getAvatarName();
+        if ($storageKey === null || $storageKey === '') {
             return null;
         }
 
-        $storageKey = $userId . '/' . $avatarName;
-        $browserPath = $this->imagineCacheManager->getBrowserPath($storageKey, $filter);
+        [$width, $height] = match ($filter) {
+            self::FILTER_THUMBNAIL => [50, 50],
+            default => [200, 200],
+        };
 
-        return $this->toRelativePath($browserPath);
-    }
-
-    private function toRelativePath(string $url): string
-    {
-        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
-            $parts = parse_url($url);
-            $path = $parts['path'] ?? '/';
-            $query = isset($parts['query']) ? '?' . $parts['query'] : '';
-            $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
-
-            return $path . $query . $fragment;
-        }
-
-        return $url;
+        return sprintf(
+            '%s/unsafe/rs:fill:%d:%d/plain/s3://%s/%s',
+            rtrim($this->imgproxyCacheBaseUrl, '/'),
+            $width,
+            $height,
+            $this->minioUserBucket,
+            $storageKey,
+        );
     }
 }
-

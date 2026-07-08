@@ -20,7 +20,7 @@
         {# Шапка: аватар, имя, дата, бейдж типа #}
         <div class="d-flex align-items-center gap-2 mb-3">
             {% if post.author.avatarName %}
-                <img src="/uploads/users/{{ post.author.id }}/{{ post.author.avatarName }}"
+                <img src="{{ user_avatar_url(post.author, 'avatar_thumbnail') }}"
                      alt="" class="rounded-circle" width="40" height="40" style="object-fit:cover">
             {% else %}
                 <div class="rounded-circle bg-secondary-subtle d-flex align-items-center justify-content-center"

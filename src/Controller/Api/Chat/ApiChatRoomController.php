@@ -8,8 +8,8 @@ use App\Repository\Chat\ChatParticipantRepository;
 use App\Repository\Chat\ChatRoomRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Chat\ChatRoomService;
+use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\ORM\EntityManagerInterface;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -24,7 +24,7 @@ final class ApiChatRoomController extends AbstractController
         private readonly ChatParticipantRepository $participantRepo,
         private readonly UserRepository $userRepo,
         private readonly EntityManagerInterface $em,
-        private readonly CacheManager $imagineCacheManager,
+        private readonly UserAvatarUrlGenerator $avatarUrlGenerator,
     ) {
     }
 
@@ -50,12 +50,7 @@ final class ApiChatRoomController extends AbstractController
                     if ($p->getUser()->getId() !== $user->getId()) {
                         $other = $p->getUser();
                         $otherUserId = $other->getId();
-                        $otherUserAvatar = $other->getAvatarName()
-                            ? $this->imagineCacheManager->getBrowserPath(
-                                $other->getId() . '/' . $other->getAvatarName(),
-                                'avatar_medium'
-                            )
-                            : null;
+                        $otherUserAvatar = $this->avatarUrlGenerator->getAvatarUrl($other);
                         if (!$displayName) {
                             $displayName = trim($other->getLastname() . ' ' . $other->getFirstname());
                         }
@@ -203,9 +198,7 @@ final class ApiChatRoomController extends AbstractController
                 'id' => $u->getId(),
                 'lastname' => $u->getLastname(),
                 'firstname' => $u->getFirstname(),
-                'avatar' => $u->getAvatarName()
-                    ? $this->imagineCacheManager->getBrowserPath($u->getId() . '/' . $u->getAvatarName(), 'avatar_medium')
-                    : null,
+                'avatar' => $this->avatarUrlGenerator->getAvatarUrl($u),
             ];
         }
 

@@ -16,7 +16,7 @@ use Symfony\Component\Messenger\MessageBusInterface;
  * при создании, обновлении релевантных полей или soft-delete.
  *
  * Релевантные поля для реплики: lastname, firstname, patronymic,
- * avatarName, deletedAt, login. Остальные изменения (пароль, email,
+ * avatarName (storage key аватара), deletedAt, login. Остальные изменения (пароль, email,
  * phone, lastSeenAt и т.д.) НЕ триггерят событие — Go они не нужны.
  *
  * Событие отправляется АСИНХРОННО через Messenger → AMQP-транспорт.

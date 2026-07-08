@@ -22,7 +22,7 @@ final readonly class UserSyncMessage
      * @param string                  $lastname   User.lastname
      * @param string                  $firstname  User.firstname
      * @param string|null             $patronymic User.patronymic
-     * @param string|null             $avatarName User.avatarName (имя файла аватара)
+     * @param string|null             $avatarName User.avatarName (storage key аватара в bucket user)
      * @param \DateTimeImmutable|null $deletedAt  User.deletedAt (soft-delete timestamp)
      */
     public function __construct(

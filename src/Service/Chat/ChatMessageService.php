@@ -10,8 +10,8 @@ use App\Entity\User\User;
 use App\Repository\Chat\ChatMessageReadRepository;
 use App\Repository\Chat\ChatMessageRepository;
 use App\Repository\Chat\ChatParticipantRepository;
+use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\ORM\EntityManagerInterface;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
@@ -24,7 +24,7 @@ class ChatMessageService
         private ChatMessageReadRepository $messageReadRepository,
         private ChatParticipantRepository $participantRepository,
         private HubInterface $hub,
-        private CacheManager $imagineCacheManager,
+        private UserAvatarUrlGenerator $avatarUrlGenerator,
     ) {
     }
 
@@ -180,9 +180,7 @@ class ChatMessageService
                 'id' => $sender->getId(),
                 'lastname' => $sender->getLastname(),
                 'firstname' => $sender->getFirstname(),
-                'avatar' => $sender->getAvatarName()
-                    ? $this->imagineCacheManager->getBrowserPath($sender->getId() . '/' . $sender->getAvatarName(), 'avatar_medium')
-                    : null,
+                'avatar' => $this->avatarUrlGenerator->getAvatarUrl($sender),
             ] : null,
             'content' => $message->isDeleted() ? null : $message->getContent(),
             'is_deleted' => $message->isDeleted(),

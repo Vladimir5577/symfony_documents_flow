@@ -11,16 +11,16 @@ use App\Repository\User\RoleRepository;
 use App\Repository\User\UserRepository;
 use App\Repository\User\WorkerRepository;
 use App\Service\User\LoginGeneratorService;
+use App\Service\User\UserAvatarStorageService;
+use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\ORM\EntityManagerInterface;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
@@ -29,7 +29,8 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 final class UserController extends AbstractController
 {
     public function __construct(
-        private readonly CacheManager $imagineCacheManager,
+        private readonly UserAvatarStorageService $avatarStorageService,
+        private readonly UserAvatarUrlGenerator $avatarUrlGenerator,
     ) {
     }
 
@@ -340,10 +341,7 @@ final class UserController extends AbstractController
 
         $avatarPreviewUrl = null;
         if ($user->getAvatarName()) {
-            $avatarPath = $user->getId() . '/' . $user->getAvatarName();
-            $avatarPreviewUrl = $this->toRelativePath(
-                $this->imagineCacheManager->getBrowserPath($avatarPath, 'avatar_medium')
-            );
+            $avatarPreviewUrl = $this->avatarUrlGenerator->getAvatarUrl($user);
         }
 
         return $this->render('user/view_user.html.twig', [
@@ -480,10 +478,7 @@ final class UserController extends AbstractController
 
         $avatarPreviewUrl = null;
         if ($user->getAvatarName()) {
-            $avatarPath = $user->getId() . '/' . $user->getAvatarName();
-            $avatarPreviewUrl = $this->toRelativePath(
-                $this->imagineCacheManager->getBrowserPath($avatarPath, 'avatar_medium')
-            );
+            $avatarPreviewUrl = $this->avatarUrlGenerator->getAvatarUrl($user);
         }
 
         return $this->render('user/edit_user_photo.html.twig', [
@@ -491,20 +486,6 @@ final class UserController extends AbstractController
             'user' => $user,
             'avatar_preview_url' => $avatarPreviewUrl,
         ]);
-    }
-
-    private function toRelativePath(string $url): string
-    {
-        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
-            $parts = parse_url($url);
-            $path = $parts['path'] ?? '/';
-            $query = isset($parts['query']) ? '?' . $parts['query'] : '';
-            $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
-
-            return $path . $query . $fragment;
-        }
-
-        return $url;
     }
 
     #[Route('/user/{id}/update-photo', name: 'app_update_user_photo', methods: ['POST'], requirements: ['id' => '\d+'])]
@@ -527,20 +508,18 @@ final class UserController extends AbstractController
             return $this->redirectToRoute('app_edit_user_photo', ['id' => $id]);
         }
 
-        $mime = $file->getMimeType();
-        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        if (!$mime || !in_array($mime, $allowed, true)) {
+        try {
+            $oldAvatarName = $user->getAvatarName();
+            $newAvatarName = $this->avatarStorageService->upload($user, $file);
+        } catch (\InvalidArgumentException $e) {
             $this->addFlash('error', 'Допустимые форматы: JPG, PNG, GIF, WebP.');
             return $this->redirectToRoute('app_edit_user_photo', ['id' => $id]);
         }
 
-        $user->setAvatarFile($file);
+        $user->setAvatarName($newAvatarName);
         $user->setUpdatedAt(new \DateTimeImmutable('now'));
         $entityManager->flush();
-
-        // Сбрасываем ссылку на файл, чтобы при сериализации сессии (текущий пользователь
-        // может быть тем же User) не возникала ошибка "Serialization of File is not allowed"
-        $user->setAvatarFile(null);
+        $this->avatarStorageService->delete($oldAvatarName);
 
         $this->addFlash('success', 'Фото сохранено.');
         return $this->redirectToRoute('app_view_user', ['id' => $id]);
@@ -551,22 +530,31 @@ final class UserController extends AbstractController
         int $id,
         Request $request,
         UserRepository $userRepository,
-        #[Autowire('%private_upload_dir_users%')] string $usersUploadDir,
     ): Response {
         $user = $userRepository->find($id);
         if (!$user || !$user->getAvatarName()) {
             throw $this->createNotFoundException('Фото не найдено.');
         }
 
-        $path = $usersUploadDir . \DIRECTORY_SEPARATOR . $user->getId() . \DIRECTORY_SEPARATOR . basename($user->getAvatarName());
-        if (!is_file($path)) {
+        $storageKey = $user->getAvatarName();
+        if (!$this->avatarStorageService->exists($storageKey)) {
             throw $this->createNotFoundException('Файл не найден.');
         }
 
-        $response = new BinaryFileResponse($path);
+        $object = $this->avatarStorageService->getObject($storageKey);
+        $stream = $object['Body'];
+
+        $response = new StreamedResponse(function () use ($stream) {
+            while (!$stream->eof()) {
+                echo $stream->read(8192);
+                flush();
+            }
+            $stream->close();
+        });
+        $response->headers->set('Content-Type', $object['ContentType'] ?? 'image/jpeg');
         $response->setContentDisposition(
             $request->query->getBoolean('inline', true) ? ResponseHeaderBag::DISPOSITION_INLINE : ResponseHeaderBag::DISPOSITION_ATTACHMENT,
-            basename($user->getAvatarName())
+            basename($storageKey)
         );
 
         return $response;
