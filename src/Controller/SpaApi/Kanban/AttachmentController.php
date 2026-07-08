@@ -24,7 +24,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
-#[Route('/spa/api/cards/{cardId}/attachments')]
+// DISABLED KANBAN MODULE
+// #[Route('/spa/api/cards/{cardId}/attachments')]
 final class AttachmentController extends AbstractController
 {
     private const ALLOWED_CONTEXTS = ['chat', 'info', 'description'];

@@ -26,7 +26,8 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
-#[Route('/spa/api/projects')]
+// DISABLED KANBAN MODULE
+// #[Route('/spa/api/projects')]
 final class ProjectMemberController extends AbstractController
 {
     public function __construct(

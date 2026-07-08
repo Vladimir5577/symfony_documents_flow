@@ -23,7 +23,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
-#[Route('/spa/api/cards/{cardId}/comments')]
+// DISABLED KANBAN MODULE
+// #[Route('/spa/api/cards/{cardId}/comments')]
 final class CommentController extends AbstractController
 {
     private const MAX_COMMENT_BODY_LENGTH = 10000;

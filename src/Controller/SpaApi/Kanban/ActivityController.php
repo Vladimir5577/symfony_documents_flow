@@ -18,7 +18,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
-#[Route('/spa/api/cards/{cardId}/activities')]
+// DISABLED KANBAN MODULE
+// #[Route('/spa/api/cards/{cardId}/activities')]
 final class ActivityController extends AbstractController
 {
     private const PAGE_SIZE = 30;
