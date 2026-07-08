@@ -61,6 +61,11 @@ final class UserSyncEntityListener
             ->getUnitOfWork()
             ->getEntityChangeSet($user);
 
+        if (array_key_exists('deletedAt', $changeSet) && $user->getDeletedAt() !== null) {
+            $this->dispatch($user, 'deleted');
+            return;
+        }
+
         // Проверяем, изменилось ли хотя бы одно из наблюдаемых полей
         foreach (self::WATCHED_FIELDS as $field) {
             if (array_key_exists($field, $changeSet)) {
@@ -73,9 +78,9 @@ final class UserSyncEntityListener
     /**
      * Удаление (hard delete, если случится) — отправляем deleted.
      *
-     * NB: soft-delete через Gedmo перехватывается как UPDATE поля deletedAt,
-     * т.е. пройдёт через postUpdate → WATCHED_FIELDS содержит 'deletedAt'.
-     * preRemove — страховка на случай реального hard delete.
+     * NB: soft-delete через Gedmo перехватывается как UPDATE поля deletedAt
+     * и отправляется как deleted в postUpdate. preRemove — страховка
+     * на случай реального hard delete.
      */
     public function preRemove(User $user, PreRemoveEventArgs $event): void
     {

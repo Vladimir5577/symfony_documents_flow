@@ -18,6 +18,7 @@ framework:
             # Symfony публикует с routing key из stamps (см. UserSyncMessage).
             event_bus:
                 dsn: '%env(RABBITMQ_TRANSPORT_DSN)%'
+                serializer: messenger.transport.symfony_serializer
                 options:
                     exchange:
                         name: events

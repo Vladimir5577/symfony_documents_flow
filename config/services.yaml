@@ -29,6 +29,9 @@ parameters:
     don_snab_api_url: '%env(resolve:DON_SNAB_API_URL)%'
     don_snab_api_key: '%env(resolve:DON_SNAB_API_KEY)%'
 
+    # kanban api
+    kanban_internal_api_key: '%env(resolve:KANBAN_INTERNAL_API_KEY)%'
+
 services:
     # default configuration for services in *this* file
     _defaults:

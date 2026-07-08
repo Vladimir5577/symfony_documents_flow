@@ -20,6 +20,9 @@ security:
         media_cache:
             pattern: ^/media/cache
             security: false
+        internal_api:
+            pattern: ^/api/internal
+            security: false
         refresh_jwt:
             pattern: ^/spa/api/(token/refresh|logout)
             stateless: true
