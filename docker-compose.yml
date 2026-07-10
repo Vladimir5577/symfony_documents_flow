@@ -24,6 +24,12 @@ services:
       - ./docker_env/php/conf.d/grpc.ini:/usr/local/etc/php/conf.d/grpc.ini
       # PHP-FPM pool overrides (max_children и т.д.)
       - ./docker_env/php/fpm.d/zz-pool.conf:/usr/local/etc/php-fpm.d/zz-pool.conf
+      # Named folders for windows performance
+      - php_fpm_vendor:/var/www/html/vendor
+      - php_fpm_cache:/var/www/html/var/cache
+      - php_fpm_logs:/var/www/html/var/log
+      # PHP-FPM pool overrides (max_children и т.д.)
+      - ./docker_env/php/fpm.d/zz-pool.conf:/usr/local/etc/php-fpm.d/zz-pool.conf
     environment:
       PHP_IDE_CONFIG: serverName=don_stroy
       XDEBUG_CONFIG: client_host=host.docker.internal client_port=9003
@@ -97,3 +103,6 @@ volumes:
 ###> doctrine/doctrine-bundle ###
   database_data:
 ###< doctrine/doctrine-bundle ###
+  php_fpm_vendor:
+  php_fpm_cache:
+  php_fpm_logs:

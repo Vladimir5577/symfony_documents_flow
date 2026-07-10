@@ -23,6 +23,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Vich\UploaderBundle\Handler\UploadHandler;
 
 final class PostController extends AbstractController
 {
@@ -250,6 +251,7 @@ final class PostController extends AbstractController
         Request                $request,
         EntityManagerInterface $entityManager,
         ValidatorInterface     $validator,
+        UploadHandler          $uploadHandler,
     ): Response {
         $postTypes = PostType::cases();
 
@@ -375,6 +377,7 @@ final class PostController extends AbstractController
             // Обложка
             if ($coverImage instanceof UploadedFile) {
                 $post->setCoverImageFile($coverImage);
+                $uploadHandler->upload($post, 'coverImageFile');
             }
 
             // Файлы
