@@ -1,4 +1,8 @@
 
+# Локальные docker-переопределения (личные настройки окружения)
+/docker-compose.override.yml
+/docker-compose.override.yaml
+
 ###> symfony/framework-bundle ###
 /.idea
 /.env
