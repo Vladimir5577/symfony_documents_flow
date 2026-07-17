@@ -4,7 +4,7 @@ namespace App\Controller\Api\Chat;
 
 use App\Entity\Organization\Department;
 use App\Repository\User\UserRepository;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
+use App\Service\User\UserAvatarUrlGenerator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
@@ -14,7 +14,7 @@ final class ApiChatUserController extends AbstractController
 {
     public function __construct(
         private readonly UserRepository $userRepo,
-        private readonly CacheManager $imagineCacheManager,
+        private readonly UserAvatarUrlGenerator $avatarUrlGenerator,
     ) {
     }
 
@@ -44,12 +44,7 @@ final class ApiChatUserController extends AbstractController
             'lastname' => $user->getLastname(),
             'firstname' => $user->getFirstname(),
             'patronymic' => $user->getPatronymic(),
-            'avatar' => $user->getAvatarName()
-                ? $this->imagineCacheManager->getBrowserPath(
-                    $user->getId() . '/' . $user->getAvatarName(),
-                    'avatar_medium'
-                )
-                : null,
+            'avatar' => $this->avatarUrlGenerator->getAvatarUrl($user),
             'phone' => $user->getPhone(),
             'email' => $user->getEmail(),
             'profession' => $worker ? $worker->getProfession() : null,

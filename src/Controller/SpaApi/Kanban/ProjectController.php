@@ -27,7 +27,8 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
-#[Route('/spa/api/projects')]
+// DISABLED KANBAN MODULE
+// #[Route('/spa/api/projects')]
 final class ProjectController extends AbstractController
 {
     private const DEFAULT_BOARD_COLUMNS = [

@@ -4,7 +4,10 @@ namespace App\Service\Kanban;
 
 use App\Entity\Kanban\KanbanAttachment;
 use App\Entity\Kanban\KanbanCard;
+use Aws\S3\Exception\S3Exception;
+use Aws\S3\S3Client;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Http\Message\StreamInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 // [KANBAN: валидация типов файла отключена] Раскомментируйте вместе с блоками ниже.
 // use Symfony\Component\HttpKernel\Exception\UnsupportedMediaTypeHttpException;
@@ -27,7 +30,8 @@ class KanbanAttachmentService
 
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly string $kanbanUploadDir,
+        private readonly S3Client $s3,
+        private readonly string $bucket,
     ) {
     }
 
@@ -49,19 +53,19 @@ class KanbanAttachmentService
             $ext = strtolower((string) pathinfo($file->getClientOriginalName(), PATHINFO_EXTENSION)) ?: 'bin';
         }
 
-        // Capture metadata before move() invalidates the temp file
+        // Capture metadata before reading the temp file
         $originalName = $file->getClientOriginalName();
         $contentType = $file->getClientMimeType() ?: 'application/octet-stream';
         $sizeBytes = $file->getSize() ?: 0;
 
         $storageKey = sprintf('%s/%s.%s', $card->getId(), bin2hex(random_bytes(16)), $ext);
-        $targetDir = $this->kanbanUploadDir . '/' . dirname($storageKey);
 
-        if (!is_dir($targetDir)) {
-            mkdir($targetDir, 0o755, true);
-        }
-
-        $file->move($targetDir, basename($storageKey));
+        $this->s3->putObject([
+            'Bucket' => $this->bucket,
+            'Key' => $storageKey,
+            'SourceFile' => $file->getPathname(),
+            'ContentType' => $contentType,
+        ]);
 
         $attachment = new KanbanAttachment();
         $attachment->setFilename($originalName);
@@ -76,9 +80,34 @@ class KanbanAttachmentService
         return $attachment;
     }
 
-    public function getFilePath(KanbanAttachment $attachment): string
+    /**
+     * Возвращает поток (PSR-7 StreamInterface) с содержимым файла из S3.
+     */
+    public function getObjectStream(KanbanAttachment $attachment): StreamInterface
     {
-        return $this->kanbanUploadDir . '/' . $attachment->getStorageKey();
+        $result = $this->s3->getObject([
+            'Bucket' => $this->bucket,
+            'Key' => $attachment->getStorageKey(),
+        ]);
+
+        return $result['Body'];
+    }
+
+    /**
+     * Проверяет, существует ли файл в S3.
+     */
+    public function exists(KanbanAttachment $attachment): bool
+    {
+        try {
+            $this->s3->headObject([
+                'Bucket' => $this->bucket,
+                'Key' => $attachment->getStorageKey(),
+            ]);
+
+            return true;
+        } catch (S3Exception) {
+            return false;
+        }
     }
 
     public function flush(): void
@@ -88,9 +117,13 @@ class KanbanAttachmentService
 
     public function delete(KanbanAttachment $attachment): void
     {
-        $path = $this->getFilePath($attachment);
-        if (file_exists($path)) {
-            unlink($path);
+        try {
+            $this->s3->deleteObject([
+                'Bucket' => $this->bucket,
+                'Key' => $attachment->getStorageKey(),
+            ]);
+        } catch (S3Exception) {
+            // Файл уже удалён или не существует — продолжаем удаление записи из БД.
         }
 
         $this->em->remove($attachment);

@@ -11,38 +11,11 @@ liip_imagine:
         default:
             filesystem:
                 data_root: '%kernel.project_dir%/public'
-        user_avatar:
-            filesystem:
-                data_root: '%private_upload_dir_users%'
-        kanban_attachment:
-            filesystem:
-                data_root: '%private_upload_kanban_dir%'
         post_uploads:
             filesystem:
                 data_root: '%private_upload_dir_posts%'
     data_loader: default
     filter_sets:
-        avatar_thumbnail:
-            data_loader: user_avatar
-            quality: 85
-            filters:
-                thumbnail:
-                    size: [50, 50]
-                    mode: outbound
-        avatar_medium:
-            data_loader: user_avatar
-            quality: 85
-            filters:
-                thumbnail:
-                    size: [200, 200]
-                    mode: outbound
-        kanban_attachment_preview:
-            data_loader: kanban_attachment
-            quality: 85
-            filters:
-                thumbnail:
-                    size: [400, 400]
-                    mode: inbound
         post_image_preview:
             data_loader: post_uploads
             quality: 85

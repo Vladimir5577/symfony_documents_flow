@@ -27,7 +27,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
-#[Route('/spa/api/cards')]
+// DISABLED KANBAN MODULE
+// #[Route('/spa/api/cards')]
 final class CardController extends AbstractController
 {
     private const MAX_ACTIVE_CARDS_PER_BOARD = 300;

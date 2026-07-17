@@ -88,6 +88,24 @@ services:
     networks:
       - project-net
 
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    volumes:
+      - ./../rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      # AMQP — для приложений (Symfony producer, Go consumer)
+      - "${RABBITMQ_PORT:-5672}:5672"
+      # Management UI (web) — http://localhost:15672
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    networks:
+      - project-net
+
 networks:
   project-net:
     name: project-net

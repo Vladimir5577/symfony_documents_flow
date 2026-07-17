@@ -21,7 +21,8 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
-#[Route('/spa/api/projects/{projectId}/boards/{boardId}/columns')]
+// DISABLED KANBAN MODULE
+// #[Route('/spa/api/projects/{projectId}/boards/{boardId}/columns')]
 final class ColumnController extends AbstractController
 {
     public function __construct(

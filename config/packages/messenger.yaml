@@ -12,6 +12,28 @@ framework:
             failed: 'doctrine://default?queue_name=failed'
             # sync: 'sync://'
 
+            # --- Межсервисная шина событий (RabbitMQ) ---
+            # Topic exchange 'events': общий на весь проект.
+            # Каждый микросервис создаёт СВОЮ очередь и биндит нужные routing keys.
+            # Symfony публикует с routing key из stamps (см. UserSyncMessage).
+            event_bus:
+                dsn: '%env(RABBITMQ_TRANSPORT_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    queues:
+                        # Очередь Symfony для чтения собственных событий (если нужно).
+                        # Go-канбан создаст свою очередь 'kanban.user_sync' со своим биндингом.
+                        symfony_events:
+                            binding_keys:
+                                - 'user.#'
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+                    delay: 1000
+
         default_bus: messenger.bus.default
 
         buses:
@@ -22,5 +44,5 @@ framework:
             Symfony\Component\Notifier\Message\ChatMessage: async
             Symfony\Component\Notifier\Message\SmsMessage: async
 
-            # Route your messages to the transports
-            # 'App\Message\YourMessage': async
+            # Межсервисная синхронизация пользователей → RabbitMQ
+            App\Message\UserSyncMessage: event_bus

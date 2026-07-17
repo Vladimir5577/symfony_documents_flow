@@ -10,7 +10,7 @@ parameters:
     # directories
     private_upload_dir: '%env(resolve:PRIVATE_UPLOAD_DIR)%'
 
-    # kanban uploads
+    # kanban uploads (legacy — для миграции; новые файлы идут в MinIO)
     private_upload_kanban_dir: '%env(resolve:PRIVATE_UPLOAD_KANBAN_DIR)%'
 
     # documents
@@ -29,6 +29,9 @@ parameters:
     don_snab_api_url: '%env(resolve:DON_SNAB_API_URL)%'
     don_snab_api_key: '%env(resolve:DON_SNAB_API_KEY)%'
 
+    # kanban api
+    kanban_internal_api_key: '%env(resolve:KANBAN_INTERNAL_API_KEY)%'
+
 services:
     # default configuration for services in *this* file
     _defaults:
@@ -44,9 +47,36 @@ services:
         resource: '../src/DataFixtures/'
         tags: ['doctrine.fixture.orm']
 
+    # S3-клиент для MinIO (файловое хранилище канбан-вложений)
+    Aws\S3\S3Client:
+        arguments:
+            -   version: 'latest'
+                region: '%env(MINIO_REGION)%'
+                endpoint: '%env(MINIO_ENDPOINT)%'
+                use_path_style_endpoint: true
+                credentials:
+                    key: '%env(MINIO_ACCESS_KEY)%'
+                    secret: '%env(MINIO_SECRET_KEY)%'
+
     App\Service\Kanban\KanbanAttachmentService:
         arguments:
-            $kanbanUploadDir: '%private_upload_kanban_dir%'
+            $s3: '@Aws\S3\S3Client'
+            $bucket: '%env(MINIO_KANBAN_BUCKET)%'
+
+    App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator:
+        arguments:
+            $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
+            $minioBucket: '%env(MINIO_KANBAN_BUCKET)%'
+
+    App\Service\User\UserAvatarStorageService:
+        arguments:
+            $s3: '@Aws\S3\S3Client'
+            $bucket: '%env(MINIO_USER_BUCKET)%'
+
+    App\Service\User\UserAvatarUrlGenerator:
+        arguments:
+            $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
+            $minioUserBucket: '%env(MINIO_USER_BUCKET)%'
 
     App\Service\ApiExternal\CitizenAppeal\CitizenAppealApiService:
         arguments:

@@ -13,6 +13,7 @@ use App\Enum\User\WorkerStatus;
 use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Kanban\Project\KanbanProjectRepository;
 use App\Service\Kanban\KanbanService;
+use App\Service\User\UserAvatarStorageService;
 use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,6 +25,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
@@ -38,7 +40,8 @@ final class MeController extends AbstractController
         private readonly RoleHierarchyInterface $roleHierarchy,
         private readonly EntityManagerInterface $entityManager,
         private readonly UserPasswordHasherInterface $passwordHasher,
-        private readonly UserAvatarUrlGenerator $userAvatarUrlGenerator,
+        private readonly UserAvatarStorageService $avatarStorageService,
+        private readonly UserAvatarUrlGenerator $avatarUrlGenerator,
     ) {
     }
 
@@ -78,7 +81,6 @@ final class MeController extends AbstractController
     public function avatar(
         #[CurrentUser] ?User $user,
         Request $request,
-        #[Autowire('%private_upload_dir_users%')] string $usersUploadDir,
     ): Response {
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
@@ -89,20 +91,26 @@ final class MeController extends AbstractController
             throw $this->createNotFoundException('Фото не найдено.');
         }
 
-        $path = $usersUploadDir . \DIRECTORY_SEPARATOR . $user->getId() . \DIRECTORY_SEPARATOR . basename($avatarName);
-        if (!is_file($path)) {
+        if (!$this->avatarStorageService->exists($avatarName)) {
             throw $this->createNotFoundException('Файл не найден.');
         }
 
-        $mimeType = mime_content_type($path) ?: 'image/jpeg';
+        $object = $this->avatarStorageService->getObject($avatarName);
+        $stream = $object['Body'];
 
-        $response = new BinaryFileResponse($path);
-        $response->headers->set('Content-Type', $mimeType);
+        $response = new StreamedResponse(function () use ($stream) {
+            while (!$stream->eof()) {
+                echo $stream->read(8192);
+                flush();
+            }
+            $stream->close();
+        });
+        $response->headers->set('Content-Type', $object['ContentType'] ?? 'image/jpeg');
         $response->setContentDisposition(
             $request->query->getBoolean('inline', true)
                 ? ResponseHeaderBag::DISPOSITION_INLINE
                 : ResponseHeaderBag::DISPOSITION_ATTACHMENT,
-            basename($avatarName)
+            basename($avatarName),
         );
 
         return $response;
@@ -157,16 +165,17 @@ final class MeController extends AbstractController
             $user->setPassword($this->passwordHasher->hashPassword($user, $password));
         }
 
+        $oldAvatarName = null;
         if ($avatar !== null) {
-            $user->setAvatarFile($avatar);
+            $oldAvatarName = $user->getAvatarName();
+            $user->setAvatarName($this->avatarStorageService->upload($user, $avatar));
             $user->setUpdatedAt(new \DateTimeImmutable('now'));
         }
 
         $this->entityManager->flush();
 
         if ($avatar !== null) {
-            // Avoid serializing UploadedFile in authenticated user session.
-            $user->setAvatarFile(null);
+            $this->avatarStorageService->delete($oldAvatarName);
         }
     }
 
@@ -210,7 +219,15 @@ final class MeController extends AbstractController
     private function buildMePayload(User $user): array
     {
         $workerStatus = $user->getWorker()?->getWorkerStatus();
-        $avatarUrl = $this->userAvatarUrlGenerator->getAvatarUrl($user, UserAvatarUrlGenerator::FILTER_MEDIUM);
+        $avatarUrl = null;
+
+        if ($user->getAvatarName() !== null && $user->getAvatarName() !== '') {
+            $avatarVersion = $user->getUpdatedAt()?->getTimestamp() ?? time();
+            $generatedUrl = $this->avatarUrlGenerator->getAvatarUrl($user);
+            if ($generatedUrl !== null) {
+                $avatarUrl = $generatedUrl . '?v=' . $avatarVersion;
+            }
+        }
 
         $folders = $this->entityManager->getRepository(KanbanProjectUserFolder::class)->findBy(
             ['user' => $user],

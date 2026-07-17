@@ -10,12 +10,13 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libfreetype6-dev \
     libzip-dev \
+    librabbitmq-dev \
     git \
     unzip \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install gd pdo pdo_mysql pgsql pdo_pgsql zip \
-    && pecl install xdebug \
-    && docker-php-ext-enable xdebug
+    && pecl install xdebug amqp \
+    && docker-php-ext-enable xdebug amqp
 
 # install libreoffice to convert docx to pdf
 RUN apt-get install libreoffice -y

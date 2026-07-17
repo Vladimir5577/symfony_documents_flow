@@ -225,6 +225,12 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
 
         $em = $this->getEntityManager();
 
+        $filters = $em->getFilters();
+        $softDeleteableEnabled = $filters->isEnabled('softdeleteable');
+        if ($softDeleteableEnabled) {
+            $filters->disable('softdeleteable');
+        }
+
         // Обнулить boss_id, created_by_id, updated_by_id у ссылающихся пользователей
         $this->createQueryBuilder('u')
             ->update()
@@ -252,6 +258,10 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             ->setParameter('user', $user)
             ->getQuery()
             ->execute();
+
+        if ($softDeleteableEnabled) {
+            $filters->enable('softdeleteable');
+        }
 
         $em->remove($user);
         $em->flush();
