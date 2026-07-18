@@ -10,6 +10,7 @@ use App\Entity\Document\DocumentType;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
 use App\Enum\Document\DocumentStatus;
+use App\Enum\Document\SignatureLevel;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Service\Notification\NotificationService;
@@ -44,6 +45,8 @@ final class DocumentCreateService
      *     deadline?: string|null,
      *     executorUserIds?: list<int>,
      *     recipientUserIds?: list<int>,
+     *     signatureLevel?: string|null,
+     *     signers?: list<array{userId: int, order: int}>,
      * } $payload
      */
     public function create(array $payload, User $currentUser): Document
@@ -75,7 +78,17 @@ final class DocumentCreateService
             throw new BadRequestHttpException(SpaApiError::DOCUMENT_NO_RECIPIENTS);
         }
 
+        $signatureLevel = $this->resolveSignatureLevel($payload);
+        $signers = $this->recipientsService->normalizeSigners($payload['signers'] ?? []);
+        if ($signers !== [] && $signatureLevel === null) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_SIGNATURE_LEVEL_REQUIRED);
+        }
+        if ($signatureLevel !== null && $signers === []) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_SIGNERS_REQUIRED);
+        }
+
         $document = new Document();
+        $document->setSignatureLevel($signatureLevel);
         $document->setName($name);
         $description = trim((string) ($payload['description'] ?? ''));
         $document->setDescription($description !== '' ? $description : null);
@@ -101,6 +114,7 @@ final class DocumentCreateService
 
         $this->entityManager->persist($document);
         $this->recipientsService->attachRecipients($document, $executorUserIds, $recipientUserIds);
+        $this->recipientsService->attachSigners($document, $signers);
         $this->entityManager->flush();
 
         if ($wantsPublish) {
@@ -134,6 +148,24 @@ final class DocumentCreateService
         }
 
         return $userOrganization;
+    }
+
+    /**
+     * @param array{signatureLevel?: string|null} $payload
+     */
+    private function resolveSignatureLevel(array $payload): ?SignatureLevel
+    {
+        $value = $payload['signatureLevel'] ?? null;
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $level = is_string($value) ? SignatureLevel::tryFrom($value) : null;
+        if ($level === null) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_INVALID_SIGNATURE_LEVEL);
+        }
+
+        return $level;
     }
 
     /**

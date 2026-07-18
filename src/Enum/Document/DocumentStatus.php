@@ -16,6 +16,8 @@ enum DocumentStatus: string
     case IN_PROGRESS = 'IN_PROGRESS';        // В работе
     case DONE = 'DONE';                      // Выполнен
     case CANCELLED = 'CANCELLED';            // Отменен
+    case ON_SIGNING = 'ON_SIGNING';          // На подписании
+    case SIGNED = 'SIGNED';                  // Подписан
 
     public function getLabel(): string
     {
@@ -30,6 +32,8 @@ enum DocumentStatus: string
             self::IN_PROGRESS => 'В работе',
             self::DONE => 'Выполнен',
             self::CANCELLED => 'Отменен',
+            self::ON_SIGNING => 'На подписании',
+            self::SIGNED => 'Подписан',
         };
     }
 

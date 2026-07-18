@@ -1,0 +1,58 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Проверка подписи{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <h1 class="mb-3">Проверка электронной подписи</h1>
+
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <p class="text-muted">
+                Загрузите PDF-файл документа — система найдёт документ по содержимому (SHA-256)
+                и проверит его подписи. Файл не сохраняется на сервере.
+            </p>
+            <form method="post" enctype="multipart/form-data" class="d-flex align-items-center gap-2">
+                <input type="hidden" name="_token" value="{{ csrf_token('verify_file') }}">
+                <input type="file" name="file" accept="application/pdf,.pdf" class="form-control" style="max-width: 420px" required>
+                <button type="submit" class="btn btn-primary">Проверить</button>
+            </form>
+        </div>
+    </div>
+
+    {% if checked %}
+        {% if document is null %}
+            <div class="alert alert-warning">
+                Документ не найден: файл не совпадает ни с одним подписанным документом
+                (содержимое изменено либо документ не отправлялся на подпись).
+            </div>
+        {% else %}
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Документ найден</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-3">
+                        <dt class="col-sm-3">Название</dt>
+                        <dd class="col-sm-9">{{ document.name }}</dd>
+                        <dt class="col-sm-3">№ документа</dt>
+                        <dd class="col-sm-9">{{ document.id }}</dd>
+                        <dt class="col-sm-3">Статус</dt>
+                        <dd class="col-sm-9">{{ document.status ? document.status.label : '—' }}</dd>
+                        <dt class="col-sm-3">Хэш SHA-256</dt>
+                        <dd class="col-sm-9"><code>{{ document.canonicalFileHash }}</code></dd>
+                    </dl>
+
+                    {% include 'verify/_signatures_table.html.twig' %}
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+{% endblock %}

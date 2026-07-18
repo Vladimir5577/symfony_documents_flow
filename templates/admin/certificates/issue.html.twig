@@ -1,0 +1,72 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Выпуск сертификата{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">Выпуск сертификата</h1>
+        <a href="{{ path('app_admin_certificates') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>К списку сертификатов
+        </a>
+    </div>
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success">{{ message }}</div>
+    {% endfor %}
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger">{{ message }}</div>
+    {% endfor %}
+
+    <div class="row">
+        <div class="col-lg-6 col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Новый сертификат (УНЭП)</h4>
+                </div>
+                <div class="card-content">
+                    <div class="card-body">
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            Файл ключа <strong>.p12</strong> будет скачан <strong>один раз</strong> сразу после выпуска.
+                            Он нигде не хранится на сервере — повторное скачивание невозможно.
+                            При утере файла или пароля сертификат нужно отозвать и выпустить новый.
+                        </div>
+
+                        <form action="{{ path('app_admin_certificates_issue') }}" method="post" class="form">
+                            <input type="hidden" name="_token" value="{{ csrf_token('certificate_issue') }}">
+
+                            <div class="form-group mb-3">
+                                <label for="user_id">Пользователь <span class="text-danger">*</span></label>
+                                <select id="user_id" name="user_id" class="form-select" required>
+                                    <option value="">— выберите пользователя —</option>
+                                    {% for user in users %}
+                                        <option value="{{ user.id }}">
+                                            {{ user.lastname }} {{ user.firstname }} {{ user.patronymic }} ({{ user.login }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-group mb-3">
+                                <label for="p12_password">Пароль контейнера .p12 (минимум 8 символов) <span class="text-danger">*</span></label>
+                                <input type="password" id="p12_password" name="p12_password" class="form-control"
+                                       minlength="8" required autocomplete="new-password">
+                                <small class="text-muted">
+                                    Пароль сообщите владельцу лично. Он не сохраняется и не логируется.
+                                </small>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-download me-1"></i>Выпустить и скачать .p12
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

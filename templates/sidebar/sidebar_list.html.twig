@@ -150,6 +150,13 @@
                     <span>Полигоны</span>
                 </a>
             </li>
+
+            <li class="sidebar-item {% if active_tab == 'admin_certificates' %}active{% endif %}">
+                <a href="{{ path('app_admin_certificates') }}" class="sidebar-link">
+                    <i class="bi bi-shield-lock"></i>
+                    <span>Сертификаты УЦ</span>
+                </a>
+            </li>
         {% endif %}
     {% endif %}
 

@@ -7,6 +7,7 @@ namespace App\Service\SpaApi\Documents;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Document\File;
+use App\Enum\Document\DocumentStatus;
 use App\Repository\Document\FileRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -28,6 +29,8 @@ final class DocumentAttachmentService
 
     public function upload(Document $document, UploadedFile $uploaded): File
     {
+        $this->assertFilesNotLocked($document);
+
         if ($uploaded->getSize() > self::MAX_FILE_SIZE) {
             throw new BadRequestHttpException(SpaApiError::POST_FILE_TOO_LARGE);
         }
@@ -47,6 +50,8 @@ final class DocumentAttachmentService
 
     public function delete(Document $document, File $fileEntity): void
     {
+        $this->assertFilesNotLocked($document);
+
         if ($fileEntity->getDocument()?->getId() !== $document->getId()) {
             throw new BadRequestHttpException(SpaApiError::ATTACHMENT_NOT_FOUND);
         }
@@ -55,6 +60,13 @@ final class DocumentAttachmentService
         $document->setUpdatedAt(new \DateTimeImmutable());
         $this->entityManager->remove($fileEntity);
         $this->entityManager->flush();
+    }
+
+    private function assertFilesNotLocked(Document $document): void
+    {
+        if (in_array($document->getStatus(), [DocumentStatus::ON_SIGNING, DocumentStatus::SIGNED], true)) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_SIGNING_LOCKED);
+        }
     }
 
     public function findForDocument(int $documentId, int $fileId): ?File

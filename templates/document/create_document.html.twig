@@ -164,6 +164,59 @@
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label class="mt-3" for="document_signature_level">Подписание документа</label>
+                                            <select id="document_signature_level" class="form-control" name="signature_level">
+                                                <option value="">Без подписания</option>
+                                                {% for value, label in signature_levels|default({}) %}
+                                                    <option value="{{ value }}" {% if form_data.signature_level|default('') == value %}selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <small class="text-muted">Простая подпись (ПЭП) — подтверждение паролем; усиленная (УНЭП) — файлом ключа .p12</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label class="mt-3" for="document_signer_users">Подписанты</label>
+                                            <div id="document_signer_users_trigger"
+                                                 class="document-users-trigger"
+                                                 data-target-select="document_signer_users"
+                                                 style="cursor: pointer;"
+                                                 title="Нажмите, чтобы выбрать по организациям">
+                                                <select id="document_signer_users" class="form-control" name="signer_user_ids[]" multiple>
+                                                    {% if signer_users is defined and signer_users|length > 0 %}
+                                                        {% for user in signer_users %}
+                                                            <option value="{{ user.id }}" selected>
+                                                                {{ user.lastname }} {{ user.firstname }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
+                                                            </option>
+                                                        {% endfor %}
+                                                    {% endif %}
+                                                </select>
+                                            </div>
+                                            <small class="text-muted">Нажмите на поле или кнопку ниже, чтобы выбрать подписантов по организациям</small>
+                                            <div class="mt-1">
+                                                <button type="button"
+                                                        class="btn btn-outline-secondary btn-sm"
+                                                        data-target-select="document_signer_users"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#organizationUserModal">
+                                                    Выбрать по организациям
+                                                </button>
+                                            </div>
+                                            <div class="mt-2">
+                                                <label class="d-block mb-1">Порядок подписания</label>
+                                                <div class="form-check form-check-inline">
+                                                    <input type="radio" id="signing_mode_parallel" class="form-check-input" name="signing_mode" value="parallel" {% if form_data.signing_mode|default('parallel') != 'sequential' %}checked{% endif %}>
+                                                    <label class="form-check-label" for="signing_mode_parallel">Параллельно (все сразу)</label>
+                                                </div>
+                                                <div class="form-check form-check-inline">
+                                                    <input type="radio" id="signing_mode_sequential" class="form-check-input" name="signing_mode" value="sequential" {% if form_data.signing_mode|default('parallel') == 'sequential' %}checked{% endif %}>
+                                                    <label class="form-check-label" for="signing_mode_sequential">По очереди (в порядке выбора)</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <input type="hidden"
                                            name="status"
                                            id="document_status_input"
@@ -227,7 +280,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const userSelectIds = ['document_executor_users', 'document_recipient_users'];
+            const userSelectIds = ['document_executor_users', 'document_recipient_users', 'document_signer_users'];
             const choicesMap = {};
 
             userSelectIds.forEach(function (selectId) {

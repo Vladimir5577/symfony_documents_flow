@@ -1,0 +1,37 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Проверка подписи документа{% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">Проверка подписи документа</h1>
+        {% if can_download %}
+            <a href="{{ path('app_verify_signed_form', {code: document.verificationCode}) }}" class="btn btn-primary">
+                <i class="bi bi-download me-1"></i>Скачать печатную форму
+            </a>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <dl class="row mb-3">
+                <dt class="col-sm-3">Название</dt>
+                <dd class="col-sm-9">{{ document.name }}</dd>
+                <dt class="col-sm-3">№ документа</dt>
+                <dd class="col-sm-9">{{ document.id }}</dd>
+                <dt class="col-sm-3">Статус</dt>
+                <dd class="col-sm-9">{{ document.status ? document.status.label : '—' }}</dd>
+                <dt class="col-sm-3">Хэш SHA-256</dt>
+                <dd class="col-sm-9"><code>{{ document.canonicalFileHash }}</code></dd>
+                <dt class="col-sm-3">Код проверки</dt>
+                <dd class="col-sm-9"><code>{{ document.verificationCode }}</code></dd>
+            </dl>
+
+            {% include 'verify/_signatures_table.html.twig' %}
+        </div>
+    </div>
+{% endblock %}

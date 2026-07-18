@@ -11,14 +11,19 @@ use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
 use App\Enum\Document\DocumentRecipientRole;
 use App\Enum\Document\DocumentStatus;
+use App\Enum\Document\SignatureLevel;
 use App\Repository\Document\DocumentHistoryRepository;
 use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
+use App\Service\Document\Signature\SignatureVerificationService;
+use App\Service\Document\Signature\SigningService;
 use App\Service\Notification\NotificationService;
+use App\Service\SpaApi\Documents\DocumentRecipientsService;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -53,6 +58,7 @@ final class DocumentController extends AbstractController
         EntityManagerInterface $entityManager,
         ValidatorInterface     $validator,
         NotificationService    $notificationService,
+        DocumentRecipientsService $recipientsService,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -113,6 +119,13 @@ final class DocumentController extends AbstractController
             if ($recipientUsers === [] && !empty($formData['recipient_user_ids'])) {
                 $recipientUsers = $userRepository->findByIds((array) $formData['recipient_user_ids']);
             }
+            $signerUsers = [];
+            if (!empty($formData['signer_user_ids'])) {
+                $signerIds = array_map('intval', (array) $formData['signer_user_ids']);
+                $signerUsers = $userRepository->findByIds($signerIds);
+                // сохранить порядок выбора (важно при последовательном подписании)
+                usort($signerUsers, static fn ($a, $b) => array_search($a->getId(), $signerIds, true) <=> array_search($b->getId(), $signerIds, true));
+            }
             return $this->render('document/create_document.html.twig', [
                 'active_tab' => 'new_document',
                 'document_type' => $documentType,
@@ -121,6 +134,8 @@ final class DocumentController extends AbstractController
                 'document_statuses' => DocumentStatus::getCreationChoices(),
                 'executor_users' => $executorUsers,
                 'recipient_users' => $recipientUsers,
+                'signer_users' => $signerUsers,
+                'signature_levels' => SignatureLevel::getChoices(),
                 'is_admin' => $isAdmin,
                 'user_organization' => $userOrganization,
             ]);
@@ -187,6 +202,34 @@ final class DocumentController extends AbstractController
         }
 
         $document->setCreatedBy($currentUser);
+
+        // Подписание (Фаза 4, T4.3): уровень подписи + подписанты (валидация связки как в T2.3)
+        $signatureLevelStr = trim((string)($formData['signature_level'] ?? ''));
+        $signatureLevel = null;
+        if ($signatureLevelStr !== '') {
+            $signatureLevel = SignatureLevel::tryFrom($signatureLevelStr);
+            if ($signatureLevel === null) {
+                $this->addFlash('error', 'Неверный уровень подписи.');
+                return $renderForm($formData);
+            }
+        }
+        $signerUserIds = $recipientsService->normalizeUserIds((array)($formData['signer_user_ids'] ?? []));
+        if ($signerUserIds !== [] && $signatureLevel === null) {
+            $this->addFlash('error', 'Для назначения подписантов выберите уровень подписи.');
+            return $renderForm($formData);
+        }
+        if ($signatureLevel !== null && $signerUserIds === []) {
+            $this->addFlash('error', 'Для документа с подписанием добавьте хотя бы одного подписанта.');
+            return $renderForm($formData);
+        }
+        $sequentialSigning = ($formData['signing_mode'] ?? 'parallel') === 'sequential';
+        $signers = [];
+        foreach ($signerUserIds as $index => $signerUserId) {
+            // по очереди → порядок = порядок выбора; параллельно → у всех 1
+            $signers[] = ['userId' => $signerUserId, 'order' => $sequentialSigning ? $index + 1 : 1];
+        }
+        $signers = $recipientsService->normalizeSigners($signers);
+        $document->setSignatureLevel($signatureLevel);
 
         // Обрабатываем deadline
         $deadlineStr = trim((string)($formData['deadline'] ?? ''));
@@ -328,6 +371,15 @@ final class DocumentController extends AbstractController
 
                 $document->addUserRecipient($recipient);
                 $entityManager->persist($recipient);
+            }
+        }
+
+        if ($signers !== []) {
+            try {
+                $recipientsService->attachSigners($document, $signers);
+            } catch (BadRequestHttpException) {
+                $this->addFlash('error', 'Один из выбранных подписантов не найден или неактивен.');
+                return $renderForm($formData);
             }
         }
 
@@ -582,6 +634,8 @@ final class DocumentController extends AbstractController
         int $id,
         EntityManagerInterface $entityManager,
         DocumentRepository $documentRepository,
+        SigningService $signingService,
+        SignatureVerificationService $verificationService,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -641,11 +695,17 @@ final class DocumentController extends AbstractController
             'executorRecipients' => $executorRecipients,
             'recipientRecipients' => $recipientRecipients,
             'organizationPath' => $organizationPath,
+            'signing' => $this->buildSigningView($document, $currentUser, $signingService, $verificationService),
         ]);
     }
 
     #[Route('/view_outgoing_document/{id}', name: 'app_view_outgoing_document', requirements: ['id' => '\d+'])]
-    public function viewOutgoingDocument(int $id, DocumentRepository $documentRepository): Response
+    public function viewOutgoingDocument(
+        int $id,
+        DocumentRepository $documentRepository,
+        SigningService $signingService,
+        SignatureVerificationService $verificationService,
+    ): Response
     {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
@@ -683,6 +743,7 @@ final class DocumentController extends AbstractController
             'executorRecipients' => $executorRecipients,
             'recipientRecipients' => $recipientRecipients,
             'organizationPath' => $organizationPath,
+            'signing' => $this->buildSigningView($document, $currentUser, $signingService, $verificationService),
         ]);
     }
 
@@ -747,6 +808,7 @@ final class DocumentController extends AbstractController
             'status' => $document->getStatus()?->value,
             'deadline' => $document->getDeadline()?->format('Y-m-d'),
             'is_published' => $document->isPublished(),
+            'signature_level' => $document->getSignatureLevel()?->value,
         ];
 
         $renderForm = function (array $data = []) use ($document, $organizationsWithChildren, $initialFormData, $isAdmin, $userOrganization): Response {
@@ -757,6 +819,7 @@ final class DocumentController extends AbstractController
                 'organizations' => $organizationsWithChildren,
                 'form_data' => $formData,
                 'document_statuses' => DocumentStatus::getCreationChoices(),
+                'signature_levels' => SignatureLevel::getChoices(),
                 'is_admin' => $isAdmin,
                 'user_organization' => $userOrganization,
             ]);
@@ -825,8 +888,34 @@ final class DocumentController extends AbstractController
             }
         }
 
+        // Уровень подписи (Фаза 4, T4.3): менять нельзя после отправки на подпись
+        $signatureLevelStr = trim((string)($formData['signature_level'] ?? ''));
+        $signatureLevel = $signatureLevelStr !== '' ? SignatureLevel::tryFrom($signatureLevelStr) : null;
+        if ($signatureLevelStr !== '' && $signatureLevel === null) {
+            $this->addFlash('error', 'Неверный уровень подписи.');
+            return $renderForm($formData);
+        }
+        if ($signatureLevel !== $document->getSignatureLevel()) {
+            if (in_array($document->getStatus(), [DocumentStatus::ON_SIGNING, DocumentStatus::SIGNED], true)) {
+                $this->addFlash('error', 'Нельзя менять уровень подписи после отправки документа на подпись.');
+                return $renderForm($formData);
+            }
+            $hasSigners = false;
+            foreach ($document->getUserRecipients() as $recipient) {
+                if ($recipient->getRole() === DocumentRecipientRole::SIGNER) {
+                    $hasSigners = true;
+                    break;
+                }
+            }
+            if ($signatureLevel === null && $hasSigners) {
+                $this->addFlash('error', 'Нельзя убрать подписание: у документа назначены подписанты. Сначала удалите их на странице «Редактировать участников».');
+                return $renderForm($formData);
+            }
+        }
+
         // Обновление полей документа
         $wasAlreadyPublished = $document->isPublished();
+        $document->setSignatureLevel($signatureLevel);
         $document->setName($name);
         $document->setDescription(trim((string)($formData['description'] ?? '')));
         $document->setOrganizationCreator($organization);
@@ -874,7 +963,7 @@ final class DocumentController extends AbstractController
             $currentRecipientKeys = [];
             foreach ($document->getUserRecipients() as $recipient) {
                 $user = $recipient->getUser();
-                if ($user) {
+                if ($user && $recipient->getRole() !== DocumentRecipientRole::SIGNER) {
                     $currentRecipientKeys[] = $user->getId() . '|' . $recipient->getRole()->value;
                 }
             }
@@ -883,10 +972,14 @@ final class DocumentController extends AbstractController
             $recipientsChanged = ($newRecipientKeys !== $currentRecipientKeys);
 
             if ($recipientsChanged) {
+                // подписантов (SIGNER) не трогаем — они управляются отдельно
                 foreach ($document->getUserRecipients()->toArray() as $recipient) {
+                    if ($recipient->getRole() === DocumentRecipientRole::SIGNER) {
+                        continue;
+                    }
+                    $document->getUserRecipients()->removeElement($recipient);
                     $entityManager->remove($recipient);
                 }
-                $document->getUserRecipients()->clear();
                 $entityManager->flush();
 
                 foreach ($executorUserIds as $userId) {
@@ -1016,6 +1109,7 @@ final class DocumentController extends AbstractController
         OrganizationRepository $organizationRepository,
         UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
+        DocumentRecipientsService $recipientsService,
     ): Response {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
@@ -1057,8 +1151,13 @@ final class DocumentController extends AbstractController
 
         $currentExecutorRecipientIds = [];
         $currentRecipientRecipientIds = [];
+        $currentSignerRecipients = [];
         foreach ($document->getUserRecipients() as $recipient) {
             if ($recipient->getUser()) {
+                if ($recipient->getRole() === DocumentRecipientRole::SIGNER) {
+                    $currentSignerRecipients[] = $recipient;
+                    continue;
+                }
                 if ($recipient->getRole() === DocumentRecipientRole::RECIPIENT) {
                     $currentRecipientRecipientIds[] = $recipient->getUser()->getId();
                     continue;
@@ -1066,9 +1165,15 @@ final class DocumentController extends AbstractController
                 $currentExecutorRecipientIds[] = $recipient->getUser()->getId();
             }
         }
+        usort($currentSignerRecipients, static fn (DocumentUserRecipient $a, DocumentUserRecipient $b): int =>
+            ($a->getSigningOrder() ?? 1) <=> ($b->getSigningOrder() ?? 1));
+        $currentSignerIds = array_map(static fn (DocumentUserRecipient $r): int => $r->getUser()->getId(), $currentSignerRecipients);
+        $currentSignerOrders = array_map(static fn (DocumentUserRecipient $r): int => $r->getSigningOrder() ?? 1, $currentSignerRecipients);
         $initialFormData = [
             'executor_user_ids' => $currentExecutorRecipientIds,
             'recipient_user_ids' => $currentRecipientRecipientIds,
+            'signer_user_ids' => $currentSignerIds,
+            'signing_mode' => count(array_unique($currentSignerOrders)) > 1 ? 'sequential' : 'parallel',
         ];
         $initialExecutorUsers = $userRepository->findByIds($currentExecutorRecipientIds);
         $initialRecipientUsers = $userRepository->findByIds($currentRecipientRecipientIds);
@@ -1083,6 +1188,13 @@ final class DocumentController extends AbstractController
             if ($recipientUsers === [] && !empty($formData['recipient_user_ids'])) {
                 $recipientUsers = $userRepository->findByIds((array) $formData['recipient_user_ids']);
             }
+            $signerUsers = [];
+            if (!empty($formData['signer_user_ids'])) {
+                $signerIds = array_map('intval', (array) $formData['signer_user_ids']);
+                $signerUsers = $userRepository->findByIds($signerIds);
+                // сохранить порядок выбора (важно при последовательном подписании)
+                usort($signerUsers, static fn ($a, $b) => array_search($a->getId(), $signerIds, true) <=> array_search($b->getId(), $signerIds, true));
+            }
             return $this->render('document/edit_recipients_outgoing_document.html.twig', [
                 'active_tab' => 'outgoing_documents',
                 'document' => $document,
@@ -1090,6 +1202,7 @@ final class DocumentController extends AbstractController
                 'form_data' => $formData,
                 'executor_users' => $executorUsers,
                 'recipient_users' => $recipientUsers,
+                'signer_users' => $signerUsers,
             ]);
         };
 
@@ -1130,7 +1243,7 @@ final class DocumentController extends AbstractController
         $currentRecipientKeys = [];
         foreach ($document->getUserRecipients() as $recipient) {
             $user = $recipient->getUser();
-            if ($user) {
+            if ($user && $recipient->getRole() !== DocumentRecipientRole::SIGNER) {
                 $currentRecipientKeys[] = $user->getId() . '|' . $recipient->getRole()->value;
             }
         }
@@ -1138,10 +1251,14 @@ final class DocumentController extends AbstractController
         $recipientsChanged = ($newRecipientKeys !== $currentRecipientKeys);
 
         if ($recipientsChanged) {
+            // подписантов (SIGNER) не трогаем — они заменяются ниже через replaceSigners
             foreach ($document->getUserRecipients()->toArray() as $recipient) {
+                if ($recipient->getRole() === DocumentRecipientRole::SIGNER) {
+                    continue;
+                }
+                $document->getUserRecipients()->removeElement($recipient);
                 $entityManager->remove($recipient);
             }
-            $document->getUserRecipients()->clear();
             $entityManager->flush();
 
             foreach ($executorUserIds as $userId) {
@@ -1172,6 +1289,29 @@ final class DocumentController extends AbstractController
                 $entityManager->persist($recipient);
             }
             $document->setUpdatedAt(new \DateTimeImmutable());
+        }
+
+        // Подписанты (Фаза 4, T4.3): та же валидация и замена, что в SPA (T2.3)
+        $signerUserIds = $recipientsService->normalizeUserIds((array)($formData['signer_user_ids'] ?? []));
+        if ($signerUserIds !== [] && $document->getSignatureLevel() === null) {
+            $this->addFlash('error', 'Для назначения подписантов сначала выберите уровень подписи в форме редактирования документа.');
+            return $renderForm($formData);
+        }
+        $sequentialSigning = ($formData['signing_mode'] ?? 'parallel') === 'sequential';
+        $signers = [];
+        foreach ($signerUserIds as $index => $signerUserId) {
+            // по очереди → порядок = порядок выбора; параллельно → у всех 1
+            $signers[] = ['userId' => $signerUserId, 'order' => $sequentialSigning ? $index + 1 : 1];
+        }
+        try {
+            $recipientsService->replaceSigners($document, $recipientsService->normalizeSigners($signers));
+        } catch (BadRequestHttpException $e) {
+            $this->addFlash('error', match ($e->getMessage()) {
+                'document_signing_locked' => 'Нельзя менять подписантов после отправки документа на подпись.',
+                'document_signer_not_found' => 'Один из выбранных подписантов не найден или неактивен.',
+                default => 'Некорректный список подписантов.',
+            });
+            return $renderForm($formData);
         }
 
         $entityManager->flush();
@@ -1487,6 +1627,86 @@ final class DocumentController extends AbstractController
     }
 
     /**
+     * Данные блока «Подписи» для карточки документа (Фаза 4, T4.2).
+     * Подписанты берутся напрямую из userRecipients по роли SIGNER
+     * (SPA-квирк splitRecipientsByRole сюда не относится).
+     *
+     * @return array{rows: list<array<string, mixed>>, sequential: bool, canSendToSigning: bool, canSign: bool, canDecline: bool}|null
+     */
+    private function buildSigningView(
+        Document $document,
+        User $user,
+        SigningService $signingService,
+        SignatureVerificationService $verificationService,
+    ): ?array {
+        $signers = [];
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getRole() === DocumentRecipientRole::SIGNER && $recipient->getUser() !== null) {
+                $signers[] = $recipient;
+            }
+        }
+
+        if ($signers === [] && $document->getSignatureLevel() === null) {
+            return null;
+        }
+
+        usort($signers, static fn (DocumentUserRecipient $a, DocumentUserRecipient $b): int =>
+            ($a->getSigningOrder() ?? 1) <=> ($b->getSigningOrder() ?? 1));
+
+        $signatureBySignerId = [];
+        foreach ($document->getSignatures() as $signature) {
+            $signerId = $signature->getSigner()?->getId();
+            if ($signerId !== null) {
+                $signatureBySignerId[$signerId] = $signature;
+            }
+        }
+
+        $verificationBySignatureId = [];
+        if ($signatureBySignerId !== []) {
+            foreach ($verificationService->verifyDocument($document)->signatures as $result) {
+                $verificationBySignatureId[$result->signature->getId()] = $result;
+            }
+        }
+
+        $pendingOrders = [];
+        foreach ($signers as $recipient) {
+            if (!isset($signatureBySignerId[$recipient->getUser()->getId()])) {
+                $pendingOrders[] = $recipient->getSigningOrder() ?? 1;
+            }
+        }
+        $currentOrder = $pendingOrders === [] ? null : min($pendingOrders);
+        $onSigning = $document->getStatus() === DocumentStatus::ON_SIGNING;
+
+        $rows = [];
+        $orders = [];
+        $isSigner = false;
+        foreach ($signers as $recipient) {
+            $signerUser = $recipient->getUser();
+            $signature = $signatureBySignerId[$signerUser->getId()] ?? null;
+            $orders[] = $recipient->getSigningOrder() ?? 1;
+            if ($signerUser->getId() === $user->getId()) {
+                $isSigner = true;
+            }
+            $rows[] = [
+                'recipient' => $recipient,
+                'signature' => $signature,
+                'verification' => $signature !== null ? ($verificationBySignatureId[$signature->getId()] ?? null) : null,
+                'isTurn' => $onSigning && $signature === null && ($recipient->getSigningOrder() ?? 1) === $currentOrder,
+            ];
+        }
+
+        return [
+            'rows' => $rows,
+            'sequential' => count(array_unique($orders)) > 1,
+            'canSendToSigning' => $signers !== []
+                && $document->getStatus() === DocumentStatus::APPROVED
+                && $document->getCreatedBy()?->getId() === $user->getId(),
+            'canSign' => $signingService->canSignNow($document, $user),
+            'canDecline' => $onSigning && $isSigner && !isset($signatureBySignerId[$user->getId()]),
+        ];
+    }
+
+    /**
      * @param DocumentUserRecipient[] $recipients
      * @return array{0: DocumentUserRecipient[], 1: DocumentUserRecipient[]}
      */
@@ -1496,6 +1716,10 @@ final class DocumentController extends AbstractController
         $recipientRecipients = [];
 
         foreach ($recipients as $recipient) {
+            if ($recipient->getRole() === DocumentRecipientRole::SIGNER) {
+                continue; // подписанты отображаются в блоке «Подписи»
+            }
+
             if ($recipient->getRole() === DocumentRecipientRole::RECIPIENT) {
                 $recipientRecipients[] = $recipient;
                 continue;

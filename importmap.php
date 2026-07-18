@@ -25,4 +25,12 @@ return [
     '@hotwired/turbo' => [
         'version' => '7.3.0',
     ],
+    'node-forge' => [
+        'version' => '1.4.0',
+    ],
+    // УНЭП-подписание в браузере (Фаза 4): подключается точечно на странице подписания
+    'document_sign' => [
+        'path' => './assets/js/document_sign.js',
+        'entrypoint' => true,
+    ],
 ];

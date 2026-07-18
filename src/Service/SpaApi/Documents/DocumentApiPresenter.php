@@ -18,9 +18,16 @@ use App\Entity\User\User;
 use App\Enum\Document\DocumentRecipientRole;
 use App\Enum\Document\DocumentStatus;
 use App\Enum\Organization\OrganizationType;
+use App\Service\Document\Signature\SigningService;
 
 final class DocumentApiPresenter
 {
+    public function __construct(
+        // nullable, чтобы юнит-тесты могли делать new DocumentApiPresenter(); в DI всегда внедрён
+        private readonly ?SigningService $signingService = null,
+    ) {
+    }
+
     public function presentType(DocumentType $type): array
     {
         return [
@@ -84,11 +91,11 @@ final class DocumentApiPresenter
         return OrganizationType::ORGANIZATION;
     }
 
-    public function presentDocumentListItem(Document $document): array
+    public function presentDocumentListItem(Document $document, ?User $currentUser = null): array
     {
         $status = $document->getStatus();
 
-        return [
+        return array_merge([
             'id' => $document->getId(),
             'name' => $document->getName(),
             'description' => $document->getDescription(),
@@ -103,10 +110,72 @@ final class DocumentApiPresenter
                 : null,
             'organization' => $this->presentOrganizationBrief($document->getOrganizationCreator()),
             'createdBy' => $this->presentUserBrief($document->getCreatedBy()),
+        ], $this->presentSignatureState($document, $currentUser));
+    }
+
+    /**
+     * Блок подписания карточки документа (T3.2): состав подписантов и права
+     * текущего пользователя. Логика «его очередь» — в SigningService::canSignNow.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentSignatureState(Document $document, ?User $currentUser): array
+    {
+        $signatureByUserId = [];
+        foreach ($document->getSignatures() as $signature) {
+            $signerId = $signature->getSigner()?->getId();
+            if ($signerId !== null) {
+                $signatureByUserId[$signerId] = $signature;
+            }
+        }
+
+        $signers = [];
+        $currentUserIsSigner = false;
+        $currentUserSigned = false;
+        foreach ($document->getUserRecipients() as $recipient) {
+            $user = $recipient->getUser();
+            if ($recipient->getRole() !== DocumentRecipientRole::SIGNER || $user === null) {
+                continue;
+            }
+
+            $signature = $signatureByUserId[$user->getId()] ?? null;
+            $signers[] = [
+                'userId' => $user->getId(),
+                'fullName' => $this->formatUserFullName($user),
+                'signingOrder' => $recipient->getSigningOrder(),
+                'signed' => $signature !== null,
+                'signedAt' => $signature?->getSignedAt()?->format(\DateTimeInterface::ATOM),
+            ];
+
+            if ($currentUser !== null && $user->getId() === $currentUser->getId()) {
+                $currentUserIsSigner = true;
+                $currentUserSigned = $signature !== null;
+            }
+        }
+
+        usort($signers, static fn (array $a, array $b): int => [$a['signingOrder'] ?? 1, $a['userId']] <=> [$b['signingOrder'] ?? 1, $b['userId']]);
+
+        $status = $document->getStatus();
+
+        return [
+            'signatureLevel' => $document->getSignatureLevel()?->value,
+            'signers' => $signers,
+            'allSigned' => $signers !== []
+                && array_all($signers, static fn (array $s): bool => $s['signed']),
+            'canSendToSigning' => $currentUser !== null
+                && $status === DocumentStatus::APPROVED
+                && $signers !== []
+                && $document->getCreatedBy()?->getId() === $currentUser->getId(),
+            'canSign' => $currentUser !== null
+                && $this->signingService?->canSignNow($document, $currentUser) === true,
+            'canDeclineSigning' => $currentUser !== null
+                && $status === DocumentStatus::ON_SIGNING
+                && $currentUserIsSigner
+                && !$currentUserSigned,
         ];
     }
 
-    public function presentIncomingListItem(DocumentUserRecipient $recipient): array
+    public function presentIncomingListItem(DocumentUserRecipient $recipient, ?User $currentUser = null): array
     {
         $document = $recipient->getDocument();
         $status = $recipient->getStatus();
@@ -116,7 +185,7 @@ final class DocumentApiPresenter
             'recipientStatus' => $status?->value,
             'recipientStatusLabel' => $status?->getLabel(),
             'role' => $recipient->getRole()->value,
-            'document' => $document !== null ? $this->presentDocumentListItem($document) : null,
+            'document' => $document !== null ? $this->presentDocumentListItem($document, $currentUser) : null,
         ];
     }
 

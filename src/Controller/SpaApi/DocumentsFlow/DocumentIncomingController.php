@@ -69,7 +69,7 @@ final class DocumentIncomingController extends AbstractController
 
         return $this->json([
             'items' => array_map(
-                fn ($recipient) => $this->presenter->presentIncomingListItem($recipient),
+                fn ($recipient) => $this->presenter->presentIncomingListItem($recipient, $user),
                 $pagination['recipients'],
             ),
             'pagination' => $this->presenter->presentPagination(
@@ -109,7 +109,7 @@ final class DocumentIncomingController extends AbstractController
         $userRecipient = $this->accessService->findUserRecipient($document, $user);
 
         return $this->json([
-            'document' => $this->presenter->presentDocumentListItem($document),
+            'document' => $this->presenter->presentDocumentListItem($document, $user),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
             'files' => $this->attachmentService->presentFilesForDocument($document),
@@ -166,7 +166,7 @@ final class DocumentIncomingController extends AbstractController
         $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
 
         return $this->json([
-            'document' => $this->presenter->presentDocumentListItem($document),
+            'document' => $this->presenter->presentDocumentListItem($document, $user),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
             'files' => $this->attachmentService->presentFilesForDocument($document),

@@ -82,6 +82,18 @@
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group mt-3">
+                                            <label for="document_signature_level">Подписание документа</label>
+                                            <select id="document_signature_level" class="form-control" name="signature_level">
+                                                <option value="">Без подписания</option>
+                                                {% for value, label in signature_levels|default({}) %}
+                                                    <option value="{{ value }}" {% if form_data.signature_level|default('') == value %}selected{% endif %}>{{ label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <small class="text-muted">Подписанты назначаются на странице «Редактировать участников». После отправки на подпись уровень менять нельзя.</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-group mt-3">
                                             <label for="document_deadline">Срок выполнения</label>
                                             <input type="date" id="document_deadline" class="form-control" name="deadline" value="{{ form_data.deadline|default('') }}" min="{{ "now"|date("Y-m-d") }}">
                                         </div>

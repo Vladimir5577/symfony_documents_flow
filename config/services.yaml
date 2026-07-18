@@ -18,9 +18,17 @@ parameters:
     private_upload_dir_documents_updated: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_UPDATED)%'
     private_upload_dir_documents_templates: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_TEMPLATES)%'
     private_upload_dir_documents_comments: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_COMMENTS)%'
+    private_upload_dir_documents_canonical: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_CANONICAL)%'
+    private_upload_dir_documents_signed_forms: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_SIGNED_FORMS)%'
     private_upload_dir_posts: '%env(resolve:PRIVATE_UPLOAD_DIR_POSTS)%'
     private_upload_dir_users: '%env(resolve:PRIVATE_UPLOAD_DIR_USERS)%'
     private_upload_dir_chats: '%env(resolve:PRIVATE_UPLOAD_DIR_CHATS)%'
+
+    # e-signature: внутренний УЦ
+    ca_root_cert_path: '%env(resolve:CA_ROOT_CERT_PATH)%'
+    ca_root_key_path: '%env(resolve:CA_ROOT_KEY_PATH)%'
+    ca_root_key_passphrase: '%env(CA_ROOT_KEY_PASSPHRASE)%'
+    app_public_url: '%env(APP_PUBLIC_URL)%'
 
     # onlyoffice url
     onlyoffice_document_server_url: '%env(resolve:ONLYOFFICE_DOCUMENT_SERVER_URL)%'
@@ -67,6 +75,18 @@ services:
         arguments:
             $apiUrl: '%don_snab_api_url%'
             $apiKey: '%don_snab_api_key%'
+
+    App\Service\Document\Signature\CertificateAuthorityService:
+        arguments:
+            $caRootCertPath: '%ca_root_cert_path%'
+            $caRootKeyPath: '%ca_root_key_path%'
+            $caRootKeyPassphrase: '%ca_root_key_passphrase%'
+
+    App\Command\CaInitCommand:
+        arguments:
+            $caRootCertPath: '%ca_root_cert_path%'
+            $caRootKeyPath: '%ca_root_key_path%'
+            $caRootKeyPassphrase: '%ca_root_key_passphrase%'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

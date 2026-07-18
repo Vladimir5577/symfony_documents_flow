@@ -1,0 +1,125 @@
+{# Блок «Подписи» на карточке документа (Фаза 4, T4.2).
+   Ожидает: document, signing = {rows, sequential, canSendToSigning, canSign, canDecline}
+   rows[]: {recipient, signature, verification, isTurn} #}
+{% if signing is not null %}
+    <div class="card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h4 class="card-title mb-0">Подписи</h4>
+            <div>
+                {% if document.signatureLevel %}
+                    <span class="badge bg-light-primary text-primary">{{ document.signatureLevel.label }}</span>
+                {% endif %}
+                {% if signing.sequential %}
+                    <span class="badge bg-light-secondary text-secondary">Подписание по очереди</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            {% if signing.rows|length == 0 %}
+                <p class="text-muted mb-0">Подписанты не назначены.</p>
+            {% else %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless table-hover mb-0">
+                        <thead>
+                        <tr>
+                            {% if signing.sequential %}<th>№</th>{% endif %}
+                            <th>ФИО</th>
+                            <th>Статус</th>
+                            <th>Уровень</th>
+                            <th>Дата подписи</th>
+                            <th>Сертификат</th>
+                            <th>Проверка</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in signing.rows %}
+                            {% set signerUser = row.recipient.user %}
+                            <tr>
+                                {% if signing.sequential %}
+                                    <td>{{ row.recipient.signingOrder ?? 1 }}</td>
+                                {% endif %}
+                                <td>
+                                    {{ signerUser.lastname }} {{ signerUser.firstname }}{% if signerUser.patronymic %} {{ signerUser.patronymic }}{% endif %}
+                                </td>
+                                <td>
+                                    {% if row.signature %}
+                                        <span class="badge bg-success">Подписал</span>
+                                    {% elseif row.isTurn %}
+                                        <span class="badge bg-warning text-dark">Его очередь</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Ожидает</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ row.signature ? row.signature.level.label : (document.signatureLevel ? document.signatureLevel.label : '—') }}</td>
+                                <td>{{ row.signature and row.signature.signedAt ? row.signature.signedAt|date('d.m.Y H:i') : '—' }}</td>
+                                <td>
+                                    {% if row.signature and row.signature.certificate %}
+                                        <code>{{ row.signature.certificate.serialNumber }}</code>
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.verification %}
+                                        {% if row.verification.valid %}
+                                            <span class="badge bg-success" title="Подпись действительна{{ row.verification.details.revokedAfterSigning is defined ? '. Сертификат отозван после подписания' }}">✓ Действительна</span>
+                                        {% else %}
+                                            <span class="badge bg-danger" title="{{ row.verification.reason }}">✕ Недействительна</span>
+                                        {% endif %}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+
+            {% if signing.canSendToSigning or signing.canSign or signing.canDecline %}
+                <div class="d-flex gap-2 flex-wrap mt-3">
+                    {% if signing.canSendToSigning %}
+                        <form method="post" action="{{ path('app_document_send_to_signing', {id: document.id}) }}" class="d-inline">
+                            <input type="hidden" name="_token" value="{{ csrf_token('send_to_signing_' ~ document.id) }}">
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-pen me-1"></i>Отправить на подпись</button>
+                        </form>
+                    {% endif %}
+                    {% if signing.canSign %}
+                        <a href="{{ path('app_document_signing_page', {id: document.id}) }}" class="btn btn-success">
+                            <i class="bi bi-vector-pen me-1"></i>Подписать
+                        </a>
+                    {% endif %}
+                    {% if signing.canDecline %}
+                        <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#declineSigningModal">
+                            Отказаться подписывать
+                        </button>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if signing.canDecline %}
+        <div class="modal fade" id="declineSigningModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <form method="post" action="{{ path('app_document_decline_signing', {id: document.id}) }}" class="modal-content">
+                    <input type="hidden" name="_token" value="{{ csrf_token('decline_signing_' ~ document.id) }}">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Отказ от подписания</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted">Отказ переведёт документ в статус «Отклонен». Причина обязательна.</p>
+                        <label for="decline_signing_reason" class="form-label">Причина отказа</label>
+                        <textarea id="decline_signing_reason" name="reason" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-danger">Отказаться</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    {% endif %}
+{% endif %}

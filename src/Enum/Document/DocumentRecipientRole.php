@@ -8,12 +8,14 @@ enum DocumentRecipientRole: string
 {
     case EXECUTOR = 'executor';
     case RECIPIENT = 'recipient';
+    case SIGNER = 'signer';
 
     public function getLabel(): string
     {
         return match ($this) {
             self::EXECUTOR => 'Исполнитель',
             self::RECIPIENT => 'Получатель',
+            self::SIGNER => 'Подписант',
         };
     }
 

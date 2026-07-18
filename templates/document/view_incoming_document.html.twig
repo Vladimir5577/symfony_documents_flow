@@ -66,6 +66,10 @@
                                 <span class="badge bg-success">{{ status.label }}</span>
                             {% elseif status.value == 'CANCELLED' %}
                                 <span class="badge bg-dark">{{ status.label }}</span>
+                            {% elseif status.value == 'ON_SIGNING' %}
+                                <span class="badge bg-warning text-dark">{{ status.label }}</span>
+                            {% elseif status.value == 'SIGNED' %}
+                                <span class="badge bg-success">{{ status.label }}</span>
                             {% else %}
                                 <span class="badge bg-secondary">{{ status.label }}</span>
                             {% endif %}
@@ -108,9 +112,6 @@
 {#                                        Просмотр#}
 {#                                    </a>#}
 {#                                {% endif %}#}
-{#                                <a href="{{ path('app_sign_and_save_document', {id: document.id, type: 'original', inline: 1}) }}" class="btn btn-sm btn-outline-success" target="_blank" rel="noopener">#}
-{#                                    Подписать#}
-{#                                </a>#}
 {#                            </div>#}
 {#                        </dd>#}
                     {% endif %}
@@ -323,6 +324,8 @@
                 {% endif %}
             </div>
         </div>
+
+        {% include 'document/partials/_signatures_block.html.twig' %}
 
         {% include 'document/partials/_comments.html.twig' %}
     </section>

@@ -5,6 +5,7 @@ namespace App\Entity\Document;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
 use App\Enum\Document\DocumentStatus;
+use App\Enum\Document\SignatureLevel;
 use App\Repository\Document\DocumentRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -63,6 +64,24 @@ class Document
     #[ORM\Column(name: 'is_published', type: Types::BOOLEAN, options: ['default' => false])]
     private bool $isPublished = false;
 
+    #[ORM\Column(name: 'signature_level', type: Types::STRING, length: 32, nullable: true, enumType: SignatureLevel::class)]
+    private ?SignatureLevel $signatureLevel = null;
+
+    #[ORM\Column(name: 'canonical_file', length: 255, nullable: true)]
+    private ?string $canonicalFile = null;
+
+    #[ORM\Column(name: 'canonical_file_hash', length: 64, nullable: true)]
+    private ?string $canonicalFileHash = null;
+
+    #[ORM\Column(name: 'signed_form_file', length: 255, nullable: true)]
+    private ?string $signedFormFile = null;
+
+    #[ORM\Column(name: 'verification_code', length: 16, unique: true, nullable: true)]
+    private ?string $verificationCode = null;
+
+    #[ORM\Column(name: 'sent_to_signing_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $sentToSigningAt = null;
+
     // created_at
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
@@ -95,11 +114,16 @@ class Document
     #[ORM\OrderBy(['createdAt' => 'ASC'])]
     private Collection $comments;
 
+    /** @var Collection<int, DocumentSignature> */
+    #[ORM\OneToMany(mappedBy: 'document', targetEntity: DocumentSignature::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    private Collection $signatures;
+
     public function __construct()
     {
         $this->userRecipients = new ArrayCollection();
         $this->files = new ArrayCollection();
         $this->comments = new ArrayCollection();
+        $this->signatures = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -344,6 +368,103 @@ class Document
     public function removeComment(DocumentComment $comment): static
     {
         $this->comments->removeElement($comment);
+
+        return $this;
+    }
+
+    public function getSignatureLevel(): ?SignatureLevel
+    {
+        return $this->signatureLevel;
+    }
+
+    public function setSignatureLevel(?SignatureLevel $signatureLevel): static
+    {
+        $this->signatureLevel = $signatureLevel;
+
+        return $this;
+    }
+
+    public function getCanonicalFile(): ?string
+    {
+        return $this->canonicalFile;
+    }
+
+    public function setCanonicalFile(?string $canonicalFile): static
+    {
+        $this->canonicalFile = $canonicalFile;
+
+        return $this;
+    }
+
+    public function getCanonicalFileHash(): ?string
+    {
+        return $this->canonicalFileHash;
+    }
+
+    public function setCanonicalFileHash(?string $canonicalFileHash): static
+    {
+        $this->canonicalFileHash = $canonicalFileHash;
+
+        return $this;
+    }
+
+    public function getSignedFormFile(): ?string
+    {
+        return $this->signedFormFile;
+    }
+
+    public function setSignedFormFile(?string $signedFormFile): static
+    {
+        $this->signedFormFile = $signedFormFile;
+
+        return $this;
+    }
+
+    public function getVerificationCode(): ?string
+    {
+        return $this->verificationCode;
+    }
+
+    public function setVerificationCode(?string $verificationCode): static
+    {
+        $this->verificationCode = $verificationCode;
+
+        return $this;
+    }
+
+    public function getSentToSigningAt(): ?\DateTimeImmutable
+    {
+        return $this->sentToSigningAt;
+    }
+
+    public function setSentToSigningAt(?\DateTimeImmutable $sentToSigningAt): static
+    {
+        $this->sentToSigningAt = $sentToSigningAt;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, DocumentSignature>
+     */
+    public function getSignatures(): Collection
+    {
+        return $this->signatures;
+    }
+
+    public function addSignature(DocumentSignature $signature): static
+    {
+        if (!$this->signatures->contains($signature)) {
+            $this->signatures->add($signature);
+            $signature->setDocument($this);
+        }
+
+        return $this;
+    }
+
+    public function removeSignature(DocumentSignature $signature): static
+    {
+        $this->signatures->removeElement($signature);
 
         return $this;
     }

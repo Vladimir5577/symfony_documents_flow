@@ -1,6 +1,20 @@
 monolog:
     channels:
         - deprecation # Deprecations are logged in the dedicated "deprecation" channel when it exists
+        - ca # Аудит внутреннего УЦ: выпуск/отзыв сертификатов (пароли не логируются)
+        - signature # События подписания: signed/declined/verification_failed, JSON-контекст для мониторинга
+    handlers:
+        ca_audit:
+            type: stream
+            path: "%kernel.logs_dir%/ca.log"
+            level: info
+            channels: [ca]
+        signature_events:
+            type: stream
+            path: "%kernel.logs_dir%/signature.log"
+            level: info
+            channels: [signature]
+            formatter: monolog.formatter.json
 
 when@dev:
     monolog:

@@ -33,6 +33,9 @@ class DocumentUserRecipient
     #[ORM\Column(enumType: DocumentStatus::class)]
     private ?DocumentStatus $status = null;
 
+    #[ORM\Column(name: 'signing_order', type: Types::INTEGER, nullable: true)]
+    private ?int $signingOrder = null;
+
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
@@ -90,6 +93,18 @@ class DocumentUserRecipient
     public function setStatus(DocumentStatus $status): static
     {
         $this->status = $status;
+
+        return $this;
+    }
+
+    public function getSigningOrder(): ?int
+    {
+        return $this->signingOrder;
+    }
+
+    public function setSigningOrder(?int $signingOrder): static
+    {
+        $this->signingOrder = $signingOrder;
 
         return $this;
     }

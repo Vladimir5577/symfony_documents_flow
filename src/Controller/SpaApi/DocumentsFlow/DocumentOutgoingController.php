@@ -20,6 +20,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
@@ -63,7 +64,7 @@ final class DocumentOutgoingController extends AbstractController
 
         return $this->json([
             'items' => array_map(
-                fn ($document) => $this->presenter->presentDocumentListItem($document),
+                fn ($document) => $this->presenter->presentDocumentListItem($document, $user),
                 $pagination['documents'],
             ),
             'pagination' => $this->presenter->presentPagination(
@@ -99,7 +100,7 @@ final class DocumentOutgoingController extends AbstractController
         $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
 
         return $this->json([
-            'document' => $this->presenter->presentDocumentListItem($document),
+            'document' => $this->presenter->presentDocumentListItem($document, $user),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
             'files' => $this->attachmentService->presentFilesForDocument($document),
@@ -132,7 +133,7 @@ final class DocumentOutgoingController extends AbstractController
             return $this->jsonError($e);
         }
 
-        return $this->json(['document' => $this->presenter->presentDocumentListItem($document)]);
+        return $this->json(['document' => $this->presenter->presentDocumentListItem($document, $user)]);
     }
 
     #[Route('/outgoing/{id}/publish', name: 'spa_api_documents_flow_outgoing_publish', requirements: ['id' => '\d+'], methods: ['POST'])]
@@ -153,7 +154,7 @@ final class DocumentOutgoingController extends AbstractController
             return $this->jsonError($e);
         }
 
-        return $this->json(['document' => $this->presenter->presentDocumentListItem($document)]);
+        return $this->json(['document' => $this->presenter->presentDocumentListItem($document, $user)]);
     }
 
     #[Route('/outgoing/{id}/recipients', name: 'spa_api_documents_flow_outgoing_recipients', requirements: ['id' => '\d+'], methods: ['PUT'])]
@@ -186,6 +187,21 @@ final class DocumentOutgoingController extends AbstractController
             $recipientUserIds = [];
         }
 
+        if (array_key_exists('signers', $payload)) {
+            try {
+                $signers = $this->recipientsService->normalizeSigners($payload['signers']);
+                if ($signers !== [] && $document->getSignatureLevel() === null) {
+                    throw new BadRequestHttpException(SpaApiError::DOCUMENT_SIGNATURE_LEVEL_REQUIRED);
+                }
+                if ($signers === [] && $document->getSignatureLevel() !== null) {
+                    throw new BadRequestHttpException(SpaApiError::DOCUMENT_SIGNERS_REQUIRED);
+                }
+                $this->recipientsService->replaceSigners($document, $signers);
+            } catch (HttpException $e) {
+                return $this->jsonError($e);
+            }
+        }
+
         $this->recipientsService->replaceRecipients(
             $document,
             $this->recipientsService->normalizeUserIds($executorUserIds),
@@ -196,7 +212,7 @@ final class DocumentOutgoingController extends AbstractController
         $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
 
         return $this->json([
-            'document' => $this->presenter->presentDocumentListItem($document),
+            'document' => $this->presenter->presentDocumentListItem($document, $user),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
             'permissions' => $this->accessService->presentPermissions($document, $user),

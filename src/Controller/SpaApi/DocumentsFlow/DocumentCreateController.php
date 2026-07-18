@@ -49,7 +49,7 @@ final class DocumentCreateController extends AbstractController
         }
 
         return $this->json([
-            'document' => $this->presenter->presentDocumentListItem($document),
+            'document' => $this->presenter->presentDocumentListItem($document, $user),
         ], Response::HTTP_CREATED);
     }
 }

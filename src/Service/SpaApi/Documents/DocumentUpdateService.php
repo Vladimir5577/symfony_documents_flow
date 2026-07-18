@@ -8,7 +8,9 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
+use App\Enum\Document\DocumentRecipientRole;
 use App\Enum\Document\DocumentStatus;
+use App\Enum\Document\SignatureLevel;
 use App\Repository\Organization\OrganizationRepository;
 use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -25,6 +27,7 @@ final class DocumentUpdateService
         private readonly EntityManagerInterface $entityManager,
         private readonly ValidatorInterface $validator,
         private readonly DocumentAccessService $accessService,
+        private readonly DocumentRecipientsService $recipientsService,
         private readonly NotificationService $notificationService,
         private readonly UrlGeneratorInterface $urlGenerator,
     ) {
@@ -38,6 +41,8 @@ final class DocumentUpdateService
      *     status?: string,
      *     deadline?: string|null,
      *     isPublished?: bool,
+     *     signatureLevel?: string|null,
+     *     signers?: list<array{userId: int, order: int}>,
      * } $payload
      */
     public function update(Document $document, array $payload, User $currentUser): Document
@@ -87,6 +92,29 @@ final class DocumentUpdateService
             throw new BadRequestHttpException(SpaApiError::DOCUMENT_NO_RECIPIENTS);
         }
 
+        $signatureLevel = array_key_exists('signatureLevel', $payload)
+            ? $this->resolveSignatureLevel($payload)
+            : $document->getSignatureLevel();
+        $signers = array_key_exists('signers', $payload)
+            ? $this->recipientsService->normalizeSigners($payload['signers'])
+            : $this->currentSigners($document);
+
+        if ($signers !== [] && $signatureLevel === null) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_SIGNATURE_LEVEL_REQUIRED);
+        }
+        if ($signatureLevel !== null && $signers === []) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_SIGNERS_REQUIRED);
+        }
+
+        if ($signatureLevel !== $document->getSignatureLevel()) {
+            $this->recipientsService->assertSigningNotLocked($document);
+            $document->setSignatureLevel($signatureLevel);
+        }
+        if (array_key_exists('signers', $payload)) {
+            // no-op при неизменном составе; при изменении в ON_SIGNING/SIGNED бросает document_signing_locked
+            $this->recipientsService->replaceSigners($document, $signers);
+        }
+
         $wasAlreadyPublished = $document->isPublished();
 
         $description = trim((string) ($payload['description'] ?? $document->getDescription() ?? ''));
@@ -110,6 +138,40 @@ final class DocumentUpdateService
         }
 
         return $document;
+    }
+
+    /**
+     * @param array{signatureLevel?: string|null} $payload
+     */
+    private function resolveSignatureLevel(array $payload): ?SignatureLevel
+    {
+        $value = $payload['signatureLevel'] ?? null;
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $level = is_string($value) ? SignatureLevel::tryFrom($value) : null;
+        if ($level === null) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_INVALID_SIGNATURE_LEVEL);
+        }
+
+        return $level;
+    }
+
+    /**
+     * @return list<array{userId: int, order: int}>
+     */
+    private function currentSigners(Document $document): array
+    {
+        $signers = [];
+        foreach ($document->getUserRecipients() as $recipient) {
+            $user = $recipient->getUser();
+            if ($recipient->getRole() === DocumentRecipientRole::SIGNER && $user !== null) {
+                $signers[] = ['userId' => (int) $user->getId(), 'order' => (int) $recipient->getSigningOrder()];
+            }
+        }
+
+        return $signers;
     }
 
     private function notifyPublished(Document $document): void
