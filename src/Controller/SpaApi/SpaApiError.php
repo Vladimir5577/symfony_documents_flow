@@ -79,4 +79,13 @@ final class SpaApiError
     public const FOLDER_NOT_FOUND = 'folder_not_found';
     public const FOLDER_NAME_REQUIRED = 'folder_name_required';
     public const FOLDER_NAME_TOO_LONG = 'folder_name_too_long';
+    public const PURCHASE_NOT_FOUND = 'purchase_not_found';
+    public const PURCHASE_INVALID_STATUS = 'purchase_invalid_status';
+    public const PURCHASE_COMMENT_REQUIRED = 'purchase_comment_required';
+    public const PURCHASE_ITEMS_REQUIRED = 'purchase_items_required';
+    public const PURCHASE_TITLE_REQUIRED = 'purchase_title_required';
+    public const PURCHASE_INVALID_PRIORITY = 'purchase_invalid_priority';
+    public const PURCHASE_INVALID_ITEM = 'purchase_invalid_item';
+    public const PURCHASE_INVALID_DUE_DATE = 'purchase_invalid_due_date';
+    public const PURCHASE_FILE_NOT_FOUND = 'purchase_file_not_found';
 }

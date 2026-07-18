@@ -211,6 +211,26 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
     }
 
     /**
+     * Пользователи с заданной ролью (опционально — только в конкретном узле организации).
+     *
+     * @return User[]
+     */
+    public function findByRoleName(string $roleName, ?AbstractOrganization $organization = null): array
+    {
+        $qb = $this->createQueryBuilder('u')
+            ->join('u.userRoles', 'ur')
+            ->join('ur.role', 'r')
+            ->where('r.name = :roleName')
+            ->setParameter('roleName', $roleName);
+
+        if ($organization !== null) {
+            $qb->andWhere('u.organization = :org')->setParameter('org', $organization);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+
+    /**
      * Soft delete: обнуляет ссылки на пользователя у подчинённых, затем устанавливает deleted_at.
      * onDelete: SET NULL не срабатывает при soft delete (нет реального DELETE в БД).
      *

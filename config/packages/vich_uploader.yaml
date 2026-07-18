@@ -53,6 +53,16 @@ vich_uploader:
                     property: comment.document.id
             delete_on_remove: true
             delete_on_update: true
+        purchase_files:
+            uri_prefix: /uploads/purchases
+            upload_destination: '%private_upload_dir_purchases%'
+            namer: Vich\UploaderBundle\Naming\SmartUniqueNamer
+            directory_namer:
+                service: Vich\UploaderBundle\Naming\PropertyDirectoryNamer
+                options:
+                    property: purchaseRequest.id
+            delete_on_remove: true
+            delete_on_update: true
         chat_files:
             uri_prefix: /uploads/chats
             upload_destination: '%private_upload_dir_chats%'
