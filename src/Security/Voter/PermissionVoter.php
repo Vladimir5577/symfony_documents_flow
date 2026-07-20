@@ -21,7 +21,7 @@ final class PermissionVoter extends Voter
     protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
     {
         $user = $token->getUser();
-        if (!$user instanceof User) {
+        if (!$user instanceof User || !method_exists($user, 'hasPermission')) {
             return false;
         }
 
