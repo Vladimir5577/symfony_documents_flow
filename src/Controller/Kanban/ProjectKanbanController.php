@@ -36,6 +36,14 @@ final class ProjectKanbanController extends AbstractController
     ) {
     }
 
+    #[Route('/legacy_notice', name: 'app_kanban_legacy_notice')]
+    public function legacyNotice(): Response
+    {
+        return $this->render('kanban/legacy_notice.html.twig', [
+            'active_tab' => 'kanban_boards',
+        ]);
+    }
+
     #[Route('/personal_projects', name: 'app_kanban_personal_projects')]
     public function personalProjects(): Response
     {
