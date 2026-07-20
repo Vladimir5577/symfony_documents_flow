@@ -1,0 +1,140 @@
+{
+  "permissions": [
+    {
+      "configure": ".*",
+      "read": ".*",
+      "user": "guest",
+      "vhost": "/",
+      "write": ".*"
+    }
+  ],
+  "bindings": [
+    {
+      "arguments": {},
+      "destination": "kanban.user_sync",
+      "destination_type": "queue",
+      "routing_key": "user.deleted",
+      "source": "events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "kanban.user_sync",
+      "destination_type": "queue",
+      "routing_key": "user.upserted",
+      "source": "events",
+      "vhost": "/"
+    },
+    {
+      "source": "events.dlx",
+      "vhost": "/",
+      "destination": "dead.events",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "arguments": {
+        "x-queue-type": "classic"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "kanban.user_sync",
+      "type": "classic",
+      "vhost": "/"
+    },
+    {
+      "name": "dead.events",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic"
+      }
+    }
+  ],
+  "parameters": [],
+  "policies": [
+    {
+      "name": "dlx-go",
+      "vhost": "/",
+      "apply-to": "queues",
+      "priority": 1,
+      "pattern": "^(kanban|notification)\\.",
+      "definition": {
+        "dead-letter-exchange": "events.dlx"
+      }
+    },
+    {
+      "name": "dead-cap",
+      "vhost": "/",
+      "apply-to": "queues",
+      "priority": 1,
+      "pattern": "^dead\\.events$",
+      "definition": {
+        "max-length": 100000,
+        "message-ttl": 1209600000
+      }
+    }
+  ],
+  "rabbitmq_version": "4.3.2",
+  "rabbit_version": "4.3.2",
+  "exchanges": [
+    {
+      "arguments": {},
+      "auto_delete": false,
+      "durable": true,
+      "name": "amq.rabbitmq.log",
+      "type": "topic",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "auto_delete": false,
+      "durable": true,
+      "name": "events",
+      "type": "topic",
+      "vhost": "/"
+    },
+    {
+      "name": "events.dlx",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "vhosts": [
+    {
+      "limits": [],
+      "metadata": {
+        "description": "Default virtual host",
+        "tags": [],
+        "default_queue_type": "classic"
+      },
+      "name": "/"
+    }
+  ],
+  "users": [
+    {
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "limits": {},
+      "name": "guest",
+      "password_hash": "mtoN8vGdq3dEJeg/6u03Q6FdQ3n7URwE97HWeyvl015yLs8i",
+      "tags": [
+        "administrator"
+      ]
+    }
+  ],
+  "global_parameters": [
+    {
+      "name": "cluster_tags",
+      "value": []
+    }
+  ],
+  "topic_permissions": []
+}

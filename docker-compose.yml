@@ -98,6 +98,10 @@ services:
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
     volumes:
       - ./../rabbitmq_data:/var/lib/rabbitmq
+      # Топология и политики как код: DLX + отстойник dead.events, чтобы
+      # отравленные сообщения не терялись, а копились для разбора.
+      - ./docker_env/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./docker_env/rabbitmq/20-load-definitions.conf:/etc/rabbitmq/conf.d/20-load-definitions.conf:ro
     ports:
       # AMQP — для приложений (Symfony producer, Go consumer)
       - "${RABBITMQ_PORT:-5672}:5672"
