@@ -73,6 +73,7 @@ final class SpaApiError
     public const POST_FILE_TOO_LARGE = 'post_file_too_large';
     public const POST_FILE_UPLOAD_ERROR = 'post_file_upload_error';
     public const POST_COMMENT_EMPTY = 'post_comment_empty';
+    public const POST_ACKNOWLEDGMENT_NOT_REQUIRED = 'post_acknowledgment_not_required';
     public const POST_FILE_NOT_FOUND = 'post_file_not_found';
     public const POST_FILE_NOT_FOUND_ON_DISK = 'post_file_not_found_on_disk';
     public const NOTIFICATION_NOT_FOUND = 'notification_not_found';

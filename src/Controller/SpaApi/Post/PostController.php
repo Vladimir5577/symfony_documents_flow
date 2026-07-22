@@ -54,9 +54,15 @@ final class PostController extends AbstractController
 
         $page = max(1, $request->query->getInt('page', 1));
         $limit = max(1, min(100, $request->query->getInt('page_size', 10)));
+        $unacknowledgedOnly = $request->query->getBoolean('unacknowledged_only');
 
-        $posts = $this->postRepository->findActivePaginated($type, $page, $limit);
-        $total = $this->postRepository->countActive($type);
+        if ($unacknowledgedOnly) {
+            $type = null;
+        }
+
+        $posts = $this->postRepository->findActiveForSpaPaginated($type, $page, $limit, $user, $unacknowledgedOnly);
+        $total = $this->postRepository->countActiveForSpa($type, $user, $unacknowledgedOnly);
+        $unacknowledgedCount = $this->postRepository->countActiveForSpa(null, $user, true);
 
         $postIds = array_map(static fn (Post $p): ?int => $p->getId(), $posts);
         $commentCounts = $this->commentRepository->countGroupedByPosts($postIds);
@@ -75,6 +81,7 @@ final class PostController extends AbstractController
             'filters' => [
                 'typeChoices' => $this->formatter->formatTypeChoices(),
             ],
+            'unacknowledgedCount' => $unacknowledgedCount,
         ]);
     }
 
@@ -173,6 +180,10 @@ final class PostController extends AbstractController
         $post = $this->postRepository->find($id);
         if ($post === null || $post->getDeletedAt() !== null) {
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        if (!$post->isRequiredAcknowledgment()) {
+            return $this->json(['error' => SpaApiError::POST_ACKNOWLEDGMENT_NOT_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
         $status = $this->statusRepository->findOneBy(['post' => $post, 'user' => $user]);

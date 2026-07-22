@@ -15,15 +15,18 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Vich\UploaderBundle\Handler\UploadHandler;
 
 final class PostCreateService
 {
     private const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
     private const ALLOWED_COVER_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+    private const COVER_FIELD = 'coverImageFile';
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ValidatorInterface $validator,
+        private readonly UploadHandler $uploadHandler,
     ) {
     }
 
@@ -83,6 +86,9 @@ final class PostCreateService
 
             if ($coverImage instanceof UploadedFile) {
                 $post->setCoverImageFile($coverImage);
+                // Vich слушает preUpdate; после первого flush сущность уже managed и без
+                // изменения mapped-полей Doctrine не вызывает preUpdate — загружаем явно.
+                $this->uploadHandler->upload($post, self::COVER_FIELD);
             }
 
             foreach ($uploadedFiles as $uploadedFile) {
@@ -99,6 +105,7 @@ final class PostCreateService
 
             $this->entityManager->flush();
             $connection->commit();
+            $this->entityManager->refresh($post);
         } catch (\Throwable $e) {
             $connection->rollBack();
             throw $e;
