@@ -470,8 +470,13 @@ final class AnalyticsReportController extends AbstractController
             throw $this->createNotFoundException('Отчёт не найден.');
         }
 
-        $canEdit = $isAdmin
-            || $report->getStatus() !== AnalyticsReportStatus::Confirmed;
+        $isDraft = $report->getStatus() !== AnalyticsReportStatus::Confirmed;
+        $isOwner = $report->getCreatedBy()?->getId() === $user->getId();
+        // Подтверждённый отчёт правит только админ; автор — только свой черновик,
+        // включая смену периода (напр. отчёт за прошедший период).
+        $canChangePeriod = $isAdmin || ($isOwner && $isDraft);
+
+        $canEdit = $isAdmin || $isDraft;
 
         if ($request->isMethod('POST')) {
             if (!$canEdit) {
@@ -518,7 +523,7 @@ final class AnalyticsReportController extends AbstractController
 
         $availablePeriods = [];
         $takenPeriodIds = [];
-        if ($isAdmin && $report->getBoard()) {
+        if ($canChangePeriod && $report->getBoard()) {
             $availablePeriods = $reportService->getAvailablePeriodsForBoard($report->getBoard());
 
             $takenReports = $em->getRepository(AnalyticsReport::class)->findBy([
@@ -538,7 +543,7 @@ final class AnalyticsReportController extends AbstractController
             'currentValues' => $currentValues,
             'currentNotes' => $currentNotes,
             'canEdit' => $canEdit,
-            'isAdmin' => $isAdmin,
+            'isAdmin' => $canChangePeriod,
             'availablePeriods' => $availablePeriods,
             'takenPeriodIds' => $takenPeriodIds,
             'versionMetricsFlat' => $this->buildVersionMetricsFlat($report, $metricTreeBuilder),
@@ -559,13 +564,15 @@ final class AnalyticsReportController extends AbstractController
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
-        if (!$this->hasAnalyticsFullAccess()) {
-            throw $this->createAccessDeniedException('Изменение периода доступно только администратору или аналитику.');
-        }
-
         $report = $reportService->findByIdForUser($id, $user);
         if (!$report) {
             throw $this->createNotFoundException('Отчёт не найден.');
+        }
+
+        // findByIdForUser уже пускает не-админа только к своим отчётам;
+        // но менять период подтверждённого отчёта вправе лишь админ/аналитик.
+        if (!$this->hasAnalyticsFullAccess() && $report->getStatus() === AnalyticsReportStatus::Confirmed) {
+            throw $this->createAccessDeniedException('Изменение периода подтверждённого отчёта доступно только администратору или аналитику.');
         }
 
         if (!$csrf->isTokenValid(new CsrfToken('report_period_change_' . $id, $request->request->getString('_token')))) {
