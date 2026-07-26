@@ -55,8 +55,21 @@ final class PostController extends AbstractController
         $page = max(1, $request->query->getInt('page', 1));
         $limit = max(1, min(100, $request->query->getInt('page_size', 10)));
 
-        $posts = $this->postRepository->findActivePaginated($type, $page, $limit);
-        $total = $this->postRepository->countActive($type);
+        // is_active=0 — неопубликованные (MANAGER: свои; ADMIN: все). По умолчанию только активные.
+        $isActiveParam = $request->query->get('is_active');
+        $isActive = !\in_array((string) $isActiveParam, ['0', 'false'], true);
+        $author = null;
+        if (!$isActive) {
+            if (!$this->isGranted('ROLE_MANAGER')) {
+                return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+            }
+            if (!$this->isGranted('ROLE_ADMIN')) {
+                $author = $user;
+            }
+        }
+
+        $posts = $this->postRepository->findActivePaginated($type, $page, $limit, $isActive, $author);
+        $total = $this->postRepository->countActive($type, $isActive, $author);
 
         $postIds = array_map(static fn (Post $p): ?int => $p->getId(), $posts);
         $commentCounts = $this->commentRepository->countGroupedByPosts($postIds);
@@ -111,6 +124,53 @@ final class PostController extends AbstractController
         }
 
         return $this->json($this->formatter->formatPostDetail($post), Response::HTTP_CREATED);
+    }
+
+    #[Route('/{id}/active', name: 'spa_api_posts_set_active', requirements: ['id' => '\d+'], methods: ['PATCH'])]
+    #[IsGranted('ROLE_MANAGER')]
+    public function setActive(int $id, Request $request, #[CurrentUser] User $user): JsonResponse
+    {
+        $post = $this->postRepository->find($id);
+        if ($post === null) {
+            return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        if (!$this->isGranted('ROLE_ADMIN') && $post->getAuthor()?->getId() !== $user->getId()) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!\is_array($payload) || !\array_key_exists('is_active', $payload)) {
+            return $this->json(['error' => SpaApiError::UPDATE_FIELDS_REQUIRED], Response::HTTP_BAD_REQUEST);
+        }
+
+        $post->setIsActive((bool) $payload['is_active']);
+        $this->entityManager->flush();
+
+        return $this->json([
+            'success' => true,
+            'isActive' => $post->isActive(),
+        ]);
+    }
+
+    #[Route('/{id}', name: 'spa_api_posts_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
+    #[IsGranted('ROLE_MANAGER')]
+    public function delete(int $id, #[CurrentUser] User $user): JsonResponse
+    {
+        $post = $this->postRepository->find($id);
+        if ($post === null) {
+            return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        if (!$this->isGranted('ROLE_ADMIN') && $post->getAuthor()?->getId() !== $user->getId()) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        // SoftDeleteable: remove → UPDATE deleted_at (не DELETE из БД)
+        $this->entityManager->remove($post);
+        $this->entityManager->flush();
+
+        return $this->json(['success' => true]);
     }
 
     #[Route('/{id}/comments', name: 'spa_api_posts_comments_list', requirements: ['id' => '\d+'], methods: ['GET'])]
