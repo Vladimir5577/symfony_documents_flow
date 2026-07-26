@@ -13,6 +13,7 @@ use App\Entity\Purchase\PurchaseRequestItem;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\User\UserRole;
+use App\Service\SpaApi\Documents\DocumentApiPresenter;
 use Symfony\Bundle\SecurityBundle\Security;
 
 /**
@@ -22,6 +23,7 @@ final class PurchaseApiPresenter
 {
     public function __construct(
         private readonly Security $security,
+        private readonly DocumentApiPresenter $documentPresenter,
     ) {}
 
     /**
@@ -42,6 +44,10 @@ final class PurchaseApiPresenter
             'organization' => [
                 'id' => $request->getOrganization()?->getId(),
                 'name' => $request->getOrganization()?->getName(),
+                // Полный путь «Организация / Филиал / Департамент» — как во входящих документах
+                'path' => $request->getOrganization() !== null
+                    ? $this->documentPresenter->buildOrganizationPath($request->getOrganization())
+                    : null,
             ],
             'category' => $request->getCategory() !== null
                 ? ['id' => $request->getCategory()->getId(), 'name' => $request->getCategory()->getName()]
