@@ -23,12 +23,31 @@ final class PurchaseNotificationPublisher
         private readonly UserRepository $userRepository,
     ) {}
 
-    /** Подана (или повторно подана) на согласование — директорам. */
+    /** Подана (или повторно подана) на рассмотрение — отделу закупок. */
     public function notifySubmitted(PurchaseRequest $request, User $actor, bool $resubmitted): void
     {
-        $this->publish('submitted', $request, $actor, $this->directors(), [
+        $this->publish('submitted', $request, $actor, $this->purchaseDepartment(), [
             'resubmitted' => $resubmitted,
         ]);
+    }
+
+    /** Отдел закупок направил заявку директору. */
+    public function notifySentToDirector(PurchaseRequest $request, User $actor): void
+    {
+        $this->publish('sent_to_director', $request, $actor, $this->directors());
+    }
+
+    /** Приглашение согласанта — приглашённому. */
+    public function notifyApproverInvited(PurchaseRequest $request, User $actor, User $invited): void
+    {
+        $this->publish('approver_invited', $request, $actor, [$invited]);
+    }
+
+    /** Согласант подтвердил — пригласившему (или отделу закупок, если пригласивший удалён). */
+    public function notifyApproverConfirmed(PurchaseRequest $request, User $approver, ?User $invitedBy): void
+    {
+        $recipients = $invitedBy !== null ? [$invitedBy] : $this->purchaseDepartment();
+        $this->publish('approver_confirmed', $request, $approver, $recipients);
     }
 
     /** Согласована — менеджерам департамента и отделу закупок. */

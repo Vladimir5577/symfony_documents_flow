@@ -3,6 +3,7 @@
 namespace App\Repository\Purchase;
 
 use App\Entity\Purchase\PurchaseRequest;
+use App\Entity\Purchase\PurchaseRequestApprover;
 use App\Enum\Purchase\PurchaseStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
@@ -21,18 +22,26 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     /**
      * Список с фильтрами и пагинацией. Срочные — сверху, затем новые.
      *
-     * @param list<int>|null            $organizationIds ограничение по узлам организаций (null = без ограничения)
+     * @param int|null                  $createdById    только заявки этого автора (null = без ограничения)
      * @param list<PurchaseStatus>|null $statuses        ограничение по статусам (null = все)
+     * @param int|null                  $approverUserId  только заявки, где пользователь — приглашённый согласант
      * @return array{items: list<PurchaseRequest>, total: int}
      */
     public function findByFilters(
-        ?array $organizationIds,
+        ?int $createdById,
         ?array $statuses,
         ?string $search,
         int $page,
         int $pageSize,
+        ?int $approverUserId = null,
     ): array {
-        $qb = $this->createFilteredQueryBuilder($organizationIds, $statuses, $search);
+        $qb = $this->createFilteredQueryBuilder($createdById, $statuses, $search);
+
+        if ($approverUserId !== null) {
+            $qb->join(PurchaseRequestApprover::class, 'ap', 'WITH', 'ap.purchaseRequest = pr')
+                ->andWhere('ap.user = :approverUserId')
+                ->setParameter('approverUserId', $approverUserId);
+        }
 
         $total = (int) (clone $qb)
             ->select('COUNT(pr.id)')
@@ -54,12 +63,12 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     /**
      * Количество заявок по каждому статусу (для счётчиков-бейджей).
      *
-     * @param list<int>|null $organizationIds
+     * @param int|null $createdById
      * @return array<string, int> [status value => count]
      */
-    public function countByStatuses(?array $organizationIds): array
+    public function countByStatuses(?int $createdById): array
     {
-        $qb = $this->createFilteredQueryBuilder($organizationIds, null, null)
+        $qb = $this->createFilteredQueryBuilder($createdById, null, null)
             ->select('pr.status AS status, COUNT(pr.id) AS cnt')
             ->groupBy('pr.status');
 
@@ -73,16 +82,16 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param list<int>|null            $organizationIds
+     * @param int|null                  $createdById
      * @param list<PurchaseStatus>|null $statuses
      */
-    private function createFilteredQueryBuilder(?array $organizationIds, ?array $statuses, ?string $search): QueryBuilder
+    private function createFilteredQueryBuilder(?int $createdById, ?array $statuses, ?string $search): QueryBuilder
     {
         $qb = $this->createQueryBuilder('pr');
 
-        if ($organizationIds !== null) {
-            $qb->andWhere('pr.organization IN (:organizationIds)')
-                ->setParameter('organizationIds', $organizationIds);
+        if ($createdById !== null) {
+            $qb->andWhere('pr.createdBy = :createdById')
+                ->setParameter('createdById', $createdById);
         }
 
         if ($statuses !== null) {

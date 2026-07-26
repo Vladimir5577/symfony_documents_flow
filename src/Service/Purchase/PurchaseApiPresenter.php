@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace App\Service\Purchase;
 
 use App\Entity\Purchase\PurchaseRequest;
+use App\Entity\Purchase\PurchaseRequestApprover;
 use App\Entity\Purchase\PurchaseRequestComment;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\Purchase\PurchaseRequestHistory;
 use App\Entity\Purchase\PurchaseRequestItem;
 use App\Entity\User\User;
-use App\Security\Voter\PurchaseRequestVoter;
-use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use App\Enum\Purchase\PurchaseStatus;
+use App\Enum\User\UserRole;
+use Symfony\Bundle\SecurityBundle\Security;
 
 /**
  * Форматирование заявок закупок для SpaApi.
@@ -19,7 +21,7 @@ use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 final class PurchaseApiPresenter
 {
     public function __construct(
-        private readonly AuthorizationCheckerInterface $authorizationChecker,
+        private readonly Security $security,
     ) {}
 
     /**
@@ -29,6 +31,8 @@ final class PurchaseApiPresenter
     {
         $status = $request->getStatus();
         $priority = $request->getPriority();
+        $law = $request->getLaw();
+        $method = $request->getMethod();
 
         return [
             'id' => $request->getId(),
@@ -39,6 +43,13 @@ final class PurchaseApiPresenter
                 'id' => $request->getOrganization()?->getId(),
                 'name' => $request->getOrganization()?->getName(),
             ],
+            'category' => $request->getCategory() !== null
+                ? ['id' => $request->getCategory()->getId(), 'name' => $request->getCategory()->getName()]
+                : null,
+            'law' => $law !== null ? ['value' => $law->value, 'label' => $law->getLabel()] : null,
+            'method' => $method !== null ? ['value' => $method->value, 'label' => $method->getLabel()] : null,
+            // Обоснование нужно в списке: директор видит его в ховере по строке
+            'justification' => $request->getJustification(),
             'createdBy' => $this->presentUser($request->getCreatedBy()),
             'executor' => $this->presentUser($request->getExecutor()),
             'totalAmount' => $request->getTotalAmount(),
@@ -59,6 +70,17 @@ final class PurchaseApiPresenter
         $data = $this->presentListItem($request);
 
         $data['description'] = $request->getDescription();
+        $data['technicalSpec'] = $request->getTechnicalSpec();
+        $data['approvers'] = array_map(
+            fn (PurchaseRequestApprover $approver): array => [
+                'id' => $approver->getId(),
+                'user' => $this->presentUser($approver->getUser()),
+                'invitedBy' => $this->presentUser($approver->getInvitedBy()),
+                'confirmedAt' => $approver->getConfirmedAt()?->format('c'),
+                'createdAt' => $approver->getCreatedAt()?->format('c'),
+            ],
+            $request->getApprovers()->toArray(),
+        );
         $data['items'] = array_map(
             fn (PurchaseRequestItem $item): array => [
                 'id' => $item->getId(),
@@ -112,6 +134,7 @@ final class PurchaseApiPresenter
         return [
             'id' => $file->getId(),
             'originalName' => $file->getOriginalName(),
+            'type' => ['value' => $file->getType()->value, 'label' => $file->getType()->getLabel()],
             'uploadedBy' => $this->presentUser($file->getUploadedBy()),
             'createdAt' => $file->getCreatedAt()?->format('c'),
             'downloadUrl' => sprintf(
@@ -124,30 +147,77 @@ final class PurchaseApiPresenter
 
     /**
      * Доступные текущему пользователю действия — фронт рисует кнопки по ним.
+     * Логика зеркалит гейты контроллеров: роль + статус + владение/согласант.
      *
      * @return array<string, mixed>
      */
     private function presentActions(PurchaseRequest $request): array
     {
-        $granted = fn (string $attribute): bool => $this->authorizationChecker->isGranted($attribute, $request);
-        $nextStatus = $request->getStatus()->nextExecutionStatus();
+        $user = $this->security->getUser();
+        $status = $request->getStatus();
+
+        $isDirector = $this->security->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value);
+        $isPurchase = $this->security->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value);
+        $isOwner = $this->security->isGranted(UserRole::ROLE_MANAGER->value)
+            && $user instanceof User
+            && $request->getCreatedBy()?->getId() === $user->getId();
+        $isApprover = $user instanceof User && $request->findApproverFor($user) !== null;
+
+        $inReview = $status === PurchaseStatus::PENDING_REVIEW;
+        $nextStatus = $status->nextExecutionStatus();
+        $canAdvance = $isPurchase && $nextStatus !== null;
+
+        $canView = $isDirector
+            || ($isPurchase && in_array($status, PurchaseStatus::getPurchaseDepartmentVisible(), true))
+            || $isOwner
+            || $isApprover;
 
         return [
-            'canEdit' => $granted(PurchaseRequestVoter::EDIT),
-            'canDelete' => $granted(PurchaseRequestVoter::DELETE),
-            'canSubmit' => $granted(PurchaseRequestVoter::SUBMIT),
-            'canApprove' => $granted(PurchaseRequestVoter::APPROVE),
-            'canReject' => $granted(PurchaseRequestVoter::REJECT),
-            'canTake' => $granted(PurchaseRequestVoter::TAKE),
-            'canAdvance' => $granted(PurchaseRequestVoter::ADVANCE),
-            'nextStatus' => $granted(PurchaseRequestVoter::ADVANCE) && $nextStatus !== null
+            'canEdit' => $isOwner && $status->isEditable(),
+            'canDelete' => $isOwner && $status === PurchaseStatus::DRAFT,
+            'canSubmit' => $isOwner && $status->isEditable(),
+            'canSendToDirector' => $isPurchase && $inReview,
+            'canClassify' => $isPurchase && $inReview,
+            'canInvite' => $isPurchase && $inReview,
+            'canConfirmApproval' => $isApprover && $inReview,
+            'canApprove' => $isDirector && $status === PurchaseStatus::PENDING_APPROVAL,
+            'canReject' => ($isPurchase && $inReview)
+                || ($isDirector && in_array($status, [PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED], true)),
+            'canTake' => $isPurchase && $status === PurchaseStatus::APPROVED,
+            'canAdvance' => $canAdvance,
+            'nextStatus' => $canAdvance
                 ? ['value' => $nextStatus->value, 'label' => $nextStatus->getLabel()]
                 : null,
-            'canConfirm' => $granted(PurchaseRequestVoter::CONFIRM),
-            'canCancel' => $granted(PurchaseRequestVoter::CANCEL),
-            'canSetPriority' => $granted(PurchaseRequestVoter::SET_PRIORITY),
-            'canComment' => $granted(PurchaseRequestVoter::COMMENT),
+            'canConfirm' => $isOwner && $status === PurchaseStatus::DELIVERED,
+            'canCancel' => $this->canCancel($status, $isDirector, $isOwner, $isPurchase),
+            'canSetPriority' => $isDirector && !$status->isFinal(),
+            'canComment' => $canView,
         ];
+    }
+
+    /** Отмена: автор — до взятия в работу; отдел закупок — на исполнении; директор — всегда (до финала). */
+    private function canCancel(PurchaseStatus $status, bool $isDirector, bool $isOwner, bool $isPurchase): bool
+    {
+        if ($status->isFinal()) {
+            return false;
+        }
+        if ($isDirector) {
+            return true;
+        }
+        if ($isOwner) {
+            return in_array($status, [
+                PurchaseStatus::DRAFT, PurchaseStatus::PENDING_REVIEW,
+                PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED, PurchaseStatus::REJECTED,
+            ], true);
+        }
+        if ($isPurchase) {
+            return in_array($status, [
+                PurchaseStatus::IN_PROGRESS, PurchaseStatus::AWAITING_PAYMENT,
+                PurchaseStatus::PAID, PurchaseStatus::DELIVERED,
+            ], true);
+        }
+
+        return false;
     }
 
     /**

@@ -6,8 +6,10 @@ namespace App\Service\Purchase;
 
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseRequest;
+use App\Entity\Purchase\PurchaseRequestApprover;
 use App\Entity\Purchase\PurchaseRequestHistory;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseStatus;
 use Doctrine\ORM\EntityManagerInterface;
@@ -15,7 +17,7 @@ use Doctrine\ORM\EntityManagerInterface;
 /**
  * Переходы статусов заявки на закупку.
  *
- * Права («кто может») проверяет PurchaseRequestVoter в контроллере;
+ * Права («кто может») проверяет ролевой гейт контроллера;
  * здесь — только корректность перехода («можно ли из текущего статуса»),
  * запись в историю и публикация уведомления. Каждый метод делает flush.
  */
@@ -32,7 +34,7 @@ final class PurchaseRequestService
         $this->addHistory($request, $actor, null, PurchaseStatus::DRAFT);
     }
 
-    /** DRAFT | REJECTED → PENDING_APPROVAL. */
+    /** DRAFT | REJECTED → PENDING_REVIEW (на рассмотрение отделом закупок). */
     public function submit(PurchaseRequest $request, User $actor): void
     {
         $from = $request->getStatus();
@@ -42,9 +44,24 @@ final class PurchaseRequestService
         if ($request->getItems()->isEmpty()) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_REQUIRED);
         }
+        // Пояснительная записка обязательна: текстом или файлом
+        if (trim((string) $request->getJustification()) === ''
+            && !$request->hasFileOfType(PurchaseFileType::JUSTIFICATION)
+        ) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_JUSTIFICATION_REQUIRED);
+        }
+
+        $this->transition($request, $actor, PurchaseStatus::PENDING_REVIEW);
+        $this->notifier->notifySubmitted($request, $actor, resubmitted: $from === PurchaseStatus::REJECTED);
+    }
+
+    /** PENDING_REVIEW → PENDING_APPROVAL (отдел закупок направляет директору). */
+    public function sendToDirector(PurchaseRequest $request, User $actor): void
+    {
+        $this->assertStatus($request, PurchaseStatus::PENDING_REVIEW);
 
         $this->transition($request, $actor, PurchaseStatus::PENDING_APPROVAL);
-        $this->notifier->notifySubmitted($request, $actor, resubmitted: $from === PurchaseStatus::REJECTED);
+        $this->notifier->notifySentToDirector($request, $actor);
     }
 
     /** PENDING_APPROVAL → APPROVED (+опционально срочность). */
@@ -60,16 +77,62 @@ final class PurchaseRequestService
         $this->notifier->notifyApproved($request, $actor);
     }
 
-    /** PENDING_APPROVAL → REJECTED, комментарий обязателен. */
+    /**
+     * Возврат на доработку, комментарий обязателен.
+     * Отдел закупок — из PENDING_REVIEW; директор — из PENDING_APPROVAL
+     * и из APPROVED, пока заявку не взяли в работу («передумал»).
+     */
     public function reject(PurchaseRequest $request, User $actor, string $comment): void
     {
-        $this->assertStatus($request, PurchaseStatus::PENDING_APPROVAL);
+        $allowed = [PurchaseStatus::PENDING_REVIEW, PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED];
+        if (!in_array($request->getStatus(), $allowed, true)) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+        }
         if (trim($comment) === '') {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_COMMENT_REQUIRED);
         }
 
         $this->transition($request, $actor, PurchaseStatus::REJECTED, $comment);
         $this->notifier->notifyRejected($request, $actor, $comment);
+    }
+
+    /** Пригласить согласанта (идемпотентно: повторное приглашение возвращает существующую запись). */
+    public function inviteApprover(PurchaseRequest $request, User $actor, User $invited): PurchaseRequestApprover
+    {
+        $existing = $request->findApproverFor($invited);
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $approver = new PurchaseRequestApprover();
+        $approver->setUser($invited);
+        $approver->setInvitedBy($actor);
+        $request->addApprover($approver);
+        $this->em->persist($approver);
+        $this->em->flush();
+
+        $this->notifier->notifyApproverInvited($request, $actor, $invited);
+
+        return $approver;
+    }
+
+    /** Убрать приглашённого согласанта. */
+    public function removeApprover(PurchaseRequest $request, PurchaseRequestApprover $approver): void
+    {
+        $request->removeApprover($approver);
+        $this->em->remove($approver);
+        $this->em->flush();
+    }
+
+    /** Тоггл согласанта: подтвердил / снял подтверждение. */
+    public function confirmApproval(PurchaseRequest $request, PurchaseRequestApprover $approver, bool $confirmed): void
+    {
+        $approver->setConfirmedAt($confirmed ? new \DateTimeImmutable() : null);
+        $this->em->flush();
+
+        if ($confirmed && $approver->getUser() !== null) {
+            $this->notifier->notifyApproverConfirmed($request, $approver->getUser(), $approver->getInvitedBy());
+        }
     }
 
     /** APPROVED → IN_PROGRESS, назначает исполнителя. */

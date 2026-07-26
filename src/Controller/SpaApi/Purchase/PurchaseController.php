@@ -8,10 +8,13 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestItem;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseLaw;
+use App\Enum\Purchase\PurchaseMethod;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\User\UserRole;
+use App\Repository\Purchase\PurchaseCategoryRepository;
+use App\Repository\Purchase\PurchaseRequestApproverRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
-use App\Security\Voter\PurchaseRequestVoter;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseRequestService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,6 +34,8 @@ final class PurchaseController extends AbstractController
 
     public function __construct(
         private readonly PurchaseRequestRepository $purchaseRepo,
+        private readonly PurchaseCategoryRepository $categoryRepo,
+        private readonly PurchaseRequestApproverRepository $approverRepo,
         private readonly PurchaseApiPresenter $presenter,
         private readonly PurchaseRequestService $purchaseService,
         private readonly EntityManagerInterface $em,
@@ -44,12 +49,18 @@ final class PurchaseController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $scope = $this->resolveScope($user);
-        if ($scope === null) {
-            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        // Режим «я согласант»: только заявки, куда пользователя пригласили (доступен любой роли)
+        $asApprover = $request->query->getBoolean('as_approver');
+        if ($asApprover) {
+            $scope = [null, null];
+        } else {
+            $scope = $this->resolveScope($user);
+            if ($scope === null) {
+                return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+            }
         }
 
-        [$organizationIds, $visibleStatuses] = $scope;
+        [$createdById, $visibleStatuses] = $scope;
 
         $statuses = $visibleStatuses;
         $statusFilter = trim((string) $request->query->get('status', ''));
@@ -70,11 +81,12 @@ final class PurchaseController extends AbstractController
         $search = trim((string) $request->query->get('search', ''));
 
         $result = $this->purchaseRepo->findByFilters(
-            $organizationIds,
+            $createdById,
             $statuses,
             $search !== '' ? $search : null,
             $page,
             $pageSize,
+            $asApprover ? (int) $user->getId() : null,
         );
 
         return $this->json([
@@ -101,22 +113,29 @@ final class PurchaseController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
+        $approverPending = $this->approverRepo->countPendingForUser($user);
+
         $scope = $this->resolveScope($user);
         if ($scope === null) {
-            return $this->json(['byStatus' => new \stdClass(), 'actionRequired' => 0]);
+            return $this->json([
+                'byStatus' => new \stdClass(),
+                'actionRequired' => $approverPending,
+                'approverPending' => $approverPending,
+            ]);
         }
 
-        [$organizationIds] = $scope;
-        $byStatus = $this->purchaseRepo->countByStatuses($organizationIds);
+        [$createdById] = $scope;
+        $byStatus = $this->purchaseRepo->countByStatuses($createdById);
 
-        $actionRequired = 0;
+        $actionRequired = $approverPending;
         if ($this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
             $actionRequired += $byStatus[PurchaseStatus::PENDING_APPROVAL->value] ?? 0;
         }
         if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)) {
-            $actionRequired += $byStatus[PurchaseStatus::APPROVED->value] ?? 0;
+            $actionRequired += ($byStatus[PurchaseStatus::PENDING_REVIEW->value] ?? 0)
+                + ($byStatus[PurchaseStatus::APPROVED->value] ?? 0);
         }
-        if ($this->isGranted(UserRole::ROLE_MANAGER->value) && $organizationIds !== null) {
+        if ($this->isGranted(UserRole::ROLE_MANAGER->value)) {
             $actionRequired += ($byStatus[PurchaseStatus::REJECTED->value] ?? 0)
                 + ($byStatus[PurchaseStatus::DELIVERED->value] ?? 0);
         }
@@ -124,6 +143,7 @@ final class PurchaseController extends AbstractController
         return $this->json([
             'byStatus' => $byStatus === [] ? new \stdClass() : $byStatus,
             'actionRequired' => $actionRequired,
+            'approverPending' => $approverPending,
         ]);
     }
 
@@ -176,7 +196,7 @@ final class PurchaseController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        if (!$this->isGranted(PurchaseRequestVoter::VIEW, $purchase)) {
+        if (!$this->canView($purchase, $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -198,7 +218,7 @@ final class PurchaseController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        if (!$this->isGranted(PurchaseRequestVoter::EDIT, $purchase)) {
+        if (!$this->canEdit($purchase, $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -232,7 +252,8 @@ final class PurchaseController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        if (!$this->isGranted(PurchaseRequestVoter::DELETE, $purchase)) {
+        // Удалить черновик может только его автор
+        if (!($this->isManagerOwner($purchase, $user) && $purchase->getStatus() === PurchaseStatus::DRAFT)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -243,10 +264,48 @@ final class PurchaseController extends AbstractController
     }
 
     /**
+     * Категория / закон / способ закупки. Отдел закупок проставляет то,
+     * что менеджер не заполнил (или правит) на этапе рассмотрения.
+     * Отсутствующий в payload ключ не трогаем, null — очистить.
+     */
+    #[Route('/{id}/classification', name: 'spa_api_purchases_classification', requirements: ['id' => '\d+'], methods: ['PATCH'])]
+    public function classification(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        // Классификацию правит отдел закупок на этапе рассмотрения
+        if (!($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value) && $purchase->getStatus() === PurchaseStatus::PENDING_REVIEW)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload)) {
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+        }
+
+        $error = $this->applyClassification($purchase, $payload);
+        if ($error !== null) {
+            return $error;
+        }
+
+        $this->em->flush();
+
+        return $this->json($this->presenter->presentDetail($purchase));
+    }
+
+    /**
      * Область видимости списка для пользователя:
-     * [organizationIds|null, visibleStatuses|null] или null, если доступа нет.
+     * [createdById|null, visibleStatuses|null] или null, если доступа нет.
+     * Директор — все; отдел закупок — с PENDING_REVIEW; менеджер — только свои.
      *
-     * @return array{0: list<int>|null, 1: list<PurchaseStatus>|null}|null
+     * @return array{0: int|null, 1: list<PurchaseStatus>|null}|null
      */
     private function resolveScope(User $user): ?array
     {
@@ -259,15 +318,40 @@ final class PurchaseController extends AbstractController
         }
 
         if ($this->isGranted(UserRole::ROLE_MANAGER->value)) {
-            $organization = $user->getOrganization();
-            if ($organization === null) {
-                return null;
-            }
-
-            return [[(int) $organization->getId()], null];
+            return [(int) $user->getId(), null];
         }
 
         return null;
+    }
+
+    private function isManagerOwner(PurchaseRequest $purchase, User $user): bool
+    {
+        return $this->isGranted(UserRole::ROLE_MANAGER->value)
+            && $purchase->getCreatedBy()?->getId() === $user->getId();
+    }
+
+    /** Кто видит заявку: директор — все; отдел закупок — с PENDING_REVIEW; автор и приглашённый согласант — свою. */
+    private function canView(PurchaseRequest $purchase, User $user): bool
+    {
+        if ($this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
+            return true;
+        }
+        if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
+            && in_array($purchase->getStatus(), PurchaseStatus::getPurchaseDepartmentVisible(), true)
+        ) {
+            return true;
+        }
+        if ($this->isManagerOwner($purchase, $user)) {
+            return true;
+        }
+
+        return $purchase->findApproverFor($user) !== null;
+    }
+
+    /** Править заявку может только автор и только в редактируемом статусе (DRAFT/REJECTED). */
+    private function canEdit(PurchaseRequest $purchase, User $user): bool
+    {
+        return $this->isManagerOwner($purchase, $user) && $purchase->getStatus()->isEditable();
     }
 
     /**
@@ -283,6 +367,17 @@ final class PurchaseController extends AbstractController
 
         $description = $payload['description'] ?? null;
         $purchase->setDescription(is_string($description) && trim($description) !== '' ? trim($description) : null);
+
+        $justification = $payload['justification'] ?? null;
+        $purchase->setJustification(is_string($justification) && trim($justification) !== '' ? trim($justification) : null);
+
+        $technicalSpec = $payload['technicalSpec'] ?? null;
+        $purchase->setTechnicalSpec(is_string($technicalSpec) && trim($technicalSpec) !== '' ? trim($technicalSpec) : null);
+
+        $error = $this->applyClassification($purchase, $payload);
+        if ($error !== null) {
+            return $error;
+        }
 
         $dueDateRaw = $payload['dueDate'] ?? null;
         if ($dueDateRaw === null || $dueDateRaw === '') {
@@ -327,6 +422,54 @@ final class PurchaseController extends AbstractController
             $item->setEstimatedPrice(number_format((float) $price, 2, '.', ''));
             $item->setPosition($position++);
             $purchase->addItem($item);
+        }
+
+        return null;
+    }
+
+    /**
+     * Общая часть applyPayload и PATCH classification:
+     * categoryId, law, method — все ключи опциональны, null очищает поле.
+     */
+    private function applyClassification(PurchaseRequest $purchase, array $payload): ?JsonResponse
+    {
+        if (array_key_exists('categoryId', $payload)) {
+            $categoryId = $payload['categoryId'];
+            if ($categoryId === null || $categoryId === '') {
+                $purchase->setCategory(null);
+            } else {
+                $category = $this->categoryRepo->find((int) $categoryId);
+                if ($category === null) {
+                    return $this->json(['error' => SpaApiError::PURCHASE_CATEGORY_NOT_FOUND], Response::HTTP_BAD_REQUEST);
+                }
+                $purchase->setCategory($category);
+            }
+        }
+
+        if (array_key_exists('law', $payload)) {
+            $lawRaw = $payload['law'];
+            if ($lawRaw === null || $lawRaw === '') {
+                $purchase->setLaw(null);
+            } else {
+                $law = PurchaseLaw::tryFrom((string) $lawRaw);
+                if ($law === null) {
+                    return $this->json(['error' => SpaApiError::PURCHASE_INVALID_LAW], Response::HTTP_BAD_REQUEST);
+                }
+                $purchase->setLaw($law);
+            }
+        }
+
+        if (array_key_exists('method', $payload)) {
+            $methodRaw = $payload['method'];
+            if ($methodRaw === null || $methodRaw === '') {
+                $purchase->setMethod(null);
+            } else {
+                $method = PurchaseMethod::tryFrom((string) $methodRaw);
+                if ($method === null) {
+                    return $this->json(['error' => SpaApiError::PURCHASE_INVALID_METHOD], Response::HTTP_BAD_REQUEST);
+                }
+                $purchase->setMethod($method);
+            }
         }
 
         return null;

@@ -88,4 +88,13 @@ final class SpaApiError
     public const PURCHASE_INVALID_ITEM = 'purchase_invalid_item';
     public const PURCHASE_INVALID_DUE_DATE = 'purchase_invalid_due_date';
     public const PURCHASE_FILE_NOT_FOUND = 'purchase_file_not_found';
+    public const PURCHASE_JUSTIFICATION_REQUIRED = 'purchase_justification_required';
+    public const PURCHASE_CATEGORY_NOT_FOUND = 'purchase_category_not_found';
+    public const PURCHASE_CATEGORY_IN_USE = 'purchase_category_in_use';
+    public const PURCHASE_CATEGORY_NAME_REQUIRED = 'purchase_category_name_required';
+    public const PURCHASE_CATEGORY_NAME_TAKEN = 'purchase_category_name_taken';
+    public const PURCHASE_INVALID_LAW = 'purchase_invalid_law';
+    public const PURCHASE_INVALID_METHOD = 'purchase_invalid_method';
+    public const PURCHASE_INVALID_FILE_TYPE = 'purchase_invalid_file_type';
+    public const PURCHASE_APPROVER_NOT_FOUND = 'purchase_approver_not_found';
 }

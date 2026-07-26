@@ -7,7 +7,8 @@ namespace App\Enum\Purchase;
 enum PurchaseStatus: string
 {
     case DRAFT = 'DRAFT';                        // Черновик
-    case PENDING_APPROVAL = 'PENDING_APPROVAL';  // На согласовании
+    case PENDING_REVIEW = 'PENDING_REVIEW';      // На рассмотрении (отдел закупок)
+    case PENDING_APPROVAL = 'PENDING_APPROVAL';  // На согласовании (директор)
     case APPROVED = 'APPROVED';                  // Согласовано
     case REJECTED = 'REJECTED';                  // Возвращено на доработку
     case IN_PROGRESS = 'IN_PROGRESS';            // В работе
@@ -21,6 +22,7 @@ enum PurchaseStatus: string
     {
         return match ($this) {
             self::DRAFT => 'Черновик',
+            self::PENDING_REVIEW => 'На рассмотрении',
             self::PENDING_APPROVAL => 'На согласовании',
             self::APPROVED => 'Согласовано',
             self::REJECTED => 'Возвращено на доработку',
@@ -59,12 +61,14 @@ enum PurchaseStatus: string
     }
 
     /**
-     * Статусы, видимые отделу закупок (всё согласованное и дальше).
+     * Статусы, видимые отделу закупок (с момента подачи на рассмотрение и дальше).
      * @return list<PurchaseStatus>
      */
     public static function getPurchaseDepartmentVisible(): array
     {
         return [
+            self::PENDING_REVIEW,
+            self::PENDING_APPROVAL,
             self::APPROVED,
             self::IN_PROGRESS,
             self::AWAITING_PAYMENT,

@@ -3,6 +3,7 @@
 namespace App\Entity\Purchase;
 
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseFileType;
 use App\Repository\Purchase\PurchaseRequestFileRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
@@ -37,6 +38,10 @@ class PurchaseRequestFile
     // Имя файла, каким его загрузил пользователь
     #[ORM\Column(name: 'original_name', length: 255)]
     private ?string $originalName = null;
+
+    // Тип вложения: ТЗ, пояснительная записка или прочее
+    #[ORM\Column(type: Types::STRING, length: 30, enumType: PurchaseFileType::class, options: ['default' => 'OTHER'])]
+    private PurchaseFileType $type = PurchaseFileType::OTHER;
 
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
@@ -101,6 +106,18 @@ class PurchaseRequestFile
     public function setOriginalName(string $originalName): static
     {
         $this->originalName = $originalName;
+
+        return $this;
+    }
+
+    public function getType(): PurchaseFileType
+    {
+        return $this->type;
+    }
+
+    public function setType(PurchaseFileType $type): static
+    {
+        $this->type = $type;
 
         return $this;
     }

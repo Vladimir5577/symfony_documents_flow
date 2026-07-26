@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Controller\SpaApi\Purchase;
 
 use App\Controller\SpaApi\SpaApiError;
+use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseFileType;
+use App\Enum\Purchase\PurchaseStatus;
+use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseRequestRepository;
-use App\Security\Voter\PurchaseRequestVoter;
 use App\Service\Purchase\PurchaseApiPresenter;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -47,8 +50,8 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        // Файлы может добавлять любой участник процесса (те же права, что на комментарий)
-        if (!$this->isGranted(PurchaseRequestVoter::COMMENT, $purchase)) {
+        // Файлы может добавлять любой участник процесса (кто видит заявку)
+        if (!$this->canView($purchase, $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -61,7 +64,18 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::POST_FILE_TOO_LARGE], Response::HTTP_BAD_REQUEST);
         }
 
+        // Тип вложения: ТЗ / пояснительная записка / прочее (по умолчанию)
+        $typeRaw = trim((string) $request->request->get('type', ''));
+        $type = PurchaseFileType::OTHER;
+        if ($typeRaw !== '') {
+            $type = PurchaseFileType::tryFrom($typeRaw);
+            if ($type === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_INVALID_FILE_TYPE], Response::HTTP_BAD_REQUEST);
+            }
+        }
+
         $fileEntity = new PurchaseRequestFile();
+        $fileEntity->setType($type);
         $fileEntity->setUploadedBy($user);
         $fileEntity->setOriginalName($uploaded->getClientOriginalName());
         $fileEntity->setFile($uploaded);
@@ -85,7 +99,7 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        if (!$this->isGranted(PurchaseRequestVoter::VIEW, $purchase)) {
+        if (!$this->canView($purchase, $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -126,9 +140,9 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        // Удалять может загрузивший или тот, кто может редактировать заявку
+        // Удалять может загрузивший или автор заявки, пока она редактируема
         $canDelete = $fileEntity->getUploadedBy()?->getId() === $user->getId()
-            || $this->isGranted(PurchaseRequestVoter::EDIT, $purchase);
+            || ($this->isManagerOwner($purchase, $user) && $purchase->getStatus()->isEditable());
         if (!$canDelete) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
@@ -138,6 +152,30 @@ final class PurchaseFileController extends AbstractController
         $this->em->flush();
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    private function isManagerOwner(PurchaseRequest $purchase, User $user): bool
+    {
+        return $this->isGranted(UserRole::ROLE_MANAGER->value)
+            && $purchase->getCreatedBy()?->getId() === $user->getId();
+    }
+
+    /** Кто видит заявку: директор — все; отдел закупок — с PENDING_REVIEW; автор и приглашённый согласант — свою. */
+    private function canView(PurchaseRequest $purchase, User $user): bool
+    {
+        if ($this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
+            return true;
+        }
+        if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
+            && in_array($purchase->getStatus(), PurchaseStatus::getPurchaseDepartmentVisible(), true)
+        ) {
+            return true;
+        }
+        if ($this->isManagerOwner($purchase, $user)) {
+            return true;
+        }
+
+        return $purchase->findApproverFor($user) !== null;
     }
 
     /**

@@ -4,6 +4,9 @@ namespace App\Entity\Purchase;
 
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseFileType;
+use App\Enum\Purchase\PurchaseLaw;
+use App\Enum\Purchase\PurchaseMethod;
 use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Repository\Purchase\PurchaseRequestRepository;
@@ -48,6 +51,26 @@ class PurchaseRequest
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
+    // Категория из справочника; NULL — менеджер не нашёл подходящую, проставит отдел закупок
+    #[ORM\ManyToOne(targetEntity: PurchaseCategory::class)]
+    #[ORM\JoinColumn(name: 'category_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
+    private ?PurchaseCategory $category = null;
+
+    #[ORM\Column(type: Types::STRING, length: 20, nullable: true, enumType: PurchaseLaw::class)]
+    private ?PurchaseLaw $law = null;
+
+    // Способ закупки; NULL — определит отдел закупок при рассмотрении
+    #[ORM\Column(type: Types::STRING, length: 30, nullable: true, enumType: PurchaseMethod::class)]
+    private ?PurchaseMethod $method = null;
+
+    // Пояснительная записка текстом (альтернатива — файл типа JUSTIFICATION)
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $justification = null;
+
+    // Техническое задание текстом (альтернатива — файл типа TECHNICAL_SPEC)
+    #[ORM\Column(name: 'technical_spec', type: Types::TEXT, nullable: true)]
+    private ?string $technicalSpec = null;
+
     #[ORM\Column(type: Types::STRING, length: 50, enumType: PurchaseStatus::class)]
     private PurchaseStatus $status = PurchaseStatus::DRAFT;
 
@@ -84,12 +107,18 @@ class PurchaseRequest
     #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseRequestFile::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $files;
 
+    /** @var Collection<int, PurchaseRequestApprover> */
+    #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseRequestApprover::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[ORM\OrderBy(['createdAt' => 'ASC'])]
+    private Collection $approvers;
+
     public function __construct()
     {
         $this->items = new ArrayCollection();
         $this->comments = new ArrayCollection();
         $this->history = new ArrayCollection();
         $this->files = new ArrayCollection();
+        $this->approvers = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -153,6 +182,66 @@ class PurchaseRequest
     public function setDescription(?string $description): static
     {
         $this->description = $description;
+
+        return $this;
+    }
+
+    public function getCategory(): ?PurchaseCategory
+    {
+        return $this->category;
+    }
+
+    public function setCategory(?PurchaseCategory $category): static
+    {
+        $this->category = $category;
+
+        return $this;
+    }
+
+    public function getLaw(): ?PurchaseLaw
+    {
+        return $this->law;
+    }
+
+    public function setLaw(?PurchaseLaw $law): static
+    {
+        $this->law = $law;
+
+        return $this;
+    }
+
+    public function getMethod(): ?PurchaseMethod
+    {
+        return $this->method;
+    }
+
+    public function setMethod(?PurchaseMethod $method): static
+    {
+        $this->method = $method;
+
+        return $this;
+    }
+
+    public function getJustification(): ?string
+    {
+        return $this->justification;
+    }
+
+    public function setJustification(?string $justification): static
+    {
+        $this->justification = $justification;
+
+        return $this;
+    }
+
+    public function getTechnicalSpec(): ?string
+    {
+        return $this->technicalSpec;
+    }
+
+    public function setTechnicalSpec(?string $technicalSpec): static
+    {
+        $this->technicalSpec = $technicalSpec;
 
         return $this;
     }
@@ -300,5 +389,52 @@ class PurchaseRequest
         $this->files->removeElement($file);
 
         return $this;
+    }
+
+    public function hasFileOfType(PurchaseFileType $type): bool
+    {
+        foreach ($this->files as $file) {
+            if ($file->getType() === $type) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return Collection<int, PurchaseRequestApprover>
+     */
+    public function getApprovers(): Collection
+    {
+        return $this->approvers;
+    }
+
+    public function addApprover(PurchaseRequestApprover $approver): static
+    {
+        if (!$this->approvers->contains($approver)) {
+            $this->approvers->add($approver);
+            $approver->setPurchaseRequest($this);
+        }
+
+        return $this;
+    }
+
+    public function removeApprover(PurchaseRequestApprover $approver): static
+    {
+        $this->approvers->removeElement($approver);
+
+        return $this;
+    }
+
+    public function findApproverFor(User $user): ?PurchaseRequestApprover
+    {
+        foreach ($this->approvers as $approver) {
+            if ($approver->getUser()?->getId() === $user->getId()) {
+                return $approver;
+            }
+        }
+
+        return null;
     }
 }
