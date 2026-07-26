@@ -64,10 +64,16 @@ final class PurchaseRequestService
         $this->notifier->notifySentToDirector($request, $actor);
     }
 
-    /** PENDING_APPROVAL → APPROVED (+опционально срочность). */
+    /**
+     * PENDING_REVIEW | PENDING_APPROVAL → APPROVED (+опционально срочность).
+     * Директор может согласовать сразу с рассмотрения, не дожидаясь направления отделом закупок.
+     */
     public function approve(PurchaseRequest $request, User $actor, ?PurchasePriority $priority = null): void
     {
-        $this->assertStatus($request, PurchaseStatus::PENDING_APPROVAL);
+        $allowed = [PurchaseStatus::PENDING_REVIEW, PurchaseStatus::PENDING_APPROVAL];
+        if (!in_array($request->getStatus(), $allowed, true)) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+        }
 
         if ($priority !== null) {
             $request->setPriority($priority);

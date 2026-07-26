@@ -180,9 +180,14 @@ final class PurchaseApiPresenter
             'canClassify' => $isPurchase && $inReview,
             'canInvite' => $isPurchase && $inReview,
             'canConfirmApproval' => $isApprover && $inReview,
-            'canApprove' => $isDirector && $status === PurchaseStatus::PENDING_APPROVAL,
+            'canApprove' => $isDirector
+                && in_array($status, [PurchaseStatus::PENDING_REVIEW, PurchaseStatus::PENDING_APPROVAL], true),
             'canReject' => ($isPurchase && $inReview)
-                || ($isDirector && in_array($status, [PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED], true)),
+                || ($isDirector && in_array(
+                    $status,
+                    [PurchaseStatus::PENDING_REVIEW, PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED],
+                    true,
+                )),
             'canTake' => $isPurchase && $status === PurchaseStatus::APPROVED,
             'canAdvance' => $canAdvance,
             'nextStatus' => $canAdvance
@@ -221,7 +226,7 @@ final class PurchaseApiPresenter
     }
 
     /**
-     * @return array{id: int|null, name: string}|null
+     * @return array{id: int|null, name: string, position: string|null}|null
      */
     private function presentUser(?User $user): ?array
     {
@@ -234,6 +239,7 @@ final class PurchaseApiPresenter
         return [
             'id' => $user->getId(),
             'name' => $name !== '' ? $name : (string) $user->getLogin(),
+            'position' => $user->getWorker()?->getProfession(),
         ];
     }
 }
