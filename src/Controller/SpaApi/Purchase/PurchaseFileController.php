@@ -154,20 +154,27 @@ final class PurchaseFileController extends AbstractController
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }
 
+    /** Автор заявки — роль не требуется: создавать может любой пользователь. */
     private function isManagerOwner(PurchaseRequest $purchase, User $user): bool
     {
-        return $this->isGranted(UserRole::ROLE_MANAGER->value)
-            && $purchase->getCreatedBy()?->getId() === $user->getId();
+        return $purchase->getCreatedBy()?->getId() === $user->getId();
     }
 
-    /** Кто видит заявку: директор — все; отдел закупок — с PENDING_REVIEW; автор и приглашённый согласант — свою. */
+    /** Кто видит заявку: директор — со своего этапа; отдел закупок — с подачи; плательщик — оплаты; автор и приглашённый согласант — свою. */
     private function canView(PurchaseRequest $purchase, User $user): bool
     {
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
+        if ($this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)
+            && in_array($purchase->getStatus(), PurchaseStatus::getDirectorVisible(), true)
+        ) {
             return true;
         }
         if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
             && in_array($purchase->getStatus(), PurchaseStatus::getPurchaseDepartmentVisible(), true)
+        ) {
+            return true;
+        }
+        if ($this->isGranted(UserRole::ROLE_PURCHASE_INVOICE->value)
+            && in_array($purchase->getStatus(), PurchaseStatus::getPayerVisible(), true)
         ) {
             return true;
         }

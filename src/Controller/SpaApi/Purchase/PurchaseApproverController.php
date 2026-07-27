@@ -80,12 +80,16 @@ final class PurchaseApproverController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_APPROVER_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $this->purchaseService->removeApprover($purchase, $approver);
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $this->purchaseService->removeApprover($purchase, $approver, $user);
 
         return $this->json($this->presenter->presentDetail($purchase));
     }
 
-    /** Тоггл согласанта: body {confirmed: bool}. Доступно только приглашённому на этапе рассмотрения. */
+    /** Тоггл согласанта: body {confirmed: bool}. Доступно только приглашённому на этапе согласования. */
     #[Route('/confirm', name: 'spa_api_purchases_approvers_confirm', methods: ['POST'])]
     public function confirm(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -99,7 +103,7 @@ final class PurchaseApproverController extends AbstractController
         }
 
         $approver = $purchase->findApproverFor($user);
-        if ($approver === null || $purchase->getStatus() !== PurchaseStatus::PENDING_REVIEW) {
+        if ($approver === null || $purchase->getStatus() !== PurchaseStatus::APPROVERS_PENDING) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -111,11 +115,11 @@ final class PurchaseApproverController extends AbstractController
         return $this->json($this->presenter->presentDetail($purchase));
     }
 
-    /** Приглашать/убирать согласантов может отдел закупок на этапе рассмотрения. */
+    /** Приглашать/убирать согласантов может отдел закупок на рассмотрении и согласовании. */
     private function canManageApprovers(PurchaseRequest $purchase): bool
     {
         return $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
-            && $purchase->getStatus() === PurchaseStatus::PENDING_REVIEW;
+            && in_array($purchase->getStatus(), [PurchaseStatus::NEW, PurchaseStatus::APPROVERS_PENDING], true);
     }
 
     private function requirePurchase(int $id): PurchaseRequest|JsonResponse

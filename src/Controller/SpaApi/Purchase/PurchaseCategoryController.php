@@ -11,6 +11,7 @@ use App\Entity\User\User;
 use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseCategoryRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
+use App\Repository\User\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -29,6 +30,7 @@ final class PurchaseCategoryController extends AbstractController
     public function __construct(
         private readonly PurchaseCategoryRepository $categoryRepo,
         private readonly PurchaseRequestRepository $purchaseRepo,
+        private readonly UserRepository $userRepo,
         private readonly EntityManagerInterface $em,
     ) {
     }
@@ -137,6 +139,41 @@ final class PurchaseCategoryController extends AbstractController
         $this->em->flush();
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    /** Назначить/снять ответственного за категорию: body {userId: int|null}. */
+    #[Route('/{id}/responsible', name: 'spa_api_purchase_categories_responsible', requirements: ['id' => '\d+'], methods: ['PUT'])]
+    public function setResponsible(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        if (!$this->canManage()) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $category = $this->categoryRepo->find($id);
+        if ($category === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_CATEGORY_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        $userId = is_array($payload) ? ($payload['userId'] ?? null) : null;
+
+        if ($userId === null || $userId === '') {
+            $category->setResponsibleUser(null);
+        } else {
+            $responsible = $this->userRepo->find((int) $userId);
+            if ($responsible === null) {
+                return $this->json(['error' => SpaApiError::USER_NOT_FOUND], Response::HTTP_BAD_REQUEST);
+            }
+            $category->setResponsibleUser($responsible);
+        }
+
+        $this->em->flush();
+
+        return $this->json($this->present($category));
     }
 
     #[Route('/{id}/items', name: 'spa_api_purchase_categories_items_create', requirements: ['id' => '\d+'], methods: ['POST'])]
@@ -277,9 +314,20 @@ final class PurchaseCategoryController extends AbstractController
      */
     private function present(PurchaseCategory $category): array
     {
+        $responsible = $category->getResponsibleUser();
+        $responsibleName = $responsible !== null
+            ? trim(($responsible->getLastname() ?? '') . ' ' . ($responsible->getFirstname() ?? ''))
+            : '';
+
         return [
             'id' => $category->getId(),
             'name' => $category->getName(),
+            'responsible' => $responsible !== null
+                ? [
+                    'id' => $responsible->getId(),
+                    'name' => $responsibleName !== '' ? $responsibleName : (string) $responsible->getLogin(),
+                ]
+                : null,
             'items' => array_map(
                 fn (PurchaseCategoryItem $item): array => [
                     'id' => $item->getId(),

@@ -18,6 +18,7 @@ enum UserRole: string
     case ROLE_MECHANIC = 'ROLE_MECHANIC';
     case ROLE_PURCHASE_DIRECTOR = 'ROLE_PURCHASE_DIRECTOR';
     case ROLE_PURCHASE_DEPARTMENT = 'ROLE_PURCHASE_DEPARTMENT';
+    case ROLE_PURCHASE_INVOICE = 'ROLE_PURCHASE_INVOICE';
     case ROLE_USER = 'ROLE_USER';
 
     public function getLabel(): string
@@ -35,6 +36,7 @@ enum UserRole: string
             self::ROLE_MECHANIC => 'Роль механика',
             self::ROLE_PURCHASE_DIRECTOR => 'Директор закупок',
             self::ROLE_PURCHASE_DEPARTMENT => 'Отдел закупок',
+            self::ROLE_PURCHASE_INVOICE => 'Плательщик закупок',
             self::ROLE_USER => 'Роль пользователя',
         };
     }

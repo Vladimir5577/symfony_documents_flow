@@ -48,13 +48,22 @@ final class PurchaseTransitionController extends AbstractController
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->submit($p, $u));
     }
 
-    /** Отдел закупок направляет рассмотренную заявку директору. */
+    /** Отдел закупок отправляет заявку согласантам: NEW → APPROVERS_PENDING. */
+    #[Route('/send-to-approvers', name: 'spa_api_purchases_send_to_approvers', methods: ['POST'])]
+    public function sendToApprovers(int $id, #[CurrentUser] ?User $user): JsonResponse
+    {
+        return $this->transition($id, $user,
+            fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
+            fn (PurchaseRequest $p, User $u) => $this->purchaseService->sendToApprovers($p, $u));
+    }
+
+    /** Отдел закупок направляет заявку директору (после согласантов или сразу, если их нет). */
     #[Route('/send-to-director', name: 'spa_api_purchases_send_to_director', methods: ['POST'])]
     public function sendToDirector(int $id, #[CurrentUser] ?User $user): JsonResponse
     {
         return $this->transition($id, $user,
             fn (PurchaseRequest $p) => $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
-                && $p->getStatus() === PurchaseStatus::PENDING_REVIEW,
+                && in_array($p->getStatus(), [PurchaseStatus::NEW, PurchaseStatus::APPROVERS_DONE], true),
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->sendToDirector($p, $u));
     }
 
@@ -92,21 +101,13 @@ final class PurchaseTransitionController extends AbstractController
 
         return $this->transition($id, $user,
             fn (PurchaseRequest $p) => (
-                $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value) && $p->getStatus() === PurchaseStatus::PENDING_REVIEW
+                $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
+                && in_array($p->getStatus(), [PurchaseStatus::NEW, PurchaseStatus::APPROVERS_PENDING], true)
             ) || (
                 $this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)
-                && in_array($p->getStatus(), [PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED], true)
+                && in_array($p->getStatus(), [PurchaseStatus::CEO_APPROVE_PENDING, PurchaseStatus::CEO_APPROVED], true)
             ),
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->reject($p, $u, $comment));
-    }
-
-    /** Взять в работу: APPROVED → IN_PROGRESS, executor = текущий пользователь. */
-    #[Route('/take', name: 'spa_api_purchases_take', methods: ['POST'])]
-    public function take(int $id, #[CurrentUser] ?User $user): JsonResponse
-    {
-        return $this->transition($id, $user,
-            fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
-            fn (PurchaseRequest $p, User $u) => $this->purchaseService->take($p, $u));
     }
 
     /** Шаг конвейера исполнения: body.status должен быть строго следующим. */
@@ -120,16 +121,19 @@ final class PurchaseTransitionController extends AbstractController
         }
 
         return $this->transition($id, $user,
-            fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
+            // Конвейер ведёт отдел закупок; отметку «Оплачено» может поставить и плательщик.
+            fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
+                || ($this->isGranted(UserRole::ROLE_PURCHASE_INVOICE->value) && $target === PurchaseStatus::INVOICE_PAID),
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->advance($p, $u, $target));
     }
 
-    /** Приёмка автором: DELIVERED → DONE. */
+    /** Закрытие DELIVERED → DONE: автор подтверждает получение, отдел закупок может закрыть сам. */
     #[Route('/confirm', name: 'spa_api_purchases_confirm', methods: ['POST'])]
     public function confirm(int $id, #[CurrentUser] ?User $user): JsonResponse
     {
         return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->isManagerOwner($p, $u),
+            fn (PurchaseRequest $p, User $u) => $this->isManagerOwner($p, $u)
+                || $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->confirm($p, $u));
     }
 
@@ -160,10 +164,10 @@ final class PurchaseTransitionController extends AbstractController
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->setPriority($p, $u, $priority));
     }
 
+    /** Автор заявки — роль не требуется: создавать может любой пользователь. */
     private function isManagerOwner(PurchaseRequest $purchase, User $user): bool
     {
-        return $this->isGranted(UserRole::ROLE_MANAGER->value)
-            && $purchase->getCreatedBy()?->getId() === $user->getId();
+        return $purchase->getCreatedBy()?->getId() === $user->getId();
     }
 
     private function canCancel(PurchaseRequest $purchase, User $user): bool
@@ -176,14 +180,14 @@ final class PurchaseTransitionController extends AbstractController
         }
         if ($this->isManagerOwner($purchase, $user)) {
             return in_array($purchase->getStatus(), [
-                PurchaseStatus::DRAFT, PurchaseStatus::PENDING_REVIEW,
-                PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED, PurchaseStatus::REJECTED,
+                PurchaseStatus::DRAFT, PurchaseStatus::NEW,
+                PurchaseStatus::APPROVERS_PENDING, PurchaseStatus::APPROVERS_DONE,
+                PurchaseStatus::CEO_APPROVE_PENDING, PurchaseStatus::CEO_APPROVED, PurchaseStatus::REJECTED,
             ], true);
         }
         if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)) {
             return in_array($purchase->getStatus(), [
-                PurchaseStatus::IN_PROGRESS, PurchaseStatus::AWAITING_PAYMENT,
-                PurchaseStatus::PAID, PurchaseStatus::DELIVERED,
+                PurchaseStatus::INVOICE_SENT, PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED,
             ], true);
         }
 

@@ -95,6 +95,7 @@ final class PurchaseApiPresenter
                 'unit' => $item->getUnit(),
                 'estimatedPrice' => $item->getEstimatedPrice(),
                 'position' => $item->getPosition(),
+                'categoryItemId' => $item->getCategoryItem()?->getId(),
             ],
             $request->getItems()->toArray(),
         );
@@ -164,17 +165,30 @@ final class PurchaseApiPresenter
 
         $isDirector = $this->security->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value);
         $isPurchase = $this->security->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value);
-        $isOwner = $this->security->isGranted(UserRole::ROLE_MANAGER->value)
-            && $user instanceof User
+        $isPayer = $this->security->isGranted(UserRole::ROLE_PURCHASE_INVOICE->value);
+        // Автор заявки — роль не требуется: создавать может любой пользователь.
+        $isOwner = $user instanceof User
             && $request->getCreatedBy()?->getId() === $user->getId();
         $isApprover = $user instanceof User && $request->findApproverFor($user) !== null;
 
-        $inReview = $status === PurchaseStatus::PENDING_REVIEW;
+        /* «Рассмотрение» = NEW и этап согласантов: отдел закупок ещё работает с заявкой. */
+        $inReview = in_array($status, [PurchaseStatus::NEW, PurchaseStatus::APPROVERS_PENDING], true);
+        $hasApprovers = !$request->getApprovers()->isEmpty();
+        $allApproversConfirmed = true;
+        foreach ($request->getApprovers() as $approver) {
+            if ($approver->getConfirmedAt() === null) {
+                $allApproversConfirmed = false;
+                break;
+            }
+        }
         $nextStatus = $status->nextExecutionStatus();
-        $canAdvance = $isPurchase && $nextStatus !== null;
+        // Конвейер ведёт отдел закупок; плательщик — только отметку «Оплачено».
+        $canAdvance = $nextStatus !== null
+            && ($isPurchase || ($isPayer && $status === PurchaseStatus::INVOICE_SENT));
 
-        $canView = $isDirector
+        $canView = ($isDirector && in_array($status, PurchaseStatus::getDirectorVisible(), true))
             || ($isPurchase && in_array($status, PurchaseStatus::getPurchaseDepartmentVisible(), true))
+            || ($isPayer && in_array($status, PurchaseStatus::getPayerVisible(), true))
             || $isOwner
             || $isApprover;
 
@@ -182,24 +196,20 @@ final class PurchaseApiPresenter
             'canEdit' => $isOwner && $status->isEditable(),
             'canDelete' => $isOwner && $status === PurchaseStatus::DRAFT,
             'canSubmit' => $isOwner && $status->isEditable(),
-            'canSendToDirector' => $isPurchase && $inReview,
+            'canSendToApprovers' => $isPurchase && $status === PurchaseStatus::NEW && $hasApprovers,
+            'canSendToDirector' => $isPurchase && $allApproversConfirmed
+                && (($status === PurchaseStatus::NEW && !$hasApprovers) || $status === PurchaseStatus::APPROVERS_DONE),
             'canClassify' => $isPurchase && $inReview,
             'canInvite' => $isPurchase && $inReview,
-            'canConfirmApproval' => $isApprover && $inReview,
-            'canApprove' => $isDirector
-                && in_array($status, [PurchaseStatus::PENDING_REVIEW, PurchaseStatus::PENDING_APPROVAL], true),
+            'canConfirmApproval' => $isApprover && $status === PurchaseStatus::APPROVERS_PENDING,
+            'canApprove' => $isDirector && $status === PurchaseStatus::CEO_APPROVE_PENDING,
             'canReject' => ($isPurchase && $inReview)
-                || ($isDirector && in_array(
-                    $status,
-                    [PurchaseStatus::PENDING_REVIEW, PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED],
-                    true,
-                )),
-            'canTake' => $isPurchase && $status === PurchaseStatus::APPROVED,
+                || ($isDirector && in_array($status, [PurchaseStatus::CEO_APPROVE_PENDING, PurchaseStatus::CEO_APPROVED], true)),
             'canAdvance' => $canAdvance,
             'nextStatus' => $canAdvance
                 ? ['value' => $nextStatus->value, 'label' => $nextStatus->getLabel()]
                 : null,
-            'canConfirm' => $isOwner && $status === PurchaseStatus::DELIVERED,
+            'canConfirm' => ($isOwner || $isPurchase) && $status === PurchaseStatus::DELIVERED,
             'canCancel' => $this->canCancel($status, $isDirector, $isOwner, $isPurchase),
             'canSetPriority' => $isDirector && !$status->isFinal(),
             'canComment' => $canView,
@@ -217,14 +227,14 @@ final class PurchaseApiPresenter
         }
         if ($isOwner) {
             return in_array($status, [
-                PurchaseStatus::DRAFT, PurchaseStatus::PENDING_REVIEW,
-                PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED, PurchaseStatus::REJECTED,
+                PurchaseStatus::DRAFT, PurchaseStatus::NEW,
+                PurchaseStatus::APPROVERS_PENDING, PurchaseStatus::APPROVERS_DONE,
+                PurchaseStatus::CEO_APPROVE_PENDING, PurchaseStatus::CEO_APPROVED, PurchaseStatus::REJECTED,
             ], true);
         }
         if ($isPurchase) {
             return in_array($status, [
-                PurchaseStatus::IN_PROGRESS, PurchaseStatus::AWAITING_PAYMENT,
-                PurchaseStatus::PAID, PurchaseStatus::DELIVERED,
+                PurchaseStatus::INVOICE_SENT, PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED,
             ], true);
         }
 

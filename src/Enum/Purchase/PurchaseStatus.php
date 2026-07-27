@@ -4,47 +4,56 @@ declare(strict_types=1);
 
 namespace App\Enum\Purchase;
 
+/**
+ * Статусы заявки на закупку — цепочка по схеме:
+ * DRAFT → NEW → [APPROVERS_PENDING → APPROVERS_DONE] → CEO_APPROVE_PENDING
+ *   → CEO_APPROVED → INVOICE_SENT → INVOICE_PAID → DELIVERED → DONE.
+ * Этап согласантов пропускается, если они не назначены. REJECTED — возврат автору,
+ * CANCELLED — отмена. Прогресс согласантов («2 из 5») хранится в PurchaseRequestApprover.
+ */
 enum PurchaseStatus: string
 {
-    case DRAFT = 'DRAFT';                        // Черновик
-    case PENDING_REVIEW = 'PENDING_REVIEW';      // На рассмотрении (отдел закупок)
-    case PENDING_APPROVAL = 'PENDING_APPROVAL';  // На согласовании (директор)
-    case APPROVED = 'APPROVED';                  // Согласовано
-    case REJECTED = 'REJECTED';                  // Возвращено на доработку
-    case IN_PROGRESS = 'IN_PROGRESS';            // В работе
-    case AWAITING_PAYMENT = 'AWAITING_PAYMENT';  // Счёт на оплате
-    case PAID = 'PAID';                          // Оплачено
-    case DELIVERED = 'DELIVERED';                // Доставлено
-    case DONE = 'DONE';                          // Выполнено
-    case CANCELLED = 'CANCELLED';                // Отменено
+    case DRAFT = 'DRAFT';                              // Черновик — у автора
+    case NEW = 'NEW';                                  // Подана — на рассмотрении отдела закупок
+    case APPROVERS_PENDING = 'APPROVERS_PENDING';      // На согласовании у согласантов
+    case APPROVERS_DONE = 'APPROVERS_DONE';            // Все согласанты подтвердили
+    case CEO_APPROVE_PENDING = 'CEO_APPROVE_PENDING';  // У директора на согласовании
+    case CEO_APPROVED = 'CEO_APPROVED';                // Согласовано директором
+    case INVOICE_SENT = 'INVOICE_SENT';                // Счёт отправлен на оплату
+    case INVOICE_PAID = 'INVOICE_PAID';                // Оплачено
+    case DELIVERED = 'DELIVERED';                      // Доставлено
+    case DONE = 'DONE';                                // Выполнено
+    case REJECTED = 'REJECTED';                        // Возвращено на доработку
+    case CANCELLED = 'CANCELLED';                      // Отменено
 
     public function getLabel(): string
     {
         return match ($this) {
             self::DRAFT => 'Черновик',
-            self::PENDING_REVIEW => 'На рассмотрении',
-            self::PENDING_APPROVAL => 'На согласовании',
-            self::APPROVED => 'Согласовано',
-            self::REJECTED => 'Возвращено на доработку',
-            self::IN_PROGRESS => 'В работе',
-            self::AWAITING_PAYMENT => 'Счёт на оплате',
-            self::PAID => 'Оплачено',
+            self::NEW => 'Новая',
+            self::APPROVERS_PENDING => 'На согласовании',
+            self::APPROVERS_DONE => 'Согласанты подтвердили',
+            self::CEO_APPROVE_PENDING => 'У директора',
+            self::CEO_APPROVED => 'Согласовано',
+            self::INVOICE_SENT => 'Счёт на оплате',
+            self::INVOICE_PAID => 'Оплачено',
             self::DELIVERED => 'Доставлено',
             self::DONE => 'Выполнено',
+            self::REJECTED => 'Возвращено на доработку',
             self::CANCELLED => 'Отменено',
         };
     }
 
     /**
-     * Следующий шаг конвейера отдела закупок.
-     * APPROVED → IN_PROGRESS выполняется отдельным действием take (назначает executor).
+     * Следующий шаг конвейера после согласования директором.
+     * Исполнитель назначается при первом шаге (CEO_APPROVED → INVOICE_SENT).
      */
     public function nextExecutionStatus(): ?self
     {
         return match ($this) {
-            self::IN_PROGRESS => self::AWAITING_PAYMENT,
-            self::AWAITING_PAYMENT => self::PAID,
-            self::PAID => self::DELIVERED,
+            self::CEO_APPROVED => self::INVOICE_SENT,
+            self::INVOICE_SENT => self::INVOICE_PAID,
+            self::INVOICE_PAID => self::DELIVERED,
             default => null,
         };
     }
@@ -61,21 +70,52 @@ enum PurchaseStatus: string
     }
 
     /**
-     * Статусы, видимые отделу закупок (с момента подачи на рассмотрение и дальше).
+     * Статусы, видимые отделу закупок (с момента подачи и дальше).
      * @return list<PurchaseStatus>
      */
     public static function getPurchaseDepartmentVisible(): array
     {
         return [
-            self::PENDING_REVIEW,
-            self::PENDING_APPROVAL,
-            self::APPROVED,
-            self::IN_PROGRESS,
-            self::AWAITING_PAYMENT,
-            self::PAID,
+            self::NEW,
+            self::APPROVERS_PENDING,
+            self::APPROVERS_DONE,
+            self::CEO_APPROVE_PENDING,
+            self::CEO_APPROVED,
+            self::INVOICE_SENT,
+            self::INVOICE_PAID,
             self::DELIVERED,
             self::DONE,
             self::CANCELLED,
+        ];
+    }
+
+    /**
+     * Статусы, видимые директору: только после всех согласантов,
+     * когда отдел закупок направил заявку на его этап.
+     * @return list<PurchaseStatus>
+     */
+    public static function getDirectorVisible(): array
+    {
+        return [
+            self::CEO_APPROVE_PENDING,
+            self::CEO_APPROVED,
+            self::INVOICE_SENT,
+            self::INVOICE_PAID,
+            self::DELIVERED,
+            self::DONE,
+            self::CANCELLED,
+        ];
+    }
+
+    /**
+     * Статусы, видимые плательщику (ROLE_PURCHASE_INVOICE): очередь на оплату и оплаченные.
+     * @return list<PurchaseStatus>
+     */
+    public static function getPayerVisible(): array
+    {
+        return [
+            self::INVOICE_SENT,
+            self::INVOICE_PAID,
         ];
     }
 

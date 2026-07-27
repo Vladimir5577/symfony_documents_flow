@@ -40,9 +40,29 @@ class PurchaseRequestItem
     #[ORM\Column]
     private int $position = 0;
 
+    /**
+     * Ссылка на номенклатуру справочника — есть только у позиций, добавленных
+     * подбором из категории. По ней при подаче приглашаются ответственные категорий.
+     */
+    #[ORM\ManyToOne(targetEntity: PurchaseCategoryItem::class)]
+    #[ORM\JoinColumn(name: 'category_item_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseCategoryItem $categoryItem = null;
+
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getCategoryItem(): ?PurchaseCategoryItem
+    {
+        return $this->categoryItem;
+    }
+
+    public function setCategoryItem(?PurchaseCategoryItem $categoryItem): static
+    {
+        $this->categoryItem = $categoryItem;
+
+        return $this;
     }
 
     public function getPurchaseRequest(): ?PurchaseRequest

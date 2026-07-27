@@ -34,7 +34,7 @@ final class PurchaseRequestService
         $this->addHistory($request, $actor, null, PurchaseStatus::DRAFT);
     }
 
-    /** DRAFT | REJECTED → PENDING_REVIEW (на рассмотрение отделом закупок). */
+    /** DRAFT | REJECTED → NEW (на рассмотрение отделом закупок). */
     public function submit(PurchaseRequest $request, User $actor): void
     {
         $from = $request->getStatus();
@@ -51,46 +51,110 @@ final class PurchaseRequestService
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_JUSTIFICATION_REQUIRED);
         }
 
-        $this->transition($request, $actor, PurchaseStatus::PENDING_REVIEW);
+        // Повторная подача после возврата: заявка могла измениться — согласуют заново.
+        if ($from === PurchaseStatus::REJECTED) {
+            foreach ($request->getApprovers() as $approver) {
+                $approver->setConfirmedAt(null);
+            }
+        }
+
+        $this->transition($request, $actor, PurchaseStatus::NEW);
         $this->notifier->notifySubmitted($request, $actor, resubmitted: $from === PurchaseStatus::REJECTED);
+
+        // Ответственные всех затронутых категорий (шапка + категории позиций из справочника)
+        // автоматически становятся согласантами (кроме самого автора).
+        foreach ($this->collectResponsibles($request) as $responsible) {
+            if ($responsible->getId() !== $actor->getId()) {
+                $this->inviteApprover($request, $actor, $responsible);
+            }
+        }
     }
 
-    /** PENDING_REVIEW → PENDING_APPROVAL (отдел закупок направляет директору). */
+    /**
+     * Ответственные категорий заявки: категория шапки + категории номенклатурных позиций.
+     * @return list<User>
+     */
+    private function collectResponsibles(PurchaseRequest $request): array
+    {
+        $byId = [];
+
+        $headerResponsible = $request->getCategory()?->getResponsibleUser();
+        if ($headerResponsible !== null) {
+            $byId[$headerResponsible->getId()] = $headerResponsible;
+        }
+
+        foreach ($request->getItems() as $item) {
+            $responsible = $item->getCategoryItem()?->getCategory()?->getResponsibleUser();
+            if ($responsible !== null) {
+                $byId[$responsible->getId()] = $responsible;
+            }
+        }
+
+        return array_values($byId);
+    }
+
+    /** NEW → APPROVERS_PENDING: отдел закупок отправляет заявку согласантам (нужен хотя бы один). */
+    public function sendToApprovers(PurchaseRequest $request, User $actor): void
+    {
+        $this->assertStatus($request, PurchaseStatus::NEW);
+
+        if ($request->getApprovers()->isEmpty()) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_APPROVERS_REQUIRED);
+        }
+
+        $this->transition($request, $actor, PurchaseStatus::APPROVERS_PENDING);
+    }
+
+    /**
+     * NEW (без согласантов) | APPROVERS_DONE → CEO_APPROVE_PENDING.
+     * Гейт: все согласанты должны подтвердить — до этого директор заявку не видит.
+     */
     public function sendToDirector(PurchaseRequest $request, User $actor): void
     {
-        $this->assertStatus($request, PurchaseStatus::PENDING_REVIEW);
+        $allowed = [PurchaseStatus::NEW, PurchaseStatus::APPROVERS_DONE];
+        if (!in_array($request->getStatus(), $allowed, true)) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+        }
 
-        $this->transition($request, $actor, PurchaseStatus::PENDING_APPROVAL);
+        foreach ($request->getApprovers() as $approver) {
+            if ($approver->getConfirmedAt() === null) {
+                throw new PurchaseTransitionException(SpaApiError::PURCHASE_APPROVALS_PENDING);
+            }
+        }
+
+        $this->transition($request, $actor, PurchaseStatus::CEO_APPROVE_PENDING);
         $this->notifier->notifySentToDirector($request, $actor);
     }
 
     /**
-     * PENDING_REVIEW | PENDING_APPROVAL → APPROVED (+опционально срочность).
-     * Директор может согласовать сразу с рассмотрения, не дожидаясь направления отделом закупок.
+     * CEO_APPROVE_PENDING → CEO_APPROVED (+опционально срочность).
+     * Только с этапа директора: до него заявка проходит рассмотрение и всех согласантов.
      */
     public function approve(PurchaseRequest $request, User $actor, ?PurchasePriority $priority = null): void
     {
-        $allowed = [PurchaseStatus::PENDING_REVIEW, PurchaseStatus::PENDING_APPROVAL];
-        if (!in_array($request->getStatus(), $allowed, true)) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
-        }
+        $this->assertStatus($request, PurchaseStatus::CEO_APPROVE_PENDING);
 
         if ($priority !== null) {
             $request->setPriority($priority);
         }
 
-        $this->transition($request, $actor, PurchaseStatus::APPROVED);
+        $this->transition($request, $actor, PurchaseStatus::CEO_APPROVED);
         $this->notifier->notifyApproved($request, $actor);
     }
 
     /**
      * Возврат на доработку, комментарий обязателен.
-     * Отдел закупок — из PENDING_REVIEW; директор — из PENDING_APPROVAL
-     * и из APPROVED, пока заявку не взяли в работу («передумал»).
+     * Отдел закупок — с рассмотрения и согласования; директор — со своего этапа
+     * и из CEO_APPROVED, пока не отправлен счёт («передумал»).
      */
     public function reject(PurchaseRequest $request, User $actor, string $comment): void
     {
-        $allowed = [PurchaseStatus::PENDING_REVIEW, PurchaseStatus::PENDING_APPROVAL, PurchaseStatus::APPROVED];
+        $allowed = [
+            PurchaseStatus::NEW,
+            PurchaseStatus::APPROVERS_PENDING,
+            PurchaseStatus::CEO_APPROVE_PENDING,
+            PurchaseStatus::CEO_APPROVED,
+        ];
         if (!in_array($request->getStatus(), $allowed, true)) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
         }
@@ -122,15 +186,23 @@ final class PurchaseRequestService
         return $approver;
     }
 
-    /** Убрать приглашённого согласанта. */
-    public function removeApprover(PurchaseRequest $request, PurchaseRequestApprover $approver): void
+    /**
+     * Убрать приглашённого согласанта (клапан от «молчуна»).
+     * Если после удаления неподтверждённых не осталось — этап согласования закрывается автоматически.
+     */
+    public function removeApprover(PurchaseRequest $request, PurchaseRequestApprover $approver, User $actor): void
     {
         $request->removeApprover($approver);
         $this->em->remove($approver);
         $this->em->flush();
+
+        $this->advanceApproversStageIfComplete($request, $actor);
     }
 
-    /** Тоггл согласанта: подтвердил / снял подтверждение. */
+    /**
+     * Тоггл согласанта: подтвердил / снял подтверждение.
+     * Подтвердил последний → заявка сама переходит в APPROVERS_DONE.
+     */
     public function confirmApproval(PurchaseRequest $request, PurchaseRequestApprover $approver, bool $confirmed): void
     {
         $approver->setConfirmedAt($confirmed ? new \DateTimeImmutable() : null);
@@ -138,24 +210,37 @@ final class PurchaseRequestService
 
         if ($confirmed && $approver->getUser() !== null) {
             $this->notifier->notifyApproverConfirmed($request, $approver->getUser(), $approver->getInvitedBy());
+            $this->advanceApproversStageIfComplete($request, $approver->getUser());
         }
     }
 
-    /** APPROVED → IN_PROGRESS, назначает исполнителя. */
-    public function take(PurchaseRequest $request, User $actor): void
+    /** APPROVERS_PENDING + все подтвердили → APPROVERS_DONE (автопереход). */
+    private function advanceApproversStageIfComplete(PurchaseRequest $request, User $actor): void
     {
-        $this->assertStatus($request, PurchaseStatus::APPROVED);
+        if ($request->getStatus() !== PurchaseStatus::APPROVERS_PENDING) {
+            return;
+        }
+        foreach ($request->getApprovers() as $approver) {
+            if ($approver->getConfirmedAt() === null) {
+                return;
+            }
+        }
 
-        $request->setExecutor($actor);
-        $this->transition($request, $actor, PurchaseStatus::IN_PROGRESS);
-        $this->notifier->notifyTaken($request, $actor);
+        $this->transition($request, $actor, PurchaseStatus::APPROVERS_DONE);
     }
 
-    /** Шаг конвейера исполнения: строго следующий статус. */
+    /**
+     * Шаг конвейера исполнения: строго следующий статус.
+     * На первом шаге (CEO_APPROVED → INVOICE_SENT) назначается исполнитель, если его ещё нет.
+     */
     public function advance(PurchaseRequest $request, User $actor, PurchaseStatus $target): void
     {
         if ($request->getStatus()->nextExecutionStatus() !== $target) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+        }
+
+        if ($target === PurchaseStatus::INVOICE_SENT && $request->getExecutor() === null) {
+            $request->setExecutor($actor);
         }
 
         $this->transition($request, $actor, $target);

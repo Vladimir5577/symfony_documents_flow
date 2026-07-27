@@ -2,6 +2,7 @@
 
 namespace App\Entity\Purchase;
 
+use App\Entity\User\User;
 use App\Repository\Purchase\PurchaseCategoryRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -30,6 +31,11 @@ class PurchaseCategory
     #[ORM\OneToMany(mappedBy: 'category', targetEntity: PurchaseCategoryItem::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['name' => 'ASC'])]
     private Collection $items;
+
+    /** Ответственный за категорию: при подаче заявки с этой категорией автоматически приглашается согласантом. */
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?User $responsibleUser = null;
 
     public function __construct()
     {
@@ -74,6 +80,18 @@ class PurchaseCategory
     public function removeItem(PurchaseCategoryItem $item): static
     {
         $this->items->removeElement($item);
+
+        return $this;
+    }
+
+    public function getResponsibleUser(): ?User
+    {
+        return $this->responsibleUser;
+    }
+
+    public function setResponsibleUser(?User $user): static
+    {
+        $this->responsibleUser = $user;
 
         return $this;
     }

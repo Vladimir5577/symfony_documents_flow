@@ -18,7 +18,7 @@ class PurchaseRequestApproverRepository extends ServiceEntityRepository
         parent::__construct($registry, PurchaseRequestApprover::class);
     }
 
-    /** Сколько приглашений ждут подтверждения пользователя (заявка ещё на рассмотрении). */
+    /** Сколько приглашений ждут подтверждения пользователя (заявка на этапе согласантов). */
     public function countPendingForUser(User $user): int
     {
         return (int) $this->createQueryBuilder('a')
@@ -28,7 +28,7 @@ class PurchaseRequestApproverRepository extends ServiceEntityRepository
             ->andWhere('a.confirmedAt IS NULL')
             ->andWhere('pr.status = :status')
             ->setParameter('user', $user)
-            ->setParameter('status', PurchaseStatus::PENDING_REVIEW)
+            ->setParameter('status', PurchaseStatus::APPROVERS_PENDING)
             ->getQuery()
             ->getSingleScalarResult();
     }
