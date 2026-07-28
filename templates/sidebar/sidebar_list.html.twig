@@ -259,7 +259,7 @@
     {% if is_granted('ROLE_TKO') %}
         <li class="sidebar-group-label">Аналитика ТКО</li>
 
-        <li class="sidebar-item has-sub {% if active_tab in ['analytics_tko', 'analytics_tko_view', 'analytics_tko_view_week', 'analytics_tko_view_month', 'analytics_tko_view_summary'] %}active{% endif %}">
+        <li class="sidebar-item has-sub {% if active_tab in ['analytics_tko', 'analytics_tko_vehicles', 'analytics_tko_vehicle_trips', 'analytics_tko_view', 'analytics_tko_view_week', 'analytics_tko_view_month', 'analytics_tko_view_summary'] %}active{% endif %}">
             <a href="#" class="sidebar-link">
                 <i class="bi bi-trash3"></i>
                 <span>Аналитика ТКО</span>
@@ -268,6 +268,14 @@
             <ul class="submenu">
                 <li class="submenu-item {% if active_tab == 'analytics_tko' %}active{% endif %}">
                     <a href="{{ path('app_analytics_tko') }}" class="submenu-link"><i class="bi bi-pencil-square"></i> Заполнение</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_tko_vehicles' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_tko_vehicles') }}" class="submenu-link"><i class="bi bi-truck"></i> Заполнение ТС</a>
+                </li>
+
+                <li class="submenu-item {% if active_tab == 'analytics_tko_vehicle_trips' %}active{% endif %}">
+                    <a href="{{ path('app_analytics_tko_vehicle_trips') }}" class="submenu-link"><i class="bi bi-list-ol"></i> Заполнение ТС-ходки</a>
                 </li>
 
                 <li class="submenu-item {% if active_tab in ['analytics_tko_view', 'analytics_tko_view_week', 'analytics_tko_view_month'] %}active{% endif %}">

@@ -1,0 +1,314 @@
+{% extends 'base_dashboard.html.twig' %}
+
+{% block title %}Заполнение ТС (ходки){% endblock %}
+
+{% block sidebar_list %}
+    {% include 'sidebar/sidebar_list.html.twig' %}
+{% endblock %}
+
+{% block main %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css">
+
+    <div class="page-title">
+        <div class="row">
+            <div class="col-12">
+                <h3>Заполнение ТС (ходки)</h3>
+                <p class="text-subtitle text-muted">Веса ходок за день по выбранному мусоровозу</p>
+            </div>
+        </div>
+    </div>
+
+    {% for label, messages in app.flashes %}
+        {% for message in messages %}
+            <div class="alert alert-{{ label == 'error' ? 'danger' : (label == 'warning' ? 'warning' : 'success') }} alert-dismissible">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endfor %}
+
+    <style>
+        @media (min-width: 1200px) {
+            .tko-trips-form-col { flex: 0 0 20%; max-width: 20%; }
+            .tko-trips-grid-col { flex: 0 0 80%; max-width: 80%; }
+        }
+    </style>
+
+    <section class="section">
+        <div class="row">
+            <div class="col-12 col-xl-3 mb-4 tko-trips-form-col">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">{{ selectedVehicleId ? 'Редактирование ТС-дня' : 'Новый ТС-День' }}</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="post" action="{{ path('app_analytics_tko_vehicle_trips_save') }}" id="trip-fill-form">
+                            <input type="hidden" name="_token" value="{{ csrf_token('analytics_tko_vehicle_trip_save') }}">
+
+                            <div class="mb-3">
+                                <label class="form-label" for="trip-date">Дата <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="trip-date" name="trip_date" required
+                                       value="{{ tripDate }}">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="trip-vehicle">ТС <span class="text-danger">*</span></label>
+                                <select class="form-select" id="trip-vehicle" name="vehicle_id" required>
+                                    <option value="">— выберите ТС —</option>
+                                    {% for vehicle in vehicles %}
+                                        <option value="{{ vehicle.id }}"
+                                            {% if selectedVehicleId and selectedVehicleId == vehicle.id %}selected{% endif %}>
+                                            {{ vehicle.name }} — {{ vehicle.licenseNumber }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="trip-weights">Ходки (веса через пробел)</label>
+                                <input type="text" class="form-control" id="trip-weights" name="weights"
+                                       value="{{ weightsInput }}"
+                                       placeholder="например: 7.2 8 5.6"
+                                       autocomplete="off">
+                                <div class="form-text">
+                                    Значения через пробел → ходки с номера 1. При сохранении старые ходки этой даты для ТС заменяются.
+                                    Пустое поле очистит ходки за день.
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-2 justify-content-end">
+                                {% if selectedVehicleId %}
+                                    <a href="{{ path('app_analytics_tko_vehicle_trips', filter_query|merge({ page: pagination.current_page })) }}"
+                                       class="btn btn-light-secondary">Отменить</a>
+                                {% endif %}
+                                <button type="submit" class="btn btn-primary">Сохранить</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-xl-9 mb-4 tko-trips-grid-col">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">Фильтры</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="get" class="row g-3 align-items-end">
+                            {% if selectedVehicleId %}
+                                <input type="hidden" name="date" value="{{ tripDate }}">
+                                <input type="hidden" name="vehicle_id" value="{{ selectedVehicleId }}">
+                            {% endif %}
+                            <div class="col-md-3">
+                                <label class="form-label mb-1" for="filter-organization">Филиал</label>
+                                <select class="form-select form-select-sm" id="filter-organization" name="organization_id">
+                                    <option value="">Все</option>
+                                    {% for filial in filials %}
+                                        <option value="{{ filial.id }}" {% if filters.organization_id == filial.id %}selected{% endif %}>
+                                            {{ filial.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label mb-1" for="filter-polygon">Полигон</label>
+                                <select class="form-select form-select-sm" id="filter-polygon" name="polygon_id">
+                                    <option value="">Все</option>
+                                    {% for polygon in polygons %}
+                                        <option value="{{ polygon.id }}" {% if filters.polygon_id == polygon.id %}selected{% endif %}>
+                                            {{ polygon.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label mb-1" for="filter-date-from">Дата от</label>
+                                <input type="date" class="form-control form-control-sm" id="filter-date-from" name="date_from"
+                                       value="{{ filters.date_from }}">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label mb-1" for="filter-date-to">Дата до</label>
+                                <input type="date" class="form-control form-control-sm" id="filter-date-to" name="date_to"
+                                       value="{{ filters.date_to }}">
+                            </div>
+                            <div class="col-md-2 d-flex gap-2 justify-content-end">
+                                <a href="{{ path('app_analytics_tko_vehicle_trips', selectedVehicleId ? { date: tripDate, vehicle_id: selectedVehicleId } : {}) }}"
+                                   class="btn btn-outline-secondary btn-sm">Сбросить</a>
+                                <button type="submit" class="btn btn-primary btn-sm">Применить</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h5 class="mb-0">Все ходки</h5>
+                        <span class="badge bg-secondary">Всего строк: {{ pagination.total_items }}</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-bordered mb-0 align-middle" style="font-size: 0.6rem;">
+                                <thead class="table-light">
+                                <tr>
+                                    <th>Дата</th>
+                                    <th>Название машины</th>
+                                    <th>Гос.№</th>
+                                    <th>Полигон</th>
+                                    <th>Филиал</th>
+                                    <th class="text-end text-nowrap">Ёмкость, м³</th>
+                                    {% if maxTripNumber > 0 %}
+                                        {% for n in 1..maxTripNumber %}
+                                            <th class="text-end text-nowrap">{{ n }} ходка</th>
+                                        {% endfor %}
+                                    {% else %}
+                                        <th class="text-muted">Ходки</th>
+                                    {% endif %}
+                                    <th></th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for row in gridRows %}
+                                    <tr>
+                                        <td class="text-nowrap">{{ row.date }}</td>
+                                        <td>{{ row.name }}</td>
+                                        <td class="fw-semibold text-nowrap">{{ row.licenseNumber }}</td>
+                                        <td>{{ row.polygon }}</td>
+                                        <td>{{ row.organization }}</td>
+                                        <td class="text-end">{{ row.capacity }}</td>
+                                        {% if maxTripNumber > 0 %}
+                                            {% for n in 1..maxTripNumber %}
+                                                <td class="text-end">{{ row.weights[n] is defined ? row.weights[n]|tko_decimal : '' }}</td>
+                                            {% endfor %}
+                                        {% else %}
+                                            <td></td>
+                                        {% endif %}
+                                        <td class="text-end text-nowrap">
+                                            <form method="post"
+                                                  action="{{ path('app_analytics_tko_vehicle_trips_delete') }}"
+                                                  class="d-inline"
+                                                  onsubmit="return confirm('Удалить ходки {{ row.licenseNumber|e('js') }} за {{ row.date|e('js') }}?');">
+                                                <input type="hidden" name="_token" value="{{ csrf_token('analytics_tko_vehicle_trip_delete_' ~ row.vehicleId ~ '_' ~ row.dateIso) }}">
+                                                <input type="hidden" name="vehicle_id" value="{{ row.vehicleId }}">
+                                                <input type="hidden" name="trip_date" value="{{ row.dateIso }}">
+                                                <input type="hidden" name="page" value="{{ pagination.current_page }}">
+                                                <button type="submit" class="btn btn-sm btn-light-danger" title="Удалить">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                            <a href="{{ path('app_analytics_tko_vehicle_trips', filter_query|merge({ date: row.dateIso, vehicle_id: row.vehicleId, page: pagination.current_page })) }}#trip-fill-form"
+                                               class="btn btn-sm btn-light-primary"
+                                               title="Редактировать">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% else %}
+                                    <tr>
+                                        <td colspan="{{ 7 + (maxTripNumber > 0 ? maxTripNumber : 1) }}" class="text-center text-muted py-4">
+                                            Нет сохранённых ходок.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% if pagination.total_pages > 1 %}
+                        {% set page_base = filter_query|merge({
+                            date: selectedVehicleId ? tripDate : null,
+                            vehicle_id: selectedVehicleId
+                        })|filter(v => v is not null and v != '') %}
+                        <div class="card-footer">
+                            <nav aria-label="Страницы ходок">
+                                <ul class="pagination justify-content-center mb-2">
+                                    <li class="page-item {% if pagination.current_page == 1 %}disabled{% endif %}">
+                                        <a class="page-link"
+                                           href="{% if pagination.current_page > 1 %}{{ path('app_analytics_tko_vehicle_trips', page_base|merge({ page: pagination.current_page - 1 })) }}{% else %}#{% endif %}">
+                                            «
+                                        </a>
+                                    </li>
+                                    {% set start_page = max(1, pagination.current_page - 2) %}
+                                    {% set end_page = min(pagination.total_pages, pagination.current_page + 2) %}
+                                    {% if start_page > 1 %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="{{ path('app_analytics_tko_vehicle_trips', page_base|merge({ page: 1 })) }}">1</a>
+                                        </li>
+                                        {% if start_page > 2 %}
+                                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                                        {% endif %}
+                                    {% endif %}
+                                    {% for p in start_page..end_page %}
+                                        <li class="page-item {% if p == pagination.current_page %}active{% endif %}">
+                                            <a class="page-link" href="{{ path('app_analytics_tko_vehicle_trips', page_base|merge({ page: p })) }}">{{ p }}</a>
+                                        </li>
+                                    {% endfor %}
+                                    {% if end_page < pagination.total_pages %}
+                                        {% if end_page < pagination.total_pages - 1 %}
+                                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                                        {% endif %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="{{ path('app_analytics_tko_vehicle_trips', page_base|merge({ page: pagination.total_pages })) }}">{{ pagination.total_pages }}</a>
+                                        </li>
+                                    {% endif %}
+                                    <li class="page-item {% if pagination.current_page == pagination.total_pages %}disabled{% endif %}">
+                                        <a class="page-link"
+                                           href="{% if pagination.current_page < pagination.total_pages %}{{ path('app_analytics_tko_vehicle_trips', page_base|merge({ page: pagination.current_page + 1 })) }}{% else %}#{% endif %}">
+                                            »
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                            <div class="text-center text-muted small">
+                                Страница {{ pagination.current_page }} из {{ pagination.total_pages }}
+                                ({{ ((pagination.current_page - 1) * pagination.items_per_page) + 1 }}–{{ min(pagination.current_page * pagination.items_per_page, pagination.total_items) }}
+                                из {{ pagination.total_items }})
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var select = document.getElementById('trip-vehicle');
+            var dateInput = document.getElementById('trip-date');
+            var prefillUrl = {{ path('app_analytics_tko_vehicle_trips')|json_encode|raw }};
+            var skipReload = true;
+
+            if (select && window.Choices) {
+                new Choices(select, {
+                    searchEnabled: true,
+                    searchPlaceholderValue: 'Поиск по названию или госномеру',
+                    itemSelectText: '',
+                    shouldSort: false,
+                    allowHTML: false,
+                });
+            }
+
+            function reloadPrefill() {
+                if (skipReload) {
+                    return;
+                }
+                var params = new URLSearchParams(window.location.search);
+                params.set('date', dateInput.value || '');
+                if (select.value) {
+                    params.set('vehicle_id', select.value);
+                } else {
+                    params.delete('vehicle_id');
+                }
+                params.delete('page');
+                window.location = prefillUrl + '?' + params.toString();
+            }
+
+            if (dateInput && select) {
+                dateInput.addEventListener('change', reloadPrefill);
+                select.addEventListener('change', reloadPrefill);
+            }
+
+            // Choices fires change on init — ignore first tick
+            setTimeout(function () { skipReload = false; }, 0);
+        });
+    </script>
+{% endblock %}
