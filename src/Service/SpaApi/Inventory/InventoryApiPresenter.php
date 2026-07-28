@@ -232,6 +232,9 @@ final class InventoryApiPresenter
                 $line->getToRoom()?->getId(),
                 $line->getToManagingWarehouse()?->getId(),
             ),
+            // Карточка устройства: отдаём id, чтобы привязку можно было и прочитать,
+            // а не только отправить. Без этого поле было недостижимо в обе стороны.
+            'device_id' => $line->getDevice()?->getId(),
             'note' => $line->getNote(),
         ];
     }

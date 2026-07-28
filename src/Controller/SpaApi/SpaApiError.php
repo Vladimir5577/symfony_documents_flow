@@ -50,6 +50,8 @@ final class SpaApiError
     public const PROJECT_NAME_REQUIRED = 'project_name_required';
     public const PROJECT_NAME_TOO_LONG = 'project_name_too_long';
     public const PROJECT_NOT_FOUND = 'project_not_found';
+    /** Запасной код для непойманных HttpException под /spa/api/ — см. SpaApiExceptionListener. */
+    public const REQUEST_FAILED = 'request_failed';
     public const SUBTASK_NOT_FOUND = 'subtask_not_found';
     public const SUBTASK_TITLE_REQUIRED = 'subtask_title_required';
     public const UPDATE_FIELDS_REQUIRED = 'update_fields_required';

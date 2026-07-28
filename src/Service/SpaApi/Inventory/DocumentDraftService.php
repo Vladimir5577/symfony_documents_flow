@@ -11,6 +11,7 @@ use App\Entity\User\User;
 use App\Enum\Inventory\DocumentStatus;
 use App\Enum\Inventory\DocumentType;
 use App\Repository\Inventory\BasisTypeRepository;
+use App\Repository\Inventory\DeviceRepository;
 use App\Repository\Inventory\NomenclatureRepository;
 use App\Repository\Inventory\RoomRepository;
 use App\Repository\Inventory\WarehouseRepository;
@@ -38,6 +39,7 @@ final class DocumentDraftService
         private readonly NomenclatureRepository $nomenclatures,
         private readonly WarehouseRepository $warehouses,
         private readonly RoomRepository $rooms,
+        private readonly DeviceRepository $devices,
         private readonly BasisTypeRepository $basisTypes,
         private readonly UserRepository $users,
         private readonly InventoryHistoryService $history,
@@ -208,6 +210,13 @@ final class DocumentDraftService
             $line->setToRoom($this->refRoom($lineData['to_room_id'] ?? null));
             $line->setToManagingWarehouse($this->refWarehouse($lineData['to_managing_warehouse_id'] ?? null));
 
+            // Карточка устройства. Семантика поля разная у разных типов документа
+            // (перемещаемый предмет против устройства-потребителя), и разбирает её
+            // StockPostingService::assertDeviceBinding при проведении. Здесь только
+            // сохраняем ссылку: без неё вся та проверка была недостижима, потому что
+            // getDevice() всегда возвращал null.
+            $line->setDevice($this->refDevice($lineData['device_id'] ?? null));
+
             $note = trim((string) ($lineData['note'] ?? ''));
             if ($note !== '') {
                 $line->setNote($note);
@@ -255,6 +264,19 @@ final class DocumentDraftService
         }
 
         return $room;
+    }
+
+    private function refDevice(mixed $id): ?\App\Entity\Inventory\Device
+    {
+        if ($id === null || $id === '' || (int) $id <= 0) {
+            return null;
+        }
+        $device = $this->devices->find((int) $id);
+        if ($device === null) {
+            throw new BadRequestHttpException(SpaApiError::INVENTORY_DOCUMENT_INVALID_LINES);
+        }
+
+        return $device;
     }
 
     private function parseDate(mixed $value): ?\DateTimeImmutable
