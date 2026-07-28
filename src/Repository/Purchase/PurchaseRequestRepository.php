@@ -25,6 +25,7 @@ class PurchaseRequestRepository extends ServiceEntityRepository
      * @param int|null                  $createdById    только заявки этого автора (null = без ограничения)
      * @param list<PurchaseStatus>|null $statuses        ограничение по статусам (null = все)
      * @param int|null                  $approverUserId  только заявки, где пользователь — приглашённый согласант
+     * @param float|null                $minAmount       скрыть заявки дешевле порога (сумма считается из позиций)
      * @return array{items: list<PurchaseRequest>, total: int}
      */
     public function findByFilters(
@@ -34,8 +35,9 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         int $page,
         int $pageSize,
         ?int $approverUserId = null,
+        ?float $minAmount = null,
     ): array {
-        $qb = $this->createFilteredQueryBuilder($createdById, $statuses, $search);
+        $qb = $this->createFilteredQueryBuilder($createdById, $statuses, $search, $minAmount);
 
         if ($approverUserId !== null) {
             $qb->join(PurchaseRequestApprover::class, 'ap', 'WITH', 'ap.purchaseRequest = pr')
@@ -85,9 +87,23 @@ class PurchaseRequestRepository extends ServiceEntityRepository
      * @param int|null                  $createdById
      * @param list<PurchaseStatus>|null $statuses
      */
-    private function createFilteredQueryBuilder(?int $createdById, ?array $statuses, ?string $search): QueryBuilder
-    {
+    private function createFilteredQueryBuilder(
+        ?int $createdById,
+        ?array $statuses,
+        ?string $search,
+        ?float $minAmount = null,
+    ): QueryBuilder {
         $qb = $this->createQueryBuilder('pr');
+
+        if ($minAmount !== null) {
+            // Сумма не хранится в колонке (считается из позиций) — фильтруем скалярным подзапросом,
+            // чтобы клон под COUNT(pr.id) работал без группировок.
+            $qb->andWhere(
+                '(SELECT COALESCE(SUM(i.quantity * i.estimatedPrice), 0)
+                  FROM App\Entity\Purchase\PurchaseRequestItem i
+                  WHERE i.purchaseRequest = pr) >= :minAmount'
+            )->setParameter('minAmount', $minAmount);
+        }
 
         if ($createdById !== null) {
             $qb->andWhere('pr.createdBy = :createdById')

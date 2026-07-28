@@ -12,6 +12,7 @@ use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseStatus;
+use App\Repository\Purchase\PurchaseSettingRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -26,6 +27,7 @@ final class PurchaseRequestService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly PurchaseNotificationPublisher $notifier,
+        private readonly PurchaseSettingRepository $settings,
     ) {}
 
     /** Запись о создании заявки (from = NULL). Без flush — вызывается при создании. */
@@ -108,6 +110,9 @@ final class PurchaseRequestService
     /**
      * NEW (без согласантов) | APPROVERS_DONE → CEO_APPROVE_PENDING.
      * Гейт: все согласанты должны подтвердить — до этого директор заявку не видит.
+     *
+     * Единственная точка, где заявка попадает к директору, поэтому порог
+     * автосогласования проверяется здесь и больше нигде.
      */
     public function sendToDirector(PurchaseRequest $request, User $actor): void
     {
@@ -120,6 +125,20 @@ final class PurchaseRequestService
             if ($approver->getConfirmedAt() === null) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_APPROVALS_PENDING);
             }
+        }
+
+        // Мелкие заявки директора не беспокоят: сразу CEO_APPROVED с отметкой в истории.
+        $minAmount = $this->settings->getCeoApproveMinAmount();
+        if ($minAmount > 0 && $request->getTotalAmount() < $minAmount) {
+            $this->transition(
+                $request,
+                $actor,
+                PurchaseStatus::CEO_APPROVED,
+                sprintf('Автосогласовано: сумма ниже порога %s ₽', number_format($minAmount, 2, ',', ' ')),
+            );
+            $this->notifier->notifyApproved($request, $actor);
+
+            return;
         }
 
         $this->transition($request, $actor, PurchaseStatus::CEO_APPROVE_PENDING);

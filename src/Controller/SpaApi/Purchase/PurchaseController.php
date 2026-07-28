@@ -11,11 +11,13 @@ use App\Entity\Purchase\PurchaseRequestItem;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseLaw;
 use App\Enum\Purchase\PurchaseMethod;
+use App\Enum\Purchase\PurchaseSettingKey;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseCategoryRepository;
 use App\Repository\Purchase\PurchaseRequestApproverRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
+use App\Repository\Purchase\PurchaseSettingRepository;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseRequestService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -37,6 +39,7 @@ final class PurchaseController extends AbstractController
         private readonly PurchaseRequestRepository $purchaseRepo,
         private readonly PurchaseCategoryRepository $categoryRepo,
         private readonly PurchaseRequestApproverRepository $approverRepo,
+        private readonly PurchaseSettingRepository $settingRepo,
         private readonly PurchaseApiPresenter $presenter,
         private readonly PurchaseRequestService $purchaseService,
         private readonly EntityManagerInterface $em,
@@ -64,8 +67,27 @@ final class PurchaseController extends AbstractController
         [$createdById, $visibleStatuses] = $scope;
 
         $statuses = $visibleStatuses;
+        // Мультивыбор чекбоксами: statuses=A,B,C. Приоритетнее одиночного status (вместе не шлются).
+        $statusesFilter = trim((string) $request->query->get('statuses', ''));
         $statusFilter = trim((string) $request->query->get('status', ''));
-        if ($statusFilter !== '') {
+        if ($statusesFilter !== '') {
+            $requested = [];
+            foreach (explode(',', $statusesFilter) as $rawStatus) {
+                $parsed = PurchaseStatus::tryFrom(trim($rawStatus));
+                if ($parsed === null) {
+                    return $this->json(['error' => SpaApiError::PURCHASE_INVALID_STATUS], Response::HTTP_BAD_REQUEST);
+                }
+                $requested[] = $parsed;
+            }
+            // Пересечение со скоупом роли: чекбоксы не открывают чужие статусы.
+            // Не array_intersect — он сравнивает через (string), а enum к строке не приводится.
+            $statuses = $visibleStatuses === null
+                ? $requested
+                : array_values(array_filter(
+                    $requested,
+                    static fn (PurchaseStatus $s): bool => in_array($s, $visibleStatuses, true),
+                ));
+        } elseif ($statusFilter !== '') {
             $requested = PurchaseStatus::tryFrom($statusFilter);
             if ($requested === null) {
                 return $this->json(['error' => SpaApiError::PURCHASE_INVALID_STATUS], Response::HTTP_BAD_REQUEST);
@@ -76,6 +98,10 @@ final class PurchaseController extends AbstractController
                 $statuses = [$requested];
             }
         }
+
+        // Порог суммы: скрыть мелочёвку. Не-числа молча игнорируются.
+        $minAmountParam = $request->query->get('min_amount');
+        $minAmount = is_numeric($minAmountParam) && (float) $minAmountParam > 0 ? (float) $minAmountParam : null;
 
         $page = max(1, $request->query->getInt('page', 1));
         $pageSize = min(self::MAX_PAGE_SIZE, max(1, $request->query->getInt('page_size', self::DEFAULT_PAGE_SIZE)));
@@ -88,6 +114,7 @@ final class PurchaseController extends AbstractController
             $page,
             $pageSize,
             $asApprover ? (int) $user->getId() : null,
+            $minAmount,
         );
 
         return $this->json([
@@ -146,6 +173,54 @@ final class PurchaseController extends AbstractController
             'byStatus' => $byStatus === [] ? new \stdClass() : $byStatus,
             'actionRequired' => $actionRequired,
             'approverPending' => $approverPending,
+        ]);
+    }
+
+    /**
+     * Настройки модуля. Читают все авторизованные — порог влияет на маршрут заявки,
+     * и фронт показывает его в подсказках.
+     *
+     * Объявлены до /{id}: иначе «settings» уйдёт в маршрут карточки.
+     */
+    #[Route('/settings', name: 'spa_api_purchases_settings_get', methods: ['GET'])]
+    public function getSettings(#[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        return $this->json([
+            'ceoApproveMinAmount' => $this->settingRepo->getCeoApproveMinAmount(),
+        ]);
+    }
+
+    /** Меняют порог только директор и админ портала. */
+    #[Route('/settings', name: 'spa_api_purchases_settings_update', methods: ['PUT'])]
+    public function updateSettings(Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+        if (!$this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value) && !$this->isGranted(UserRole::ROLE_ADMIN->value)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload) || !array_key_exists('ceoApproveMinAmount', $payload)) {
+            return $this->json(['error' => SpaApiError::PURCHASE_INVALID_SETTING], Response::HTTP_BAD_REQUEST);
+        }
+
+        // Тип значения БД не контролирует (JSON) — проверяем по ключу
+        $key = PurchaseSettingKey::CEO_APPROVE_MIN_AMOUNT;
+        if (!$key->isValid($payload['ceoApproveMinAmount'])) {
+            return $this->json(['error' => SpaApiError::PURCHASE_INVALID_SETTING], Response::HTTP_BAD_REQUEST);
+        }
+
+        $this->settingRepo->set($key, (float) $payload['ceoApproveMinAmount']);
+        $this->em->flush();
+
+        return $this->json([
+            'ceoApproveMinAmount' => $this->settingRepo->getCeoApproveMinAmount(),
         ]);
     }
 

@@ -90,21 +90,19 @@ enum PurchaseStatus: string
     }
 
     /**
-     * Статусы, видимые директору: только после всех согласантов,
-     * когда отдел закупок направил заявку на его этап.
+     * Статусы, видимые директору: весь путь заявки, кроме черновиков.
+     * Черновик — личная кухня автора, он ещё никому не подан.
+     *
+     * Согласует директор по-прежнему только со своего этапа (CEO_APPROVE_PENDING) —
+     * это отдельная проверка в переходах, видимость на неё не влияет.
      * @return list<PurchaseStatus>
      */
     public static function getDirectorVisible(): array
     {
-        return [
-            self::CEO_APPROVE_PENDING,
-            self::CEO_APPROVED,
-            self::INVOICE_SENT,
-            self::INVOICE_PAID,
-            self::DELIVERED,
-            self::DONE,
-            self::CANCELLED,
-        ];
+        return array_values(array_filter(
+            self::cases(),
+            static fn (self $status): bool => $status !== self::DRAFT,
+        ));
     }
 
     /**

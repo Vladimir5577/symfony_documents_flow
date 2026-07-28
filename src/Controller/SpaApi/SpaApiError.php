@@ -99,4 +99,5 @@ final class SpaApiError
     public const PURCHASE_APPROVER_NOT_FOUND = 'purchase_approver_not_found';
     public const PURCHASE_APPROVALS_PENDING = 'purchase_approvals_pending';
     public const PURCHASE_APPROVERS_REQUIRED = 'purchase_approvers_required';
+    public const PURCHASE_INVALID_SETTING = 'purchase_invalid_setting';
 }
