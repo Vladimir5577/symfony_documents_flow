@@ -63,3 +63,13 @@ vich_uploader:
                     property: message.room.id
             delete_on_remove: true
             delete_on_update: true
+        inventory_document_files:
+            uri_prefix: /uploads/inventory
+            upload_destination: '%private_upload_dir_inventory%'
+            namer: Vich\UploaderBundle\Naming\SmartUniqueNamer
+            directory_namer:
+                service: Vich\UploaderBundle\Naming\PropertyDirectoryNamer
+                options:
+                    property: document.id
+            delete_on_remove: true
+            delete_on_update: true

@@ -22,6 +22,9 @@ parameters:
     private_upload_dir_users: '%env(resolve:PRIVATE_UPLOAD_DIR_USERS)%'
     private_upload_dir_chats: '%env(resolve:PRIVATE_UPLOAD_DIR_CHATS)%'
 
+    # inventory (модуль инвентаризации ТМЦ): сканы УПД и актов
+    private_upload_dir_inventory: '%env(resolve:PRIVATE_UPLOAD_DIR_INVENTORY)%'
+
     # onlyoffice url
     onlyoffice_document_server_url: '%env(resolve:ONLYOFFICE_DOCUMENT_SERVER_URL)%'
 

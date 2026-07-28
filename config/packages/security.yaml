@@ -68,17 +68,38 @@ security:
     # Иерархия ролей: роли наследуют права друг друга
     # ROLE_ADMIN автоматически имеет все права ROLE_HR и ROLE_USER
     # ROLE_HR автоматически имеет все права ROLE_USER
+    # Иерархия ролей: слева — роль, справа — что она получает В ПРИДАЧУ автоматически.
+    # Описание самих ролей — в src/Enum/User/UserRole.php (там же про ловушки).
+    # После правки: php bin/console app:roles:sync
     role_hierarchy:
-        ROLE_ADMIN: [ROLE_ANALYTIC, ROLE_MANAGER, ROLE_CITIZEN_APPEAL, ROLE_HR, ROLE_CONTRACT_APPLICATION, ROLE_TKO, ROLE_FINANCE, ROLE_CLIENTS_DEPARTMENT, ROLE_MECHANIC, ROLE_USER]
+        # Инвентаризация: наследует ТОЛЬКО ROLE_ADMIN (решение дебатов 2026-07-28):
+        # ROLE_ANALYTIC инвентарные роли НЕ получает — в модуле пароли устройств и матценности,
+        # доступ выдаётся явно через админку ролей.
+
+        # Администратор портала — получает всё, включая администратора инвентаризации.
+        ROLE_ADMIN: [ROLE_ANALYTIC, ROLE_MANAGER, ROLE_CITIZEN_APPEAL, ROLE_HR, ROLE_CONTRACT_APPLICATION, ROLE_TKO, ROLE_FINANCE, ROLE_CLIENTS_DEPARTMENT, ROLE_MECHANIC, ROLE_INVENTORY_ADMIN, ROLE_USER]
+        # Аналитик — все прикладные роли портала, но НИ ОДНОЙ инвентарной. Так задумано.
         ROLE_ANALYTIC: [ROLE_MANAGER, ROLE_CITIZEN_APPEAL, ROLE_HR, ROLE_CONTRACT_APPLICATION, ROLE_TKO, ROLE_FINANCE, ROLE_CLIENTS_DEPARTMENT, ROLE_MECHANIC, ROLE_USER]
-        ROLE_MANAGER: ROLE_USER
-        ROLE_CITIZEN_APPEAL: ROLE_USER
-        ROLE_HR: ROLE_USER
-        ROLE_CONTRACT_APPLICATION: ROLE_USER
-        ROLE_TKO: ROLE_USER
-        ROLE_FINANCE: ROLE_USER
-        ROLE_CLIENTS_DEPARTMENT: ROLE_USER
-        ROLE_MECHANIC: ROLE_USER
+
+        # ⚠ Единственная инвентарная роль, наследующая остальные инвентарные.
+        ROLE_INVENTORY_ADMIN: [ROLE_INVENTORY_MOL, ROLE_INVENTORY_VIEWER, ROLE_INVENTORY_DEPT_VIEWER, ROLE_USER]
+        # ⚠ Ниже — три ПАРАЛЛЕЛЬНЫЕ ветки: МОЛ не наследует наблюдателя, наблюдатель не наследует
+        # начальника отдела и наоборот. Поэтому #[IsGranted('ROLE_INVENTORY_VIEWER')] на классе
+        # контроллера отрезал бы МОЛа — на этом уже обожглись (см. decisions.md, второй раунд
+        # ревью сверки). Доступ в модуле решает InventoryAccessService в каждом методе.
+        ROLE_INVENTORY_MOL: ROLE_USER          # материально ответственный, работает в своём контуре
+        ROLE_INVENTORY_VIEWER: ROLE_USER       # бухгалтерия и руководство: видят всё, не меняют ничего
+        ROLE_INVENTORY_DEPT_VIEWER: ROLE_USER  # начальник отдела: только своё подразделение и потомки
+
+        # Прикладные роли портала — каждая даёт лишь базовую ROLE_USER сверх себя.
+        ROLE_MANAGER: ROLE_USER                # проекты, доски, пользователи
+        ROLE_CITIZEN_APPEAL: ROLE_USER         # обращения граждан
+        ROLE_HR: ROLE_USER                     # кадры: вакансии и отклики
+        ROLE_CONTRACT_APPLICATION: ROLE_USER   # заявки на договор
+        ROLE_TKO: ROLE_USER                    # аналитика ТКО
+        ROLE_FINANCE: ROLE_USER                # финансы и закупки
+        ROLE_CLIENTS_DEPARTMENT: ROLE_USER     # абонентский отдел
+        ROLE_MECHANIC: ROLE_USER               # транспорт и путевые листы
 
     # Note: Only the *first* matching rule is applied
     # Правила применяются сверху вниз, первое совпадение используется

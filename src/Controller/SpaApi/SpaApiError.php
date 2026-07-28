@@ -79,4 +79,26 @@ final class SpaApiError
     public const FOLDER_NOT_FOUND = 'folder_not_found';
     public const FOLDER_NAME_REQUIRED = 'folder_name_required';
     public const FOLDER_NAME_TOO_LONG = 'folder_name_too_long';
+
+    // Инвентаризация (модуль ТМЦ)
+    public const INVENTORY_NOT_FOUND = 'inventory_not_found';
+    public const INVENTORY_NAME_REQUIRED = 'inventory_name_required';
+    public const INVENTORY_FILE_REQUIRED = 'inventory_file_required';
+    public const INVENTORY_FILE_TOO_LARGE = 'inventory_file_too_large';
+    public const INVENTORY_FILE_INVALID_TYPE = 'inventory_file_invalid_type';
+    public const INVENTORY_INSUFFICIENT_STOCK = 'inventory_insufficient_stock';
+    public const INVENTORY_DOCUMENT_FROZEN = 'inventory_document_frozen';
+    public const INVENTORY_DOCUMENT_INVALID_STATUS = 'inventory_document_invalid_status';
+    public const INVENTORY_DOCUMENT_INVALID_LINES = 'inventory_document_invalid_lines';
+    public const INVENTORY_DOCUMENT_REQUISITES_REQUIRED = 'inventory_document_requisites_required';
+    public const INVENTORY_DEVICE_NOT_SUPPORTED = 'inventory_device_not_supported';
+    public const INVENTORY_IMPORT_DUPLICATE_FILE = 'inventory_import_duplicate_file';
+    public const INVENTORY_IMPORT_INVALID_FORMAT = 'inventory_import_invalid_format';
+    public const INVENTORY_REVERSAL_WOULD_GO_NEGATIVE = 'inventory_reversal_would_go_negative';
+    public const INVENTORY_ACCESS_DENIED_SCOPE = 'inventory_access_denied_scope';
+    public const INVENTORY_CONSUMABLE_ONLY = 'inventory_consumable_only';
+    public const INVENTORY_CREDENTIALS_KEY_MISSING = 'inventory_credentials_key_missing';
+    public const INVENTORY_IN_USE = 'inventory_in_use';
+    public const INVENTORY_INVALID_PAYLOAD = 'inventory_invalid_payload';
+    public const INVENTORY_CONCURRENT_RETRY = 'inventory_concurrent_retry';
 }
