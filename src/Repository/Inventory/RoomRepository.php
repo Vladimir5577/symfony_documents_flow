@@ -27,7 +27,7 @@ class RoomRepository extends ServiceEntityRepository
                 ->setParameter('search', '%' . $search . '%');
         }
 
-        $total = (int) (clone $qb)->select('COUNT(r.id)')->getQuery()->getSingleScalarResult();
+        $total = (int) (clone $qb)->select('COUNT(r.id)')->resetDQLPart('orderBy')->getQuery()->getSingleScalarResult();
         $items = $qb->setFirstResult(($page - 1) * $limit)->setMaxResults($limit)->getQuery()->getResult();
 
         return [

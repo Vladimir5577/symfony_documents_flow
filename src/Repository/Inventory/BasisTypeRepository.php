@@ -26,7 +26,7 @@ class BasisTypeRepository extends ServiceEntityRepository
             $qb->andWhere('LOWER(b.name) LIKE LOWER(:search)')->setParameter('search', '%' . $search . '%');
         }
 
-        $total = (int) (clone $qb)->select('COUNT(b.id)')->getQuery()->getSingleScalarResult();
+        $total = (int) (clone $qb)->select('COUNT(b.id)')->resetDQLPart('orderBy')->getQuery()->getSingleScalarResult();
         $items = $qb->setFirstResult(($page - 1) * $limit)->setMaxResults($limit)->getQuery()->getResult();
 
         return [

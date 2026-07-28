@@ -26,7 +26,7 @@ class CategoryRepository extends ServiceEntityRepository
             $qb->andWhere('LOWER(c.name) LIKE LOWER(:search)')->setParameter('search', '%' . $search . '%');
         }
 
-        $total = (int) (clone $qb)->select('COUNT(c.id)')->getQuery()->getSingleScalarResult();
+        $total = (int) (clone $qb)->select('COUNT(c.id)')->resetDQLPart('orderBy')->getQuery()->getSingleScalarResult();
         $items = $qb->setFirstResult(($page - 1) * $limit)->setMaxResults($limit)->getQuery()->getResult();
 
         return [
