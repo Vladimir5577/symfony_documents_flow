@@ -154,7 +154,7 @@ class StockRepository extends ServiceEntityRepository
             ->join('s.nomenclature', 'n')
             ->where('s.holderUser = :userId')
             ->setParameter('userId', $userId)
-            ->groupBy('n.id')
+            ->groupBy('s.nomenclature')
             ->addGroupBy('n.name')
             ->addGroupBy('n.unit')
             ->orderBy('n.name', 'ASC')
