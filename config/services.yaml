@@ -32,6 +32,13 @@ parameters:
     # kanban api
     kanban_internal_api_key: '%env(resolve:KANBAN_INTERNAL_API_KEY)%'
 
+    # warehouse api (go_warehouse_service) — СВОЙ ключ, не общий с канбаном:
+    # компрометация ключа одного сервиса не должна открывать справочники другому.
+    # default:: намеренно вместо resolve:. Если переменная не задана, параметр
+    # равен пустой строке, контроллер отвечает 403, а контейнер собирается.
+    # С resolve: отсутствие переменной уронило бы всё приложение целиком.
+    warehouse_internal_api_key: '%env(default::WAREHOUSE_INTERNAL_API_KEY)%'
+
 services:
     # default configuration for services in *this* file
     _defaults:
