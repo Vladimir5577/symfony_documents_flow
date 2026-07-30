@@ -250,7 +250,7 @@ final class PurchaseRequestService
 
     /**
      * Шаг конвейера исполнения: строго следующий статус.
-     * На первом шаге (CEO_APPROVED → INVOICE_SENT) назначается исполнитель, если его ещё нет.
+     * Исполнителем становится тот, кто сделал первый шаг (CEO_APPROVED → CONTRACT_PENDING).
      */
     public function advance(PurchaseRequest $request, User $actor, PurchaseStatus $target): void
     {
@@ -258,7 +258,14 @@ final class PurchaseRequestService
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
         }
 
-        if ($target === PurchaseStatus::INVOICE_SENT && $request->getExecutor() === null) {
+        // Уйти на оплату можно только с приложенным договором.
+        if ($target === PurchaseStatus::INVOICE_SENT
+            && !$request->hasFileOfType(PurchaseFileType::CONTRACT)
+        ) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONTRACT_REQUIRED);
+        }
+
+        if ($request->getExecutor() === null) {
             $request->setExecutor($actor);
         }
 

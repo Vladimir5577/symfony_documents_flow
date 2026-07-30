@@ -187,7 +187,8 @@ final class PurchaseTransitionController extends AbstractController
         }
         if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)) {
             return in_array($purchase->getStatus(), [
-                PurchaseStatus::INVOICE_SENT, PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED,
+                PurchaseStatus::CONTRACT_PENDING, PurchaseStatus::INVOICE_SENT,
+                PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED,
             ], true);
         }
 

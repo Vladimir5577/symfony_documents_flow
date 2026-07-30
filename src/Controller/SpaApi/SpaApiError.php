@@ -89,6 +89,8 @@ final class SpaApiError
     public const PURCHASE_INVALID_DUE_DATE = 'purchase_invalid_due_date';
     public const PURCHASE_FILE_NOT_FOUND = 'purchase_file_not_found';
     public const PURCHASE_JUSTIFICATION_REQUIRED = 'purchase_justification_required';
+    public const PURCHASE_CONTRACT_REQUIRED = 'purchase_contract_required';
+    public const PURCHASE_FILE_LOCKED = 'purchase_file_locked';
     public const PURCHASE_CATEGORY_NOT_FOUND = 'purchase_category_not_found';
     public const PURCHASE_CATEGORY_IN_USE = 'purchase_category_in_use';
     public const PURCHASE_CATEGORY_NAME_REQUIRED = 'purchase_category_name_required';

@@ -140,6 +140,12 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
+        // Обязательное вложение после прохождения его стадии не удалить уже никому:
+        // иначе оплаченная заявка осталась бы без договора, а поданная — без записки.
+        if ($fileEntity->getType()->isLockedAt($purchase->getStatus())) {
+            return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
+        }
+
         // Удалять может загрузивший или автор заявки, пока она редактируема
         $canDelete = $fileEntity->getUploadedBy()?->getId() === $user->getId()
             || ($this->isManagerOwner($purchase, $user) && $purchase->getStatus()->isEditable());

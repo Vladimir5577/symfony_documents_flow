@@ -162,7 +162,8 @@ final class PurchaseController extends AbstractController
         if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)) {
             $actionRequired += ($byStatus[PurchaseStatus::NEW->value] ?? 0)
                 + ($byStatus[PurchaseStatus::APPROVERS_DONE->value] ?? 0)
-                + ($byStatus[PurchaseStatus::CEO_APPROVED->value] ?? 0);
+                + ($byStatus[PurchaseStatus::CEO_APPROVED->value] ?? 0)
+                + ($byStatus[PurchaseStatus::CONTRACT_PENDING->value] ?? 0);
         }
         if ($this->isGranted(UserRole::ROLE_MANAGER->value)) {
             $actionRequired += ($byStatus[PurchaseStatus::REJECTED->value] ?? 0)

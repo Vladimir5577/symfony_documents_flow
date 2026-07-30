@@ -7,7 +7,7 @@ namespace App\Enum\Purchase;
 /**
  * Статусы заявки на закупку — цепочка по схеме:
  * DRAFT → NEW → [APPROVERS_PENDING → APPROVERS_DONE] → CEO_APPROVE_PENDING
- *   → CEO_APPROVED → INVOICE_SENT → INVOICE_PAID → DELIVERED → DONE.
+ *   → CEO_APPROVED → CONTRACT_PENDING → INVOICE_SENT → INVOICE_PAID → DELIVERED → DONE.
  * Этап согласантов пропускается, если они не назначены. REJECTED — возврат автору,
  * CANCELLED — отмена. Прогресс согласантов («2 из 5») хранится в PurchaseRequestApprover.
  */
@@ -19,6 +19,7 @@ enum PurchaseStatus: string
     case APPROVERS_DONE = 'APPROVERS_DONE';            // Все согласанты подтвердили
     case CEO_APPROVE_PENDING = 'CEO_APPROVE_PENDING';  // У директора на согласовании
     case CEO_APPROVED = 'CEO_APPROVED';                // Согласовано директором
+    case CONTRACT_PENDING = 'CONTRACT_PENDING';        // Готовится договор — отдел закупок прикладывает файл
     case INVOICE_SENT = 'INVOICE_SENT';                // Счёт отправлен на оплату
     case INVOICE_PAID = 'INVOICE_PAID';                // Оплачено
     case DELIVERED = 'DELIVERED';                      // Доставлено
@@ -35,6 +36,7 @@ enum PurchaseStatus: string
             self::APPROVERS_DONE => 'Согласанты подтвердили',
             self::CEO_APPROVE_PENDING => 'У директора',
             self::CEO_APPROVED => 'Согласовано',
+            self::CONTRACT_PENDING => 'Подготовка договора',
             self::INVOICE_SENT => 'Счёт на оплате',
             self::INVOICE_PAID => 'Оплачено',
             self::DELIVERED => 'Доставлено',
@@ -46,12 +48,13 @@ enum PurchaseStatus: string
 
     /**
      * Следующий шаг конвейера после согласования директором.
-     * Исполнитель назначается при первом шаге (CEO_APPROVED → INVOICE_SENT).
+     * Исполнитель назначается при первом шаге (CEO_APPROVED → CONTRACT_PENDING).
      */
     public function nextExecutionStatus(): ?self
     {
         return match ($this) {
-            self::CEO_APPROVED => self::INVOICE_SENT,
+            self::CEO_APPROVED => self::CONTRACT_PENDING,
+            self::CONTRACT_PENDING => self::INVOICE_SENT,
             self::INVOICE_SENT => self::INVOICE_PAID,
             self::INVOICE_PAID => self::DELIVERED,
             default => null,
@@ -81,6 +84,7 @@ enum PurchaseStatus: string
             self::APPROVERS_DONE,
             self::CEO_APPROVE_PENDING,
             self::CEO_APPROVED,
+            self::CONTRACT_PENDING,
             self::INVOICE_SENT,
             self::INVOICE_PAID,
             self::DELIVERED,

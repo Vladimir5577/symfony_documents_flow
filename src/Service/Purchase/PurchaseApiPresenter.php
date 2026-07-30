@@ -144,12 +144,31 @@ final class PurchaseApiPresenter
             'type' => ['value' => $file->getType()->value, 'label' => $file->getType()->getLabel()],
             'uploadedBy' => $this->presentUser($file->getUploadedBy()),
             'createdAt' => $file->getCreatedAt()?->format('c'),
+            'canDelete' => $this->canDeleteFile($file),
             'downloadUrl' => sprintf(
                 '/spa/api/purchases/%d/files/%d/download',
                 $file->getPurchaseRequest()?->getId(),
                 $file->getId(),
             ),
         ];
+    }
+
+    /** Зеркалит гейт PurchaseFileController::delete() — фронт по нему прячет корзину. */
+    private function canDeleteFile(PurchaseRequestFile $file): bool
+    {
+        $request = $file->getPurchaseRequest();
+        $user = $this->security->getUser();
+        if ($request === null || !$user instanceof User) {
+            return false;
+        }
+
+        $status = $request->getStatus();
+        if ($file->getType()->isLockedAt($status)) {
+            return false;
+        }
+
+        return $file->getUploadedBy()?->getId() === $user->getId()
+            || ($request->getCreatedBy()?->getId() === $user->getId() && $status->isEditable());
     }
 
     /**
@@ -234,7 +253,8 @@ final class PurchaseApiPresenter
         }
         if ($isPurchase) {
             return in_array($status, [
-                PurchaseStatus::INVOICE_SENT, PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED,
+                PurchaseStatus::CONTRACT_PENDING, PurchaseStatus::INVOICE_SENT,
+                PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED,
             ], true);
         }
 
