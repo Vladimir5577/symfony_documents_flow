@@ -6,10 +6,10 @@ namespace App\Controller\Analytics\TKO;
 
 use App\Entity\Analytics\TKO\AnalyticsTkoVehicle;
 use App\Entity\Analytics\TKO\AnalyticsTkoVehicleTrip;
+use App\Enum\Analytics\AnalyticsTkoVehicleStatus;
 use App\Repository\Analytics\TKO\AnalyticsTkoVehicleRepository;
 use App\Repository\Analytics\TKO\AnalyticsTkoVehicleTripRepository;
 use App\Repository\Organization\OrganizationRepository;
-use App\Repository\Polygon\PolygonRepository;
 use App\Twig\TkoDecimalExtension;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
@@ -30,10 +30,10 @@ final class AnalyticsTkoVehicleTripController extends AbstractController
         AnalyticsTkoVehicleRepository $vehicleRepository,
         AnalyticsTkoVehicleTripRepository $tripRepository,
         OrganizationRepository $organizationRepository,
-        PolygonRepository $polygonRepository,
     ): Response {
         $vehicles = $vehicleRepository->createQueryBuilder('v')
-            ->andWhere('v.isActive = true')
+            ->andWhere('v.status = :status')
+            ->setParameter('status', AnalyticsTkoVehicleStatus::Active)
             ->orderBy('v.licenseNumber', 'ASC')
             ->getQuery()
             ->getResult();
@@ -44,20 +44,17 @@ final class AnalyticsTkoVehicleTripController extends AbstractController
         $page = max(1, $request->query->getInt('page', 1));
 
         $filterOrganizationId = $this->optionalPositiveInt($request->query->getString('organization_id'));
-        $filterPolygonId = $this->optionalPositiveInt($request->query->getString('polygon_id'));
         $filterDateFrom = $this->parseDate($request->query->getString('date_from'));
         $filterDateTo = $this->parseDate($request->query->getString('date_to'));
 
         $filters = [
             'organizationId' => $filterOrganizationId,
-            'polygonId' => $filterPolygonId,
             'dateFrom' => $filterDateFrom,
             'dateTo' => $filterDateTo,
         ];
 
         $filterQuery = array_filter([
             'organization_id' => $filterOrganizationId,
-            'polygon_id' => $filterPolygonId,
             'date_from' => $filterDateFrom?->format('Y-m-d'),
             'date_to' => $filterDateTo?->format('Y-m-d'),
         ], static fn ($v) => null !== $v && '' !== $v && 0 !== $v);
@@ -96,10 +93,8 @@ final class AnalyticsTkoVehicleTripController extends AbstractController
                 'items_per_page' => $grid['limit'],
             ],
             'filials' => $organizationRepository->findAllParentOrganizations(),
-            'polygons' => $polygonRepository->findBy(['isActive' => true], ['sortOrder' => 'ASC', 'name' => 'ASC']),
             'filters' => [
                 'organization_id' => $filterOrganizationId,
-                'polygon_id' => $filterPolygonId,
                 'date_from' => $filterDateFrom?->format('Y-m-d') ?? '',
                 'date_to' => $filterDateTo?->format('Y-m-d') ?? '',
             ],

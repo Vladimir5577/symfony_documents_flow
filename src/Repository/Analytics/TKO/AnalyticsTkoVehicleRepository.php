@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repository\Analytics\TKO;
 
 use App\Entity\Analytics\TKO\AnalyticsTkoVehicle;
+use App\Enum\Analytics\AnalyticsTkoVehicleStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
@@ -20,7 +21,7 @@ class AnalyticsTkoVehicleRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param array{organizationId?: int|null, polygonId?: int|null} $filters
+     * @param array{organizationId?: int|null, status?: AnalyticsTkoVehicleStatus|null} $filters
      *
      * @return array{items: AnalyticsTkoVehicle[], total: int, page: int, limit: int, totalPages: int}
      */
@@ -39,9 +40,9 @@ class AnalyticsTkoVehicleRepository extends ServiceEntityRepository
         }
 
         $itemsQb = $this->createQueryBuilder('v')
-            ->innerJoin('v.polygon', 'p')->addSelect('p')
-            ->innerJoin('v.organization', 'o')->addSelect('o')
-            ->orderBy('v.isActive', 'DESC')
+            ->leftJoin('v.organization', 'o')->addSelect('o')
+            ->leftJoin('v.driver', 'd')->addSelect('d')
+            ->orderBy('v.status', 'ASC')
             ->addOrderBy('v.licenseNumber', 'ASC')
             ->setFirstResult(($page - 1) * $limit)
             ->setMaxResults($limit);
@@ -57,7 +58,7 @@ class AnalyticsTkoVehicleRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param array{organizationId?: int|null, polygonId?: int|null} $filters
+     * @param array{organizationId?: int|null, status?: AnalyticsTkoVehicleStatus|null} $filters
      */
     private function applyFilters(QueryBuilder $qb, array $filters): void
     {
@@ -67,10 +68,10 @@ class AnalyticsTkoVehicleRepository extends ServiceEntityRepository
                 ->setParameter('filterOrganization', $organizationId);
         }
 
-        $polygonId = $filters['polygonId'] ?? null;
-        if (null !== $polygonId && $polygonId > 0) {
-            $qb->andWhere('v.polygon = :filterPolygon')
-                ->setParameter('filterPolygon', $polygonId);
+        $status = $filters['status'] ?? null;
+        if ($status instanceof AnalyticsTkoVehicleStatus) {
+            $qb->andWhere('v.status = :filterStatus')
+                ->setParameter('filterStatus', $status);
         }
     }
 }

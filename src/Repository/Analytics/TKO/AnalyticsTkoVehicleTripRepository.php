@@ -24,10 +24,10 @@ class AnalyticsTkoVehicleTripRepository extends ServiceEntityRepository
     /**
      * Сетка ходок с пагинацией по парам (дата + ТС).
      *
-     * @param array{organizationId?: int|null, polygonId?: int|null, dateFrom?: \DateTimeImmutable|null, dateTo?: \DateTimeImmutable|null} $filters
+     * @param array{organizationId?: int|null, dateFrom?: \DateTimeImmutable|null, dateTo?: \DateTimeImmutable|null} $filters
      *
      * @return array{
-     *     rows: list<array{vehicleId: int, date: string, dateIso: string, name: string, licenseNumber: string, polygon: string, organization: string, capacity: string, weights: array<int, string>}>,
+     *     rows: list<array{vehicleId: int, date: string, dateIso: string, model: string, licenseNumber: string, organization: string, capacity: string, weights: array<int, string>}>,
      *     maxTripNumber: int,
      *     total: int,
      *     page: int,
@@ -93,7 +93,6 @@ class AnalyticsTkoVehicleTripRepository extends ServiceEntityRepository
         $orX = $this->getEntityManager()->getExpressionBuilder()->orX();
         $qb = $this->createQueryBuilder('t')
             ->innerJoin('t.vehicle', 'v')->addSelect('v')
-            ->leftJoin('v.polygon', 'p')->addSelect('p')
             ->leftJoin('v.organization', 'o')->addSelect('o')
             ->orderBy('t.tripDate', 'DESC')
             ->addOrderBy('v.licenseNumber', 'ASC')
@@ -128,9 +127,8 @@ class AnalyticsTkoVehicleTripRepository extends ServiceEntityRepository
                     'vehicleId' => $vehicle->getId(),
                     'date' => $tripDate->format('d.m.Y'),
                     'dateIso' => $tripDate->format('Y-m-d'),
-                    'name' => $vehicle->getName() ?? '',
+                    'model' => $vehicle->getModel() ?? '',
                     'licenseNumber' => $vehicle->getLicenseNumber() ?? '',
-                    'polygon' => $vehicle->getPolygon()?->getName() ?? '—',
                     'organization' => $vehicle->getOrganization()?->getName() ?? '—',
                     'capacity' => self::formatCapacity($vehicle->getVolume(), $vehicle->getCompactionRatio()),
                     'weights' => [],
@@ -164,7 +162,7 @@ class AnalyticsTkoVehicleTripRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param array{organizationId?: int|null, polygonId?: int|null, dateFrom?: \DateTimeImmutable|null, dateTo?: \DateTimeImmutable|null} $filters
+     * @param array{organizationId?: int|null, dateFrom?: \DateTimeImmutable|null, dateTo?: \DateTimeImmutable|null} $filters
      */
     private function applyGridFilters(QueryBuilder $qb, array $filters): void
     {
@@ -172,12 +170,6 @@ class AnalyticsTkoVehicleTripRepository extends ServiceEntityRepository
         if (null !== $organizationId && $organizationId > 0) {
             $qb->andWhere('v.organization = :filterOrganization')
                 ->setParameter('filterOrganization', $organizationId);
-        }
-
-        $polygonId = $filters['polygonId'] ?? null;
-        if (null !== $polygonId && $polygonId > 0) {
-            $qb->andWhere('v.polygon = :filterPolygon')
-                ->setParameter('filterPolygon', $polygonId);
         }
 
         $dateFrom = $filters['dateFrom'] ?? null;

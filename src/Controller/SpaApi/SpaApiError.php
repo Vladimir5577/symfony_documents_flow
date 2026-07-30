@@ -76,7 +76,19 @@ final class SpaApiError
     public const POST_FILE_NOT_FOUND = 'post_file_not_found';
     public const POST_FILE_NOT_FOUND_ON_DISK = 'post_file_not_found_on_disk';
     public const NOTIFICATION_NOT_FOUND = 'notification_not_found';
+    public const CITIZEN_APPEAL_NOT_FOUND = 'citizen_appeal_not_found';
     public const FOLDER_NOT_FOUND = 'folder_not_found';
     public const FOLDER_NAME_REQUIRED = 'folder_name_required';
     public const FOLDER_NAME_TOO_LONG = 'folder_name_too_long';
+    public const TKO_VEHICLE_NOT_FOUND = 'tko_vehicle_not_found';
+    public const TKO_VEHICLE_MODEL_REQUIRED = 'tko_vehicle_model_required';
+    public const TKO_VEHICLE_TYPE_REQUIRED = 'tko_vehicle_type_required';
+    public const TKO_VEHICLE_LICENSE_REQUIRED = 'tko_vehicle_license_required';
+    public const TKO_VEHICLE_LICENSE_EXISTS = 'tko_vehicle_license_exists';
+    public const TKO_VEHICLE_HAS_TRIPS = 'tko_vehicle_has_trips';
+    public const TKO_VEHICLE_INVALID_STATUS = 'tko_vehicle_invalid_status';
+    public const TKO_VEHICLE_INVALID_ORGANIZATION = 'tko_vehicle_invalid_organization';
+    public const TKO_VEHICLE_INVALID_DRIVER = 'tko_vehicle_invalid_driver';
+    public const TKO_VEHICLE_INVALID_DATE = 'tko_vehicle_invalid_date';
+    public const TKO_VEHICLE_INVALID_CONTEXT = 'tko_vehicle_invalid_context';
 }

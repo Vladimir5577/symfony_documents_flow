@@ -58,7 +58,7 @@
                                     {% for vehicle in vehicles %}
                                         <option value="{{ vehicle.id }}"
                                             {% if selectedVehicleId and selectedVehicleId == vehicle.id %}selected{% endif %}>
-                                            {{ vehicle.name }} — {{ vehicle.licenseNumber }}
+                                            {{ vehicle.model }} — {{ vehicle.licenseNumber }}
                                         </option>
                                     {% endfor %}
                                 </select>
@@ -99,7 +99,7 @@
                                 <input type="hidden" name="date" value="{{ tripDate }}">
                                 <input type="hidden" name="vehicle_id" value="{{ selectedVehicleId }}">
                             {% endif %}
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <label class="form-label mb-1" for="filter-organization">Филиал</label>
                                 <select class="form-select form-select-sm" id="filter-organization" name="organization_id">
                                     <option value="">Все</option>
@@ -111,22 +111,11 @@
                                 </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label mb-1" for="filter-polygon">Полигон</label>
-                                <select class="form-select form-select-sm" id="filter-polygon" name="polygon_id">
-                                    <option value="">Все</option>
-                                    {% for polygon in polygons %}
-                                        <option value="{{ polygon.id }}" {% if filters.polygon_id == polygon.id %}selected{% endif %}>
-                                            {{ polygon.name }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-2">
                                 <label class="form-label mb-1" for="filter-date-from">Дата от</label>
                                 <input type="date" class="form-control form-control-sm" id="filter-date-from" name="date_from"
                                        value="{{ filters.date_from }}">
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-3">
                                 <label class="form-label mb-1" for="filter-date-to">Дата до</label>
                                 <input type="date" class="form-control form-control-sm" id="filter-date-to" name="date_to"
                                        value="{{ filters.date_to }}">
@@ -151,9 +140,8 @@
                                 <thead class="table-light">
                                 <tr>
                                     <th>Дата</th>
-                                    <th>Название машины</th>
+                                    <th>Модель</th>
                                     <th>Гос.№</th>
-                                    <th>Полигон</th>
                                     <th>Филиал</th>
                                     <th class="text-end text-nowrap">Ёмкость, м³</th>
                                     {% if maxTripNumber > 0 %}
@@ -170,9 +158,8 @@
                                 {% for row in gridRows %}
                                     <tr>
                                         <td class="text-nowrap">{{ row.date }}</td>
-                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.model }}</td>
                                         <td class="fw-semibold text-nowrap">{{ row.licenseNumber }}</td>
-                                        <td>{{ row.polygon }}</td>
                                         <td>{{ row.organization }}</td>
                                         <td class="text-end">{{ row.capacity }}</td>
                                         {% if maxTripNumber > 0 %}
@@ -204,7 +191,7 @@
                                     </tr>
                                 {% else %}
                                     <tr>
-                                        <td colspan="{{ 7 + (maxTripNumber > 0 ? maxTripNumber : 1) }}" class="text-center text-muted py-4">
+                                        <td colspan="{{ 6 + (maxTripNumber > 0 ? maxTripNumber : 1) }}" class="text-center text-muted py-4">
                                             Нет сохранённых ходок.
                                         </td>
                                     </tr>
@@ -280,7 +267,7 @@
             if (select && window.Choices) {
                 new Choices(select, {
                     searchEnabled: true,
-                    searchPlaceholderValue: 'Поиск по названию или госномеру',
+                    searchPlaceholderValue: 'Поиск по модели или госномеру',
                     itemSelectText: '',
                     shouldSort: false,
                     allowHTML: false,

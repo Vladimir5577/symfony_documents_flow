@@ -78,6 +78,11 @@ services:
             $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
             $minioUserBucket: '%env(MINIO_USER_BUCKET)%'
 
+    App\Service\Analytics\TKO\AnalyticsTkoVehicleAttachmentService:
+        arguments:
+            $s3: '@Aws\S3\S3Client'
+            $bucket: '%env(MINIO_TKO_BUCKET)%'
+
     App\Service\ApiExternal\CitizenAppeal\CitizenAppealApiService:
         arguments:
             $apiUrl: '%don_snab_api_url%'
