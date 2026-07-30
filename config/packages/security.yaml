@@ -65,12 +65,16 @@ security:
             # https://symfony.com/doc/current/security/impersonating_user.html
             # switch_user: true
 
-    # Иерархия ролей: роли наследуют права друг друга
-    # ROLE_ADMIN автоматически имеет все права ROLE_HR и ROLE_USER
-    # ROLE_HR автоматически имеет все права ROLE_USER
+    # Иерархия ролей: слева — роль, справа — что она получает В ПРИДАЧУ автоматически.
+    # Описание самих ролей — в src/Enum/User/UserRole.php (там же про ловушки).
+    # После правки: php bin/console app:roles:sync
     role_hierarchy:
-        ROLE_ADMIN: [ROLE_ANALYTIC, ROLE_MANAGER, ROLE_CITIZEN_APPEAL, ROLE_HR, ROLE_CONTRACT_APPLICATION, ROLE_TKO, ROLE_FINANCE, ROLE_CLIENTS_DEPARTMENT, ROLE_MECHANIC, ROLE_USER]
+        ROLE_ADMIN: [ROLE_ANALYTIC, ROLE_MANAGER, ROLE_CITIZEN_APPEAL, ROLE_HR, ROLE_CONTRACT_APPLICATION, ROLE_TKO, ROLE_FINANCE, ROLE_CLIENTS_DEPARTMENT, ROLE_MECHANIC, ROLE_INVENTORY_ADMIN, ROLE_USER]
         ROLE_ANALYTIC: [ROLE_MANAGER, ROLE_CITIZEN_APPEAL, ROLE_HR, ROLE_CONTRACT_APPLICATION, ROLE_TKO, ROLE_FINANCE, ROLE_CLIENTS_DEPARTMENT, ROLE_MECHANIC, ROLE_USER]
+        ROLE_INVENTORY_ADMIN: [ROLE_INVENTORY_MOL, ROLE_INVENTORY_VIEWER, ROLE_INVENTORY_DEPT_VIEWER, ROLE_USER]
+        ROLE_INVENTORY_MOL: ROLE_USER
+        ROLE_INVENTORY_VIEWER: ROLE_USER
+        ROLE_INVENTORY_DEPT_VIEWER: ROLE_USER
         ROLE_MANAGER: ROLE_USER
         ROLE_CITIZEN_APPEAL: ROLE_USER
         ROLE_HR: ROLE_USER
