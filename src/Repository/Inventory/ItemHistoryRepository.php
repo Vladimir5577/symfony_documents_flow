@@ -24,11 +24,17 @@ class ItemHistoryRepository extends ServiceEntityRepository
      */
     public function findByItem(Item $item): array
     {
+        // Работники (`*w`) в ответе не нужны, но без них Doctrine делает по SELECT
+        // на каждого из трёх пользователей каждой записи: worker — инверсная сторона
+        // OneToOne у User, прокси на неё построить нельзя.
         return $this->createQueryBuilder('h')
-            ->addSelect('u', 'oa', 'na')
+            ->addSelect('u', 'uw', 'oa', 'oaw', 'na', 'naw')
             ->leftJoin('h.changedBy', 'u')
+            ->leftJoin('u.worker', 'uw')
             ->leftJoin('h.oldAssignedTo', 'oa')
+            ->leftJoin('oa.worker', 'oaw')
             ->leftJoin('h.newAssignedTo', 'na')
+            ->leftJoin('na.worker', 'naw')
             ->andWhere('h.item = :item')
             ->setParameter('item', $item)
             ->orderBy('h.createdAt', 'DESC')

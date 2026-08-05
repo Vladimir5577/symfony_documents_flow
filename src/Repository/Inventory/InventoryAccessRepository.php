@@ -10,6 +10,10 @@ use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
+ * Списки привязок джойнят работников (`uw`, `cbw`), хотя в ответ те не идут:
+ * worker — инверсная сторона OneToOne у User, прокси на неё Doctrine построить
+ * не может и без джойна делает по SELECT на каждого пользователя каждой строки.
+ *
  * @extends ServiceEntityRepository<InventoryAccess>
  */
 class InventoryAccessRepository extends ServiceEntityRepository
@@ -50,10 +54,13 @@ class InventoryAccessRepository extends ServiceEntityRepository
         }
 
         return $this->createQueryBuilder('a')
-            ->addSelect('u', 'o', 'c')
+            ->addSelect('u', 'uw', 'o', 'c', 'cb', 'cbw')
             ->join('a.user', 'u')
+            ->leftJoin('u.worker', 'uw')
             ->join('a.organization', 'o')
             ->leftJoin('a.category', 'c')
+            ->leftJoin('a.createdBy', 'cb')
+            ->leftJoin('cb.worker', 'cbw')
             ->andWhere('a.organization IN (:organizationIds)')
             ->setParameter('organizationIds', $organizationIds)
             ->orderBy('o.name', 'ASC')
@@ -68,10 +75,13 @@ class InventoryAccessRepository extends ServiceEntityRepository
     public function findAllWithRelations(): array
     {
         return $this->createQueryBuilder('a')
-            ->addSelect('u', 'o', 'c')
+            ->addSelect('u', 'uw', 'o', 'c', 'cb', 'cbw')
             ->join('a.user', 'u')
+            ->leftJoin('u.worker', 'uw')
             ->join('a.organization', 'o')
             ->leftJoin('a.category', 'c')
+            ->leftJoin('a.createdBy', 'cb')
+            ->leftJoin('cb.worker', 'cbw')
             ->orderBy('o.name', 'ASC')
             ->addOrderBy('u.lastname', 'ASC')
             ->getQuery()

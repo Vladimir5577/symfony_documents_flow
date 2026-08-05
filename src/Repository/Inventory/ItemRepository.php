@@ -108,11 +108,15 @@ class ItemRepository extends ServiceEntityRepository
         // выкинул бы неразобранные товары из всех списков, ничего об этом не сказав.
         // Документ присоединяется сразу: и список, и выгрузка показывают его у каждой
         // строки, а ленивый прокси означал бы отдельный SELECT на каждый документ.
+        // Работник владельца (`aw`) в ответ не идёт, но джойн обязателен: worker —
+        // инверсная сторона OneToOne у User, прокси на неё построить нельзя. Без джойна
+        // страница с разными владельцами стоит +20 запросов, а выгрузка — до +10000.
         $qb = $this->createQueryBuilder('i')
-            ->addSelect('c', 'o', 'a', 'u')
+            ->addSelect('c', 'o', 'a', 'aw', 'u')
             ->leftJoin('i.category', 'c')
             ->join('i.organization', 'o')
             ->leftJoin('i.assignedTo', 'a')
+            ->leftJoin('a.worker', 'aw')
             ->leftJoin('i.upd', 'u');
 
         $this->applyScope($qb, $scope);
