@@ -139,6 +139,27 @@ abstract class AbstractOrganization
         return $this;
     }
 
+    /**
+     * Путь от корня дерева до этой организации: «Головная / Филиал / Департамент».
+     *
+     * Ограничение глубины — защита от зацикленного parent: связь допускает любой
+     * узел, и битые данные иначе повесили бы запрос.
+     */
+    public function getPath(string $separator = ' / ', int $maxDepth = 10): string
+    {
+        $names = [(string) $this->getName()];
+
+        $current = $this->getParent();
+        $depth = 0;
+        while ($current !== null && $depth < $maxDepth) {
+            array_unshift($names, (string) $current->getName());
+            $current = $current->getParent();
+            ++$depth;
+        }
+
+        return implode($separator, array_filter($names, static fn (string $name): bool => $name !== ''));
+    }
+
     /** @return Collection<int, self> */
     public function getChildOrganizations(): Collection
     {

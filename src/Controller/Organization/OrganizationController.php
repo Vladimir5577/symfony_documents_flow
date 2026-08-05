@@ -10,6 +10,7 @@ use App\Entity\Organization\Organization;
 use App\Entity\User\User;
 use App\Enum\Organization\OrganizationType;
 use App\Enum\Organization\TaxType;
+use App\Repository\Inventory\ItemRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -408,10 +409,30 @@ final class OrganizationController extends AbstractController
 
     #[Route('/delete_organization/{id}', name: 'app_delete_organization', requirements: ['id' => '\d+'], methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
-    public function deleteOrganization(int $id, Request $request, OrganizationRepository $organizationRepository): Response
-    {
+    public function deleteOrganization(
+        int $id,
+        Request $request,
+        OrganizationRepository $organizationRepository,
+        ItemRepository $itemRepository,
+    ): Response {
         if (!$this->isCsrfTokenValid('delete_organization_' . $id, $request->request->get('_csrf_token', ''))) {
             $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('view_organization', ['id' => $id]);
+        }
+
+        // Организация удаляется мягко, поэтому ON DELETE RESTRICT на товарах не сработает:
+        // имущество осталось бы в базе, но пропало из всех списков инвентаризации — его
+        // организация отфильтрована soft-delete, а список строится через INNER JOIN.
+        // Дочерние организации при удалении выживают (у них сбрасывается родитель),
+        // поэтому считаем только товары самой организации.
+        $itemsCount = $itemRepository->countByOrganizationIds([$id]);
+        if ($itemsCount > 0) {
+            $this->addFlash('error', sprintf(
+                'Нельзя удалить организацию: за ней числится %d ед. имущества. '
+                . 'Перенесите имущество в другую организацию или спишите.',
+                $itemsCount,
+            ));
+
             return $this->redirectToRoute('view_organization', ['id' => $id]);
         }
 
