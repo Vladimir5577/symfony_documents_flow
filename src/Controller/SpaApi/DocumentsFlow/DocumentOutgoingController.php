@@ -186,12 +186,16 @@ final class DocumentOutgoingController extends AbstractController
             $recipientUserIds = [];
         }
 
-        $this->recipientsService->replaceRecipients(
-            $document,
-            $this->recipientsService->normalizeUserIds($executorUserIds),
-            $this->recipientsService->normalizeUserIds($recipientUserIds),
-        );
-        $this->entityManager->flush();
+        try {
+            $this->recipientsService->replaceRecipients(
+                $document,
+                $this->recipientsService->normalizeUserIds($executorUserIds),
+                $this->recipientsService->normalizeUserIds($recipientUserIds),
+            );
+            $this->entityManager->flush();
+        } catch (HttpException $e) {
+            return $this->jsonError($e);
+        }
 
         $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
 

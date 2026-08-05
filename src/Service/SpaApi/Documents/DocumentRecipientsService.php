@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\SpaApi\Documents;
 
+use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Document\DocumentUserRecipient;
 use App\Enum\Document\DocumentRecipientRole;
 use App\Enum\Document\DocumentStatus;
 use App\Repository\User\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 final class DocumentRecipientsService
 {
@@ -35,6 +37,8 @@ final class DocumentRecipientsService
      */
     public function attachRecipients(Document $document, array $executorUserIds, array $recipientUserIds): void
     {
+        $this->assertNoRoleOverlap($executorUserIds, $recipientUserIds);
+
         $now = new \DateTimeImmutable();
 
         foreach ($executorUserIds as $userId) {
@@ -81,6 +85,8 @@ final class DocumentRecipientsService
         $executorUserIds = $this->normalizeUserIds($executorUserIds);
         $recipientUserIds = $this->normalizeUserIds($recipientUserIds);
 
+        $this->assertNoRoleOverlap($executorUserIds, $recipientUserIds);
+
         $newRecipientKeys = [];
         foreach ($executorUserIds as $userId) {
             $newRecipientKeys[] = $userId . '|' . DocumentRecipientRole::EXECUTOR->value;
@@ -113,5 +119,20 @@ final class DocumentRecipientsService
         $document->setUpdatedAt(new \DateTimeImmutable());
 
         return true;
+    }
+
+    /**
+     * В модели документооборота один пользователь может быть и исполнителем, и получателем.
+     * Но в UX это выглядит как "дубликат документа", поэтому запрещаем пересечение ролей на уровне API.
+     *
+     * @param list<int> $executorUserIds
+     * @param list<int> $recipientUserIds
+     */
+    private function assertNoRoleOverlap(array $executorUserIds, array $recipientUserIds): void
+    {
+        $overlap = array_values(array_intersect($executorUserIds, $recipientUserIds));
+        if ($overlap !== []) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_EXECUTOR_RECIPIENT_OVERLAP);
+        }
     }
 }

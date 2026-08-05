@@ -62,6 +62,7 @@ final class SpaApiError
     public const DOCUMENT_INVALID_DEADLINE = 'document_invalid_deadline';
     public const DOCUMENT_CANNOT_PUBLISH_DRAFT = 'document_cannot_publish_draft';
     public const DOCUMENT_NO_RECIPIENTS = 'document_no_recipients';
+    public const DOCUMENT_EXECUTOR_RECIPIENT_OVERLAP = 'document_executor_recipient_overlap';
     public const DOCUMENT_VALIDATION_FAILED = 'document_validation_failed';
     public const ORGANIZATION_REQUIRED = 'organization_required';
     public const POST_NOT_FOUND = 'post_not_found';
@@ -79,4 +80,7 @@ final class SpaApiError
     public const FOLDER_NOT_FOUND = 'folder_not_found';
     public const FOLDER_NAME_REQUIRED = 'folder_name_required';
     public const FOLDER_NAME_TOO_LONG = 'folder_name_too_long';
+    public const CITIZEN_APPEAL_NOT_FOUND = 'citizen_appeal_not_found';
+    public const CITIZEN_APPEAL_FILE_NOT_FOUND = 'citizen_appeal_file_not_found';
+    public const CITIZEN_APPEAL_SERVICE_UNAVAILABLE = 'citizen_appeal_service_unavailable';
 }
