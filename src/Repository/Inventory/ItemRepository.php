@@ -50,6 +50,17 @@ class ItemRepository extends ServiceEntityRepository
         $qb = $this->createFilteredQueryBuilder($scope, $filters);
         $this->applySorting($qb, $filters);
 
+        return $this->paginate($qb, $page, $limit);
+    }
+
+    /**
+     * Счёт и срез страницы. Общее для списка и «моего имущества»: расчёт числа
+     * страниц, разложенный по двум местам, однажды разъехался бы.
+     *
+     * @return array{items: Item[], total: int, page: int, limit: int, totalPages: int}
+     */
+    private function paginate(QueryBuilder $qb, int $page, int $limit): array
+    {
         $total = (int) (clone $qb)
             ->resetDQLPart('orderBy')
             ->select('COUNT(DISTINCT i.id)')
@@ -147,19 +158,28 @@ class ItemRepository extends ServiceEntityRepository
     /**
      * Товары, назначенные на пользователя. Скоуп не применяется: свои вещи видит любой.
      *
-     * @return Item[]
+     * Постранично и с поиском: на подотчёте у кладовщика бывают тысячи позиций, и
+     * отдавать их одним куском нельзя. Скоуп сюда не передаётся намеренно — условие
+     * по владельцу зашито прямо здесь, и подменить его запросом снаружи нельзя.
+     *
+     * @return array{items: Item[], total: int, page: int, limit: int, totalPages: int}
      */
-    public function findAssignedTo(User $user): array
+    public function findAssignedTo(User $user, string $search, int $page, int $limit): array
     {
-        return $this->createQueryBuilder('i')
+        $qb = $this->createQueryBuilder('i')
             ->addSelect('c', 'o')
             ->leftJoin('i.category', 'c')
             ->join('i.organization', 'o')
             ->andWhere('i.assignedTo = :user')
             ->setParameter('user', $user)
             ->orderBy('i.name', 'ASC')
-            ->getQuery()
-            ->getResult();
+            // Добивка по id — та же причина, что в applySorting: наименования не
+            // уникальны, и без тай-брейкера строки разъезжались бы между страницами.
+            ->addOrderBy('i.id', 'ASC');
+
+        $this->applySearch($qb, $search);
+
+        return $this->paginate($qb, $page, $limit);
     }
 
     /**
@@ -302,13 +322,25 @@ class ItemRepository extends ServiceEntityRepository
             $qb->andWhere('i.assignedTo = :assignedToId')->setParameter('assignedToId', $filters['assignedToId']);
         }
 
-        $search = trim((string) ($filters['search'] ?? ''));
-        if ($search !== '') {
-            $qb->andWhere(
-                'LOWER(i.name) LIKE LOWER(:search)'
-                . ' OR LOWER(i.inventoryNumber) LIKE LOWER(:search)'
-                . ' OR LOWER(i.serialNumber) LIKE LOWER(:search)',
-            )->setParameter('search', '%' . $search . '%');
+        $this->applySearch($qb, (string) ($filters['search'] ?? ''));
+    }
+
+    /**
+     * Поиск по наименованию, инвентарному и серийному номеру. Вынесен отдельно,
+     * потому что им пользуются и общий список, и «моё имущество»: два скопированных
+     * поиска однажды начали бы искать по разным полям.
+     */
+    private function applySearch(QueryBuilder $qb, string $search): void
+    {
+        $search = trim($search);
+        if ($search === '') {
+            return;
         }
+
+        $qb->andWhere(
+            'LOWER(i.name) LIKE LOWER(:search)'
+            . ' OR LOWER(i.inventoryNumber) LIKE LOWER(:search)'
+            . ' OR LOWER(i.serialNumber) LIKE LOWER(:search)',
+        )->setParameter('search', '%' . $search . '%');
     }
 }
