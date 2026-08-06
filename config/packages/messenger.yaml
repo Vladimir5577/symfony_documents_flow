@@ -46,3 +46,6 @@ framework:
 
             # Межсервисная синхронизация пользователей → RabbitMQ
             App\Message\UserSyncMessage: event_bus
+
+            # Уведомления модуля закупок → RabbitMQ (сервис нотификаций)
+            App\Message\PurchaseNotificationMessage: event_bus

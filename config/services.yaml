@@ -21,6 +21,7 @@ parameters:
     private_upload_dir_posts: '%env(resolve:PRIVATE_UPLOAD_DIR_POSTS)%'
     private_upload_dir_users: '%env(resolve:PRIVATE_UPLOAD_DIR_USERS)%'
     private_upload_dir_chats: '%env(resolve:PRIVATE_UPLOAD_DIR_CHATS)%'
+    # закупки на диске больше не хранятся — вложения уехали в MinIO
 
     # onlyoffice url
     onlyoffice_document_server_url: '%env(resolve:ONLYOFFICE_DOCUMENT_SERVER_URL)%'
@@ -77,6 +78,11 @@ services:
         arguments:
             $s3: '@Aws\S3\S3Client'
             $bucket: '%env(MINIO_USER_BUCKET)%'
+
+    App\Service\Purchase\PurchaseFileStorageService:
+        arguments:
+            $s3: '@Aws\S3\S3Client'
+            $bucket: '%env(MINIO_PURCHASE_BUCKET)%'
 
     App\Service\User\UserAvatarUrlGenerator:
         arguments:
