@@ -77,7 +77,8 @@ final class PurchaseApiPresenter
 
         $data['description'] = $request->getDescription();
         $data['technicalSpec'] = $request->getTechnicalSpec();
-        $data['approvers'] = array_map(
+        // array_values: после removeElement ключи коллекции дырявые → JSON-объект, не массив.
+        $data['approvers'] = array_values(array_map(
             fn (PurchaseRequestApprover $approver): array => [
                 'id' => $approver->getId(),
                 'user' => $this->presentUser($approver->getUser()),
@@ -86,8 +87,8 @@ final class PurchaseApiPresenter
                 'createdAt' => $approver->getCreatedAt()?->format('c'),
             ],
             $request->getApprovers()->toArray(),
-        );
-        $data['items'] = array_map(
+        ));
+        $data['items'] = array_values(array_map(
             fn (PurchaseRequestItem $item): array => [
                 'id' => $item->getId(),
                 'name' => $item->getName(),
@@ -98,8 +99,8 @@ final class PurchaseApiPresenter
                 'categoryItemId' => $item->getCategoryItem()?->getId(),
             ],
             $request->getItems()->toArray(),
-        );
-        $data['comments'] = array_map(
+        ));
+        $data['comments'] = array_values(array_map(
             fn (PurchaseRequestComment $comment): array => [
                 'id' => $comment->getId(),
                 'author' => $this->presentUser($comment->getAuthor()),
@@ -107,8 +108,8 @@ final class PurchaseApiPresenter
                 'createdAt' => $comment->getCreatedAt()?->format('c'),
             ],
             $request->getComments()->toArray(),
-        );
-        $data['history'] = array_map(
+        ));
+        $data['history'] = array_values(array_map(
             fn (PurchaseRequestHistory $entry): array => [
                 'id' => $entry->getId(),
                 'user' => $this->presentUser($entry->getUser()),
@@ -123,11 +124,11 @@ final class PurchaseApiPresenter
                 'createdAt' => $entry->getCreatedAt()?->format('c'),
             ],
             $request->getHistory()->toArray(),
-        );
-        $data['files'] = array_map(
+        ));
+        $data['files'] = array_values(array_map(
             fn (PurchaseRequestFile $file): array => $this->presentFile($file),
             $request->getFiles()->toArray(),
-        );
+        ));
         $data['actions'] = $this->presentActions($request);
 
         return $data;
