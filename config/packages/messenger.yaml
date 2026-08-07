@@ -47,5 +47,7 @@ framework:
             # Межсервисная синхронизация пользователей → RabbitMQ
             App\Message\UserSyncMessage: event_bus
 
-            # Уведомления модуля закупок → RabbitMQ (сервис нотификаций)
-            App\Message\PurchaseNotificationMessage: event_bus
+            # Уведомления всех модулей → RabbitMQ (сервис нотификаций).
+            # Один класс на все модули, routing key ставится AmqpStamp'ом
+            # в NotificationPublisher: {модуль}.notification.{событие}.
+            App\Message\NotificationMessage: event_bus

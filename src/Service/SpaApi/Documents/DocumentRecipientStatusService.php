@@ -9,19 +9,16 @@ use App\Entity\Document\Document;
 use App\Entity\Document\DocumentHistory;
 use App\Entity\User\User;
 use App\Enum\Document\DocumentStatus;
-use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 final class DocumentRecipientStatusService
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly DocumentAccessService $accessService,
-        private readonly NotificationService $notificationService,
-        private readonly UrlGeneratorInterface $urlGenerator,
+        private readonly DocumentNotifier $documentNotifier,
     ) {
     }
 
@@ -76,39 +73,14 @@ final class DocumentRecipientStatusService
 
     private function notifyStatusChange(Document $document, User $currentUser, DocumentStatus $status): void
     {
-        $authorFullName = trim(sprintf(
-            '%s %s %s',
-            (string) $currentUser->getLastname(),
-            (string) $currentUser->getFirstname(),
-            (string) ($currentUser->getPatronymic() ?? ''),
-        ));
-        if ($authorFullName === '') {
-            $authorFullName = 'Пользователь';
-        }
-
-        $notificationTitle = sprintf(
-            '%s изменил статус документа «%s» на «%s».',
-            $authorFullName,
-            $document->getName(),
-            $status->getLabel(),
-        );
-
-        $documentId = $document->getId();
-        if ($documentId === null) {
-            return;
-        }
-
+        // Кому показывать: автору документа и остальным участникам, кроме того,
+        // кто статус и поменял. Ссылку и текст соберёт DocumentNotifier — автор
+        // смотрит документ как исходящий, участники как входящий.
         $recipientsById = [];
+
         $creator = $document->getCreatedBy();
         if ($creator !== null && $creator->getId() !== $currentUser->getId()) {
-            $recipientsById[$creator->getId()] = [
-                'user' => $creator,
-                'link' => $this->urlGenerator->generate(
-                    'app_view_outgoing_document',
-                    ['id' => $documentId],
-                    UrlGeneratorInterface::ABSOLUTE_PATH,
-                ),
-            ];
+            $recipientsById[$creator->getId()] = $creator;
         }
 
         foreach ($document->getUserRecipients() as $recipient) {
@@ -116,19 +88,14 @@ final class DocumentRecipientStatusService
             if ($participant === null || $participant->getId() === $currentUser->getId()) {
                 continue;
             }
-
-            $recipientsById[$participant->getId()] = [
-                'user' => $participant,
-                'link' => $this->urlGenerator->generate(
-                    'app_view_incoming_document',
-                    ['id' => $documentId],
-                    UrlGeneratorInterface::ABSOLUTE_PATH,
-                ),
-            ];
+            $recipientsById[$participant->getId()] = $participant;
         }
 
-        foreach ($recipientsById as $item) {
-            $this->notificationService->notifyGeneric($item['user'], $notificationTitle, $item['link']);
-        }
+        $this->documentNotifier->notifyStatusChanged(
+            $document,
+            $currentUser,
+            $status,
+            array_values($recipientsById),
+        );
     }
 }

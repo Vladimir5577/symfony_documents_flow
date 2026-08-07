@@ -8,19 +8,16 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\User\User;
 use App\Enum\Document\DocumentStatus;
-use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 final class DocumentPublishService
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly DocumentAccessService $accessService,
-        private readonly NotificationService $notificationService,
-        private readonly UrlGeneratorInterface $urlGenerator,
+        private readonly DocumentNotifier $documentNotifier,
     ) {
     }
 
@@ -54,22 +51,7 @@ final class DocumentPublishService
             }
         }
 
-        $recipients = array_values($recipientsById);
-        if ($recipients !== []) {
-            $documentId = $document->getId();
-            if ($documentId !== null) {
-                $link = $this->urlGenerator->generate(
-                    'app_view_incoming_document',
-                    ['id' => $documentId],
-                    UrlGeneratorInterface::ABSOLUTE_PATH,
-                );
-                $this->notificationService->notifyNewIncomingDocumentToRecipients(
-                    $recipients,
-                    (string) $document->getName(),
-                    $link,
-                );
-            }
-        }
+        $this->documentNotifier->notifyIncoming($document, array_values($recipientsById));
 
         return $document;
     }

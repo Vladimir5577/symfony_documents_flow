@@ -10,13 +10,11 @@ use App\Entity\Document\DocumentComment;
 use App\Entity\Document\DocumentCommentFile;
 use App\Entity\User\User;
 use App\Repository\Document\DocumentCommentRepository;
-use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 final class DocumentCommentService
 {
@@ -27,8 +25,7 @@ final class DocumentCommentService
         private readonly DocumentApiPresenter $presenter,
         private readonly DocumentAccessService $accessService,
         private readonly EntityManagerInterface $entityManager,
-        private readonly NotificationService $notificationService,
-        private readonly UrlGeneratorInterface $urlGenerator,
+        private readonly DocumentNotifier $documentNotifier,
         #[Autowire('%private_upload_dir_documents_comments%')]
         private readonly string $commentsUploadDir,
     ) {
@@ -208,17 +205,6 @@ final class DocumentCommentService
             return;
         }
 
-        $authorName = trim($commentAuthor->getLastname() . ' ' . $commentAuthor->getFirstname()) ?: $commentAuthor->getLogin();
-        $documentTitle = $document->getName() ?? '';
-        $anchor = '#document-comments';
-        $creatorId = $creator?->getId();
-
-        $outgoingLink = $this->urlGenerator->generate('app_view_outgoing_document', ['id' => $document->getId()]) . $anchor;
-        $incomingLink = $this->urlGenerator->generate('app_view_incoming_document', ['id' => $document->getId()]) . $anchor;
-
-        foreach ($recipients as $recipient) {
-            $link = ($creatorId !== null && $recipient->getId() === $creatorId) ? $outgoingLink : $incomingLink;
-            $this->notificationService->notifyDocumentCommentAdded($recipient, $authorName, $documentTitle, $link);
-        }
+        $this->documentNotifier->notifyCommentAdded($document, $commentAuthor, $recipients);
     }
 }

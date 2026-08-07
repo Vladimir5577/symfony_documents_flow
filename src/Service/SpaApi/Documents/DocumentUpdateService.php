@@ -10,12 +10,10 @@ use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
 use App\Enum\Document\DocumentStatus;
 use App\Repository\Organization\OrganizationRepository;
-use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class DocumentUpdateService
@@ -25,8 +23,7 @@ final class DocumentUpdateService
         private readonly EntityManagerInterface $entityManager,
         private readonly ValidatorInterface $validator,
         private readonly DocumentAccessService $accessService,
-        private readonly NotificationService $notificationService,
-        private readonly UrlGeneratorInterface $urlGenerator,
+        private readonly DocumentNotifier $documentNotifier,
     ) {
     }
 
@@ -127,21 +124,6 @@ final class DocumentUpdateService
             return;
         }
 
-        $documentId = $document->getId();
-        if ($documentId === null) {
-            return;
-        }
-
-        $link = $this->urlGenerator->generate(
-            'app_view_incoming_document',
-            ['id' => $documentId],
-            UrlGeneratorInterface::ABSOLUTE_PATH,
-        );
-
-        $this->notificationService->notifyNewIncomingDocumentToRecipients(
-            $recipients,
-            (string) $document->getName(),
-            $link,
-        );
+        $this->documentNotifier->notifyIncoming($document, $recipients);
     }
 }
