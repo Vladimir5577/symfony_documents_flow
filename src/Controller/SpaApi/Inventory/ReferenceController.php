@@ -9,6 +9,7 @@ use App\Entity\Organization\AbstractOrganization;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Inventory\InventoryAccessResolver;
+use App\Service\Inventory\InventoryUserPresenter;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -27,6 +28,7 @@ final class ReferenceController extends AbstractController
         private readonly OrganizationRepository $organizationRepository,
         private readonly UserRepository $userRepository,
         private readonly InventoryAccessResolver $accessResolver,
+        private readonly InventoryUserPresenter $userPresenter,
     ) {
     }
 
@@ -106,6 +108,10 @@ final class ReferenceController extends AbstractController
             ->getQuery()
             ->getArrayResult();
 
+        // Логин отдаётся только администратору инвентаризации: справочник
+        // открыт всем менеджерам, а им для выбора человека хватает ФИО.
+        $canSeeLogin = $this->userPresenter->canSeeLogin();
+
         return $this->json([
             'users' => array_map(
                 static fn (array $user): array => [
@@ -113,7 +119,7 @@ final class ReferenceController extends AbstractController
                     'lastname' => $user['lastname'] ?? '-',
                     'firstname' => $user['firstname'] ?? '-',
                     'patronymic' => $user['patronymic'] ?? '-',
-                    'login' => $user['login'],
+                    'login' => $canSeeLogin ? $user['login'] : null,
                     'organizationId' => $user['organizationId'],
                 ],
                 $users,

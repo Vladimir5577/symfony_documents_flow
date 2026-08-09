@@ -17,6 +17,7 @@ use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\RoleRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Inventory\InventoryAccessResolver;
+use App\Service\Inventory\InventoryUserPresenter;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -43,6 +44,7 @@ final class AccessController extends AbstractController
         private readonly OrganizationRepository $organizationRepository,
         private readonly UserRepository $userRepository,
         private readonly RoleRepository $roleRepository,
+        private readonly InventoryUserPresenter $userPresenter,
         private readonly EntityManagerInterface $em,
     ) {
     }
@@ -245,13 +247,7 @@ final class AccessController extends AbstractController
 
         return [
             'id' => $access->getId(),
-            'user' => [
-                'id' => $user->getId(),
-                'lastname' => $user->getLastname() ?? '-',
-                'firstname' => $user->getFirstname() ?? '-',
-                'patronymic' => $user->getPatronymic() ?? '-',
-                'login' => $user->getLogin(),
-            ],
+            'user' => $this->userPresenter->format($user),
             'organization' => [
                 'id' => $organization->getId(),
                 'name' => $organization->getName(),
@@ -262,9 +258,7 @@ final class AccessController extends AbstractController
                 ? ['id' => $category->getId(), 'name' => $category->getName()]
                 : null,
             'isOrganizationAdmin' => $access->isOrganizationAdmin(),
-            'createdBy' => $createdBy !== null
-                ? ['id' => $createdBy->getId(), 'login' => $createdBy->getLogin()]
-                : null,
+            'createdBy' => $this->userPresenter->formatAuthor($createdBy),
             'createdAt' => $access->getCreatedAt()?->format(\DateTimeInterface::ATOM),
         ];
     }

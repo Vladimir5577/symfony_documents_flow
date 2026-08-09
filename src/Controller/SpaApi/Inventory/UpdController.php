@@ -14,6 +14,7 @@ use App\Repository\Inventory\UpdFileRepository;
 use App\Repository\Inventory\UpdRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Service\Inventory\InventoryAccessResolver;
+use App\Service\Inventory\InventoryUserPresenter;
 use App\Service\Inventory\UpdFileService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -48,6 +49,7 @@ final class UpdController extends AbstractController
         private readonly OrganizationRepository $organizationRepository,
         private readonly InventoryAccessResolver $accessResolver,
         private readonly UpdFileService $fileService,
+        private readonly InventoryUserPresenter $userPresenter,
         private readonly EntityManagerInterface $em,
     ) {
     }
@@ -419,9 +421,7 @@ final class UpdController extends AbstractController
                 'fullName' => $organization->getFullName(),
                 'path' => $organization->getPath(),
             ],
-            'createdBy' => $createdBy !== null
-                ? ['id' => $createdBy->getId(), 'login' => $createdBy->getLogin()]
-                : null,
+            'createdBy' => $this->userPresenter->formatAuthor($createdBy),
             'createdAt' => $upd->getCreatedAt()?->format(\DateTimeInterface::ATOM),
         ];
 
@@ -444,9 +444,7 @@ final class UpdController extends AbstractController
             'filename' => $file->getFilename(),
             'contentType' => $file->getContentType(),
             'sizeBytes' => $file->getSizeBytes(),
-            'uploadedBy' => $uploadedBy !== null
-                ? ['id' => $uploadedBy->getId(), 'login' => $uploadedBy->getLogin()]
-                : null,
+            'uploadedBy' => $this->userPresenter->formatAuthor($uploadedBy),
             'createdAt' => $file->getCreatedAt()?->format(\DateTimeInterface::ATOM),
         ];
     }

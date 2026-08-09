@@ -20,6 +20,7 @@ use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Inventory\InventoryAccessResolver;
 use App\Service\Inventory\InventoryHistoryLogger;
+use App\Service\Inventory\InventoryUserPresenter;
 use App\Service\Inventory\ItemFilterFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -48,6 +49,7 @@ final class ItemController extends AbstractController
         private readonly OrganizationRepository $organizationRepository,
         private readonly UserRepository $userRepository,
         private readonly InventoryAccessResolver $accessResolver,
+        private readonly InventoryUserPresenter $userPresenter,
         private readonly InventoryHistoryLogger $historyLogger,
         private readonly ItemFilterFactory $filterFactory,
         private readonly EntityManagerInterface $em,
@@ -716,12 +718,6 @@ final class ItemController extends AbstractController
             return null;
         }
 
-        return [
-            'id' => $user->getId(),
-            'lastname' => $user->getLastname() ?? '-',
-            'firstname' => $user->getFirstname() ?? '-',
-            'patronymic' => $user->getPatronymic() ?? '-',
-            'login' => $user->getLogin(),
-        ];
+        return $this->userPresenter->format($user);
     }
 }

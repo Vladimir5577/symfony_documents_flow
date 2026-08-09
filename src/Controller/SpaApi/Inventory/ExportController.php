@@ -9,6 +9,7 @@ use App\Entity\Inventory\Item;
 use App\Entity\User\User;
 use App\Repository\Inventory\ItemRepository;
 use App\Service\Inventory\InventoryAccessResolver;
+use App\Service\Inventory\InventoryUserPresenter;
 use App\Service\Inventory\ItemFilterFactory;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -61,6 +62,7 @@ final class ExportController extends AbstractController
         private readonly ItemRepository $itemRepository,
         private readonly InventoryAccessResolver $accessResolver,
         private readonly ItemFilterFactory $filterFactory,
+        private readonly InventoryUserPresenter $userPresenter,
     ) {
     }
 
@@ -158,9 +160,7 @@ final class ExportController extends AbstractController
             return null;
         }
 
-        $parts = array_filter([$user->getLastname(), $user->getFirstname(), $user->getPatronymic()]);
-
-        return $parts === [] ? $user->getLogin() : implode(' ', $parts);
+        return $this->userPresenter->displayName($user);
     }
 
     /**
