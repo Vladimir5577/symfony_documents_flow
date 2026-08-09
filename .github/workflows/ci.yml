@@ -34,6 +34,14 @@ jobs:
           extensions: amqp, gd, zip, intl, pdo_pgsql, sockets, bcmath
           coverage: none
 
+      - name: Подготовить окружение
+        # На чистом клоне .env нет — он в .gitignore. Без него команды
+        # bin/console падают на неразрешённых %env(...)%: проект читает
+        # десятки переменных (база, каталоги загрузок, MinIO, JWT, RabbitMQ).
+        # .env.example содержит их все со значениями-заглушками, а .env.test
+        # добавляет то, что нужно окружению test.
+        run: cp .env.example .env
+
       - name: Проверить composer.json и composer.lock
         run: composer validate --strict
 

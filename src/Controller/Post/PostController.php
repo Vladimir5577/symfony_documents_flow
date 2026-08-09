@@ -13,6 +13,7 @@ use App\Repository\Post\FileRepository;
 use App\Repository\Post\PostRepository;
 use App\Repository\Post\PostUserCommentRepository;
 use App\Repository\Post\PostUserStatusRepository;
+use App\Service\SpaApi\Post\PostAccessService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -26,6 +27,14 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class PostController extends AbstractController
 {
+    public function __construct(
+        // Та же политика видимости, что в SPA-контроллере публикаций:
+        // правило одно на оба интерфейса, иначе легаси-маршруты остаются
+        // обходным путём к чужим черновикам.
+        private readonly PostAccessService $postAccess,
+    ) {
+    }
+
     #[Route('/posts', name: 'app_all_posts', methods: ['GET'])]
     public function allPosts(
         Request                    $request,
@@ -122,6 +131,13 @@ final class PostController extends AbstractController
             return new JsonResponse(['error' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
         }
 
+        // Та же политика видимости, что в SPA: доступ по идентификатору
+        // обязан проверять её так же, как список. Иначе черновик читается
+        // перебором id — здесь через легаси-интерфейс.
+        if (!$this->postAccess->isReadable($post, $user)) {
+            return new JsonResponse(['error' => 'Публикация не найдена'], Response::HTTP_NOT_FOUND);
+        }
+
         $content = trim((string) $request->request->get('content', ''));
         if ($content === '') {
             return new JsonResponse(['error' => 'Комментарий не может быть пустым'], Response::HTTP_BAD_REQUEST);
@@ -151,6 +167,11 @@ final class PostController extends AbstractController
         Request                    $request,
         PostUserCommentRepository  $commentRepository,
     ): Response {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$this->postAccess->isReadable($post, $user)) {
+            throw $this->createNotFoundException();
+        }
+
         $offset = max(0, $request->query->getInt('offset', 0));
         $limit = 5;
 
@@ -176,6 +197,10 @@ final class PostController extends AbstractController
         $user = $this->getUser();
         if (!$user instanceof User) {
             return new JsonResponse(['error' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+        }
+
+        if (!$this->postAccess->isReadable($post, $user)) {
+            return new JsonResponse(['error' => 'Публикация не найдена'], Response::HTTP_NOT_FOUND);
         }
 
         $existing = $statusRepository->findOneBy(['post' => $post, 'user' => $user]);
@@ -207,12 +232,21 @@ final class PostController extends AbstractController
             throw $this->createNotFoundException('Файл не найден.');
         }
 
+        // Вложение наследует видимость своей публикации. Без этой проверки
+        // хватало числового id файла, чтобы выкачать вложение чужого
+        // черновика — то же, что было в SPA-контроллере.
+        $user = $this->getUser();
+        $post = $fileEntity->getPost();
+        if (!$user instanceof User || !$this->postAccess->isReadable($post, $user)) {
+            throw $this->createNotFoundException('Файл не найден.');
+        }
+
         $filePath = $fileEntity->getFilePath();
         if (!$filePath) {
             throw $this->createNotFoundException('Файл не прикреплён.');
         }
 
-        $postId = $fileEntity->getPost()?->getId();
+        $postId = $post->getId();
         $uploadDir = $this->getParameter('private_upload_dir_posts');
         $absolutePath = str_contains($filePath, '/')
             ? $uploadDir . '/' . $filePath

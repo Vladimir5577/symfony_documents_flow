@@ -132,7 +132,10 @@ final class PurchaseController extends AbstractController
             'items' => array_map(
                 fn (PurchaseRequest $item): array => $this->presenter->presentListItem(
                     $item,
-                    $itemAggregates[$item->getId()] ?? null,
+                    // Заявка без позиций в агрегат не попадает: подставляем
+                    // нули явно, иначе презентер уйдёт в ленивую загрузку
+                    // пустой коллекции — ровно тот запрос, который мы и убирали.
+                    $itemAggregates[$item->getId()] ?? ['count' => 0, 'total' => 0.0],
                 ),
                 $result['items'],
             ),
