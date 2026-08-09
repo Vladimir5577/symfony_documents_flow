@@ -6,7 +6,7 @@ namespace App\Service\Notification;
 
 use App\Entity\User\User;
 use App\Message\NotificationMessage;
-use Symfony\Component\Messenger\Bridge\Amqp\Transport\AmqpStamp;
+use App\Message\NotificationOutboxMessage;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Uid\Uuid;
 
@@ -66,18 +66,26 @@ final class NotificationPublisher
             return;
         }
 
+        // Публикуем не в AMQP напрямую, а в outbox — транспорт на той же
+        // базе, где лежат бизнес-данные. Прямая публикация означала, что
+        // недоступный в этот момент брокер терял событие навсегда: документ
+        // уже опубликован и лежит у получателей, а уведомления нет и не
+        // будет. Из outbox сообщение забирает отдельный воркер и повторяет
+        // попытки, пока брокер не поднимется.
         $this->messageBus->dispatch(
-            new NotificationMessage(
-                eventId: Uuid::v7()->toRfc4122(),
-                recipients: array_values($ids),
-                title: $title,
-                typeLabel: $typeLabel,
-                message: $message,
-                link: $link,
-                actorId: (int) $actorId,
-                data: $data,
+            new NotificationOutboxMessage(
+                routingKey: $module . '.notification.' . $event,
+                notification: new NotificationMessage(
+                    eventId: Uuid::v7()->toRfc4122(),
+                    recipients: array_values($ids),
+                    title: $title,
+                    typeLabel: $typeLabel,
+                    message: $message,
+                    link: $link,
+                    actorId: (int) $actorId,
+                    data: $data,
+                ),
             ),
-            [new AmqpStamp($module . '.notification.' . $event)],
         );
     }
 }

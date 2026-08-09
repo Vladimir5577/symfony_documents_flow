@@ -12,6 +12,28 @@ framework:
             failed: 'doctrine://default?queue_name=failed'
             # sync: 'sync://'
 
+            # --- Outbox уведомлений ---
+            # Транспорт на той же базе, что и бизнес-данные. Продюсер кладёт
+            # сюда, воркер `messenger:consume outbox` перекладывает в event_bus.
+            #
+            # Смысл: между записью бизнес-изменения и публикацией события
+            # больше нет брокера. Раньше упавший в этот момент RabbitMQ терял
+            # уведомление навсегда — документ уже опубликован и лежит у
+            # получателей, а колокольчик пуст. Теперь событие лежит в базе и
+            # ждёт, пока брокер поднимется.
+            #
+            # Ретраи щедрее, чем у остальных транспортов: недоступность
+            # брокера — штатная ситуация при выкате, и терять на ней события
+            # незачем. После исчерпания попыток сообщение уходит в failed,
+            # откуда его видно и можно переотправить.
+            outbox:
+                dsn: 'doctrine://default?queue_name=outbox&auto_setup=0'
+                retry_strategy:
+                    max_retries: 10
+                    delay: 5000
+                    multiplier: 2
+                    max_delay: 300000
+
             # --- Межсервисная шина событий (RabbitMQ) ---
             # Topic exchange 'events': общий на весь проект.
             # Каждый микросервис создаёт СВОЮ очередь и биндит нужные routing keys.
@@ -47,7 +69,19 @@ framework:
             # Межсервисная синхронизация пользователей → RabbitMQ
             App\Message\UserSyncMessage: event_bus
 
-            # Уведомления всех модулей → RabbitMQ (сервис нотификаций).
-            # Один класс на все модули, routing key ставится AmqpStamp'ом
-            # в NotificationPublisher: {модуль}.notification.{событие}.
+            # Уведомления всех модулей идут в два шага.
+            #
+            # Шаг 1: продюсер кладёт конверт с routing key в outbox — в базу,
+            # рядом с бизнес-данными. NotificationOutboxMessage дальше outbox
+            # не уходит и Go-сервису не виден.
+            #
+            # Шаг 2: воркер `messenger:consume outbox` разбирает конверт и
+            # отправляет само уведомление в event_bus с AmqpStamp
+            # {модуль}.notification.{событие} — это и есть тело, которое
+            # разбирает go_notification_service.
+            #
+            # ВАЖНО при выкате: без запущенного воркера outbox уведомления
+            # будут копиться в таблице messenger_messages и не доходить до
+            # получателей. Сервис messenger_outbox добавлен в docker-compose.
+            App\Message\NotificationOutboxMessage: outbox
             App\Message\NotificationMessage: event_bus

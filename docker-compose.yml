@@ -30,6 +30,30 @@ services:
     networks:
       - project-net
 
+  # Воркер outbox: перекладывает уведомления из таблицы messenger_messages
+  # в RabbitMQ.
+  #
+  # ОБЯЗАТЕЛЕН при выкате вместе с приложением. Без него уведомления не
+  # теряются — они копятся в базе, — но и до получателей не доходят.
+  #
+  # --time-limit перезапускает воркер раз в час: длинный процесс с Doctrine
+  # накапливает память и держит устаревшее соединение с базой; штатный способ
+  # с этим жить — периодически завершаться и подниматься заново по restart.
+  messenger_outbox:
+    build:
+      context: .
+      dockerfile: ./docker_env/php/Dockerfile
+    container_name: messenger_outbox
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    command: php bin/console messenger:consume outbox --time-limit=3600 --memory-limit=256M -vv
+    volumes:
+      - ./:/var/www/html
+      - ./../uploads:/uploads
+    networks:
+      - project-net
+
   nginx:
     build:
       context: .

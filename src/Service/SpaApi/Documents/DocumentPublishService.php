@@ -39,10 +39,6 @@ final class DocumentPublishService
             return $document;
         }
 
-        $document->setIsPublished(true);
-        $document->setUpdatedAt(new \DateTimeImmutable());
-        $this->entityManager->flush();
-
         $recipientsById = [];
         foreach ($document->getUserRecipients() as $recipient) {
             $user = $recipient->getUser();
@@ -51,7 +47,22 @@ final class DocumentPublishService
             }
         }
 
-        $this->documentNotifier->notifyIncoming($document, array_values($recipientsById));
+        // Публикация документа и постановка уведомления в outbox — одна
+        // транзакция. Раньше между ними был коммит: документ становился
+        // опубликованным, а событие могло не уехать. Повторно опубликовать
+        // не выйдет — isPublished уже стоит, и метод выходит раньше, — так
+        // что уведомление терялось безвозвратно.
+        //
+        // Оба действия пишут в одну базу через одно соединение, поэтому
+        // общая транзакция делает их неразделимыми: либо документ
+        // опубликован и событие лежит в outbox, либо ни того, ни другого.
+        $this->entityManager->wrapInTransaction(function () use ($document, $recipientsById): void {
+            $document->setIsPublished(true);
+            $document->setUpdatedAt(new \DateTimeImmutable());
+            $this->entityManager->flush();
+
+            $this->documentNotifier->notifyIncoming($document, array_values($recipientsById));
+        });
 
         return $document;
     }
