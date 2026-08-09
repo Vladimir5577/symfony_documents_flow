@@ -119,9 +119,21 @@ final class PurchaseController extends AbstractController
             $minAmount,
         );
 
+        // Количество позиций и сумму берём одним запросом на всю страницу:
+        // иначе презентер загрузил бы коллекцию позиций у каждой заявки.
+        $itemAggregates = $this->purchaseRepo->sumAndCountItemsByRequestIds(
+            array_values(array_filter(array_map(
+                static fn (PurchaseRequest $item): ?int => $item->getId(),
+                $result['items'],
+            ))),
+        );
+
         return $this->json([
             'items' => array_map(
-                fn (PurchaseRequest $item): array => $this->presenter->presentListItem($item),
+                fn (PurchaseRequest $item): array => $this->presenter->presentListItem(
+                    $item,
+                    $itemAggregates[$item->getId()] ?? null,
+                ),
                 $result['items'],
             ),
             'pagination' => [

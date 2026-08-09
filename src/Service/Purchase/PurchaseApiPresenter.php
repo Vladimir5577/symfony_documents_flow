@@ -29,7 +29,15 @@ final class PurchaseApiPresenter
     /**
      * @return array<string, mixed>
      */
-    public function presentListItem(PurchaseRequest $request): array
+    /**
+     * @param array{count: int, total: float}|null $itemsAggregate
+     *        Предпосчитанные количество позиций и сумма. Передаётся списком,
+     *        который берёт их одним запросом на всю страницу
+     *        (PurchaseRequestRepository::sumAndCountItemsByRequestIds).
+     *        Без него значения считаются по коллекции — это загрузит позиции
+     *        заявки, что допустимо для одиночного показа, но не для списка.
+     */
+    public function presentListItem(PurchaseRequest $request, ?array $itemsAggregate = null): array
     {
         $status = $request->getStatus();
         $priority = $request->getPriority();
@@ -58,8 +66,8 @@ final class PurchaseApiPresenter
             'justification' => $request->getJustification(),
             'createdBy' => $this->presentUser($request->getCreatedBy()),
             'executor' => $this->presentUser($request->getExecutor()),
-            'totalAmount' => $request->getTotalAmount(),
-            'itemsCount' => $request->getItems()->count(),
+            'totalAmount' => $itemsAggregate['total'] ?? $request->getTotalAmount(),
+            'itemsCount' => $itemsAggregate['count'] ?? $request->getItems()->count(),
             'dueDate' => $request->getDueDate()?->format('Y-m-d'),
             'createdAt' => $request->getCreatedAt()?->format('c'),
             'updatedAt' => $request->getUpdatedAt()?->format('c'),

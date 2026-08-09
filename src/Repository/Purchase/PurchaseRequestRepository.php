@@ -50,8 +50,22 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
 
+        // Связи «к одному» подтягиваем сразу. Без этого презентер на каждой
+        // строке лениво дёргал организацию (плюс обход её родителей для
+        // полного пути), категорию, автора, исполнителя и должности обоих —
+        // на странице в сто записей это сотни отдельных запросов.
+        //
+        // Коллекцию позиций тут фетчить нельзя: соединение «к многим» ломает
+        // setMaxResults, страница поехала бы. Количество позиций и сумму
+        // считает отдельный агрегирующий запрос — sumAndCountItemsByRequestIds.
         $items = $qb
             ->addSelect("CASE WHEN pr.priority = 'URGENT' THEN 0 ELSE 1 END AS HIDDEN prioritySort")
+            ->leftJoin('pr.organization', 'org')->addSelect('org')
+            ->leftJoin('pr.category', 'cat')->addSelect('cat')
+            ->leftJoin('pr.createdBy', 'author')->addSelect('author')
+            ->leftJoin('author.worker', 'authorWorker')->addSelect('authorWorker')
+            ->leftJoin('pr.executor', 'executor')->addSelect('executor')
+            ->leftJoin('executor.worker', 'executorWorker')->addSelect('executorWorker')
             ->orderBy('prioritySort', 'ASC')
             ->addOrderBy('pr.createdAt', 'DESC')
             ->setFirstResult(($page - 1) * $pageSize)
@@ -60,6 +74,44 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             ->getResult();
 
         return ['items' => $items, 'total' => $total];
+    }
+
+    /**
+     * Количество позиций и их сумма по списку заявок — одним запросом.
+     *
+     * Нужно, чтобы список не загружал коллекцию позиций у каждой заявки ради
+     * getTotalAmount() и count(): именно это давало основной вес страницы.
+     *
+     * @param list<int> $requestIds
+     *
+     * @return array<int, array{count: int, total: float}> ключ — id заявки
+     */
+    public function sumAndCountItemsByRequestIds(array $requestIds): array
+    {
+        if ($requestIds === []) {
+            return [];
+        }
+
+        $rows = $this->getEntityManager()->createQuery(
+            'SELECT IDENTITY(i.purchaseRequest) AS requestId,
+                    COUNT(i.id) AS itemsCount,
+                    COALESCE(SUM(i.quantity * i.estimatedPrice), 0) AS totalAmount
+               FROM App\Entity\Purchase\PurchaseRequestItem i
+              WHERE i.purchaseRequest IN (:ids)
+              GROUP BY i.purchaseRequest'
+        )
+            ->setParameter('ids', $requestIds)
+            ->getArrayResult();
+
+        $aggregates = [];
+        foreach ($rows as $row) {
+            $aggregates[(int) $row['requestId']] = [
+                'count' => (int) $row['itemsCount'],
+                'total' => round((float) $row['totalAmount'], 2),
+            ];
+        }
+
+        return $aggregates;
     }
 
     /**
