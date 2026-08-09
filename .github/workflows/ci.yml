@@ -1,0 +1,66 @@
+name: CI
+
+# Гейт на каждый push и pull request. До этого в репозитории не было ни одной
+# автоматической проверки: на 51 тысячу строк приходилось несколько unit-тестов,
+# которые запускались руками, поэтому регрессии — в том числе в проверках
+# доступа — ловились уже на стенде людьми.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+# Push в ветку с открытым PR иначе запускает job дважды.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Установить PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # Версия из composer.json: проект требует >=8.4.
+          php-version: '8.4'
+          # amqp и gd нужны как platform requirements пакетов, иначе
+          # composer install отказывается ставить зависимости.
+          extensions: amqp, gd, zip, intl, pdo_pgsql, sockets, bcmath
+          coverage: none
+
+      - name: Проверить composer.json и composer.lock
+        run: composer validate --strict
+
+      - name: Кэш зависимостей
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Установить зависимости
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Синтаксис PHP
+        run: find src tests -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null
+
+      - name: Проверить контейнер служб
+        # Ловит то, что не видит php -l: несуществующий сервис в аргументе,
+        # осиротевшее определение в services.yaml, класс, удалённый вместе с
+        # модулем, но оставшийся в чьём-то конструкторе.
+        run: php bin/console lint:container --env=test
+
+      - name: Проверить шаблоны
+        run: php bin/console lint:twig templates --env=test
+
+      - name: Проверить конфигурацию
+        run: php bin/console lint:yaml config --parse-tags --env=test
+
+      - name: Тесты
+        run: vendor/bin/phpunit
