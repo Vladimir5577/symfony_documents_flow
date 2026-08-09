@@ -17,7 +17,7 @@ use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
-use App\Service\Notification\NotificationService;
+use App\Service\SpaApi\Documents\DocumentNotifier;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -52,7 +52,7 @@ final class DocumentController extends AbstractController
         UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
         ValidatorInterface     $validator,
-        NotificationService    $notificationService,
+        DocumentNotifier       $documentNotifier,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -366,11 +366,15 @@ final class DocumentController extends AbstractController
                     $recipientsById[$user->getId()] = $user;
                 }
             }
-            $recipients = array_values($recipientsById);
-            if ($recipients !== []) {
-                $link = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]);
-                $notificationService->notifyNewIncomingDocumentToRecipients($recipients, $document->getName(), $link);
-            }
+            // Уведомление уходит в общую шину, как из SPA. Раньше здесь
+            // писалась строка в таблицу notification монолита, которую SPA
+            // не читает: nginx отправляет /spa/api/notifications* в Go-сервис.
+            $actor = $this->getUser();
+            $documentNotifier->notifyIncoming(
+                $document,
+                array_values($recipientsById),
+                $actor instanceof User ? $actor : null,
+            );
         }
 
         $this->addFlash('success', 'Документ успешно создан.');
@@ -695,7 +699,7 @@ final class DocumentController extends AbstractController
         UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
         ValidatorInterface     $validator,
-        NotificationService    $notificationService,
+        DocumentNotifier       $documentNotifier,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -931,11 +935,15 @@ final class DocumentController extends AbstractController
                     $recipientsById[$user->getId()] = $user;
                 }
             }
-            $recipients = array_values($recipientsById);
-            if ($recipients !== []) {
-                $link = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]);
-                $notificationService->notifyNewIncomingDocumentToRecipients($recipients, $document->getName(), $link);
-            }
+            // Уведомление уходит в общую шину, как из SPA. Раньше здесь
+            // писалась строка в таблицу notification монолита, которую SPA
+            // не читает: nginx отправляет /spa/api/notifications* в Go-сервис.
+            $actor = $this->getUser();
+            $documentNotifier->notifyIncoming(
+                $document,
+                array_values($recipientsById),
+                $actor instanceof User ? $actor : null,
+            );
         }
 
         $this->addFlash('success', 'Документ успешно обновлён.');
@@ -948,7 +956,7 @@ final class DocumentController extends AbstractController
         Request                $request,
         DocumentRepository     $documentRepository,
         EntityManagerInterface $entityManager,
-        NotificationService    $notificationService,
+        DocumentNotifier       $documentNotifier,
     ): Response {
         $currentUser = $this->getUser();
         if (!$currentUser instanceof User) {
@@ -998,11 +1006,13 @@ final class DocumentController extends AbstractController
                 $recipientsById[$user->getId()] = $user;
             }
         }
-        $recipients = array_values($recipientsById);
-        if ($recipients !== []) {
-            $link = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]);
-            $notificationService->notifyNewIncomingDocumentToRecipients($recipients, $document->getName(), $link);
-        }
+        // Уведомление уходит в общую шину, как из SPA.
+        $actor = $this->getUser();
+        $documentNotifier->notifyIncoming(
+            $document,
+            array_values($recipientsById),
+            $actor instanceof User ? $actor : null,
+        );
 
         $this->addFlash('success', 'Документ успешно опубликован.');
         return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id]);
@@ -1242,7 +1252,7 @@ final class DocumentController extends AbstractController
         Request                $request,
         DocumentRepository     $documentRepository,
         EntityManagerInterface $entityManager,
-        NotificationService    $notificationService,
+        DocumentNotifier       $documentNotifier,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -1323,43 +1333,29 @@ final class DocumentController extends AbstractController
         $entityManager->persist($history);
         $entityManager->flush();
 
-        $authorFullName = trim(sprintf(
-            '%s %s %s',
-            (string) $currentUser->getLastname(),
-            (string) $currentUser->getFirstname(),
-            (string) ($currentUser->getPatronymic() ?? '')
-        ));
-        if ($authorFullName === '') {
-            $authorFullName = 'Пользователь';
-        }
-        $notificationTitle = sprintf(
-            '%s изменил статус документа «%s» на «%s».',
-            $authorFullName,
-            $document->getName(),
-            $status->getLabel()
-        );
-
+        // Текст и разные ссылки автору и получателям собирает сам
+        // DocumentNotifier (publishSplitByRole) — здесь достаточно передать
+        // участников. Раньше ссылки строились на легаси-маршруты монолита, а
+        // сами уведомления писались в таблицу, которую SPA не читает.
         $recipientsById = [];
         $creator = $document->getCreatedBy();
         if ($creator && $creator->getId() !== $currentUser->getId()) {
-            $recipientsById[$creator->getId()] = [
-                'user' => $creator,
-                'link' => $this->generateUrl('app_view_outgoing_document', ['id' => $document->getId()]),
-            ];
+            $recipientsById[$creator->getId()] = $creator;
         }
         foreach ($document->getUserRecipients() as $recipient) {
             $participant = $recipient->getUser();
             if (!$participant || $participant->getId() === $currentUser->getId()) {
                 continue;
             }
-            $recipientsById[$participant->getId()] = [
-                'user' => $participant,
-                'link' => $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]),
-            ];
+            $recipientsById[$participant->getId()] = $participant;
         }
-        foreach ($recipientsById as $item) {
-            $notificationService->notifyGeneric($item['user'], $notificationTitle, $item['link']);
-        }
+
+        $documentNotifier->notifyStatusChanged(
+            $document,
+            $currentUser,
+            $status,
+            array_values($recipientsById),
+        );
 
         $this->addFlash('success', sprintf('Статус документа изменен на "%s".', $status->getLabel()));
         return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
