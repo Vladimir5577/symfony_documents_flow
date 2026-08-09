@@ -542,8 +542,9 @@
                     {% for post in posts %}
                         <div class="news-card">
                             <div class="news-card-img-wrap">
-                                {% if post.coverImageName %}
-                                    <img class="news-card-img" src="/uploads/posts/{{ post.id }}/{{ post.coverImageName }}" alt="">
+                                {% set cover_url = post_cover_url(post) %}
+                                {% if cover_url %}
+                                    <img class="news-card-img" src="{{ cover_url }}" alt="">
                                 {% else %}
                                     <div class="news-card-img d-flex align-items-center justify-content-center">
                                         <i class="bi bi-image text-muted" style="font-size:2rem"></i>

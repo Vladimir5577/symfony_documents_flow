@@ -3,13 +3,18 @@
 namespace App\Controller\Api\Chat;
 
 use App\Entity\User\User;
+use App\Repository\Chat\ChatFileRepository;
 use App\Repository\Chat\ChatMessageRepository;
 use App\Repository\Chat\ChatParticipantRepository;
 use App\Repository\Chat\ChatRoomRepository;
 use App\Service\Chat\ChatMessageService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/chat')]
@@ -21,6 +26,56 @@ final class ApiChatMessageController extends AbstractController
         private readonly ChatMessageRepository $messageRepo,
         private readonly ChatParticipantRepository $participantRepo,
     ) {
+    }
+
+    /**
+     * Скачивание вложения чата.
+     *
+     * Раньше serializeMessage отдавал клиенту прямой путь
+     * /uploads/chats/{roomId}/{file} — то есть ссылку в приватное хранилище,
+     * которое раздавалось статикой в обход Symfony и никаких прав не
+     * проверяло. Файл получал кто угодно, зная путь. Теперь файл отдаётся
+     * только участнику комнаты, как и сами сообщения.
+     */
+    #[Route('/files/{id}/download', name: 'api_chat_file_download', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function downloadFile(
+        int $id,
+        ChatFileRepository $fileRepo,
+        #[Autowire('%private_upload_dir_chats%')] string $uploadDirChats,
+    ): Response {
+        /** @var User $user */
+        $user = $this->getUser();
+
+        $file = $fileRepo->find($id);
+        $room = $file?->getMessage()?->getRoom();
+        if ($file === null || $room === null) {
+            return $this->json(['error' => 'File not found'], 404);
+        }
+
+        // 404, а не 403: ответ не должен подтверждать существование файла в
+        // чужой переписке.
+        if (!$this->participantRepo->isParticipant($room, $user)) {
+            return $this->json(['error' => 'File not found'], 404);
+        }
+
+        $filePath = $file->getFilePath();
+        if ($filePath === null || $filePath === '') {
+            return $this->json(['error' => 'File not found'], 404);
+        }
+
+        $absolutePath = $uploadDirChats . '/' . $room->getId() . '/' . $filePath;
+        if (!is_file($absolutePath)) {
+            return $this->json(['error' => 'File not found on disk'], 404);
+        }
+
+        $response = new BinaryFileResponse($absolutePath);
+        $response->setContentDisposition(
+            ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+            $file->getTitle() ?: basename($filePath),
+        );
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+
+        return $response;
     }
 
     #[Route('/rooms/{id}/messages', name: 'api_chat_messages_list', methods: ['GET'])]

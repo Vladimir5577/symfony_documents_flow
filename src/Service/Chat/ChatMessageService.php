@@ -15,6 +15,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 class ChatMessageService
 {
@@ -25,6 +26,7 @@ class ChatMessageService
         private ChatParticipantRepository $participantRepository,
         private HubInterface $hub,
         private UserAvatarUrlGenerator $avatarUrlGenerator,
+        private UrlGeneratorInterface $urlGenerator,
     ) {
     }
 
@@ -163,10 +165,16 @@ class ChatMessageService
         $sender = $message->getSender();
         $files = [];
         foreach ($message->getFiles() as $file) {
+            // Ссылка ведёт в контроллер, а не в приватный каталог напрямую:
+            // /uploads раздавался статикой в обход Symfony, то есть файл из
+            // чужой переписки получал кто угодно, зная путь. Контроллер
+            // отдаёт файл только участнику комнаты.
             $files[] = [
                 'id' => $file->getId(),
                 'title' => $file->getTitle(),
-                'path' => $file->getFilePath() ? '/uploads/chats/' . $message->getRoom()->getId() . '/' . $file->getFilePath() : null,
+                'path' => $file->getFilePath() !== null && $file->getId() !== null
+                    ? $this->urlGenerator->generate('api_chat_file_download', ['id' => $file->getId()])
+                    : null,
             ];
         }
 

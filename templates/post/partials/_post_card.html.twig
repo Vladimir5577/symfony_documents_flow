@@ -10,9 +10,10 @@
      data-post-id="{{ post.id }}">
 
     {# Обложка #}
-    {% if post.coverImageName %}
+    {% set cover_url = post_cover_url(post) %}
+    {% if cover_url %}
         <div class="post-card-cover">
-            <img src="/uploads/posts/{{ post.id }}/{{ post.coverImageName }}" alt="" class="w-100" style="max-height:320px;object-fit:cover">
+            <img src="{{ cover_url }}" alt="" class="w-100" style="max-height:320px;object-fit:cover">
         </div>
     {% endif %}
 

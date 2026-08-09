@@ -29,7 +29,6 @@ final class PostResponseFormatter
      *     author: array{id: int|null, name: string}|null,
      *     isActive: bool,
      *     isRequiredAcknowledgment: bool,
-     *     coverImageUrl: string|null,
      *     coverThumbnailUrl: string|null,
      *     createdAt: string|null,
      *     commentCount: int,
@@ -54,7 +53,6 @@ final class PostResponseFormatter
             ] : null,
             'isActive' => $post->isActive(),
             'isRequiredAcknowledgment' => $post->isRequiredAcknowledgment(),
-            'coverImageUrl' => $this->buildCoverImageUrl($post),
             'coverThumbnailUrl' => $this->previewUrlGenerator->getCoverPreviewUrl($post),
             'createdAt' => $post->getCreatedAt()?->format('c'),
             'commentCount' => $commentCount,
@@ -183,16 +181,6 @@ final class PostResponseFormatter
             'value' => $status->value,
             'label' => $status->label(),
         ];
-    }
-
-    private function buildCoverImageUrl(Post $post): ?string
-    {
-        $name = $post->getCoverImageName();
-        if ($name === null || $name === '') {
-            return null;
-        }
-
-        return '/uploads/posts/' . $post->getId() . '/' . $name;
     }
 
     private function formatUserFullName(User $user): string
