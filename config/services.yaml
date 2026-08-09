@@ -59,15 +59,10 @@ services:
                     key: '%env(MINIO_ACCESS_KEY)%'
                     secret: '%env(MINIO_SECRET_KEY)%'
 
-    App\Service\Kanban\KanbanAttachmentService:
-        arguments:
-            $s3: '@Aws\S3\S3Client'
-            $bucket: '%env(MINIO_KANBAN_BUCKET)%'
-
-    App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator:
-        arguments:
-            $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
-            $minioBucket: '%env(MINIO_KANBAN_BUCKET)%'
+    # Сервисы канбана удалены вместе с легаси-модулем: канбаном владеет
+    # go_kanban_service_document_flow, он же работает со своим бакетом MinIO.
+    # Переменные MINIO_KANBAN_BUCKET и IMGPROXY_CACHE_BASE_URL остаются в
+    # окружении — их читает Go-сервис.
 
     App\Service\Inventory\UpdFileService:
         arguments:

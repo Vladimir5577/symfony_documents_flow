@@ -6,13 +6,7 @@ namespace App\Controller\SpaApi\User;
 
 use App\Entity\User\User;
 use App\Entity\User\Worker;
-use App\Entity\Kanban\Project\KanbanProjectUser;
-use App\Entity\Kanban\Project\KanbanProjectUserFolder;
-use App\Enum\Kanban\KanbanBoardMemberRole;
 use App\Enum\User\WorkerStatus;
-use App\Repository\Kanban\KanbanBoardRepository;
-use App\Repository\Kanban\Project\KanbanProjectRepository;
-use App\Service\Kanban\KanbanService;
 use App\Service\User\UserAvatarStorageService;
 use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
@@ -34,9 +28,6 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
 final class MeController extends AbstractController
 {
     public function __construct(
-        private readonly KanbanProjectRepository $projectRepository,
-        private readonly KanbanBoardRepository $boardRepository,
-        private readonly KanbanService $kanbanService,
         private readonly RoleHierarchyInterface $roleHierarchy,
         private readonly EntityManagerInterface $entityManager,
         private readonly UserPasswordHasherInterface $passwordHasher,
@@ -180,22 +171,6 @@ final class MeController extends AbstractController
     }
 
     /**
-     * Список проектов — копия ProjectKanbanController::personalProjects (JSON для SPA).
-     *
-     * @return list<array{
-     *     id: int,
-     *     name: string,
-     *     description: string|null,
-     *     isOwner: bool,
-     *     isProjectAdmin: bool,
-     *     entryBoardId: int|null,
-     *     folderId: int|null,
-     *     position: float,
-     * }>
-     */
-
-
-    /**
      * @return array{
      *   id: int|null,
      *   login: string,
@@ -208,12 +183,7 @@ final class MeController extends AbstractController
      *   statusLabel: string|null,
      *   avatar: string|null,
      *   avatarUrl: string|null,
-     *   projects: list<array{
-     *      id:int,name:string,description:string|null,isOwner:bool,isProjectAdmin:bool,entryBoardId:int|null,folderId:int|null,position:float
-     *   }>,
-     *   projectFolders: list<array{
-     *      id:int,name:string,position:float
-     *   }>
+     *   statusChoices: array<string, string>,
      * }
      */
     private function buildMePayload(User $user): array
@@ -228,16 +198,6 @@ final class MeController extends AbstractController
                 $avatarUrl = $generatedUrl . '?v=' . $avatarVersion;
             }
         }
-
-        $folders = $this->entityManager->getRepository(KanbanProjectUserFolder::class)->findBy(
-            ['user' => $user],
-            ['position' => 'ASC']
-        );
-        $projectFolders = array_map(static fn ($f) => [
-            'id' => $f->getId(),
-            'name' => $f->getName(),
-            'position' => $f->getPosition()
-        ], $folders);
 
         return [
             'id' => $user->getId(),
@@ -256,8 +216,6 @@ final class MeController extends AbstractController
             // обращался к эндпоинту с кадровыми данными коллег.
             'statusChoices' => WorkerStatus::getChoices(),
             'avatarUrl' => $avatarUrl,
-            'projects' => $this->kanbanService->getProjectsListForUser($user),
-            'projectFolders' => $projectFolders,
         ];
     }
 }

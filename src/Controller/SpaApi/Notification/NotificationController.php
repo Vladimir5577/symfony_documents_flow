@@ -7,7 +7,6 @@ namespace App\Controller\SpaApi\Notification;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Notification\Notification;
 use App\Entity\User\User;
-use App\Repository\Kanban\KanbanBoardRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Repository\Notification\NotificationRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -28,7 +27,6 @@ final class NotificationController extends AbstractController
     public function __construct(
         private readonly NotificationRepository $notificationRepo,
         private readonly DocumentUserRecipientRepository $recipientRepo,
-        private readonly KanbanBoardRepository $kanbanBoardRepository,
     ) {
     }
 
@@ -172,43 +170,14 @@ final class NotificationController extends AbstractController
             return $outgoingSpaLink;
         }
 
-        if (!str_starts_with($rawLink, '/kanban_board/')) {
-            if (str_starts_with($rawLink, '/kanban_project/')) {
-                $projectId = (int) preg_replace('/\D+/', '', $rawLink);
-                if ($projectId > 0) {
-                    return '/projects/' . $projectId . '/edit';
-                }
-            }
-
-            return $rawLink;
-        }
-
-        $parts = parse_url($rawLink);
-        $path = $parts['path'] ?? '';
-        $query = $parts['query'] ?? '';
-
-        if (!preg_match('#^/kanban_board/(\d+)$#', $path, $matches)) {
-            return $rawLink;
-        }
-
-        $boardId = (int) $matches[1];
-        if ($boardId <= 0) {
-            return $rawLink;
-        }
-
-        $board = $this->kanbanBoardRepository->find($boardId);
-        $projectId = $board?->getProject()?->getId();
-        if ($projectId === null) {
-            return $rawLink;
-        }
-
-        parse_str($query, $queryParams);
-        $spaQuery = 'board=' . $boardId;
-        if (isset($queryParams['card']) && is_scalar($queryParams['card'])) {
-            $spaQuery .= '&card=' . (int) $queryParams['card'];
-        }
-
-        return '/projects/' . $projectId . '?' . $spaQuery;
+        // Переписывание легаси-ссылок канбана убрано вместе с самим легаси-
+        // канбаном: маршрутов /kanban_board/{id} и /kanban_project/{id}
+        // больше не существует, а перевод их в SPA-адрес требовал похода в
+        // удалённые таблицы за проектом доски. Старые строки уведомлений с
+        // такими ссылками остаются в БД и просто вернутся как есть — этот
+        // контроллер всё равно недостижим: nginx отправляет
+        // /spa/api/notifications* в Go-сервис.
+        return $rawLink;
     }
 
     private function mapDocumentViewLink(string $rawLink, string $legacySegment, string $spaBasePath): ?string
