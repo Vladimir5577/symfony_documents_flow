@@ -249,6 +249,12 @@ final class MeController extends AbstractController
             'phone' => $user->getPhone(),
             'status' => $workerStatus?->value,
             'statusLabel' => $workerStatus?->getLabel(),
+            // Справочник статусов — статический список из enum, к чужим данным
+            // отношения не имеет. Раньше страница профиля тянула ради него
+            // весь каталог сотрудников (/spa/api/users?page=1&page_size=1),
+            // то есть рядовой пользователь при открытии своего профиля
+            // обращался к эндпоинту с кадровыми данными коллег.
+            'statusChoices' => WorkerStatus::getChoices(),
             'avatarUrl' => $avatarUrl,
             'projects' => $this->kanbanService->getProjectsListForUser($user),
             'projectFolders' => $projectFolders,

@@ -62,8 +62,12 @@ final class UserController extends AbstractController
             $status = null;
         }
 
+        // Сортировка по кадровым полям — тоже доступ к ним: порядок по времени
+        // последней активности выдаёт эту активность не хуже самого поля.
         $orderBy = (string) $request->query->get('order_by', 'lastname');
-        $allowedOrderBy = ['lastname', 'created_at', 'last_seen_at'];
+        $allowedOrderBy = $this->isGranted('ROLE_MANAGER')
+            ? ['lastname', 'created_at', 'last_seen_at']
+            : ['lastname'];
         if (!\in_array($orderBy, $allowedOrderBy, true)) {
             $orderBy = 'lastname';
         }
@@ -92,20 +96,29 @@ final class UserController extends AbstractController
 
         $pagination = $this->findPaginated($page, $pageSize, $search, $organizationIds, $status, $orderBy, $order);
 
+        // Кадровые поля видит только руководитель и выше.
+        //
+        // Эндпоинт нужен многим экранам: выбор исполнителя карточки, участники
+        // проекта, инвентаризация, согласанты закупок — все они открывают один
+        // и тот же диалог подбора пользователя. Закрыть его целиком нельзя,
+        // поэтому чинится не доступ, а объём выдачи: рядовому сотруднику для
+        // выбора коллеги нужны ФИО и должность, а не логин, телефон и время
+        // последней активности всех сотрудников компании постранично по сто
+        // записей.
+        $canSeePersonnelData = $this->isGranted('ROLE_MANAGER');
+
         return $this->json([
             'users' => array_map(
-                static function (User $user): array {
+                static function (User $user) use ($canSeePersonnelData): array {
                     $worker = $user->getWorker();
                     $workerStatus = $worker?->getWorkerStatus();
                     $organization = $user->getOrganization();
 
-                    return [
+                    $item = [
                         'id' => $user->getId(),
                         'lastname' => $user->getLastname() ?? '-',
                         'firstname' => $user->getFirstname() ?? '-',
                         'patronymic' => $user->getPatronymic() ?? '-',
-                        'login' => $user->getLogin(),
-                        'phone' => $user->getPhone() ?? '-',
                         'profession' => $worker?->getProfession() ?? '-',
                         'status' => $workerStatus?->value,
                         'statusLabel' => $workerStatus?->getLabel() ?? '-',
@@ -114,9 +127,16 @@ final class UserController extends AbstractController
                             'name' => $organization->getName(),
                             'fullName' => $organization->getFullName(),
                         ] : null,
-                        'lastSeenAt' => $user->getLastSeenAt()?->format(\DateTimeInterface::ATOM),
-                        'createdAt' => $user->getCreatedAt()?->format(\DateTimeInterface::ATOM),
                     ];
+
+                    if ($canSeePersonnelData) {
+                        $item['login'] = $user->getLogin();
+                        $item['phone'] = $user->getPhone() ?? '-';
+                        $item['lastSeenAt'] = $user->getLastSeenAt()?->format(\DateTimeInterface::ATOM);
+                        $item['createdAt'] = $user->getCreatedAt()?->format(\DateTimeInterface::ATOM);
+                    }
+
+                    return $item;
                 },
                 $pagination['users'],
             ),
@@ -178,7 +198,20 @@ final class UserController extends AbstractController
             ->select('COUNT(u.id)');
 
         if ($search !== '') {
-            $searchCondition = 'LOWER(u.lastname) LIKE LOWER(:search) OR LOWER(u.firstname) LIKE LOWER(:search) OR LOWER(u.patronymic) LIKE LOWER(:search) OR LOWER(u.login) LIKE LOWER(:search) OR LOWER(u.phone) LIKE LOWER(:search)';
+            // Поиск по логину и телефону — это тоже способ их узнать: подбирая
+            // строку и глядя, кто нашёлся, телефон восстанавливается по цифре.
+            // Поэтому непривилегированному пользователю ищем только по ФИО.
+            $searchFields = ['u.lastname', 'u.firstname', 'u.patronymic'];
+            if ($this->isGranted('ROLE_MANAGER')) {
+                $searchFields[] = 'u.login';
+                $searchFields[] = 'u.phone';
+            }
+
+            $searchCondition = implode(' OR ', array_map(
+                static fn (string $field): string => sprintf('LOWER(%s) LIKE LOWER(:search)', $field),
+                $searchFields,
+            ));
+
             $qb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
             $countQb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
         }
