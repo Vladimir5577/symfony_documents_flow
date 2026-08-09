@@ -16,6 +16,7 @@ use App\Repository\Post\FileRepository;
 use App\Repository\Post\PostRepository;
 use App\Repository\Post\PostUserCommentRepository;
 use App\Repository\Post\PostUserStatusRepository;
+use App\Service\SpaApi\Post\PostAccessService;
 use App\Service\SpaApi\Post\PostCreateService;
 use App\Service\SpaApi\Post\PostResponseFormatter;
 use Doctrine\ORM\EntityManagerInterface;
@@ -40,6 +41,7 @@ final class PostController extends AbstractController
         private readonly PostUserStatusRepository $statusRepository,
         private readonly FileRepository $fileRepository,
         private readonly PostResponseFormatter $formatter,
+        private readonly PostAccessService $accessService,
         private readonly EntityManagerInterface $entityManager,
         #[Autowire('%private_upload_dir_posts%')]
         private readonly string $uploadDirPosts,
@@ -91,11 +93,25 @@ final class PostController extends AbstractController
         ]);
     }
 
+    /**
+     * Публикация по id с проверкой видимости.
+     *
+     * Возвращает null и в случае «нет такой публикации», и в случае «нет
+     * доступа»: вызывающий отвечает 404 в обоих случаях, чтобы ответ не
+     * подтверждал существование чужого черновика.
+     */
+    private function findVisiblePost(int $id, User $user): ?Post
+    {
+        $post = $this->postRepository->find($id);
+
+        return $this->accessService->isReadable($post, $user) ? $post : null;
+    }
+
     #[Route('/{id}', name: 'spa_api_posts_view', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function view(int $id, #[CurrentUser] User $user): JsonResponse
     {
-        $post = $this->postRepository->find($id);
-        if ($post === null || $post->getDeletedAt() !== null) {
+        $post = $this->findVisiblePost($id, $user);
+        if ($post === null) {
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
@@ -174,10 +190,10 @@ final class PostController extends AbstractController
     }
 
     #[Route('/{id}/comments', name: 'spa_api_posts_comments_list', requirements: ['id' => '\d+'], methods: ['GET'])]
-    public function listComments(int $id, Request $request): JsonResponse
+    public function listComments(int $id, Request $request, #[CurrentUser] User $user): JsonResponse
     {
-        $post = $this->postRepository->find($id);
-        if ($post === null || $post->getDeletedAt() !== null) {
+        $post = $this->findVisiblePost($id, $user);
+        if ($post === null) {
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
@@ -201,8 +217,8 @@ final class PostController extends AbstractController
     #[Route('/{id}/comments', name: 'spa_api_posts_comments_create', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function createComment(int $id, Request $request, #[CurrentUser] User $user): JsonResponse
     {
-        $post = $this->postRepository->find($id);
-        if ($post === null || $post->getDeletedAt() !== null) {
+        $post = $this->findVisiblePost($id, $user);
+        if ($post === null) {
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
@@ -230,8 +246,8 @@ final class PostController extends AbstractController
     #[Route('/{id}/acknowledge', name: 'spa_api_posts_acknowledge', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function acknowledge(int $id, #[CurrentUser] User $user): JsonResponse
     {
-        $post = $this->postRepository->find($id);
-        if ($post === null || $post->getDeletedAt() !== null) {
+        $post = $this->findVisiblePost($id, $user);
+        if ($post === null) {
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
@@ -258,10 +274,18 @@ final class PostController extends AbstractController
     }
 
     #[Route('/files/{fileId}/download', name: 'spa_api_posts_file_download', requirements: ['fileId' => '\d+'], methods: ['GET'])]
-    public function downloadFile(int $fileId, Request $request): Response
+    public function downloadFile(int $fileId, Request $request, #[CurrentUser] User $user): Response
     {
         $fileEntity = $this->fileRepository->find($fileId);
         if (!$fileEntity instanceof PostFile) {
+            return $this->json(['error' => SpaApiError::POST_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        // Вложение наследует видимость своей публикации. Раньше эндпоинт не
+        // смотрел на публикацию вообще: хватало числового fileId, поэтому
+        // перебором выкачивались вложения чужих черновиков.
+        $post = $fileEntity->getPost();
+        if ($post === null || !$this->accessService->isReadable($post, $user)) {
             return $this->json(['error' => SpaApiError::POST_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
@@ -270,7 +294,7 @@ final class PostController extends AbstractController
             return $this->json(['error' => SpaApiError::POST_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $postId = $fileEntity->getPost()?->getId();
+        $postId = $post->getId();
         $absolutePath = str_contains($filePath, '/')
             ? $this->uploadDirPosts . '/' . $filePath
             : $this->uploadDirPosts . '/' . $postId . '/' . $filePath;
