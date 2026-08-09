@@ -6,15 +6,15 @@ namespace App\Tests\Service\Notification;
 
 use App\Entity\User\User;
 use App\Message\NotificationMessage;
+use App\Message\NotificationOutboxMessage;
 use App\Service\Notification\NotificationPublisher;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Messenger\Bridge\Amqp\Transport\AmqpStamp;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 
 final class NotificationPublisherTest extends TestCase
 {
-    /** @var list<array{0: NotificationMessage, 1: list<object>}> */
+    /** @var list<array{0: NotificationOutboxMessage, 1: list<object>}> */
     private array $dispatched = [];
 
     private NotificationPublisher $publisher;
@@ -47,14 +47,19 @@ final class NotificationPublisherTest extends TestCase
         );
 
         self::assertCount(1, $this->dispatched);
-        [$message, $stamps] = $this->dispatched[0];
+        [$envelope] = $this->dispatched[0];
+
+        // Продюсер кладёт сообщение в outbox, а не сразу в AMQP: между
+        // бизнес-изменением и брокером теперь стоит база. Routing key едет
+        // в конверте, потому что AmqpStamp до транспорта не доезжает
+        // (NonSendableStampInterface), а в теле уведомления ему не место —
+        // это тело разбирает Go-сервис.
+        self::assertInstanceOf(NotificationOutboxMessage::class, $envelope);
+        self::assertSame('document.notification.incoming', $envelope->routingKey);
 
         // Модуль и событие живут только в ключе — в теле их нет,
         // чтобы у продюсера не было двух источников истины.
-        $stamp = $stamps[0];
-        self::assertInstanceOf(AmqpStamp::class, $stamp);
-        self::assertSame('document.notification.incoming', $stamp->getRoutingKey());
-
+        $message = $envelope->notification;
         self::assertInstanceOf(NotificationMessage::class, $message);
         self::assertSame('Новый входящий документ: Акт', $message->title);
         self::assertSame('/document-in?doc=42', $message->link);
@@ -76,6 +81,8 @@ final class NotificationPublisherTest extends TestCase
 
         [$first] = $this->dispatched[0];
         [$second] = $this->dispatched[1];
+        $first = $first->notification;
+        $second = $second->notification;
 
         self::assertMatchesRegularExpression(
             '/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',
@@ -98,7 +105,8 @@ final class NotificationPublisherTest extends TestCase
             actor: $actor,
         );
 
-        [$message] = $this->dispatched[0];
+        [$envelope] = $this->dispatched[0];
+        $message = $envelope->notification;
         self::assertSame([187, 1745], $message->recipients);
         self::assertSame(144, $message->actorId);
     }
@@ -113,8 +121,8 @@ final class NotificationPublisherTest extends TestCase
             title: 'Акт',
         );
 
-        [$message] = $this->dispatched[0];
-        self::assertSame([187], $message->recipients);
+        [$envelope] = $this->dispatched[0];
+        self::assertSame([187], $envelope->notification->recipients);
     }
 
     /**

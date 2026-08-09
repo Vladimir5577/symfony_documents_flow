@@ -21,6 +21,24 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    # LoginControllerTest — функциональный: он поднимает ядро и пишет
+    # пользователя через Doctrine. Без реальной базы гейт был бы красным
+    # с первого запуска.
+    services:
+      postgres:
+        image: postgres:16.4
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v7
 
@@ -38,9 +56,20 @@ jobs:
         # На чистом клоне .env нет — он в .gitignore. Без него команды
         # bin/console падают на неразрешённых %env(...)%: проект читает
         # десятки переменных (база, каталоги загрузок, MinIO, JWT, RabbitMQ).
-        # .env.example содержит их все со значениями-заглушками, а .env.test
-        # добавляет то, что нужно окружению test.
-        run: cp .env.example .env
+        # .env.example содержит их все со значениями-заглушками; здесь
+        # доопределяются те, которым нужны рабочие значения в CI.
+        run: |
+          cp .env.example .env
+          {
+            echo "APP_SECRET=ci-secret-not-used-outside-ci"
+            echo "DATABASE_URL=postgresql://app:app@127.0.0.1:5432/app_test?serverVersion=16&charset=utf8"
+            echo "MESSENGER_TRANSPORT_DSN=doctrine://default?auto_setup=0"
+            echo "RABBITMQ_TRANSPORT_DSN=amqp://guest:guest@127.0.0.1:5672/%2f"
+            echo "MAILER_DSN=null://null"
+          } >> .env.test.local
+          # Каталоги загрузок должны существовать: часть сервисов проверяет
+          # их наличие при старте.
+          mkdir -p var/ci-uploads/{documents/originals,documents/updated,documents/templates,documents/comments,posts,users,chats}
 
       - name: Проверить composer.json и composer.lock
         run: composer validate --strict
@@ -69,6 +98,14 @@ jobs:
 
       - name: Проверить конфигурацию
         run: php bin/console lint:yaml config --parse-tags --env=test
+
+      - name: Сгенерировать ключи JWT
+        # LexikJWTAuthenticationBundle требует пару ключей при сборке
+        # контейнера. В CI она одноразовая и наружу не уходит.
+        run: php bin/console lexik:jwt:generate-keypair --skip-if-exists --env=test
+
+      - name: Создать схему тестовой базы
+        run: php bin/console doctrine:schema:create --env=test --no-interaction
 
       - name: Тесты
         run: vendor/bin/phpunit

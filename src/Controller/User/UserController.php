@@ -275,6 +275,11 @@ final class UserController extends AbstractController
 
         $pagination = $userRepository->findPaginated($page, $limit, $search, $organizationId, $status);
 
+        // Та же граница, что в SPA-каталоге: логин и телефон коллег —
+        // кадровые данные, а не справочник для выбора человека. Без этого
+        // легаси-маршрут остаётся обходным путём к тому же набору.
+        $canSeePersonnelData = $this->isGranted('ROLE_MANAGER');
+
         $usersData = [];
         foreach ($pagination['users'] as $user) {
             $worker = $user->getWorker();
@@ -283,8 +288,8 @@ final class UserController extends AbstractController
                 'lastname' => $user->getLastname() ?? '-',
                 'firstname' => $user->getFirstname() ?? '-',
                 'patronymic' => $user->getPatronymic() ?? '-',
-                'login' => $user->getLogin(),
-                'phone' => $user->getPhone() ?? '-',
+                'login' => $canSeePersonnelData ? $user->getLogin() : null,
+                'phone' => $canSeePersonnelData ? ($user->getPhone() ?? '-') : null,
                 'profession' => $worker?->getProfession() ?? '—',
                 'userEmployeeStatusLabel' => $worker?->getWorkerStatus()->getLabel() ?? '—',
                 'viewUrl' => $this->generateUrl('app_view_user', ['id' => $user->getId(), 'page' => $page]),

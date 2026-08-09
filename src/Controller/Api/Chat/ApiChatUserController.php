@@ -39,18 +39,28 @@ final class ApiChatUserController extends AbstractController
             $organizationName = $org->getName();
         }
 
-        return $this->json([
+        // Карточка собеседника в чате — это ФИО, должность и подразделение.
+        // Телефон, почта и время последней активности к переписке отношения
+        // не имеют и отдаются на тех же условиях, что в каталоге сотрудников.
+        $canSeePersonnelData = $this->isGranted('ROLE_MANAGER');
+
+        $profile = [
             'id' => $user->getId(),
             'lastname' => $user->getLastname(),
             'firstname' => $user->getFirstname(),
             'patronymic' => $user->getPatronymic(),
             'avatar' => $this->avatarUrlGenerator->getAvatarUrl($user),
-            'phone' => $user->getPhone(),
-            'email' => $user->getEmail(),
             'profession' => $worker ? $worker->getProfession() : null,
             'department' => $departmentName,
             'organization' => $organizationName,
-            'last_seen_at' => $user->getLastSeenAt()?->format('c'),
-        ]);
+        ];
+
+        if ($canSeePersonnelData) {
+            $profile['phone'] = $user->getPhone();
+            $profile['email'] = $user->getEmail();
+            $profile['last_seen_at'] = $user->getLastSeenAt()?->format('c');
+        }
+
+        return $this->json($profile);
     }
 }
