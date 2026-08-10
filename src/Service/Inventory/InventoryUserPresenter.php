@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Inventory;
 
 use App\Entity\User\User;
-use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
 /**
  * Единственное место, где экраны инвентаризации решают, что показывать про
@@ -28,7 +28,7 @@ use Symfony\Bundle\SecurityBundle\Security;
  */
 final readonly class InventoryUserPresenter
 {
-    public function __construct(private Security $security)
+    public function __construct(private AuthorizationCheckerInterface $security)
     {
     }
 
