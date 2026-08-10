@@ -336,7 +336,8 @@ final class AnalyticsTKOController extends AbstractController
     ): Response {
         $polygonId = $request->request->getInt('polygon_id');
         $week = $request->request->getString('week');
-        $dateStr = $request->request->getString('date');
+        /** @var array<string, mixed> $daysPayload */
+        $daysPayload = $request->request->all('days');
 
         if (!$this->isCsrfTokenValid('analytics_tko_save', $request->request->getString('_token'))) {
             $this->addFlash('error', 'Неверный CSRF-токен.');
@@ -349,67 +350,90 @@ final class AnalyticsTKOController extends AbstractController
             throw $this->createNotFoundException('Полигон не найден.');
         }
 
-        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateStr);
-        if (false === $date) {
-            $this->addFlash('error', 'Некорректная дата.');
-
-            return $this->redirectToTko($polygonId, $week);
-        }
-
-        $record = $analyticsRepository->findOneByPolygonAndDate($polygon, $date);
-        $isNew = null === $record;
-
-        $hasValue = false;
-        $pending = [];
-        foreach (TkoMetrics::METRICS as $metric) {
-            $raw = trim($request->request->getString($metric['key']));
-            $value = null;
-
-            if ('' !== $raw) {
-                if ('num' === $metric['type']) {
-                    $normalized = str_replace([' ', ','], ['', '.'], $raw);
-                    if (!is_numeric($normalized)) {
-                        $this->addFlash('error', sprintf('«%s»: «%s» — не число.', $metric['label'], $raw));
-
-                        return $this->redirectToTko($polygonId, $week);
-                    }
-                    $value = $normalized;
-                } else {
-                    $value = $raw;
-                }
-                $hasValue = true;
-            }
-
-            // Откладываем запись значений до момента, когда решим создавать ли строку
-            $metric['value'] = $value;
-            $pending[] = $metric;
-        }
-
-        // Не создаём пустую строку
-        if ($isNew && !$hasValue) {
+        if ([] === $daysPayload) {
             $this->addFlash('warning', 'Нет данных для сохранения.');
 
             return $this->redirectToTko($polygonId, $week);
         }
 
-        if ($isNew) {
-            $record = new AnalyticsTKO();
-            $record->setPolygon($polygon);
-            $record->setReportDate($date);
-            $user = $this->getUser();
-            if ($user instanceof User) {
-                $record->setCreatedBy($user);
+        $user = $this->getUser();
+        $saved = 0;
+
+        foreach ($daysPayload as $dateStr => $rawValues) {
+            if (!\is_array($rawValues) || !\is_string($dateStr)) {
+                continue;
             }
+
+            $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $dateStr);
+            if (false === $date) {
+                $this->addFlash('error', sprintf('Некорректная дата: %s.', $dateStr));
+
+                return $this->redirectToTko($polygonId, $week);
+            }
+
+            $record = $analyticsRepository->findOneByPolygonAndDate($polygon, $date);
+            $isNew = null === $record;
+
+            $hasValue = false;
+            $pending = [];
+            foreach (TkoMetrics::METRICS as $metric) {
+                $raw = trim((string) ($rawValues[$metric['key']] ?? ''));
+                $value = null;
+
+                if ('' !== $raw) {
+                    if ('num' === $metric['type']) {
+                        $normalized = str_replace([' ', ','], ['', '.'], $raw);
+                        if (!is_numeric($normalized)) {
+                            $this->addFlash('error', sprintf(
+                                '%s, «%s»: «%s» — не число.',
+                                $date->format('d.m.Y'),
+                                $metric['label'],
+                                $raw,
+                            ));
+
+                            return $this->redirectToTko($polygonId, $week);
+                        }
+                        $value = $normalized;
+                    } else {
+                        $value = $raw;
+                    }
+                    $hasValue = true;
+                }
+
+                $metric['value'] = $value;
+                $pending[] = $metric;
+            }
+
+            // Не создаём пустую строку
+            if ($isNew && !$hasValue) {
+                continue;
+            }
+
+            if ($isNew) {
+                $record = new AnalyticsTKO();
+                $record->setPolygon($polygon);
+                $record->setReportDate($date);
+                if ($user instanceof User) {
+                    $record->setCreatedBy($user);
+                }
+            }
+
+            foreach ($pending as $metric) {
+                $record->{$this->setter($metric['key'])}($metric['value']);
+            }
+
+            $em->persist($record);
+            ++$saved;
         }
 
-        foreach ($pending as $metric) {
-            $record->{$this->setter($metric['key'])}($metric['value']);
+        if (0 === $saved) {
+            $this->addFlash('warning', 'Нет данных для сохранения.');
+
+            return $this->redirectToTko($polygonId, $week);
         }
 
-        $em->persist($record);
         $em->flush();
-
-        $this->addFlash('success', sprintf('Сохранено: %s, %s.', $polygon->getName(), $date->format('d.m.Y')));
+        $this->addFlash('success', sprintf('Сохранено: %s.', $polygon->getName()));
 
         return $this->redirectToTko($polygonId, $week);
     }

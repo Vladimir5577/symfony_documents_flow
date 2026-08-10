@@ -66,114 +66,114 @@
             <div class="col-12 col-lg-9 mb-3">
                 <div class="card">
                     <div class="card-body">
-                        {# Навигация по неделям #}
-                        <div class="d-flex align-items-center justify-content-center gap-3 mb-4">
-                            <a href="{{ path('app_analytics_tko', { polygon_id: selectedPolygon ? selectedPolygon.id : null, week: prevWeek }) }}"
-                               class="btn btn-light-secondary btn-sm" title="Предыдущая неделя">
-                                <i class="bi bi-chevron-left"></i>
-                            </a>
-                            <span class="tko-week-label">Период {{ weekLabel }}</span>
-                            <a href="{{ path('app_analytics_tko', { polygon_id: selectedPolygon ? selectedPolygon.id : null, week: nextWeek }) }}"
-                               class="btn btn-light-secondary btn-sm" title="Следующая неделя">
-                                <i class="bi bi-chevron-right"></i>
-                            </a>
-                        </div>
-
                         {% if selectedPolygon is null %}
+                            <div class="d-flex align-items-center justify-content-center gap-3 mb-4">
+                                <a href="{{ path('app_analytics_tko', { week: prevWeek }) }}"
+                                   class="btn btn-light-secondary btn-sm" title="Предыдущая неделя">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                                <span class="tko-week-label">Период {{ weekLabel }}</span>
+                                <a href="{{ path('app_analytics_tko', { week: nextWeek }) }}"
+                                   class="btn btn-light-secondary btn-sm" title="Следующая неделя">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </div>
                             <p class="text-muted mb-0">Выберите полигон слева.</p>
                         {% else %}
-                            {# Отдельная форма на каждый день; поля связываются через атрибут form="" #}
-                            {% for day in days %}
-                                <form id="tko-form-{{ loop.index0 }}" method="post"
-                                      action="{{ path('app_analytics_tko_save') }}" class="d-none">
-                                    <input type="hidden" name="_token" value="{{ csrf_token('analytics_tko_save') }}">
-                                    <input type="hidden" name="polygon_id" value="{{ selectedPolygon.id }}">
-                                    <input type="hidden" name="week" value="{{ week }}">
-                                    <input type="hidden" name="date" value="{{ day.date }}">
-                                </form>
-                            {% endfor %}
+                            <form method="post" action="{{ path('app_analytics_tko_save') }}">
+                                <input type="hidden" name="_token" value="{{ csrf_token('analytics_tko_save') }}">
+                                <input type="hidden" name="polygon_id" value="{{ selectedPolygon.id }}">
+                                <input type="hidden" name="week" value="{{ week }}">
 
-                            <div class="table-responsive">
-                                <table class="table table-bordered tko-grid mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th style="min-width: 180px;">Метрики</th>
-                                            {% for day in days %}
-                                                <th>{{ day.dow }}<br><small class="text-muted">{{ day.short }}</small></th>
-                                            {% endfor %}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for metric in metrics %}
+                                <div class="d-flex align-items-center mb-4">
+                                    <div class="flex-grow-1"></div>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <a href="{{ path('app_analytics_tko', { polygon_id: selectedPolygon.id, week: prevWeek }) }}"
+                                           class="btn btn-light-secondary btn-sm" title="Предыдущая неделя">
+                                            <i class="bi bi-chevron-left"></i>
+                                        </a>
+                                        <span class="tko-week-label">Период {{ weekLabel }}</span>
+                                        <a href="{{ path('app_analytics_tko', { polygon_id: selectedPolygon.id, week: nextWeek }) }}"
+                                           class="btn btn-light-secondary btn-sm" title="Следующая неделя">
+                                            <i class="bi bi-chevron-right"></i>
+                                        </a>
+                                    </div>
+                                    <div class="flex-grow-1 text-end">
+                                        <button type="submit" class="btn btn-primary">Сохранить</button>
+                                    </div>
+                                </div>
+
+                                <div class="table-responsive">
+                                    <table class="table table-bordered tko-grid mb-0">
+                                        <thead>
                                             <tr>
-                                                <td class="metric-label">{{ metric.label }}</td>
+                                                <th style="min-width: 180px;">Метрики</th>
                                                 {% for day in days %}
-                                                    <td>
-                                                        {% if metric.type == 'num' %}
-                                                            <input type="number" step="any" min="0"
-                                                                   class="form-control form-control-sm"
-                                                                   form="tko-form-{{ loop.index0 }}"
-                                                                   name="{{ metric.key }}"
-                                                                   value="{{ day.values[metric.key] }}">
-                                                        {% else %}
-                                                            {% if metric.key == 'machinery_work' %}
-                                                                <div class="input-group input-group-sm">
-                                                                    <input type="text"
-                                                                           class="form-control form-control-sm machinery-work-input"
-                                                                           form="tko-form-{{ loop.index0 }}"
-                                                                           name="{{ metric.key }}"
-                                                                           value="{{ day.values[metric.key] }}">
-                                                                    <button type="button"
-                                                                            class="btn btn-outline-secondary machinery-work-open"
-                                                                            data-bs-toggle="modal"
-                                                                            data-bs-target="#machineryWorkModal">
-                                                                        <i class="bi bi-list-ul"></i>
-                                                                    </button>
-                                                                </div>
-                                                            {% elseif metric.key in ['smoke', 'fire_without_mchs', 'fire_with_mchs', 'irrigation'] %}
-                                                                <div class="input-group input-group-sm">
-                                                                    <input type="text"
-                                                                           class="form-control form-control-sm timed-event-input"
-                                                                           form="tko-form-{{ loop.index0 }}"
-                                                                           name="{{ metric.key }}"
-                                                                           value="{{ day.values[metric.key] }}">
-                                                                    <button type="button"
-                                                                            class="btn btn-outline-secondary timed-event-open"
-                                                                            data-bs-toggle="modal"
-                                                                            data-bs-target="#timedEventModal"
-                                                                            data-title="{{ metric.label }}"
-                                                                            data-placeholder="Например, {{ metric.label|lower }}">
-                                                                        <i class="bi bi-clock"></i>
-                                                                    </button>
-                                                                </div>
-                                                            {% else %}
-                                                                <input type="text"
-                                                                       class="form-control form-control-sm"
-                                                                       form="tko-form-{{ loop.index0 }}"
-                                                                       name="{{ metric.key }}"
-                                                                       value="{{ day.values[metric.key] }}">
-                                                            {% endif %}
-                                                        {% endif %}
-                                                    </td>
+                                                    <th>{{ day.dow }}<br><small class="text-muted">{{ day.short }}</small></th>
                                                 {% endfor %}
                                             </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                    <tfoot>
-                                        <tr>
-                                            <td></td>
-                                            {% for day in days %}
-                                                <td class="text-center">
-                                                    <button type="submit" form="tko-form-{{ loop.index0 }}"
-                                                            class="btn btn-primary btn-sm">
-                                                        Сохранить
-                                                    </button>
-                                                </td>
+                                        </thead>
+                                        <tbody>
+                                            {% for metric in metrics %}
+                                                {% set metricIndex = loop.index0 %}
+                                                <tr>
+                                                    <td class="metric-label">{{ metric.label }}</td>
+                                                    {% for day in days %}
+                                                        {% set tabIndex = loop.index0 * metrics|length + metricIndex + 1 %}
+                                                        <td>
+                                                            {% if metric.type == 'num' %}
+                                                                <input type="number" step="any" min="0"
+                                                                       class="form-control form-control-sm"
+                                                                       tabindex="{{ tabIndex }}"
+                                                                       name="days[{{ day.date }}][{{ metric.key }}]"
+                                                                       value="{{ day.values[metric.key] }}">
+                                                            {% else %}
+                                                                {% if metric.key == 'machinery_work' %}
+                                                                    <div class="input-group input-group-sm">
+                                                                        <input type="text"
+                                                                               class="form-control form-control-sm machinery-work-input"
+                                                                               tabindex="{{ tabIndex }}"
+                                                                               name="days[{{ day.date }}][{{ metric.key }}]"
+                                                                               value="{{ day.values[metric.key] }}">
+                                                                        <button type="button" tabindex="-1"
+                                                                                class="btn btn-outline-secondary machinery-work-open"
+                                                                                data-bs-toggle="modal"
+                                                                                data-bs-target="#machineryWorkModal">
+                                                                            <i class="bi bi-list-ul"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                {% elseif metric.key in ['smoke', 'fire_without_mchs', 'fire_with_mchs', 'irrigation'] %}
+                                                                    <div class="input-group input-group-sm">
+                                                                        <input type="text"
+                                                                               class="form-control form-control-sm timed-event-input"
+                                                                               tabindex="{{ tabIndex }}"
+                                                                               name="days[{{ day.date }}][{{ metric.key }}]"
+                                                                               value="{{ day.values[metric.key] }}">
+                                                                        <button type="button" tabindex="-1"
+                                                                                class="btn btn-outline-secondary timed-event-open"
+                                                                                data-bs-toggle="modal"
+                                                                                data-bs-target="#timedEventModal"
+                                                                                data-title="{{ metric.label }}"
+                                                                                data-placeholder="Например, {{ metric.label|lower }}">
+                                                                            <i class="bi bi-clock"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                {% else %}
+                                                                    <input type="text"
+                                                                           class="form-control form-control-sm"
+                                                                           tabindex="{{ tabIndex }}"
+                                                                           name="days[{{ day.date }}][{{ metric.key }}]"
+                                                                           value="{{ day.values[metric.key] }}">
+                                                                {% endif %}
+                                                            {% endif %}
+                                                        </td>
+                                                    {% endfor %}
+                                                </tr>
                                             {% endfor %}
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </form>
                         {% endif %}
                     </div>
                 </div>
