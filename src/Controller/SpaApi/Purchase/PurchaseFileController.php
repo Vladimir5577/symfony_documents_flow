@@ -12,6 +12,7 @@ use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseRequestRepository;
+use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseFileStorageService;
 use Aws\S3\Exception\S3Exception;
@@ -36,6 +37,7 @@ final class PurchaseFileController extends AbstractController
         private readonly PurchaseApiPresenter $presenter,
         private readonly PurchaseFileStorageService $storage,
         private readonly EntityManagerInterface $em,
+        private readonly PurchaseAccess $access,
     ) {
     }
 
@@ -192,29 +194,10 @@ final class PurchaseFileController extends AbstractController
         return $purchase->getCreatedBy()?->getId() === $user->getId();
     }
 
-    /** Кто видит заявку: директор — со своего этапа; отдел закупок — с подачи; плательщик — оплаты; автор и приглашённый согласант — свою. */
+    /** Видимость заявки — общая на весь модуль, см. PurchaseAccess. */
     private function canView(PurchaseRequest $purchase, User $user): bool
     {
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)
-            && in_array($purchase->getStatus(), PurchaseStatus::getDirectorVisible(), true)
-        ) {
-            return true;
-        }
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
-            && in_array($purchase->getStatus(), PurchaseStatus::getPurchaseDepartmentVisible(), true)
-        ) {
-            return true;
-        }
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_INVOICE->value)
-            && in_array($purchase->getStatus(), PurchaseStatus::getPayerVisible(), true)
-        ) {
-            return true;
-        }
-        if ($this->isManagerOwner($purchase, $user)) {
-            return true;
-        }
-
-        return $purchase->findApproverFor($user) !== null;
+        return $this->access->canView($purchase, $user);
     }
 
     /**

@@ -11,13 +11,16 @@ use App\Entity\Purchase\PurchaseRequestItem;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseLaw;
 use App\Enum\Purchase\PurchaseMethod;
+use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseSettingKey;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\User\UserRole;
+use App\Repository\Purchase\PurchaseApprovalStepRepository;
 use App\Repository\Purchase\PurchaseCategoryRepository;
-use App\Repository\Purchase\PurchaseRequestApproverRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Repository\Purchase\PurchaseSettingRepository;
+use App\Service\Purchase\ApprovalRouteBuilder;
+use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseFileStorageService;
 use App\Service\Purchase\PurchaseRequestService;
@@ -39,12 +42,14 @@ final class PurchaseController extends AbstractController
     public function __construct(
         private readonly PurchaseRequestRepository $purchaseRepo,
         private readonly PurchaseCategoryRepository $categoryRepo,
-        private readonly PurchaseRequestApproverRepository $approverRepo,
+        private readonly PurchaseApprovalStepRepository $stepRepo,
         private readonly PurchaseSettingRepository $settingRepo,
         private readonly PurchaseApiPresenter $presenter,
         private readonly PurchaseRequestService $purchaseService,
         private readonly PurchaseFileStorageService $fileStorage,
         private readonly EntityManagerInterface $em,
+        private readonly PurchaseAccess $access,
+        private readonly ApprovalRouteBuilder $routeBuilder,
     ) {
     }
 
@@ -117,6 +122,7 @@ final class PurchaseController extends AbstractController
             $pageSize,
             $asApprover ? (int) $user->getId() : null,
             $minAmount,
+            $asApprover ? $user->getRoles() : [],
         );
 
         return $this->json([
@@ -143,7 +149,10 @@ final class PurchaseController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $approverPending = $this->approverRepo->countPendingForUser($user);
+        // Согласование — активные шаги, ждущие лично меня или мою роль.
+        // Именно активные: будущие шаги мне ещё недоступны, и бейдж показал бы
+        // работу, которую сделать нельзя.
+        $approverPending = $this->stepRepo->countActiveForUser($user, $user->getRoles());
 
         $scope = $this->resolveScope($user);
         if ($scope === null) {
@@ -157,17 +166,16 @@ final class PurchaseController extends AbstractController
         [$createdById] = $scope;
         $byStatus = $this->purchaseRepo->countByStatuses($createdById);
 
+        // Шагами маршрута счётчик не исчерпывается: часть работы живёт в конвейере
+        // и шагом не является. Общее правило — «следующее действие доступно мне».
         $actionRequired = $approverPending;
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
-            $actionRequired += $byStatus[PurchaseStatus::CEO_APPROVE_PENDING->value] ?? 0;
-        }
         if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)) {
-            $actionRequired += ($byStatus[PurchaseStatus::NEW->value] ?? 0)
-                + ($byStatus[PurchaseStatus::APPROVERS_DONE->value] ?? 0)
-                + ($byStatus[PurchaseStatus::CEO_APPROVED->value] ?? 0)
-                + ($byStatus[PurchaseStatus::CONTRACT_PENDING->value] ?? 0);
+            // APPROVED — выставить счёт, INVOICE_PAID — отметить доставку
+            $actionRequired += ($byStatus[PurchaseStatus::APPROVED->value] ?? 0)
+                + ($byStatus[PurchaseStatus::INVOICE_PAID->value] ?? 0);
         }
         if ($this->isGranted(UserRole::ROLE_MANAGER->value)) {
+            // Автору: вернули на доработку и приёмка поставки
             $actionRequired += ($byStatus[PurchaseStatus::REJECTED->value] ?? 0)
                 + ($byStatus[PurchaseStatus::DELIVERED->value] ?? 0);
         }
@@ -194,36 +202,92 @@ final class PurchaseController extends AbstractController
 
         return $this->json([
             'ceoApproveMinAmount' => $this->settingRepo->getCeoApproveMinAmount(),
+            'fastMaxAmount' => $this->settingRepo->getFastMaxAmount(),
         ]);
     }
 
-    /** Меняют порог только директор и админ портала. */
+    /**
+     * Превью маршрута для формы создания: какие шаги получатся при выбранной
+     * кнопке и такой сумме.
+     *
+     * Считает бэк тем же строителем, что и реальную подачу. Строчки «сумма выше
+     * порога — потребуется директор», посчитанной на фронте по двум настройкам,
+     * мало: в шаблон «Быстрая» могут положить кого-то ещё, и предупреждение
+     * окажется неполной правдой.
+     *
+     * Объявлен до /{id}: иначе «route-preview» уйдёт в маршрут карточки.
+     */
+    #[Route('/route-preview', name: 'spa_api_purchases_route_preview', methods: ['GET'])]
+    public function routePreview(Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $kind = PurchaseRequestKind::tryFrom((string) $request->query->get('kind', ''))
+            ?? PurchaseRequestKind::STANDARD;
+
+        return $this->json([
+            'kind' => $kind->value,
+            'steps' => $this->routeBuilder->preview($kind, (float) $request->query->get('amount', '0')),
+        ]);
+    }
+
+    /**
+     * У каждой настройки свой владелец: порог согласования ставит себе директор,
+     * потолок быстрой заявки — отдел закупок. Числа независимы и друг друга не
+     * ограничивают: потолок 20 000 при пороге 5 000 — штатно, быстрая заявка
+     * на 8 000 просто получит в маршруте шаг директора.
+     */
     #[Route('/settings', name: 'spa_api_purchases_settings_update', methods: ['PUT'])]
     public function updateSettings(Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
-        if (!$this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value) && !$this->isGranted(UserRole::ROLE_ADMIN->value)) {
-            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-        }
 
         $payload = json_decode($request->getContent(), true);
-        if (!is_array($payload) || !array_key_exists('ceoApproveMinAmount', $payload)) {
+        if (!is_array($payload)) {
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+        }
+
+        $isAdmin = $this->isGranted(UserRole::ROLE_ADMIN->value);
+        $writable = [
+            'ceoApproveMinAmount' => [
+                PurchaseSettingKey::CEO_APPROVE_MIN_AMOUNT,
+                $isAdmin || $this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value),
+            ],
+            'fastMaxAmount' => [
+                PurchaseSettingKey::FAST_MAX_AMOUNT,
+                $isAdmin || $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
+            ],
+        ];
+
+        $touched = false;
+        foreach ($writable as $field => [$key, $allowed]) {
+            if (!array_key_exists($field, $payload)) {
+                continue;
+            }
+            if (!$allowed) {
+                return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+            }
+            // Тип значения БД не контролирует (JSON) — проверяем по ключу
+            if (!$key->isValid($payload[$field])) {
+                return $this->json(['error' => SpaApiError::PURCHASE_INVALID_SETTING], Response::HTTP_BAD_REQUEST);
+            }
+            $this->settingRepo->set($key, (float) $payload[$field]);
+            $touched = true;
+        }
+
+        if (!$touched) {
             return $this->json(['error' => SpaApiError::PURCHASE_INVALID_SETTING], Response::HTTP_BAD_REQUEST);
         }
 
-        // Тип значения БД не контролирует (JSON) — проверяем по ключу
-        $key = PurchaseSettingKey::CEO_APPROVE_MIN_AMOUNT;
-        if (!$key->isValid($payload['ceoApproveMinAmount'])) {
-            return $this->json(['error' => SpaApiError::PURCHASE_INVALID_SETTING], Response::HTTP_BAD_REQUEST);
-        }
-
-        $this->settingRepo->set($key, (float) $payload['ceoApproveMinAmount']);
         $this->em->flush();
 
         return $this->json([
             'ceoApproveMinAmount' => $this->settingRepo->getCeoApproveMinAmount(),
+            'fastMaxAmount' => $this->settingRepo->getFastMaxAmount(),
         ]);
     }
 
@@ -248,6 +312,11 @@ final class PurchaseController extends AbstractController
         $purchase = new PurchaseRequest();
         $purchase->setOrganization($organization);
         $purchase->setCreatedBy($user);
+        // Какой кнопкой создали — от этого набор полей формы и потолок суммы.
+        // Меняться потом не будет: отдел закупок переключает маршрут, но не вид формы.
+        $purchase->setCreatedAs(
+            PurchaseRequestKind::tryFrom((string) ($payload['createdAs'] ?? '')) ?? PurchaseRequestKind::STANDARD,
+        );
 
         $error = $this->applyPayload($purchase, $payload);
         if ($error !== null) {
@@ -361,9 +430,9 @@ final class PurchaseController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        // Классификацию правит отдел закупок на рассмотрении и согласовании
+        // Классификацию правит отдел закупок, пока заявка идёт по маршруту
         if (!($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
-            && in_array($purchase->getStatus(), [PurchaseStatus::NEW, PurchaseStatus::APPROVERS_PENDING], true))) {
+            && $purchase->getStatus() === PurchaseStatus::ON_APPROVAL)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -414,29 +483,10 @@ final class PurchaseController extends AbstractController
         return $purchase->getCreatedBy()?->getId() === $user->getId();
     }
 
-    /** Кто видит заявку: директор — со своего этапа; отдел закупок — с подачи; автор и приглашённый согласант — свою. */
+    /** Видимость заявки — общая на весь модуль, см. PurchaseAccess. */
     private function canView(PurchaseRequest $purchase, User $user): bool
     {
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)
-            && in_array($purchase->getStatus(), PurchaseStatus::getDirectorVisible(), true)
-        ) {
-            return true;
-        }
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
-            && in_array($purchase->getStatus(), PurchaseStatus::getPurchaseDepartmentVisible(), true)
-        ) {
-            return true;
-        }
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_INVOICE->value)
-            && in_array($purchase->getStatus(), PurchaseStatus::getPayerVisible(), true)
-        ) {
-            return true;
-        }
-        if ($this->isManagerOwner($purchase, $user)) {
-            return true;
-        }
-
-        return $purchase->findApproverFor($user) !== null;
+        return $this->access->canView($purchase, $user);
     }
 
     /** Править заявку может только автор и только в редактируемом статусе (DRAFT/REJECTED). */

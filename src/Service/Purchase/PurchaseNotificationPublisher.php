@@ -38,35 +38,39 @@ final class PurchaseNotificationPublisher
         $this->publish('submitted', $request, $actor, $this->purchaseDepartment(), $title, 'Новая заявка на закупку');
     }
 
-    /** Отдел закупок направил заявку директору. */
-    public function notifySentToDirector(PurchaseRequest $request, User $actor): void
+    /**
+     * Активировалась позиция маршрута — зовём всех, кто на ней стоит.
+     *
+     * Ролевые шаги разворачиваем в носителей роли. Это критично: согласантом
+     * может быть человек без закупочных ролей, и колокольчик для него —
+     * единственная точка входа в заявку.
+     */
+    public function notifyStepActivated(PurchaseRequest $request, User $actor): void
     {
-        $this->publish(
-            'sent_to_director', $request, $actor, $this->directors(),
-            sprintf('Заявка на закупку «%s» направлена на согласование', $this->titleOf($request)),
-            'Заявка на согласовании',
-        );
-    }
+        $recipients = [];
+        foreach ($request->getActiveSteps() as $step) {
+            $user = $step->getApproverUser();
+            if ($user !== null) {
+                $recipients[$user->getId()] = $user;
+                continue;
+            }
+            foreach ($this->userRepository->findByRoleName((string) $step->getApproverRole()) as $holder) {
+                $recipients[$holder->getId()] = $holder;
+            }
+        }
 
-    /** Приглашение согласанта — приглашённому. */
-    public function notifyApproverInvited(PurchaseRequest $request, User $actor, User $invited): void
-    {
-        $this->publish(
-            'approver_invited', $request, $actor, [$invited],
-            sprintf('Вас пригласили согласовать закупку «%s»', $this->titleOf($request)),
-            'Приглашение согласовать',
-        );
-    }
+        // Себе уведомление не шлём: закрыл шаг и тут же на нём стоишь — бывает
+        // у отдела закупок, они в маршруте дважды.
+        unset($recipients[$actor->getId()]);
 
-    /** Согласант подтвердил — пригласившему (или отделу закупок, если пригласивший удалён). */
-    public function notifyApproverConfirmed(PurchaseRequest $request, User $approver, ?User $invitedBy): void
-    {
-        $recipients = $invitedBy !== null ? [$invitedBy] : $this->purchaseDepartment();
+        if ($recipients === []) {
+            return;
+        }
 
         $this->publish(
-            'approver_confirmed', $request, $approver, $recipients,
-            sprintf('%s подтвердил(а) согласование закупки «%s»', $this->nameOf($approver), $this->titleOf($request)),
-            'Согласование подтверждено',
+            'step_activated', $request, $actor, array_values($recipients),
+            sprintf('Закупка «%s» ждёт вашего согласования', $this->titleOf($request)),
+            'Требуется согласование',
         );
     }
 

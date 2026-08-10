@@ -2,8 +2,8 @@
 
 namespace App\Repository\Purchase;
 
+use App\Entity\Purchase\PurchaseApprovalStep;
 use App\Entity\Purchase\PurchaseRequest;
-use App\Entity\Purchase\PurchaseRequestApprover;
 use App\Enum\Purchase\PurchaseStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
@@ -24,7 +24,8 @@ class PurchaseRequestRepository extends ServiceEntityRepository
      *
      * @param int|null                  $createdById    только заявки этого автора (null = без ограничения)
      * @param list<PurchaseStatus>|null $statuses        ограничение по статусам (null = все)
-     * @param int|null                  $approverUserId  только заявки, где пользователь — приглашённый согласант
+     * @param int|null                  $approverUserId  только заявки, где пользователь есть в маршруте
+     * @param list<string>              $approverRoles   его роли — для ролевых шагов маршрута
      * @param float|null                $minAmount       скрыть заявки дешевле порога (сумма считается из позиций)
      * @return array{items: list<PurchaseRequest>, total: int}
      */
@@ -36,13 +37,22 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         int $pageSize,
         ?int $approverUserId = null,
         ?float $minAmount = null,
+        array $approverRoles = [],
     ): array {
         $qb = $this->createFilteredQueryBuilder($createdById, $statuses, $search, $minAmount);
 
+        // «Я согласант» — заявки, где человек есть в маршруте: лично или через роль.
         if ($approverUserId !== null) {
-            $qb->join(PurchaseRequestApprover::class, 'ap', 'WITH', 'ap.purchaseRequest = pr')
-                ->andWhere('ap.user = :approverUserId')
-                ->setParameter('approverUserId', $approverUserId);
+            $qb->join(PurchaseApprovalStep::class, 'st', 'WITH', 'st.purchaseRequest = pr')
+                ->setParameter('approverUserId', $approverUserId)
+                ->distinct();
+
+            if ($approverRoles === []) {
+                $qb->andWhere('st.approverUser = :approverUserId');
+            } else {
+                $qb->andWhere('st.approverUser = :approverUserId OR st.approverRole IN (:approverRoles)')
+                    ->setParameter('approverRoles', $approverRoles);
+            }
         }
 
         $total = (int) (clone $qb)

@@ -18,9 +18,9 @@ final class PurchaseFileTypeTest extends TestCase
     {
         $contract = PurchaseFileType::CONTRACT;
 
-        // Пока договор готовят — ошибочный файл можно снести и перезалить
-        self::assertFalse($contract->isLockedAt(PurchaseStatus::CEO_APPROVED));
-        self::assertFalse($contract->isLockedAt(PurchaseStatus::CONTRACT_PENDING));
+        // Пока идёт согласование и договор готовят — ошибочный файл можно снести и перезалить
+        self::assertFalse($contract->isLockedAt(PurchaseStatus::ON_APPROVAL));
+        self::assertFalse($contract->isLockedAt(PurchaseStatus::APPROVED));
 
         // Ушли на оплату — договор зафиксирован
         self::assertTrue($contract->isLockedAt(PurchaseStatus::INVOICE_SENT));
@@ -38,7 +38,7 @@ final class PurchaseFileTypeTest extends TestCase
         self::assertFalse($justification->isLockedAt(PurchaseStatus::REJECTED));
 
         // Подана — дальше заявка уже уехала на её основании
-        self::assertTrue($justification->isLockedAt(PurchaseStatus::NEW));
+        self::assertTrue($justification->isLockedAt(PurchaseStatus::ON_APPROVAL));
         self::assertTrue($justification->isLockedAt(PurchaseStatus::INVOICE_PAID));
     }
 
@@ -50,10 +50,16 @@ final class PurchaseFileTypeTest extends TestCase
         }
     }
 
-    /** Цепочка исполнения проходит через договор и нигде не зацикливается. */
-    public function testContractStageSitsBetweenApprovalAndPayment(): void
+    /**
+     * Конвейер исполнения начинается сразу со счёта: договор ушёл из статусов
+     * в шаг маршрута. Если вернуть его сюда, быстрая заявка — у которой шага
+     * «договор» нет — упрётся в требование договора и застрянет на APPROVED.
+     */
+    public function testExecutionStartsWithInvoiceNotContract(): void
     {
-        self::assertSame(PurchaseStatus::CONTRACT_PENDING, PurchaseStatus::CEO_APPROVED->nextExecutionStatus());
-        self::assertSame(PurchaseStatus::INVOICE_SENT, PurchaseStatus::CONTRACT_PENDING->nextExecutionStatus());
+        self::assertSame(PurchaseStatus::INVOICE_SENT, PurchaseStatus::APPROVED->nextExecutionStatus());
+        self::assertSame(PurchaseStatus::INVOICE_PAID, PurchaseStatus::INVOICE_SENT->nextExecutionStatus());
+        self::assertSame(PurchaseStatus::DELIVERED, PurchaseStatus::INVOICE_PAID->nextExecutionStatus());
+        self::assertNull(PurchaseStatus::DELIVERED->nextExecutionStatus());
     }
 }

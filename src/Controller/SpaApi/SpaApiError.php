@@ -102,6 +102,23 @@ final class SpaApiError
     public const PURCHASE_APPROVALS_PENDING = 'purchase_approvals_pending';
     public const PURCHASE_APPROVERS_REQUIRED = 'purchase_approvers_required';
     public const PURCHASE_INVALID_SETTING = 'purchase_invalid_setting';
+    // v3 — маршруты согласования
+    public const PURCHASE_ROUTE_TEMPLATE_MISSING = 'purchase_route_template_missing';
+    public const PURCHASE_ROUTE_TEMPLATE_NOT_FOUND = 'purchase_route_template_not_found';
+    public const PURCHASE_FAST_LIMIT_EXCEEDED = 'purchase_fast_limit_exceeded';
+    public const PURCHASE_STEP_NOT_FOUND = 'purchase_step_not_found';
+    public const PURCHASE_STEP_NOT_ACTIVE = 'purchase_step_not_active';
+    public const PURCHASE_STEP_FILE_REQUIRED = 'purchase_step_file_required';
+    public const PURCHASE_ROUTE_LOCKED = 'purchase_route_locked';
+    public const PURCHASE_ROUTE_MANDATORY_STEP = 'purchase_route_mandatory_step';
+    public const PURCHASE_ROUTE_INVALID = 'purchase_route_invalid';
+    public const PURCHASE_TEMPLATE_NAME_REQUIRED = 'purchase_template_name_required';
+    public const PURCHASE_TEMPLATE_EMPTY = 'purchase_template_empty';
+    public const PURCHASE_TEMPLATE_DEFAULT_TAKEN = 'purchase_template_default_taken';
+    public const PURCHASE_TEMPLATE_FIRST_STEP_DEPARTMENT = 'purchase_template_first_step_department';
+    public const PURCHASE_TEMPLATE_UNKNOWN_ROLE = 'purchase_template_unknown_role';
+    public const PURCHASE_TEMPLATE_ROLE_WITHOUT_HOLDERS = 'purchase_template_role_without_holders';
+    public const PURCHASE_TEMPLATE_IN_USE = 'purchase_template_in_use';
     public const INVENTORY_ACCESS_EXISTS = 'inventory_access_exists';
     public const INVENTORY_ACCESS_NOT_FOUND = 'inventory_access_not_found';
     public const INVENTORY_CATEGORY_HAS_ITEMS = 'inventory_category_has_items';

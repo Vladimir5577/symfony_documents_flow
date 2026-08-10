@@ -5,22 +5,29 @@ declare(strict_types=1);
 namespace App\Service\Purchase;
 
 use App\Controller\SpaApi\SpaApiError;
+use App\Entity\Purchase\PurchaseApprovalStep;
 use App\Entity\Purchase\PurchaseRequest;
-use App\Entity\Purchase\PurchaseRequestApprover;
 use App\Entity\Purchase\PurchaseRequestHistory;
+use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchasePriority;
+use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseStatus;
+use App\Enum\Purchase\PurchaseStepDecision;
+use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseSettingRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
- * Переходы статусов заявки на закупку.
+ * Движение заявки на закупку.
  *
- * Права («кто может») проверяет ролевой гейт контроллера;
- * здесь — только корректность перехода («можно ли из текущего статуса»),
- * запись в историю и публикация уведомления. Каждый метод делает flush.
+ * Согласование — не цепочка статусов, а шаги маршрута (PurchaseApprovalStep).
+ * Здесь живёт исполнитель: указатель стоит на минимальной незакрытой позиции,
+ * закрылась вся позиция — идём к следующей, шагов не осталось — заявка APPROVED.
+ *
+ * Права («кто может») проверяет ролевой гейт контроллера: у него есть Security.
+ * Здесь — только корректность («можно ли сейчас»), запись в историю и уведомление.
  */
 final class PurchaseRequestService
 {
@@ -28,6 +35,7 @@ final class PurchaseRequestService
         private readonly EntityManagerInterface $em,
         private readonly PurchaseNotificationPublisher $notifier,
         private readonly PurchaseSettingRepository $settings,
+        private readonly ApprovalRouteBuilder $routeBuilder,
     ) {}
 
     /** Запись о создании заявки (from = NULL). Без flush — вызывается при создании. */
@@ -36,7 +44,10 @@ final class PurchaseRequestService
         $this->addHistory($request, $actor, null, PurchaseStatus::DRAFT);
     }
 
-    /** DRAFT | REJECTED → NEW (на рассмотрение отделом закупок). */
+    /**
+     * DRAFT | REJECTED → ON_APPROVAL: собираем маршрут и запускаем его.
+     * Повторная подача строит маршрут заново — сумма и состав могли измениться.
+     */
     public function submit(PurchaseRequest $request, User $actor): void
     {
         $from = $request->getStatus();
@@ -46,223 +57,237 @@ final class PurchaseRequestService
         if ($request->getItems()->isEmpty()) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_REQUIRED);
         }
-        // Пояснительная записка обязательна: текстом или файлом
-        if (trim((string) $request->getJustification()) === ''
+
+        // Потолок быстрой заявки стережём на сервере: спрятанная кнопка защитой не является.
+        if ($request->getCreatedAs() === PurchaseRequestKind::FAST
+            && $request->getTotalAmount() > $this->settings->getFastMaxAmount()
+        ) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_FAST_LIMIT_EXCEEDED);
+        }
+
+        // У быстрой заявки короткая форма — записку не требуем.
+        if ($request->getCreatedAs() !== PurchaseRequestKind::FAST
+            && trim((string) $request->getJustification()) === ''
             && !$request->hasFileOfType(PurchaseFileType::JUSTIFICATION)
         ) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_JUSTIFICATION_REQUIRED);
         }
 
-        // Повторная подача после возврата: заявка могла измениться — согласуют заново.
-        if ($from === PurchaseStatus::REJECTED) {
-            foreach ($request->getApprovers() as $approver) {
-                $approver->setConfirmedAt(null);
-            }
-        }
+        $this->routeBuilder->build($request);
 
-        $this->transition($request, $actor, PurchaseStatus::NEW);
+        $this->transition($request, $actor, PurchaseStatus::ON_APPROVAL);
         $this->notifier->notifySubmitted($request, $actor, resubmitted: $from === PurchaseStatus::REJECTED);
-
-        // Ответственные всех затронутых категорий (шапка + категории позиций из справочника)
-        // автоматически становятся согласантами (кроме самого автора).
-        foreach ($this->collectResponsibles($request) as $responsible) {
-            if ($responsible->getId() !== $actor->getId()) {
-                $this->inviteApprover($request, $actor, $responsible);
-            }
-        }
+        $this->notifier->notifyStepActivated($request, $actor);
     }
 
     /**
-     * Ответственные категорий заявки: категория шапки + категории номенклатурных позиций.
-     * @return list<User>
+     * Согласовать свой шаг. Решение необратимо: позиция закрывается и следующим
+     * участникам уходят уведомления — отзывать их было бы некорректно.
      */
-    private function collectResponsibles(PurchaseRequest $request): array
+    public function approveStep(PurchaseRequest $request, PurchaseApprovalStep $step, User $actor, ?string $comment = null): void
     {
-        $byId = [];
+        $this->assertActiveStep($request, $step);
 
-        $headerResponsible = $request->getCategory()?->getResponsibleUser();
-        if ($headerResponsible !== null) {
-            $byId[$headerResponsible->getId()] = $headerResponsible;
+        // Требование файла живёт на шаге, а не в конвейере: у быстрого маршрута
+        // шага «договор» нет, и требовать с него договор не за что.
+        $requiredFile = $step->getRequiresFileType();
+        if ($requiredFile !== null && !$request->hasFileOfType($requiredFile)) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_STEP_FILE_REQUIRED);
         }
 
-        foreach ($request->getItems() as $item) {
-            $responsible = $item->getCategoryItem()?->getCategory()?->getResponsibleUser();
-            if ($responsible !== null) {
-                $byId[$responsible->getId()] = $responsible;
-            }
-        }
+        $positionBefore = $request->getCurrentPosition();
 
-        return array_values($byId);
-    }
+        $step->setDecision(PurchaseStepDecision::APPROVED)
+            ->setDecidedBy($actor)
+            ->setDecidedAt(new \DateTimeImmutable())
+            ->setComment($this->normalizeComment($comment));
 
-    /** NEW → APPROVERS_PENDING: отдел закупок отправляет заявку согласантам (нужен хотя бы один). */
-    public function sendToApprovers(PurchaseRequest $request, User $actor): void
-    {
-        $this->assertStatus($request, PurchaseStatus::NEW);
+        $this->em->flush();
 
-        if ($request->getApprovers()->isEmpty()) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_APPROVERS_REQUIRED);
-        }
-
-        $this->transition($request, $actor, PurchaseStatus::APPROVERS_PENDING);
-    }
-
-    /**
-     * NEW (без согласантов) | APPROVERS_DONE → CEO_APPROVE_PENDING.
-     * Гейт: все согласанты должны подтвердить — до этого директор заявку не видит.
-     *
-     * Единственная точка, где заявка попадает к директору, поэтому порог
-     * автосогласования проверяется здесь и больше нигде.
-     */
-    public function sendToDirector(PurchaseRequest $request, User $actor): void
-    {
-        $allowed = [PurchaseStatus::NEW, PurchaseStatus::APPROVERS_DONE];
-        if (!in_array($request->getStatus(), $allowed, true)) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
-        }
-
-        foreach ($request->getApprovers() as $approver) {
-            if ($approver->getConfirmedAt() === null) {
-                throw new PurchaseTransitionException(SpaApiError::PURCHASE_APPROVALS_PENDING);
-            }
-        }
-
-        // Мелкие заявки директора не беспокоят: сразу CEO_APPROVED с отметкой в истории.
-        $minAmount = $this->settings->getCeoApproveMinAmount();
-        if ($minAmount > 0 && $request->getTotalAmount() < $minAmount) {
-            $this->transition(
-                $request,
-                $actor,
-                PurchaseStatus::CEO_APPROVED,
-                sprintf('Автосогласовано: сумма ниже порога %s ₽', number_format($minAmount, 2, ',', ' ')),
-            );
+        if ($request->getCurrentPosition() === null) {
+            $this->transition($request, $actor, PurchaseStatus::APPROVED);
             $this->notifier->notifyApproved($request, $actor);
 
             return;
         }
 
-        $this->transition($request, $actor, PurchaseStatus::CEO_APPROVE_PENDING);
-        $this->notifier->notifySentToDirector($request, $actor);
+        // Позиция закрылась целиком — зовём следующих. Пока в позиции остались
+        // незакрытые параллельные шаги, никого не дёргаем.
+        if ($request->getCurrentPosition() !== $positionBefore) {
+            $this->notifier->notifyStepActivated($request, $actor);
+        }
     }
 
-    /**
-     * CEO_APPROVE_PENDING → CEO_APPROVED (+опционально срочность).
-     * Только с этапа директора: до него заявка проходит рассмотрение и всех согласантов.
-     */
-    public function approve(PurchaseRequest $request, User $actor, ?PurchasePriority $priority = null): void
+    /** Вернуть заявку автору со своего шага. Комментарий обязателен. */
+    public function rejectStep(PurchaseRequest $request, PurchaseApprovalStep $step, User $actor, string $comment): void
     {
-        $this->assertStatus($request, PurchaseStatus::CEO_APPROVE_PENDING);
+        $this->assertActiveStep($request, $step);
 
-        if ($priority !== null) {
-            $request->setPriority($priority);
-        }
-
-        $this->transition($request, $actor, PurchaseStatus::CEO_APPROVED);
-        $this->notifier->notifyApproved($request, $actor);
-    }
-
-    /**
-     * Возврат на доработку, комментарий обязателен.
-     * Отдел закупок — с рассмотрения и согласования; директор — со своего этапа
-     * и из CEO_APPROVED, пока не отправлен счёт («передумал»).
-     */
-    public function reject(PurchaseRequest $request, User $actor, string $comment): void
-    {
-        $allowed = [
-            PurchaseStatus::NEW,
-            PurchaseStatus::APPROVERS_PENDING,
-            PurchaseStatus::CEO_APPROVE_PENDING,
-            PurchaseStatus::CEO_APPROVED,
-        ];
-        if (!in_array($request->getStatus(), $allowed, true)) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
-        }
         if (trim($comment) === '') {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_COMMENT_REQUIRED);
         }
+
+        $step->setDecision(PurchaseStepDecision::REJECTED)
+            ->setDecidedBy($actor)
+            ->setDecidedAt(new \DateTimeImmutable())
+            ->setComment($comment);
 
         $this->transition($request, $actor, PurchaseStatus::REJECTED, $comment);
         $this->notifier->notifyRejected($request, $actor, $comment);
     }
 
-    /** Пригласить согласанта (идемпотентно: повторное приглашение возвращает существующую запись). */
-    public function inviteApprover(PurchaseRequest $request, User $actor, User $invited): PurchaseRequestApprover
+    /**
+     * Переложить заявку на другой шаблон маршрута (переключатель отдела закупок).
+     * Можно только пока указатель на их первом шаге — дальше маршрут заморожен.
+     */
+    public function switchTemplate(PurchaseRequest $request, PurchaseRouteTemplate $template, User $actor): void
     {
-        $existing = $request->findApproverFor($invited);
-        if ($existing !== null) {
-            return $existing;
-        }
+        $this->assertRouteEditable($request);
 
-        $approver = new PurchaseRequestApprover();
-        $approver->setUser($invited);
-        $approver->setInvitedBy($actor);
-        $request->addApprover($approver);
-        $this->em->persist($approver);
+        $request->setRouteTemplate($template);
+        $this->routeBuilder->applyTemplate($request, $template);
         $this->em->flush();
 
-        $this->notifier->notifyApproverInvited($request, $actor, $invited);
-
-        return $approver;
+        $this->addHistory(
+            $request,
+            $actor,
+            $request->getStatus(),
+            $request->getStatus(),
+            sprintf('Маршрут переключён на «%s»', $template->getName()),
+        );
+        $this->em->flush();
     }
 
     /**
-     * Убрать приглашённого согласанта (клапан от «молчуна»).
-     * Если после удаления неподтверждённых не осталось — этап согласования закрывается автоматически.
+     * Заменить незакрытую часть маршрута присланным списком шагов.
+     *
+     * Уже принятые решения не трогаются вовсе — их и нельзя удалить, они аудит.
+     * Обязательные шаги (директор от своего порога) должны остаться в списке:
+     * отдел закупок маршрут удлиняет и переставляет, но не укорачивает ниже того,
+     * что директор установил для себя.
+     *
+     * @param list<PurchaseApprovalStep> $newSteps несохранённые шаги, собранные контроллером
      */
-    public function removeApprover(PurchaseRequest $request, PurchaseRequestApprover $approver, User $actor): void
+    public function replaceRoute(PurchaseRequest $request, array $newSteps, User $actor): void
     {
-        $request->removeApprover($approver);
-        $this->em->remove($approver);
-        $this->em->flush();
+        $this->assertRouteEditable($request);
 
-        $this->advanceApproversStageIfComplete($request, $actor);
-    }
-
-    /**
-     * Тоггл согласанта: подтвердил / снял подтверждение.
-     * Подтвердил последний → заявка сама переходит в APPROVERS_DONE.
-     */
-    public function confirmApproval(PurchaseRequest $request, PurchaseRequestApprover $approver, bool $confirmed): void
-    {
-        $approver->setConfirmedAt($confirmed ? new \DateTimeImmutable() : null);
-        $this->em->flush();
-
-        if ($confirmed && $approver->getUser() !== null) {
-            $this->notifier->notifyApproverConfirmed($request, $approver->getUser(), $approver->getInvitedBy());
-            $this->advanceApproversStageIfComplete($request, $approver->getUser());
-        }
-    }
-
-    /** APPROVERS_PENDING + все подтвердили → APPROVERS_DONE (автопереход). */
-    private function advanceApproversStageIfComplete(PurchaseRequest $request, User $actor): void
-    {
-        if ($request->getStatus() !== PurchaseStatus::APPROVERS_PENDING) {
-            return;
-        }
-        foreach ($request->getApprovers() as $approver) {
-            if ($approver->getConfirmedAt() === null) {
-                return;
+        $before = [];
+        $mandatoryKeys = [];
+        foreach ($request->getSteps() as $step) {
+            if ($step->getDecision()->isDecided()) {
+                continue;
+            }
+            $before[] = $this->describeStep($step);
+            if ($step->isMandatory()) {
+                $mandatoryKeys[$this->stepKey($step)] = $this->describeStep($step);
             }
         }
 
-        $this->transition($request, $actor, PurchaseStatus::APPROVERS_DONE);
+        $newKeys = [];
+        foreach ($newSteps as $step) {
+            $newKeys[$this->stepKey($step)] = true;
+        }
+        foreach ($mandatoryKeys as $key => $label) {
+            if (!isset($newKeys[$key])) {
+                throw new PurchaseTransitionException(SpaApiError::PURCHASE_ROUTE_MANDATORY_STEP);
+            }
+        }
+
+        foreach ($request->getSteps()->toArray() as $step) {
+            if (!$step->getDecision()->isDecided()) {
+                $request->removeStep($step);
+                $this->em->remove($step);
+            }
+        }
+
+        $after = [];
+        foreach ($newSteps as $step) {
+            $step->setMandatory(isset($mandatoryKeys[$this->stepKey($step)]));
+            $step->setCreatedBy($actor);
+            $request->addStep($step);
+            $this->em->persist($step);
+            $after[] = $this->describeStep($step);
+        }
+
+        $this->em->flush();
+
+        $this->addHistory(
+            $request,
+            $actor,
+            $request->getStatus(),
+            $request->getStatus(),
+            sprintf('Маршрут изменён: было [%s], стало [%s]', implode(', ', $before), implode(', ', $after)),
+        );
+        $this->em->flush();
+    }
+
+    /** Ключ шага для сравнения маршрутов: кого ждём, без учёта позиции. */
+    private function stepKey(PurchaseApprovalStep $step): string
+    {
+        return $step->getApproverUser() !== null
+            ? 'u:' . $step->getApproverUser()->getId()
+            : 'r:' . (string) $step->getApproverRole();
+    }
+
+    /**
+     * Отзыв: заявка ушла дальше, а маршрут надо переделать.
+     * Все шаги после первого шага отдела закупок сбрасываются, указатель
+     * возвращается к ним. Полученные согласования сгорают — люди подтверждают
+     * заново; их прошлые решения после сброса видны ТОЛЬКО в history, поэтому
+     * запись туда обязательна и делается здесь же.
+     */
+    public function recall(PurchaseRequest $request, User $actor, string $reason): void
+    {
+        if ($request->getStatus() !== PurchaseStatus::ON_APPROVAL) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+        }
+        if (trim($reason) === '') {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_COMMENT_REQUIRED);
+        }
+
+        $anchor = $this->firstDepartmentPosition($request);
+        $burned = [];
+
+        foreach ($request->getSteps() as $step) {
+            if ($step->getPosition() >= $anchor && $step->getDecision()->isDecided()) {
+                $burned[] = sprintf(
+                    '%s (%s)',
+                    $this->describeStep($step),
+                    $step->getDecision()->getLabel(),
+                );
+                $step->setDecision(PurchaseStepDecision::PENDING)
+                    ->setDecidedBy(null)
+                    ->setDecidedAt(null)
+                    ->setComment(null);
+            }
+        }
+
+        $this->addHistory(
+            $request,
+            $actor,
+            $request->getStatus(),
+            $request->getStatus(),
+            sprintf(
+                'Маршрут отозван: %s. Сброшены согласования: %s',
+                $reason,
+                $burned === [] ? 'нет' : implode(', ', $burned),
+            ),
+        );
+        $this->em->flush();
+
+        $this->notifier->notifyStepActivated($request, $actor);
     }
 
     /**
      * Шаг конвейера исполнения: строго следующий статус.
-     * Исполнителем становится тот, кто сделал первый шаг (CEO_APPROVED → CONTRACT_PENDING).
+     * Договора здесь больше нет — он стал шагом маршрута, и его файл требует
+     * тот шаг. Исполнителем становится тот, кто сделал первый шаг.
      */
     public function advance(PurchaseRequest $request, User $actor, PurchaseStatus $target): void
     {
         if ($request->getStatus()->nextExecutionStatus() !== $target) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
-        }
-
-        // Уйти на оплату можно только с приложенным договором.
-        if ($target === PurchaseStatus::INVOICE_SENT
-            && !$request->hasFileOfType(PurchaseFileType::CONTRACT)
-        ) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONTRACT_REQUIRED);
         }
 
         if ($request->getExecutor() === null) {
@@ -309,6 +334,75 @@ final class PurchaseRequestService
         $this->em->flush();
     }
 
+    /**
+     * Маршрут правится только пока указатель на первом шаге отдела закупок.
+     * После их approve заявка ушла к людям, и менять цепочку под ними нельзя —
+     * для этого есть recall.
+     */
+    public function assertRouteEditable(PurchaseRequest $request): void
+    {
+        if ($request->getStatus() !== PurchaseStatus::ON_APPROVAL) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+        }
+
+        $current = $request->getCurrentPosition();
+        if ($current === null || $current !== $this->firstDepartmentPosition($request)) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_ROUTE_LOCKED);
+        }
+    }
+
+    /** Шаг существует у этой заявки, не решён и стоит на позиции указателя. */
+    private function assertActiveStep(PurchaseRequest $request, PurchaseApprovalStep $step): void
+    {
+        if ($step->getPurchaseRequest()?->getId() !== $request->getId()) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_STEP_NOT_FOUND);
+        }
+        if ($request->getStatus() !== PurchaseStatus::ON_APPROVAL) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+        }
+        if (!$step->isPending() || $step->getPosition() !== $request->getCurrentPosition()) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_STEP_NOT_ACTIVE);
+        }
+    }
+
+    /**
+     * Позиция первого шага отдела закупок. В обычном маршруте они стоят дважды
+     * (рассмотрение и договор) — якорь всегда первый.
+     */
+    private function firstDepartmentPosition(PurchaseRequest $request): int
+    {
+        $min = null;
+        foreach ($request->getSteps() as $step) {
+            if ($step->getApproverRole() === UserRole::ROLE_PURCHASE_DEPARTMENT->value
+                && ($min === null || $step->getPosition() < $min)
+            ) {
+                $min = $step->getPosition();
+            }
+        }
+
+        return $min ?? 1;
+    }
+
+    private function describeStep(PurchaseApprovalStep $step): string
+    {
+        if ($step->getTitle() !== null && $step->getTitle() !== '') {
+            return $step->getTitle();
+        }
+
+        $user = $step->getApproverUser();
+        if ($user !== null) {
+            return trim(($user->getLastname() ?? '') . ' ' . ($user->getFirstname() ?? ''));
+        }
+
+        return UserRole::tryFrom((string) $step->getApproverRole())?->getLabel()
+            ?? (string) $step->getApproverRole();
+    }
+
+    private function normalizeComment(?string $comment): ?string
+    {
+        return $comment !== null && trim($comment) !== '' ? $comment : null;
+    }
+
     private function assertStatus(PurchaseRequest $request, PurchaseStatus $expected): void
     {
         if ($request->getStatus() !== $expected) {
@@ -330,7 +424,7 @@ final class PurchaseRequestService
         $entry->setUser($actor);
         $entry->setFromStatus($from);
         $entry->setToStatus($to);
-        $entry->setComment($comment !== null && trim($comment) !== '' ? $comment : null);
+        $entry->setComment($this->normalizeComment($comment));
         $request->addHistory($entry);
         $this->em->persist($entry);
     }

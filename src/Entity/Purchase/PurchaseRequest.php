@@ -8,6 +8,7 @@ use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseLaw;
 use App\Enum\Purchase\PurchaseMethod;
 use App\Enum\Purchase\PurchasePriority;
+use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -74,6 +75,17 @@ class PurchaseRequest
     #[ORM\Column(type: Types::STRING, length: 50, enumType: PurchaseStatus::class)]
     private PurchaseStatus $status = PurchaseStatus::DRAFT;
 
+    // Какой кнопкой создана. НЕ меняется: от неё зависят набор полей формы
+    // при редактировании и проверка потолка быстрой заявки при подаче.
+    #[ORM\Column(name: 'created_as', type: Types::STRING, length: 20, enumType: PurchaseRequestKind::class, options: ['default' => 'STANDARD'])]
+    private PurchaseRequestKind $createdAs = PurchaseRequestKind::STANDARD;
+
+    // Текущий шаблон маршрута: сначала стартовый по кнопке, потом отдел закупок
+    // может переключить на заготовку. Отсюда бейдж и построение маршрута.
+    #[ORM\ManyToOne(targetEntity: PurchaseRouteTemplate::class)]
+    #[ORM\JoinColumn(name: 'route_template_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseRouteTemplate $routeTemplate = null;
+
     #[ORM\Column(type: Types::STRING, length: 20, enumType: PurchasePriority::class, options: ['default' => 'NORMAL'])]
     private PurchasePriority $priority = PurchasePriority::NORMAL;
 
@@ -107,10 +119,10 @@ class PurchaseRequest
     #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseRequestFile::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $files;
 
-    /** @var Collection<int, PurchaseRequestApprover> */
-    #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseRequestApprover::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
-    #[ORM\OrderBy(['createdAt' => 'ASC'])]
-    private Collection $approvers;
+    /** @var Collection<int, PurchaseApprovalStep> */
+    #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseApprovalStep::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[ORM\OrderBy(['position' => 'ASC', 'id' => 'ASC'])]
+    private Collection $steps;
 
     public function __construct()
     {
@@ -118,7 +130,7 @@ class PurchaseRequest
         $this->comments = new ArrayCollection();
         $this->history = new ArrayCollection();
         $this->files = new ArrayCollection();
-        $this->approvers = new ArrayCollection();
+        $this->steps = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -402,39 +414,98 @@ class PurchaseRequest
         return false;
     }
 
-    /**
-     * @return Collection<int, PurchaseRequestApprover>
-     */
-    public function getApprovers(): Collection
+    public function getCreatedAs(): PurchaseRequestKind
     {
-        return $this->approvers;
+        return $this->createdAs;
     }
 
-    public function addApprover(PurchaseRequestApprover $approver): static
+    public function setCreatedAs(PurchaseRequestKind $createdAs): static
     {
-        if (!$this->approvers->contains($approver)) {
-            $this->approvers->add($approver);
-            $approver->setPurchaseRequest($this);
+        $this->createdAs = $createdAs;
+
+        return $this;
+    }
+
+    public function getRouteTemplate(): ?PurchaseRouteTemplate
+    {
+        return $this->routeTemplate;
+    }
+
+    public function setRouteTemplate(?PurchaseRouteTemplate $routeTemplate): static
+    {
+        $this->routeTemplate = $routeTemplate;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, PurchaseApprovalStep>
+     */
+    public function getSteps(): Collection
+    {
+        return $this->steps;
+    }
+
+    public function addStep(PurchaseApprovalStep $step): static
+    {
+        if (!$this->steps->contains($step)) {
+            $this->steps->add($step);
+            $step->setPurchaseRequest($this);
         }
 
         return $this;
     }
 
-    public function removeApprover(PurchaseRequestApprover $approver): static
+    public function removeStep(PurchaseApprovalStep $step): static
     {
-        $this->approvers->removeElement($approver);
+        $this->steps->removeElement($step);
 
         return $this;
     }
 
-    public function findApproverFor(User $user): ?PurchaseRequestApprover
+    /**
+     * Указатель маршрута: минимальная позиция среди незакрытых шагов.
+     * NULL — незакрытых нет, то есть маршрут пройден (или ещё не построен).
+     * Отдельной колонкой не хранится, чтобы её нельзя было рассинхронить с шагами.
+     */
+    public function getCurrentPosition(): ?int
     {
-        foreach ($this->approvers as $approver) {
-            if ($approver->getUser()?->getId() === $user->getId()) {
-                return $approver;
+        $min = null;
+        foreach ($this->steps as $step) {
+            if ($step->isPending() && ($min === null || $step->getPosition() < $min)) {
+                $min = $step->getPosition();
             }
         }
 
-        return null;
+        return $min;
+    }
+
+    /**
+     * Шаги, по которым можно действовать прямо сейчас — вся текущая позиция.
+     * Параллельные шаги закрываются в любом порядке, позиция уходит, когда закрыты все.
+     *
+     * @return list<PurchaseApprovalStep>
+     */
+    public function getActiveSteps(): array
+    {
+        $position = $this->getCurrentPosition();
+        if ($position === null) {
+            return [];
+        }
+
+        $active = [];
+        foreach ($this->steps as $step) {
+            if ($step->isPending() && $step->getPosition() === $position) {
+                $active[] = $step;
+            }
+        }
+
+        return $active;
+    }
+
+    /** Маршрут построен и полностью пройден. */
+    public function isRouteComplete(): bool
+    {
+        return !$this->steps->isEmpty() && $this->getCurrentPosition() === null;
     }
 }

@@ -42,10 +42,10 @@ final class PurchaseCategoryController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        if (!$this->canRead()) {
-            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-        }
-
+        // Читают ВСЕ авторизованные: справочник нужен форме создания заявки,
+        // а создать заявку может любой сотрудник. Ролевой гейт здесь давал
+        // обычному пользователю 403 прямо на форме — и финдиректору тоже.
+        // Ведёт справочник по-прежнему только отдел закупок, см. canManage().
         return $this->json([
             'items' => array_map(
                 fn (PurchaseCategory $category): array => $this->present($category),
@@ -265,13 +265,6 @@ final class PurchaseCategoryController extends AbstractController
         $this->em->flush();
 
         return $this->json($this->present($category));
-    }
-
-    private function canRead(): bool
-    {
-        return $this->isGranted(UserRole::ROLE_MANAGER->value)
-            || $this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)
-            || $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value);
     }
 
     private function canManage(): bool

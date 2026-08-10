@@ -25,10 +25,20 @@ class PurchaseSettingRepository extends ServiceEntityRepository
         return $this->findOneBy(['key' => $key])?->getValue() ?? $key->getDefault();
     }
 
-    /** Порог директорского согласования в рублях. 0 — выключено, все заявки идут к директору. */
+    /** От какой суммы шаг директора обязателен в маршруте. 0 — обязателен всегда. */
     public function getCeoApproveMinAmount(): float
     {
         return (float) $this->get(PurchaseSettingKey::CEO_APPROVE_MIN_AMOUNT);
+    }
+
+    /**
+     * До какой суммы доступна короткая форма быстрой заявки.
+     * С порогом директора НЕ связан: потолок 20 000 при пороге 5 000 —
+     * штатная ситуация, быстрая заявка на 8 000 просто получит шаг директора.
+     */
+    public function getFastMaxAmount(): float
+    {
+        return (float) $this->get(PurchaseSettingKey::FAST_MAX_AMOUNT);
     }
 
     /** Создаёт строку при первом сохранении. Flush на вызывающей стороне. */
