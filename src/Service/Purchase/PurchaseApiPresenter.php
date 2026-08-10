@@ -12,6 +12,7 @@ use App\Entity\Purchase\PurchaseRequestHistory;
 use App\Entity\Purchase\PurchaseRequestItem;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseStatus;
+use App\Enum\Purchase\PurchaseStepDecision;
 use App\Enum\User\UserRole;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -70,6 +71,10 @@ final class PurchaseApiPresenter
                 : null,
             // «У кого заявка» — данные шага, а не статус
             'currentStep' => $this->presentCurrentStepSummary($request),
+            // Моя подпись на этой заявке, если её ещё можно снять. Нужна строке
+            // списка: без неё тоггл в таблице не знает, что откатывать.
+            // Коллекция шагов здесь и так уже загружена ради currentStep.
+            'myApprovedStepId' => $this->findRevokableStep($request)?->getId(),
             'dueDate' => $request->getDueDate()?->format('Y-m-d'),
             'createdAt' => $request->getCreatedAt()?->format('c'),
             'updatedAt' => $request->getUpdatedAt()?->format('c'),
@@ -259,6 +264,7 @@ final class PurchaseApiPresenter
         $isParticipant = $user instanceof User && $this->isRouteParticipant($request, $user);
 
         $myStep = $this->findMyActiveStep($request);
+        $revokableStep = $this->findRevokableStep($request);
         $onApproval = $status === PurchaseStatus::ON_APPROVAL;
         // Маршрут правится, только пока указатель на первом шаге отдела закупок
         $routeEditable = $onApproval
@@ -288,6 +294,9 @@ final class PurchaseApiPresenter
             'canApproveStep' => $myStep !== null,
             'canRejectStep' => $myStep !== null,
             'activeStepId' => $myStep?->getId(),
+            // Снять свою подпись может только директор и только своё решение
+            'canRevokeStep' => $isDirector && $revokableStep !== null,
+            'revokableStepId' => $isDirector ? $revokableStep?->getId() : null,
             'canEditRoute' => $routeEditable,
             'canRecall' => $isPurchase && $onApproval && !$routeEditable,
             'canClassify' => $isPurchase && $onApproval,
@@ -311,6 +320,33 @@ final class PurchaseApiPresenter
 
         foreach ($request->getActiveSteps() as $step) {
             if ($this->canActOn($step)) {
+                return $step;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Шаг, подписанный лично мной, который ещё можно откатить.
+     *
+     * Пока заявка не ушла в исполнение: ON_APPROVAL или APPROVED. После счёта
+     * откатывать нечего — деньги уже пошли, там только отмена заявки.
+     */
+    private function findRevokableStep(PurchaseRequest $request): ?PurchaseApprovalStep
+    {
+        $user = $this->security->getUser();
+        if (!$user instanceof User) {
+            return null;
+        }
+        if (!in_array($request->getStatus(), [PurchaseStatus::ON_APPROVAL, PurchaseStatus::APPROVED], true)) {
+            return null;
+        }
+
+        foreach ($request->getSteps() as $step) {
+            if ($step->getDecision() === PurchaseStepDecision::APPROVED
+                && $step->getDecidedBy()?->getId() === $user->getId()
+            ) {
                 return $step;
             }
         }

@@ -69,7 +69,42 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
 
+        $this->warmUpSteps($items);
+
         return ['items' => $items, 'total' => $total];
+    }
+
+    /**
+     * Догрузить шаги маршрута для страницы списка одним запросом.
+     *
+     * Презентеру списка шаги нужны у каждой строки: «у кого сейчас заявка» и
+     * «моя подпись, которую ещё можно снять». Без этого Doctrine поднимает
+     * коллекцию лениво на каждую строку — двадцать заявок, двадцать запросов.
+     *
+     * Fetch-join прямо в основной запрос делать нельзя: коллекция размножает
+     * строки, и setMaxResults начинает резать не заявки, а их шаги. Поэтому
+     * вторым запросом по id уже отобранной страницы — он подтягивает те же
+     * объекты из identity map и заодно инициализирует их коллекции.
+     *
+     * @param list<PurchaseRequest> $items
+     */
+    private function warmUpSteps(array $items): void
+    {
+        if ($items === []) {
+            return;
+        }
+
+        $this->createQueryBuilder('wpr')
+            ->leftJoin('wpr.steps', 'wst')->addSelect('wst')
+            ->leftJoin('wst.approverUser', 'wau')->addSelect('wau')
+            ->leftJoin('wst.decidedBy', 'wdb')->addSelect('wdb')
+            ->andWhere('wpr.id IN (:ids)')
+            ->setParameter('ids', array_map(
+                static fn (PurchaseRequest $request): int => (int) $request->getId(),
+                $items,
+            ))
+            ->getQuery()
+            ->getResult();
     }
 
     /**

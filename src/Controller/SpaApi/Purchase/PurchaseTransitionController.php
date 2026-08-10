@@ -82,6 +82,22 @@ final class PurchaseTransitionController extends AbstractController
     }
 
     /**
+     * Снять свою подпись. Только директор и только со своего решения —
+     * чужую подпись снимает отзыв маршрута отделом закупок.
+     */
+    #[Route('/steps/{stepId}/revoke', name: 'spa_api_purchases_step_revoke', requirements: ['stepId' => '\d+'], methods: ['POST'])]
+    public function revokeStep(int $id, int $stepId, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        return $this->stepAction($id, $stepId, $user,
+            fn (PurchaseRequest $p, PurchaseApprovalStep $s, User $u) => $this->purchaseService
+                ->revokeStep($p, $s, $u));
+    }
+
+    /**
      * Правка маршрута отделом закупок: либо переключение на другой шаблон
      * (`templateId`), либо присланный целиком список шагов (`steps`).
      * Доступно, только пока указатель на их первом шаге.

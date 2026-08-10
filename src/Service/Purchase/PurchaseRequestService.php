@@ -118,6 +118,74 @@ final class PurchaseRequestService
         }
     }
 
+    /**
+     * Снять свою подпись — персональный откат для директора.
+     *
+     * Обычная подпись необратима: позиция закрылась, следующим ушли уведомления.
+     * Но у директора на его позиции обычно никого больше нет, поэтому его подпись
+     * закрывает позицию сразу и «окна на передумать» не остаётся вовсе — а ошибиться
+     * тоггглом легко. Отзыв маршрута это лечит, но требует второго человека
+     * из отдела закупок.
+     *
+     * Поэтому здесь то же, что делает recall, но в границах одного человека:
+     * сбрасываем его шаг и всё, что успело подписаться после него, и возвращаем
+     * указатель на его позицию. Сгоревшие согласования видны только в history,
+     * поэтому запись туда обязательна и идёт той же транзакцией.
+     */
+    public function revokeStep(PurchaseRequest $request, PurchaseApprovalStep $step, User $actor): void
+    {
+        $statusBefore = $request->getStatus();
+
+        // APPROVED тоже допустим: если директор был последним в цепочке, маршрут
+        // уже закрыт — но пока закупки не начали исполнение, откатить можно.
+        if (!in_array($statusBefore, [PurchaseStatus::ON_APPROVAL, PurchaseStatus::APPROVED], true)) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+        }
+        if ($step->getPurchaseRequest()?->getId() !== $request->getId()) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_STEP_NOT_FOUND);
+        }
+        // Именно СВОЮ: чужую подпись снимает только отзыв маршрута отделом закупок
+        if ($step->getDecision() !== PurchaseStepDecision::APPROVED
+            || $step->getDecidedBy()?->getId() !== $actor->getId()
+        ) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_STEP_NOT_REVOKABLE);
+        }
+
+        $anchor = $step->getPosition();
+        $burned = [];
+
+        foreach ($request->getSteps() as $candidate) {
+            if ($candidate->getPosition() < $anchor || !$candidate->getDecision()->isDecided()) {
+                continue;
+            }
+            if ($candidate !== $step) {
+                $burned[] = $this->describeStep($candidate);
+            }
+            $candidate->setDecision(PurchaseStepDecision::PENDING)
+                ->setDecidedBy(null)
+                ->setDecidedAt(null)
+                ->setComment(null);
+        }
+
+        $request->setStatus(PurchaseStatus::ON_APPROVAL);
+
+        $this->addHistory(
+            $request,
+            $actor,
+            $statusBefore,
+            PurchaseStatus::ON_APPROVAL,
+            $burned === []
+                ? 'Согласование снято автором подписи'
+                : sprintf(
+                    'Согласование снято автором подписи. Сброшены согласования после него: %s',
+                    implode(', ', $burned),
+                ),
+        );
+        $this->em->flush();
+
+        $this->notifier->notifyStepActivated($request, $actor);
+    }
+
     /** Вернуть заявку автору со своего шага. Комментарий обязателен. */
     public function rejectStep(PurchaseRequest $request, PurchaseApprovalStep $step, User $actor, string $comment): void
     {

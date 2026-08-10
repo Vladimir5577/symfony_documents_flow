@@ -109,6 +109,7 @@ final class SpaApiError
     public const PURCHASE_STEP_NOT_FOUND = 'purchase_step_not_found';
     public const PURCHASE_STEP_NOT_ACTIVE = 'purchase_step_not_active';
     public const PURCHASE_STEP_FILE_REQUIRED = 'purchase_step_file_required';
+    public const PURCHASE_STEP_NOT_REVOKABLE = 'purchase_step_not_revokable';
     public const PURCHASE_ROUTE_LOCKED = 'purchase_route_locked';
     public const PURCHASE_ROUTE_MANDATORY_STEP = 'purchase_route_mandatory_step';
     public const PURCHASE_ROUTE_INVALID = 'purchase_route_invalid';
