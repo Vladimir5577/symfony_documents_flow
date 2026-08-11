@@ -99,6 +99,11 @@
                                         </a>
                                     </div>
                                     <div class="flex-grow-1 text-end">
+                                        {# Выгружается то, что в базе: незасохранённые правки в файл не попадут #}
+                                        <a href="{{ path('app_analytics_tko_export', { polygon_id: selectedPolygon.id, level: 'day', period: week }) }}"
+                                           class="btn btn-success me-2" title="Выгружаются сохранённые данные">
+                                            <i class="bi bi-file-earmark-excel me-1"></i>Выгрузить в Excel
+                                        </a>
                                         <button type="submit" class="btn btn-primary">Сохранить</button>
                                     </div>
                                 </div>
