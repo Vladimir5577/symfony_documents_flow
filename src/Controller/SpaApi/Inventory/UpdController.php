@@ -9,7 +9,7 @@ use App\Entity\Inventory\Upd;
 use App\Entity\Inventory\UpdFile;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
-use App\Repository\Inventory\ItemRepository;
+use App\Repository\Inventory\NomenclatureItemRepository;
 use App\Repository\Inventory\UpdFileRepository;
 use App\Repository\Inventory\UpdRepository;
 use App\Repository\Organization\OrganizationRepository;
@@ -44,7 +44,7 @@ final class UpdController extends AbstractController
     public function __construct(
         private readonly UpdRepository $updRepository,
         private readonly UpdFileRepository $fileRepository,
-        private readonly ItemRepository $itemRepository,
+        private readonly NomenclatureItemRepository $itemRepository,
         private readonly OrganizationRepository $organizationRepository,
         private readonly InventoryAccessResolver $accessResolver,
         private readonly UpdFileService $fileService,

@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\Inventory;
 
-use App\Entity\Inventory\Item;
+use App\Entity\Inventory\NomenclatureItem;
 use App\Entity\User\User;
-use App\Repository\Inventory\ItemRepository;
+use App\Repository\Inventory\NomenclatureItemRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -23,7 +23,7 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
 final class MyItemController extends AbstractController
 {
     public function __construct(
-        private readonly ItemRepository $itemRepository,
+        private readonly NomenclatureItemRepository $itemRepository,
     ) {
     }
 
@@ -50,7 +50,7 @@ final class MyItemController extends AbstractController
 
         return $this->json([
             'items' => array_map(
-                fn (Item $item): array => $this->format($item),
+                fn (NomenclatureItem $item): array => $this->format($item),
                 $pagination['items'],
             ),
             'pagination' => [
@@ -62,23 +62,31 @@ final class MyItemController extends AbstractController
         ]);
     }
 
-    private function format(Item $item): array
+    private function format(NomenclatureItem $item): array
     {
+        $nomenclature = $item->getNomenclature();
         $organization = $item->getOrganization();
+        $category = $item->getCategory();
 
         return [
             'id' => $item->getId(),
-            'name' => $item->getName(),
+            'nomenclature' => [
+                'id' => $nomenclature->getId(),
+                'name' => $nomenclature->getName(),
+            ],
             'inventoryNumber' => $item->getInventoryNumber(),
             'serialNumber' => $item->getSerialNumber(),
-            'category' => $item->getCategory() !== null
-                ? ['id' => $item->getCategory()->getId(), 'name' => $item->getCategory()->getName()]
+            // Категория приходит с вида, своего поля у позиции нет.
+            'category' => $category !== null
+                ? ['id' => $category->getId(), 'name' => $category->getName()]
                 : null,
-            'organization' => [
-                'id' => $organization->getId(),
-                'name' => $organization->getName(),
-                'path' => $organization->getPath(),
-            ],
+            'organization' => $organization !== null
+                ? [
+                    'id' => $organization->getId(),
+                    'name' => $organization->getName(),
+                    'path' => $organization->getPath(),
+                ]
+                : null,
             'status' => $item->getStatus()->value,
             'statusLabel' => $item->getStatus()->getLabel(),
             'description' => $item->getDescription(),

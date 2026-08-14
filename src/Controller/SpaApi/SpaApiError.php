@@ -134,11 +134,16 @@ final class SpaApiError
     public const INVENTORY_FILE_UPLOAD_FAILED = 'inventory_file_upload_failed';
     public const INVENTORY_INVALID_DATE = 'inventory_invalid_date';
     public const INVENTORY_INVALID_PRICE = 'inventory_invalid_price';
+    public const INVENTORY_INVALID_QUANTITY = 'inventory_invalid_quantity';
     public const INVENTORY_INVALID_STATUS = 'inventory_invalid_status';
-    public const INVENTORY_ITEM_NAME_REQUIRED = 'inventory_item_name_required';
     public const INVENTORY_ITEM_NOT_FOUND = 'inventory_item_not_found';
     public const INVENTORY_ITEM_NUMBER_EXISTS = 'inventory_item_number_exists';
     public const INVENTORY_NO_ACCESS = 'inventory_no_access';
+    public const INVENTORY_NOMENCLATURE_HAS_ITEMS = 'inventory_nomenclature_has_items';
+    public const INVENTORY_NOMENCLATURE_NAME_EXISTS = 'inventory_nomenclature_name_exists';
+    public const INVENTORY_NOMENCLATURE_NAME_REQUIRED = 'inventory_nomenclature_name_required';
+    public const INVENTORY_NOMENCLATURE_NOT_FOUND = 'inventory_nomenclature_not_found';
+    public const INVENTORY_NOMENCLATURE_REQUIRED = 'inventory_nomenclature_required';
     public const INVENTORY_ORGANIZATION_NOT_ALLOWED = 'inventory_organization_not_allowed';
     public const INVENTORY_UPD_HAS_ITEMS = 'inventory_upd_has_items';
     public const INVENTORY_UPD_NOT_FOUND = 'inventory_upd_not_found';

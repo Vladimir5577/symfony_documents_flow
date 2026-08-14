@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace App\Controller\SpaApi\Inventory;
 
 use App\Controller\SpaApi\SpaApiError;
-use App\Entity\Inventory\Item;
-use App\Entity\Inventory\ItemCategory;
-use App\Entity\Inventory\ItemHistory;
+use App\Entity\Inventory\Nomenclature;
+use App\Entity\Inventory\NomenclatureHistory;
+use App\Entity\Inventory\NomenclatureItem;
 use App\Entity\Inventory\Upd;
 use App\Entity\Organization\AbstractOrganization;
 use App\Entity\User\User;
 use App\Enum\Inventory\ItemStatus;
-use App\Repository\Inventory\ItemCategoryRepository;
-use App\Repository\Inventory\ItemHistoryRepository;
-use App\Repository\Inventory\ItemRepository;
+use App\Repository\Inventory\NomenclatureHistoryRepository;
+use App\Repository\Inventory\NomenclatureItemRepository;
+use App\Repository\Inventory\NomenclatureRepository;
 use App\Repository\Inventory\UpdRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
@@ -31,19 +31,21 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
- * Товары инвентаризации.
+ * Позиции инвентаризации — конкретные штуки имущества.
  *
- * Редактирование карточки и операции над товаром намеренно разведены: у операций
- * разные права и каждая обязана оставить запись в истории.
+ * Наименование и категория живут на виде товара (Nomenclature), поэтому здесь их
+ * не редактируют: сменить наименование у одной штуки нельзя, можно только перевести
+ * её на другой вид. Редактирование карточки и операции над позицией намеренно
+ * разведены: у операций разные права и каждая обязана оставить запись в истории.
  */
 #[Route('/spa/api/inventory/items')]
 #[IsGranted('ROLE_INVENTORY_MANAGER')]
 final class ItemController extends AbstractController
 {
     public function __construct(
-        private readonly ItemRepository $itemRepository,
-        private readonly ItemCategoryRepository $categoryRepository,
-        private readonly ItemHistoryRepository $historyRepository,
+        private readonly NomenclatureItemRepository $itemRepository,
+        private readonly NomenclatureRepository $nomenclatureRepository,
+        private readonly NomenclatureHistoryRepository $historyRepository,
         private readonly UpdRepository $updRepository,
         private readonly OrganizationRepository $organizationRepository,
         private readonly UserRepository $userRepository,
@@ -73,7 +75,7 @@ final class ItemController extends AbstractController
         );
 
         return $this->json([
-            'items' => array_map(fn (Item $item): array => $this->format($item), $pagination['items']),
+            'items' => array_map(fn (NomenclatureItem $item): array => $this->format($item), $pagination['items']),
             'pagination' => [
                 'current_page' => $pagination['page'],
                 'total_pages' => $pagination['totalPages'],
@@ -117,86 +119,147 @@ final class ItemController extends AbstractController
 
         $scope = $this->accessResolver->resolveCurrent();
 
-        $organization = $this->organizationRepository->find((int) ($payload['organizationId'] ?? 0));
-        if (!$organization instanceof AbstractOrganization) {
-            return $this->json(['error' => SpaApiError::ORGANIZATION_NOT_FOUND], Response::HTTP_NOT_FOUND);
-        }
-
-        // Категория необязательна: неразобранный предмет заводится без неё.
-        // Ответственный за категорию при этом обязан её указать — товар без категории
-        // не входит в его зону, и canSee ниже такую попытку отклонит.
-        $category = null;
-        $categoryId = (int) ($payload['categoryId'] ?? 0);
-        if ($categoryId > 0) {
-            $category = $this->categoryRepository->find($categoryId);
-            if (!$category instanceof ItemCategory) {
-                return $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NOT_FOUND], Response::HTTP_NOT_FOUND);
-            }
-
-            if (!$category->isActive()) {
-                return $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NOT_ALLOWED], Response::HTTP_CONFLICT);
+        // Организация необязательна: позиция без неё считается неразобранной и видна
+        // только главному администратору — canSee ниже отклонит чужую попытку.
+        $organization = null;
+        $organizationId = (int) ($payload['organizationId'] ?? 0);
+        if ($organizationId > 0) {
+            $organization = $this->organizationRepository->find($organizationId);
+            if (!$organization instanceof AbstractOrganization) {
+                return $this->json(['error' => SpaApiError::ORGANIZATION_NOT_FOUND], Response::HTTP_NOT_FOUND);
             }
         }
 
-        if (!$scope->canSee((int) $organization->getId(), $category !== null ? (int) $category->getId() : null)) {
+        [$nomenclature, $nomenclatureError] = $this->resolveNomenclature($payload['nomenclatureId'] ?? null);
+        if ($nomenclatureError !== null) {
+            return $nomenclatureError;
+        }
+
+        // Категория берётся с вида: у самой позиции своей категории больше нет.
+        // Вид без категории — тот же неразобранный предмет, что и раньше:
+        // ответственный за категорию его не заводит, только админ организации.
+        $categoryId = $nomenclature->getCategory()?->getId();
+        if (!$scope->canSee(
+            $organization !== null ? (int) $organization->getId() : null,
+            $categoryId !== null ? (int) $categoryId : null,
+        )) {
             return $this->json(
                 ['error' => SpaApiError::INVENTORY_ORGANIZATION_NOT_ALLOWED],
                 Response::HTTP_FORBIDDEN,
             );
         }
 
-        $name = trim((string) ($payload['name'] ?? ''));
-        if ($name === '') {
-            return $this->json(['error' => SpaApiError::INVENTORY_ITEM_NAME_REQUIRED], Response::HTTP_BAD_REQUEST);
+        // Пачка: приёмка по одному УПД заводится одним действием, а не тридцатью.
+        // ponytail: потолок 100 — если реальная поставка окажется больше, поднять
+        // число; очередь и фоновую обработку заводить незачем, вставка дешёвая.
+        $quantity = (int) ($payload['quantity'] ?? 1);
+        if ($quantity < 1 || $quantity > 100) {
+            return $this->json(
+                ['error' => SpaApiError::INVENTORY_INVALID_QUANTITY],
+                Response::HTTP_BAD_REQUEST,
+            );
         }
 
         // Номер необязателен: предмет со стёртой биркой заводится без него,
         // иначе люди вписывают «б/н» и упираются в уникальный индекс на втором таком.
-        $inventoryNumber = trim((string) ($payload['inventoryNumber'] ?? ''));
+        //
+        // У пачки номера и серийники пустые всегда: они уникальны у каждой штуки,
+        // и один на десять карточек упёрся бы в уникальный индекс на второй же.
+        // Проставляют их потом, по мере наклейки бирок.
+        $isBatch = $quantity > 1;
+        $inventoryNumber = $isBatch ? '' : trim((string) ($payload['inventoryNumber'] ?? ''));
         if ($inventoryNumber !== ''
-            && $this->itemRepository->inventoryNumberExists((int) $organization->getId(), $inventoryNumber)
+            && $this->itemRepository->inventoryNumberExists(
+                $organization !== null ? (int) $organization->getId() : null,
+                $inventoryNumber,
+            )
         ) {
             return $this->json(['error' => SpaApiError::INVENTORY_ITEM_NUMBER_EXISTS], Response::HTTP_CONFLICT);
         }
 
-        $item = new Item();
-        $item->setOrganization($organization);
-        $item->setCategory($category);
+        // Владелец необязателен: позиция без сотрудника лежит на складе. Проверка та же,
+        // что у операции назначения, — иначе через заведение можно было бы закрепить
+        // имущество за человеком из чужой ветки в обход /assign.
+        $assignee = null;
+        $assigneeId = (int) ($payload['userId'] ?? 0);
+        if ($assigneeId > 0) {
+            $assignee = $this->userRepository->find($assigneeId);
+            if (!$assignee instanceof User) {
+                return $this->json(['error' => SpaApiError::USER_NOT_FOUND], Response::HTTP_NOT_FOUND);
+            }
+
+            if (!$this->isAssignable($assignee, $organization)) {
+                return $this->json(
+                    ['error' => SpaApiError::INVENTORY_USER_NOT_IN_ORGANIZATION],
+                    Response::HTTP_CONFLICT,
+                );
+            }
+        }
 
         // Документ необязателен: первичная инвентаризация и старая мебель заводятся
         // без него. Проверки те же, что у операции привязки, — общий resolveUpdFor.
+        $upd = null;
         $updId = (int) ($payload['updId'] ?? 0);
         if ($updId > 0) {
             [$upd, $updError] = $this->resolveUpdFor($updId, $organization);
             if ($updError !== null) {
                 return $updError;
             }
-            $item->setUpd($upd);
         }
 
-        $item->setName(mb_substr($name, 0, 255));
-        $item->setInventoryNumber($inventoryNumber === '' ? null : mb_substr($inventoryNumber, 0, 64));
-        $item->setCreatedBy($currentUser);
-        $item->setUpdatedBy($currentUser);
-
-        $fieldError = $this->applyCardFields($item, $payload);
-        if ($fieldError !== null) {
-            return $this->json(['error' => $fieldError], Response::HTTP_BAD_REQUEST);
-        }
-
+        $status = null;
         if (isset($payload['status'])) {
             $status = ItemStatus::tryFrom((string) $payload['status']);
             if ($status === null) {
                 return $this->json(['error' => SpaApiError::INVENTORY_INVALID_STATUS], Response::HTTP_BAD_REQUEST);
             }
-            $item->setStatus($status);
         }
 
-        $this->em->persist($item);
-        $this->historyLogger->logCreated($item);
+        // Остальное у пачки общее и осмысленно общее: десять мониторов из одного УПД
+        // приехали в один день по одной цене. Разными у них бывают только номер
+        // и серийник, и они выше уже вычищены.
+        $created = [];
+        for ($index = 0; $index < $quantity; ++$index) {
+            $item = new NomenclatureItem();
+            $item->setNomenclature($nomenclature);
+            $item->setOrganization($organization);
+            $item->setUser($assignee);
+            $item->setUpd($upd);
+            $item->setInventoryNumber($inventoryNumber === '' ? null : mb_substr($inventoryNumber, 0, 64));
+            $item->setCreatedBy($currentUser);
+            $item->setUpdatedBy($currentUser);
+
+            $fieldError = $this->applyCardFields($item, $payload);
+            if ($fieldError !== null) {
+                return $this->json(['error' => $fieldError], Response::HTTP_BAD_REQUEST);
+            }
+
+            if ($status !== null) {
+                $item->setStatus($status);
+            }
+
+            $this->em->persist($item);
+            $this->historyLogger->logCreated($item);
+
+            // Владелец при заведении — отдельная запись рядом с «Создан». Иначе в ленте
+            // не осталось бы следа, как имущество попало к человеку: после первого же
+            // снятия было бы видно «снят с Иванова» без единого «назначен».
+            if ($assignee !== null) {
+                $this->historyLogger->logAssignment($item, null, $assignee);
+            }
+
+            $created[] = $item;
+        }
+
+        // Один flush на всю пачку: сто карточек и их история должны уехать одной
+        // транзакцией, иначе половина пачки останется в базе после сбоя на середине.
         $this->em->flush();
 
-        return $this->json(['item' => $this->format($item)], Response::HTTP_CREATED);
+        return $this->json([
+            'item' => $this->format($created[0]),
+            'items' => array_map(fn (NomenclatureItem $row): array => $this->format($row), $created),
+            'created' => count($created),
+        ], Response::HTTP_CREATED);
     }
 
     #[Route('/{id}', name: 'spa_api_inventory_items_update', requirements: ['id' => '\d+'], methods: ['PATCH'])]
@@ -212,22 +275,15 @@ final class ItemController extends AbstractController
             return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
-        if (array_key_exists('name', $payload)) {
-            $name = trim((string) $payload['name']);
-            if ($name === '') {
-                return $this->json(['error' => SpaApiError::INVENTORY_ITEM_NAME_REQUIRED], Response::HTTP_BAD_REQUEST);
-            }
-            $item->setName(mb_substr($name, 0, 255));
-        }
-
         if (array_key_exists('inventoryNumber', $payload)) {
             $inventoryNumber = trim((string) $payload['inventoryNumber']);
 
             if ($inventoryNumber === '') {
                 $item->setInventoryNumber(null);
             } else {
+                $organizationId = $item->getOrganization()?->getId();
                 $taken = $this->itemRepository->inventoryNumberExists(
-                    (int) $item->getOrganization()->getId(),
+                    $organizationId !== null ? (int) $organizationId : null,
                     $inventoryNumber,
                     $item->getId(),
                 );
@@ -279,12 +335,12 @@ final class ItemController extends AbstractController
             );
         }
 
-        $previous = $item->getAssignedTo();
+        $previous = $item->getUser();
         if ($previous?->getId() === $assignee->getId()) {
             return $this->json(['item' => $this->format($item)]);
         }
 
-        $item->setAssignedTo($assignee);
+        $item->setUser($assignee);
         $item->setUpdatedBy($currentUser instanceof User ? $currentUser : null);
         $this->historyLogger->logAssignment($item, $previous, $assignee);
         $this->em->flush();
@@ -300,12 +356,12 @@ final class ItemController extends AbstractController
             return $error;
         }
 
-        $previous = $item->getAssignedTo();
+        $previous = $item->getUser();
         if ($previous === null) {
             return $this->json(['item' => $this->format($item)]);
         }
 
-        $item->setAssignedTo(null);
+        $item->setUser(null);
         $item->setUpdatedBy($currentUser instanceof User ? $currentUser : null);
         $this->historyLogger->logAssignment($item, $previous, null);
         $this->em->flush();
@@ -357,7 +413,7 @@ final class ItemController extends AbstractController
         }
 
         $scope = $this->accessResolver->resolveCurrent();
-        if (!$scope->isOrganizationAdmin((int) $item->getOrganization()->getId())) {
+        if (!$this->isSourceAdmin($item->getOrganization())) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -379,13 +435,13 @@ final class ItemController extends AbstractController
         }
 
         $source = $item->getOrganization();
-        if ($source->getId() === $target->getId()) {
+        if ($source?->getId() === $target->getId()) {
             return $this->json(['item' => $this->format($item)]);
         }
 
         // Владелец из старой ветки в новой организации уже не валиден — пусть админ
-        // сначала снимет товар, чтобы перенос не менял владельца молча.
-        $assignee = $item->getAssignedTo();
+        // сначала снимет позицию, чтобы перенос не менял владельца молча.
+        $assignee = $item->getUser();
         if ($assignee !== null && !$this->isAssignable($assignee, $target)) {
             return $this->json(
                 ['error' => SpaApiError::INVENTORY_USER_NOT_IN_ORGANIZATION],
@@ -402,26 +458,27 @@ final class ItemController extends AbstractController
 
         $item->setOrganization($target);
         $item->setUpdatedBy($currentUser instanceof User ? $currentUser : null);
-        $this->historyLogger->logMoved($item, $source->getName(), $target->getName());
+        $this->historyLogger->logMoved($item, $source?->getName() ?? 'без организации', $target->getName());
         $this->em->flush();
 
         return $this->json(['item' => $this->format($item)]);
     }
 
     /**
-     * Смена категории — только админу организации: ответственный за категорию иначе
-     * уводил бы товары из своей зоны или забирал чужие.
+     * Смена вида товара. Пришла на место смены категории: категория теперь свойство
+     * вида, и «перенести монитор в другую категорию» означает перевести его на другой
+     * вид. Права те же — только админ организации, иначе ответственный за категорию
+     * уводил бы имущество из своей зоны или забирал чужое.
      */
-    #[Route('/{id}/category', name: 'spa_api_inventory_items_category', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function changeCategory(int $id, Request $request, #[CurrentUser] ?User $currentUser): JsonResponse
+    #[Route('/{id}/nomenclature', name: 'spa_api_inventory_items_nomenclature', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function changeNomenclature(int $id, Request $request, #[CurrentUser] ?User $currentUser): JsonResponse
     {
         [$item, $error] = $this->resolveItem($id);
         if ($error !== null) {
             return $error;
         }
 
-        $scope = $this->accessResolver->resolveCurrent();
-        if (!$scope->isOrganizationAdmin((int) $item->getOrganization()->getId())) {
+        if (!$this->isSourceAdmin($item->getOrganization())) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -430,39 +487,26 @@ final class ItemController extends AbstractController
             return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
-        // categoryId = null или 0 снимает категорию, возвращая товар в неразобранные.
-        $category = null;
-        $categoryId = (int) ($payload['categoryId'] ?? 0);
-        if ($categoryId > 0) {
-            $category = $this->categoryRepository->find($categoryId);
-            if (!$category instanceof ItemCategory) {
-                return $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NOT_FOUND], Response::HTTP_NOT_FOUND);
-            }
+        [$nomenclature, $nomenclatureError] = $this->resolveNomenclature($payload['nomenclatureId'] ?? null);
+        if ($nomenclatureError !== null) {
+            return $nomenclatureError;
         }
 
-        $previous = $item->getCategory();
-        if ($previous?->getId() === $category?->getId()) {
+        $previous = $item->getNomenclature();
+        if ($previous->getId() === $nomenclature->getId()) {
             return $this->json(['item' => $this->format($item)]);
         }
 
-        if ($category !== null && !$category->isActive()) {
-            return $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NOT_ALLOWED], Response::HTTP_CONFLICT);
-        }
-
-        $item->setCategory($category);
+        $item->setNomenclature($nomenclature);
         $item->setUpdatedBy($currentUser instanceof User ? $currentUser : null);
-        $this->historyLogger->logCategoryChanged(
-            $item,
-            $previous?->getName() ?? 'без категории',
-            $category?->getName() ?? 'без категории',
-        );
+        $this->historyLogger->logNomenclatureChanged($item, $previous->getName(), $nomenclature->getName());
         $this->em->flush();
 
         return $this->json(['item' => $this->format($item)]);
     }
 
     /**
-     * Привязка к документу поступления. Как перенос и смена категории — только админу
+     * Привязка к документу поступления. Как перенос и смена вида — только админу
      * организации: ответственный за категорию документов вообще не видит, и выбрать
      * ему было бы не из чего.
      */
@@ -474,8 +518,7 @@ final class ItemController extends AbstractController
             return $error;
         }
 
-        $scope = $this->accessResolver->resolveCurrent();
-        if (!$scope->isOrganizationAdmin((int) $item->getOrganization()->getId())) {
+        if (!$this->isSourceAdmin($item->getOrganization())) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -521,19 +564,19 @@ final class ItemController extends AbstractController
 
         return $this->json([
             'history' => array_map(
-                fn (ItemHistory $history): array => $this->formatHistory($history),
+                fn (NomenclatureHistory $history): array => $this->formatHistory($history),
                 $this->historyRepository->findByItem($item),
             ),
         ]);
     }
 
     /**
-     * @return array{0: Item|null, 1: JsonResponse|null}
+     * @return array{0: NomenclatureItem|null, 1: JsonResponse|null}
      */
     private function resolveItem(int $id): array
     {
         $item = $this->itemRepository->find($id);
-        if (!$item instanceof Item) {
+        if (!$item instanceof NomenclatureItem) {
             return [null, $this->json(['error' => SpaApiError::INVENTORY_ITEM_NOT_FOUND], Response::HTTP_NOT_FOUND)];
         }
 
@@ -545,11 +588,58 @@ final class ItemController extends AbstractController
     }
 
     /**
-     * Назначать можно только на сотрудника организации товара или её потомков:
-     * иначе учёт по департаментам разваливается молча.
+     * Вид товара из тела запроса. Обязателен и должен существовать: наименование
+     * позиции берётся только отсюда, без вида её нечем показать.
+     *
+     * @return array{0: Nomenclature|null, 1: JsonResponse|null}
      */
-    private function isAssignable(User $assignee, AbstractOrganization $organization): bool
+    private function resolveNomenclature(mixed $rawId): array
     {
+        $nomenclatureId = (int) ($rawId ?? 0);
+        if ($nomenclatureId <= 0) {
+            return [null, $this->json(
+                ['error' => SpaApiError::INVENTORY_NOMENCLATURE_REQUIRED],
+                Response::HTTP_BAD_REQUEST,
+            )];
+        }
+
+        $nomenclature = $this->nomenclatureRepository->find($nomenclatureId);
+        if (!$nomenclature instanceof Nomenclature) {
+            return [null, $this->json(
+                ['error' => SpaApiError::INVENTORY_NOMENCLATURE_NOT_FOUND],
+                Response::HTTP_NOT_FOUND,
+            )];
+        }
+
+        return [$nomenclature, null];
+    }
+
+    /**
+     * Операции над позицией разрешены админу её организации. Позиция без организации
+     * ничьей зоне не принадлежит, поэтому ей распоряжается только главный администратор.
+     */
+    private function isSourceAdmin(?AbstractOrganization $organization): bool
+    {
+        $scope = $this->accessResolver->resolveCurrent();
+
+        if ($organization === null) {
+            return $scope->full;
+        }
+
+        return $scope->isOrganizationAdmin((int) $organization->getId());
+    }
+
+    /**
+     * Назначать можно только на сотрудника организации позиции или её потомков:
+     * иначе учёт по департаментам разваливается молча. У позиции без организации
+     * сверять не с чем — ограничение снимается вместе с самой организацией.
+     */
+    private function isAssignable(User $assignee, ?AbstractOrganization $organization): bool
+    {
+        if ($organization === null) {
+            return true;
+        }
+
         return $this->isInSubtree($organization, $assignee->getOrganization());
     }
 
@@ -562,7 +652,7 @@ final class ItemController extends AbstractController
      *
      * @return array{0: Upd|null, 1: JsonResponse|null}
      */
-    private function resolveUpdFor(int $updId, AbstractOrganization $itemOrganization): array
+    private function resolveUpdFor(int $updId, ?AbstractOrganization $itemOrganization): array
     {
         $upd = $this->updRepository->find($updId);
         if (!$upd instanceof Upd) {
@@ -574,7 +664,8 @@ final class ItemController extends AbstractController
         }
 
         // Позиция обязана числиться за организацией документа или её потомком, иначе
-        // по документу для одного филиала заводилось бы имущество другого.
+        // по документу для одного филиала заводилось бы имущество другого. Позиция без
+        // организации этой проверки пройти не может — сверять нечего.
         if (!$this->isInSubtree($upd->getOrganization(), $itemOrganization)) {
             return [null, $this->json(
                 ['error' => SpaApiError::INVENTORY_UPD_ORGANIZATION_MISMATCH],
@@ -606,7 +697,7 @@ final class ItemController extends AbstractController
      *
      * @return string|null код ошибки из SpaApiError, если значение не разобрано
      */
-    private function applyCardFields(Item $item, array $payload): ?string
+    private function applyCardFields(NomenclatureItem $item, array $payload): ?string
     {
         if (array_key_exists('serialNumber', $payload)) {
             $serialNumber = trim((string) $payload['serialNumber']);
@@ -650,8 +741,9 @@ final class ItemController extends AbstractController
         return null;
     }
 
-    private function format(Item $item): array
+    private function format(NomenclatureItem $item): array
     {
+        $nomenclature = $item->getNomenclature();
         $organization = $item->getOrganization();
         $category = $item->getCategory();
         $upd = $item->getUpd();
@@ -669,19 +761,25 @@ final class ItemController extends AbstractController
                 ]
                 : null,
             'id' => $item->getId(),
-            'name' => $item->getName(),
+            'nomenclature' => [
+                'id' => $nomenclature->getId(),
+                'name' => $nomenclature->getName(),
+            ],
             'inventoryNumber' => $item->getInventoryNumber(),
             'serialNumber' => $item->getSerialNumber(),
+            // Категория приходит с вида, своего поля у позиции нет.
             'category' => $category !== null
                 ? ['id' => $category->getId(), 'name' => $category->getName()]
                 : null,
-            'organization' => [
-                'id' => $organization->getId(),
-                'name' => $organization->getName(),
-                'fullName' => $organization->getFullName(),
-                'path' => $organization->getPath(),
-            ],
-            'assignedTo' => $this->formatUser($item->getAssignedTo()),
+            'organization' => $organization !== null
+                ? [
+                    'id' => $organization->getId(),
+                    'name' => $organization->getName(),
+                    'fullName' => $organization->getFullName(),
+                    'path' => $organization->getPath(),
+                ]
+                : null,
+            'assignedTo' => $this->formatUser($item->getUser()),
             'status' => $item->getStatus()->value,
             'statusLabel' => $item->getStatus()->getLabel(),
             'description' => $item->getDescription(),
@@ -692,7 +790,7 @@ final class ItemController extends AbstractController
         ];
     }
 
-    private function formatHistory(ItemHistory $history): array
+    private function formatHistory(NomenclatureHistory $history): array
     {
         return [
             'id' => $history->getId(),

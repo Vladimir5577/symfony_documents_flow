@@ -8,7 +8,8 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Inventory\ItemCategory;
 use App\Repository\Inventory\InventoryAccessRepository;
 use App\Repository\Inventory\ItemCategoryRepository;
-use App\Repository\Inventory\ItemRepository;
+use App\Repository\Inventory\NomenclatureItemRepository;
+use App\Repository\Inventory\NomenclatureRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -27,7 +28,8 @@ final class CategoryController extends AbstractController
 {
     public function __construct(
         private readonly ItemCategoryRepository $categoryRepository,
-        private readonly ItemRepository $itemRepository,
+        private readonly NomenclatureItemRepository $itemRepository,
+        private readonly NomenclatureRepository $nomenclatureRepository,
         private readonly InventoryAccessRepository $accessRepository,
         private readonly EntityManagerInterface $em,
     ) {
@@ -122,12 +124,17 @@ final class CategoryController extends AbstractController
             return $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
+        // Виды считаются отдельно от позиций: категория теперь висит на виде, и вид
+        // без единой позиции всё равно держит внешний ключ. Без этой проверки наружу
+        // ушла бы сырая ошибка RESTRICT вместо внятного 409.
         $itemsCount = $this->itemRepository->countByCategory($category);
+        $nomenclatureCount = $this->nomenclatureRepository->countByCategory($category);
         $responsibleCount = $this->accessRepository->count(['category' => $category]);
-        if ($itemsCount > 0 || $responsibleCount > 0) {
+        if ($itemsCount > 0 || $nomenclatureCount > 0 || $responsibleCount > 0) {
             return $this->json([
                 'error' => SpaApiError::INVENTORY_CATEGORY_HAS_ITEMS,
                 'itemsCount' => $itemsCount,
+                'nomenclatureCount' => $nomenclatureCount,
                 'responsibleCount' => $responsibleCount,
             ], Response::HTTP_CONFLICT);
         }

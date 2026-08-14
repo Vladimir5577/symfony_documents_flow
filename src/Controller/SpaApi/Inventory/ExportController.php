@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Controller\SpaApi\Inventory;
 
 use App\Controller\SpaApi\SpaApiError;
-use App\Entity\Inventory\Item;
+use App\Entity\Inventory\NomenclatureItem;
 use App\Entity\User\User;
-use App\Repository\Inventory\ItemRepository;
+use App\Repository\Inventory\NomenclatureItemRepository;
 use App\Service\Inventory\InventoryAccessResolver;
 use App\Service\Inventory\ItemFilterFactory;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
@@ -58,7 +58,7 @@ final class ExportController extends AbstractController
     ];
 
     public function __construct(
-        private readonly ItemRepository $itemRepository,
+        private readonly NomenclatureItemRepository $itemRepository,
         private readonly InventoryAccessResolver $accessResolver,
         private readonly ItemFilterFactory $filterFactory,
     ) {
@@ -89,7 +89,7 @@ final class ExportController extends AbstractController
     }
 
     /**
-     * @param Item[] $items
+     * @param NomenclatureItem[] $items
      */
     private function build(array $items): Spreadsheet
     {
@@ -109,13 +109,13 @@ final class ExportController extends AbstractController
         $row = 2;
         foreach ($items as $item) {
             $organization = $item->getOrganization();
-            $assignee = $item->getAssignedTo();
+            $assignee = $item->getUser();
 
             $sheet->setCellValueExplicit([1, $row], (string) $item->getId(), DataType::TYPE_NUMERIC);
             $this->text($sheet, 2, $row, $item->getInventoryNumber());
             $this->text($sheet, 3, $row, $item->getName());
             $this->text($sheet, 4, $row, $item->getCategory()?->getName());
-            $this->text($sheet, 5, $row, $organization->getPath());
+            $this->text($sheet, 5, $row, $organization?->getPath());
             $this->text($sheet, 6, $row, $item->getSerialNumber());
             $this->text($sheet, 7, $row, $item->getStatus()->getLabel());
             $this->text($sheet, 8, $row, $this->assigneeName($assignee));

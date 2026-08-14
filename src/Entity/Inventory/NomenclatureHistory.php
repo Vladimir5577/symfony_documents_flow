@@ -7,29 +7,37 @@ namespace App\Entity\Inventory;
 use App\Entity\User\User;
 use App\Enum\Inventory\ItemHistoryAction;
 use App\Enum\Inventory\ItemStatus;
-use App\Repository\Inventory\ItemHistoryRepository;
+use App\Repository\Inventory\NomenclatureHistoryRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
 
 /**
- * Журнал движений товара. Статус и владелец типизированы — по ним ищут
- * («что висело на уволенном сотруднике»). Смена организации и категории
- * пишется человекочитаемым текстом в comment: эти события читают глазами в ленте.
+ * Журнал движений позиции номенклатуры. Статус и владелец типизированы — по ним ищут
+ * («что висело на уволенном сотруднике»). Смена организации и вида пишется
+ * человекочитаемым текстом в comment: эти события читают глазами в ленте.
  */
-#[ORM\Entity(repositoryClass: ItemHistoryRepository::class)]
-#[ORM\Table(name: 'inventory_item_history')]
-#[ORM\Index(name: 'idx_inventory_item_history_item_created', columns: ['item_id', 'created_at'])]
-class ItemHistory
+#[ORM\Entity(repositoryClass: NomenclatureHistoryRepository::class)]
+#[ORM\Table(name: 'inventory_nomenclature_history')]
+#[ORM\Index(
+    name: 'idx_inventory_nomenclature_history_item_created',
+    columns: ['nomenclature_item_id', 'created_at'],
+)]
+class NomenclatureHistory
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\ManyToOne(targetEntity: Item::class)]
-    #[ORM\JoinColumn(name: 'item_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
-    private Item $item;
+    #[ORM\ManyToOne(targetEntity: NomenclatureItem::class)]
+    #[ORM\JoinColumn(
+        name: 'nomenclature_item_id',
+        referencedColumnName: 'id',
+        nullable: false,
+        onDelete: 'CASCADE',
+    )]
+    private NomenclatureItem $item;
 
     /**
      * Кто совершил действие. Может стать null, если пользователь удалён —
@@ -68,12 +76,12 @@ class ItemHistory
         return $this->id;
     }
 
-    public function getItem(): Item
+    public function getItem(): NomenclatureItem
     {
         return $this->item;
     }
 
-    public function setItem(Item $item): static
+    public function setItem(NomenclatureItem $item): static
     {
         $this->item = $item;
 
