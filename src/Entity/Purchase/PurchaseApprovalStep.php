@@ -42,7 +42,6 @@ class PurchaseApprovalStep
     #[ORM\Column(type: Types::SMALLINT)]
     private int $position = 1;
 
-    // Только ROLE или USER: CATEGORY_RESPONSIBLE строитель уже развернул в людей
     #[ORM\Column(name: 'approver_kind', type: Types::STRING, length: 30, enumType: PurchaseApproverKind::class)]
     private PurchaseApproverKind $approverKind = PurchaseApproverKind::ROLE;
 
@@ -59,13 +58,15 @@ class PurchaseApprovalStep
     #[ORM\Column(name: 'requires_file_type', type: Types::STRING, length: 30, nullable: true, enumType: PurchaseFileType::class)]
     private ?PurchaseFileType $requiresFileType = null;
 
-    // Обязательный участник: отдел закупок может его двигать, но не удалять.
-    // Ставится строителем — сегодня только директору от его порога.
-    #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
-    private bool $mandatory = false;
-
     #[ORM\Column(type: Types::STRING, length: 20, enumType: PurchaseStepDecision::class, options: ['default' => 'PENDING'])]
     private PurchaseStepDecision $decision = PurchaseStepDecision::PENDING;
+
+    /**
+     * «Рассмотрю позже»: заявка остаётся у директора, но уезжает в конец очереди.
+     * Без этой отметки отложенная заявка заезжала бы в модалку первой по кругу.
+     */
+    #[ORM\Column(name: 'deferred_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $deferredAt = null;
 
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'decided_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
@@ -175,17 +176,6 @@ class PurchaseApprovalStep
         return $this;
     }
 
-    public function isMandatory(): bool
-    {
-        return $this->mandatory;
-    }
-
-    public function setMandatory(bool $mandatory): static
-    {
-        $this->mandatory = $mandatory;
-
-        return $this;
-    }
 
     public function getDecision(): PurchaseStepDecision
     {
@@ -195,6 +185,9 @@ class PurchaseApprovalStep
     public function setDecision(PurchaseStepDecision $decision): static
     {
         $this->decision = $decision;
+        // Решение снимает отметку «рассмотрю позже»: откладывать больше нечего,
+        // а подписанный шаг с флагом «отложен» — мусор в карточке и в очереди.
+        $this->deferredAt = null;
 
         return $this;
     }
@@ -250,6 +243,18 @@ class PurchaseApprovalStep
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;
+    }
+
+    public function getDeferredAt(): ?\DateTimeImmutable
+    {
+        return $this->deferredAt;
+    }
+
+    public function setDeferredAt(?\DateTimeImmutable $deferredAt): static
+    {
+        $this->deferredAt = $deferredAt;
+
+        return $this;
     }
 
     public function isPending(): bool

@@ -57,16 +57,14 @@ class PurchaseRequest
     #[ORM\JoinColumn(name: 'category_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
     private ?PurchaseCategory $category = null;
 
+    // Закон: по умолчанию 223-ФЗ — по нему идёт почти всё. Автор его не выбирает,
+    // при рассмотрении поправит отдел закупок.
     #[ORM\Column(type: Types::STRING, length: 20, nullable: true, enumType: PurchaseLaw::class)]
-    private ?PurchaseLaw $law = null;
+    private ?PurchaseLaw $law = PurchaseLaw::FZ_223;
 
     // Способ закупки; NULL — определит отдел закупок при рассмотрении
     #[ORM\Column(type: Types::STRING, length: 30, nullable: true, enumType: PurchaseMethod::class)]
     private ?PurchaseMethod $method = null;
-
-    // Пояснительная записка текстом (альтернатива — файл типа JUSTIFICATION)
-    #[ORM\Column(type: Types::TEXT, nullable: true)]
-    private ?string $justification = null;
 
     // Техническое задание текстом (альтернатива — файл типа TECHNICAL_SPEC)
     #[ORM\Column(name: 'technical_spec', type: Types::TEXT, nullable: true)]
@@ -79,12 +77,6 @@ class PurchaseRequest
     // при редактировании и проверка потолка быстрой заявки при подаче.
     #[ORM\Column(name: 'created_as', type: Types::STRING, length: 20, enumType: PurchaseRequestKind::class, options: ['default' => 'STANDARD'])]
     private PurchaseRequestKind $createdAs = PurchaseRequestKind::STANDARD;
-
-    // Текущий шаблон маршрута: сначала стартовый по кнопке, потом отдел закупок
-    // может переключить на заготовку. Отсюда бейдж и построение маршрута.
-    #[ORM\ManyToOne(targetEntity: PurchaseRouteTemplate::class)]
-    #[ORM\JoinColumn(name: 'route_template_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
-    private ?PurchaseRouteTemplate $routeTemplate = null;
 
     #[ORM\Column(type: Types::STRING, length: 20, enumType: PurchasePriority::class, options: ['default' => 'NORMAL'])]
     private PurchasePriority $priority = PurchasePriority::NORMAL;
@@ -234,17 +226,6 @@ class PurchaseRequest
         return $this;
     }
 
-    public function getJustification(): ?string
-    {
-        return $this->justification;
-    }
-
-    public function setJustification(?string $justification): static
-    {
-        $this->justification = $justification;
-
-        return $this;
-    }
 
     public function getTechnicalSpec(): ?string
     {
@@ -336,7 +317,11 @@ class PurchaseRequest
     {
         $total = 0.0;
         foreach ($this->items as $item) {
-            $total += (float) $item->getQuantity() * (float) $item->getEstimatedPrice();
+            // Снятые директором позиции в сумму не идут, количество — утверждённое
+            if ($item->isExcluded()) {
+                continue;
+            }
+            $total += (float) $item->getEffectiveQuantity() * (float) $item->getEstimatedPrice();
         }
 
         return round($total, 2);
@@ -422,18 +407,6 @@ class PurchaseRequest
     public function setCreatedAs(PurchaseRequestKind $createdAs): static
     {
         $this->createdAs = $createdAs;
-
-        return $this;
-    }
-
-    public function getRouteTemplate(): ?PurchaseRouteTemplate
-    {
-        return $this->routeTemplate;
-    }
-
-    public function setRouteTemplate(?PurchaseRouteTemplate $routeTemplate): static
-    {
-        $this->routeTemplate = $routeTemplate;
 
         return $this;
     }

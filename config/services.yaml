@@ -84,6 +84,11 @@ services:
             $s3: '@Aws\S3\S3Client'
             $bucket: '%env(MINIO_PURCHASE_BUCKET)%'
 
+    App\Service\Purchase\PurchaseImageUrlGenerator:
+        arguments:
+            $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
+            $minioPurchaseBucket: '%env(MINIO_PURCHASE_BUCKET)%'
+
     App\Service\User\UserAvatarUrlGenerator:
         arguments:
             $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'

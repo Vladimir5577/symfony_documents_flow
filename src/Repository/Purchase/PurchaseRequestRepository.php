@@ -5,6 +5,7 @@ namespace App\Repository\Purchase;
 use App\Entity\Purchase\PurchaseApprovalStep;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Enum\Purchase\PurchaseStatus;
+use App\Enum\Purchase\PurchaseStepDecision;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
@@ -17,6 +18,34 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, PurchaseRequest::class);
+    }
+
+    /**
+     * Очередь разбора директора: заявки, ждущие его решения.
+     *
+     * Шаг директора в маршруте всегда первый, поэтому «его шаг не решён» и есть
+     * «заявка стоит на нём» — сверять с указателем не требуется.
+     *
+     * Отложенные («рассмотрю позже») уходят в конец: иначе директор упирался бы
+     * в одну и ту же заявку каждый раз, как открывает разбор.
+     *
+     * @return list<PurchaseRequest>
+     */
+    public function findDirectorQueue(string $directorRole): array
+    {
+        return $this->createQueryBuilder('p')
+            ->innerJoin('p.steps', 's')
+            ->andWhere('p.status = :onApproval')
+            ->andWhere('s.approverRole = :role')
+            ->andWhere('s.decision = :pending')
+            ->setParameter('onApproval', PurchaseStatus::ON_APPROVAL)
+            ->setParameter('role', $directorRole)
+            ->setParameter('pending', PurchaseStepDecision::PENDING)
+            ->addOrderBy('CASE WHEN s.deferredAt IS NULL THEN 0 ELSE 1 END', 'ASC')
+            ->addOrderBy('s.deferredAt', 'ASC')
+            ->addOrderBy('p.createdAt', 'ASC')
+            ->getQuery()
+            ->getResult();
     }
 
     /**

@@ -41,6 +41,17 @@ class PurchaseRequestItem
     private int $position = 0;
 
     /**
+     * Директор снял галочку с позиции. Строку не удаляем: заявленный автором
+     * состав — часть аудита, а «просили 10 позиций, согласовали 8» иначе не показать.
+     */
+    #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $excluded = false;
+
+    /** Количество, утверждённое директором. NULL — сколько просил автор. */
+    #[ORM\Column(name: 'approved_quantity', type: Types::DECIMAL, precision: 12, scale: 3, nullable: true)]
+    private ?string $approvedQuantity = null;
+
+    /**
      * Ссылка на номенклатуру справочника — есть только у позиций, добавленных
      * подбором из категории. По ней при подаче приглашаются ответственные категорий.
      */
@@ -123,6 +134,36 @@ class PurchaseRequestItem
         $this->estimatedPrice = $estimatedPrice;
 
         return $this;
+    }
+
+    public function isExcluded(): bool
+    {
+        return $this->excluded;
+    }
+
+    public function setExcluded(bool $excluded): static
+    {
+        $this->excluded = $excluded;
+
+        return $this;
+    }
+
+    public function getApprovedQuantity(): ?string
+    {
+        return $this->approvedQuantity;
+    }
+
+    public function setApprovedQuantity(?string $approvedQuantity): static
+    {
+        $this->approvedQuantity = $approvedQuantity;
+
+        return $this;
+    }
+
+    /** Сколько закупать на самом деле: решение директора, а без него — заявка автора. */
+    public function getEffectiveQuantity(): string
+    {
+        return $this->approvedQuantity ?? (string) $this->quantity;
     }
 
     public function getPosition(): int

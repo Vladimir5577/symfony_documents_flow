@@ -8,9 +8,7 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseApprovalStep;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestHistory;
-use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
-use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseStatus;
@@ -65,14 +63,6 @@ final class PurchaseRequestService
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_FAST_LIMIT_EXCEEDED);
         }
 
-        // У быстрой заявки короткая форма — записку не требуем.
-        if ($request->getCreatedAs() !== PurchaseRequestKind::FAST
-            && trim((string) $request->getJustification()) === ''
-            && !$request->hasFileOfType(PurchaseFileType::JUSTIFICATION)
-        ) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_JUSTIFICATION_REQUIRED);
-        }
-
         $this->routeBuilder->build($request);
 
         $this->transition($request, $actor, PurchaseStatus::ON_APPROVAL);
@@ -116,6 +106,117 @@ final class PurchaseRequestService
         if ($request->getCurrentPosition() !== $positionBefore) {
             $this->notifier->notifyStepActivated($request, $actor);
         }
+    }
+
+    /**
+     * Решение директора из разбора новых заявок: правки состава и отправка дальше.
+     *
+     * Всё одной транзакцией намеренно. Разнеси правку позиций и вердикт по двум
+     * запросам — и закрытая на полпути вкладка оставит заявку с урезанным составом,
+     * но без решения: у согласанта окажется не то, что директор согласовал.
+     *
+     * Согласанты приходят от директора списком; если он никого не отметил,
+     * заявка идёт сразу в отдел закупок — шаг для них в маршруте уже есть.
+     *
+     * @param array<int, array{included: bool, quantity: string|null}> $itemEdits ключ — id позиции
+     * @param list<User> $approvers
+     */
+    public function directorSend(
+        PurchaseRequest $request,
+        PurchaseApprovalStep $step,
+        User $actor,
+        array $itemEdits,
+        array $approvers,
+    ): void {
+        $this->assertActiveStep($request, $step);
+
+        $changes = $this->applyDirectorEdits($request, $itemEdits);
+
+        if ($changes !== []) {
+            $this->addHistory(
+                $request,
+                $actor,
+                $request->getStatus(),
+                $request->getStatus(),
+                'Состав правил директор: ' . implode('; ', $changes),
+            );
+        }
+
+        $this->routeBuilder->addApprovers($request, $approvers);
+
+        // Подпись директора закрывает его позицию: указатель уедет либо на
+        // согласантов, которых мы только что добавили, либо сразу в закупки.
+        $this->approveStep($request, $step, $actor);
+    }
+
+    /** «Рассмотрю позже»: заявка остаётся у директора, но уходит в конец очереди. */
+    public function directorDefer(PurchaseRequest $request, PurchaseApprovalStep $step): void
+    {
+        $this->assertActiveStep($request, $step);
+
+        $step->setDeferredAt(new \DateTimeImmutable());
+        $this->em->flush();
+    }
+
+    /**
+     * Применить правки состава: снятые галочки и изменённое количество.
+     *
+     * Позиции не удаляются — заявленный автором состав остаётся в строке, а
+     * решение директора ложится рядом (`excluded`, `approved_quantity`).
+     * Снять всё нельзя: заявка без единой позиции — это отказ, и оформлять его
+     * надо отказом, иначе в закупки уедет пустой заказ.
+     *
+     * @param array<int, array{included: bool, quantity: string|null}> $itemEdits
+     * @return list<string> человекочитаемый дифф для истории
+     */
+    private function applyDirectorEdits(PurchaseRequest $request, array $itemEdits): array
+    {
+        $changes = [];
+
+        foreach ($request->getItems() as $item) {
+            $edit = $itemEdits[(int) $item->getId()] ?? null;
+            if ($edit === null) {
+                continue;
+            }
+
+            if ($edit['included'] === false && !$item->isExcluded()) {
+                $item->setExcluded(true);
+                $changes[] = sprintf('снята позиция «%s»', (string) $item->getName());
+                continue;
+            }
+
+            $item->setExcluded(false);
+
+            $quantity = $edit['quantity'];
+            if ($quantity === null || (float) $quantity === (float) $item->getQuantity()) {
+                $item->setApprovedQuantity(null);
+                continue;
+            }
+            if ((float) $quantity <= 0) {
+                throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
+            }
+
+            $item->setApprovedQuantity($quantity);
+            $changes[] = sprintf(
+                'количество «%s»: %s → %s',
+                (string) $item->getName(),
+                rtrim(rtrim((string) $item->getQuantity(), '0'), '.'),
+                rtrim(rtrim($quantity, '0'), '.'),
+            );
+        }
+
+        $hasIncluded = false;
+        foreach ($request->getItems() as $item) {
+            if (!$item->isExcluded()) {
+                $hasIncluded = true;
+                break;
+            }
+        }
+        if (!$hasIncluded) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_REQUIRED);
+        }
+
+        return $changes;
     }
 
     /**
@@ -205,149 +306,6 @@ final class PurchaseRequestService
     }
 
     /**
-     * Переложить заявку на другой шаблон маршрута (переключатель отдела закупок).
-     * Можно только пока указатель на их первом шаге — дальше маршрут заморожен.
-     */
-    public function switchTemplate(PurchaseRequest $request, PurchaseRouteTemplate $template, User $actor): void
-    {
-        $this->assertRouteEditable($request);
-
-        $request->setRouteTemplate($template);
-        $this->routeBuilder->applyTemplate($request, $template);
-        $this->em->flush();
-
-        $this->addHistory(
-            $request,
-            $actor,
-            $request->getStatus(),
-            $request->getStatus(),
-            sprintf('Маршрут переключён на «%s»', $template->getName()),
-        );
-        $this->em->flush();
-    }
-
-    /**
-     * Заменить незакрытую часть маршрута присланным списком шагов.
-     *
-     * Уже принятые решения не трогаются вовсе — их и нельзя удалить, они аудит.
-     * Обязательные шаги (директор от своего порога) должны остаться в списке:
-     * отдел закупок маршрут удлиняет и переставляет, но не укорачивает ниже того,
-     * что директор установил для себя.
-     *
-     * @param list<PurchaseApprovalStep> $newSteps несохранённые шаги, собранные контроллером
-     */
-    public function replaceRoute(PurchaseRequest $request, array $newSteps, User $actor): void
-    {
-        $this->assertRouteEditable($request);
-
-        $before = [];
-        $mandatoryKeys = [];
-        foreach ($request->getSteps() as $step) {
-            if ($step->getDecision()->isDecided()) {
-                continue;
-            }
-            $before[] = $this->describeStep($step);
-            if ($step->isMandatory()) {
-                $mandatoryKeys[$this->stepKey($step)] = $this->describeStep($step);
-            }
-        }
-
-        $newKeys = [];
-        foreach ($newSteps as $step) {
-            $newKeys[$this->stepKey($step)] = true;
-        }
-        foreach ($mandatoryKeys as $key => $label) {
-            if (!isset($newKeys[$key])) {
-                throw new PurchaseTransitionException(SpaApiError::PURCHASE_ROUTE_MANDATORY_STEP);
-            }
-        }
-
-        foreach ($request->getSteps()->toArray() as $step) {
-            if (!$step->getDecision()->isDecided()) {
-                $request->removeStep($step);
-                $this->em->remove($step);
-            }
-        }
-
-        $after = [];
-        foreach ($newSteps as $step) {
-            $step->setMandatory(isset($mandatoryKeys[$this->stepKey($step)]));
-            $step->setCreatedBy($actor);
-            $request->addStep($step);
-            $this->em->persist($step);
-            $after[] = $this->describeStep($step);
-        }
-
-        $this->em->flush();
-
-        $this->addHistory(
-            $request,
-            $actor,
-            $request->getStatus(),
-            $request->getStatus(),
-            sprintf('Маршрут изменён: было [%s], стало [%s]', implode(', ', $before), implode(', ', $after)),
-        );
-        $this->em->flush();
-    }
-
-    /** Ключ шага для сравнения маршрутов: кого ждём, без учёта позиции. */
-    private function stepKey(PurchaseApprovalStep $step): string
-    {
-        return $step->getApproverUser() !== null
-            ? 'u:' . $step->getApproverUser()->getId()
-            : 'r:' . (string) $step->getApproverRole();
-    }
-
-    /**
-     * Отзыв: заявка ушла дальше, а маршрут надо переделать.
-     * Все шаги после первого шага отдела закупок сбрасываются, указатель
-     * возвращается к ним. Полученные согласования сгорают — люди подтверждают
-     * заново; их прошлые решения после сброса видны ТОЛЬКО в history, поэтому
-     * запись туда обязательна и делается здесь же.
-     */
-    public function recall(PurchaseRequest $request, User $actor, string $reason): void
-    {
-        if ($request->getStatus() !== PurchaseStatus::ON_APPROVAL) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
-        }
-        if (trim($reason) === '') {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_COMMENT_REQUIRED);
-        }
-
-        $anchor = $this->firstDepartmentPosition($request);
-        $burned = [];
-
-        foreach ($request->getSteps() as $step) {
-            if ($step->getPosition() >= $anchor && $step->getDecision()->isDecided()) {
-                $burned[] = sprintf(
-                    '%s (%s)',
-                    $this->describeStep($step),
-                    $step->getDecision()->getLabel(),
-                );
-                $step->setDecision(PurchaseStepDecision::PENDING)
-                    ->setDecidedBy(null)
-                    ->setDecidedAt(null)
-                    ->setComment(null);
-            }
-        }
-
-        $this->addHistory(
-            $request,
-            $actor,
-            $request->getStatus(),
-            $request->getStatus(),
-            sprintf(
-                'Маршрут отозван: %s. Сброшены согласования: %s',
-                $reason,
-                $burned === [] ? 'нет' : implode(', ', $burned),
-            ),
-        );
-        $this->em->flush();
-
-        $this->notifier->notifyStepActivated($request, $actor);
-    }
-
-    /**
      * Шаг конвейера исполнения: строго следующий статус.
      * Договора здесь больше нет — он стал шагом маршрута, и его файл требует
      * тот шаг. Исполнителем становится тот, кто сделал первый шаг.
@@ -402,23 +360,6 @@ final class PurchaseRequestService
         $this->em->flush();
     }
 
-    /**
-     * Маршрут правится только пока указатель на первом шаге отдела закупок.
-     * После их approve заявка ушла к людям, и менять цепочку под ними нельзя —
-     * для этого есть recall.
-     */
-    public function assertRouteEditable(PurchaseRequest $request): void
-    {
-        if ($request->getStatus() !== PurchaseStatus::ON_APPROVAL) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
-        }
-
-        $current = $request->getCurrentPosition();
-        if ($current === null || $current !== $this->firstDepartmentPosition($request)) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_ROUTE_LOCKED);
-        }
-    }
-
     /** Шаг существует у этой заявки, не решён и стоит на позиции указателя. */
     private function assertActiveStep(PurchaseRequest $request, PurchaseApprovalStep $step): void
     {
@@ -431,24 +372,6 @@ final class PurchaseRequestService
         if (!$step->isPending() || $step->getPosition() !== $request->getCurrentPosition()) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_STEP_NOT_ACTIVE);
         }
-    }
-
-    /**
-     * Позиция первого шага отдела закупок. В обычном маршруте они стоят дважды
-     * (рассмотрение и договор) — якорь всегда первый.
-     */
-    private function firstDepartmentPosition(PurchaseRequest $request): int
-    {
-        $min = null;
-        foreach ($request->getSteps() as $step) {
-            if ($step->getApproverRole() === UserRole::ROLE_PURCHASE_DEPARTMENT->value
-                && ($min === null || $step->getPosition() < $min)
-            ) {
-                $min = $step->getPosition();
-            }
-        }
-
-        return $min ?? 1;
     }
 
     private function describeStep(PurchaseApprovalStep $step): string

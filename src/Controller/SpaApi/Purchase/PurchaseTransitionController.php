@@ -8,13 +8,10 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseApprovalStep;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
-use App\Enum\Purchase\PurchaseApproverKind;
-use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseRequestRepository;
-use App\Repository\Purchase\PurchaseRouteTemplateRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseRequestService;
@@ -27,7 +24,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 /**
- * Движение заявки: подача, решения по шагам маршрута, правка маршрута, конвейер.
+ * Движение заявки: подача, решения по шагам маршрута, конвейер исполнения.
  *
  * Право согласовать больше не выводится из статуса и зашитого списка ролей —
  * оно читается из самого шага: кому он адресован, тот и решает. Поэтому
@@ -38,7 +35,6 @@ final class PurchaseTransitionController extends AbstractController
 {
     public function __construct(
         private readonly PurchaseRequestRepository $purchaseRepo,
-        private readonly PurchaseRouteTemplateRepository $templateRepo,
         private readonly UserRepository $userRepo,
         private readonly PurchaseRequestService $purchaseService,
         private readonly PurchaseApiPresenter $presenter,
@@ -98,57 +94,148 @@ final class PurchaseTransitionController extends AbstractController
     }
 
     /**
-     * Правка маршрута отделом закупок: либо переключение на другой шаблон
-     * (`templateId`), либо присланный целиком список шагов (`steps`).
-     * Доступно, только пока указатель на их первом шаге.
+     * Решение директора из разбора новых заявок — одно на все кнопки модалки.
+     *
+     * body: {action, items?: [{id, included, quantity}], approverIds?: [], reason?}
+     *   send   — применить правки состава и отправить дальше: отмеченным
+     *            согласантам, а если никого не отметили — сразу в отдел закупок
+     *   reject — мотивированный отказ: автору на доработку, причина обязательна
+     *   cancel — отказ без объяснений: заявка отменена
+     *   defer  — «рассмотрю позже»: остаётся у директора, уходит в конец очереди
      */
-    #[Route('/route', name: 'spa_api_purchases_route_update', methods: ['PUT'])]
-    public function updateRoute(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    #[Route('/director-decision', name: 'spa_api_purchases_director_decision', methods: ['POST'])]
+    public function directorDecision(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        if (!$this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $step = $this->findDirectorStep($purchase);
+        if ($step === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_STEP_NOT_ACTIVE], Response::HTTP_CONFLICT);
+        }
+
         $payload = json_decode($request->getContent(), true);
         if (!is_array($payload)) {
             return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
-        if (isset($payload['templateId'])) {
-            $template = $this->templateRepo->find((int) $payload['templateId']);
-            if ($template === null) {
-                return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_TEMPLATE_NOT_FOUND], Response::HTTP_NOT_FOUND);
-            }
-
-            return $this->transition($id, $user,
-                fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
-                fn (PurchaseRequest $p, User $u) => $this->purchaseService->switchTemplate($p, $template, $u));
-        }
-
-        if (!is_array($payload['steps'] ?? null)) {
-            return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_INVALID], Response::HTTP_BAD_REQUEST);
-        }
+        $action = (string) ($payload['action'] ?? '');
+        $reason = trim((string) ($payload['reason'] ?? ''));
 
         try {
-            $steps = $this->buildSteps($payload['steps']);
-        } catch (\InvalidArgumentException) {
-            return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_INVALID], Response::HTTP_BAD_REQUEST);
+            switch ($action) {
+                case 'send':
+                    $approvers = $this->collectApprovers($payload['approverIds'] ?? []);
+                    if ($approvers === null) {
+                        return $this->json(['error' => SpaApiError::USER_NOT_FOUND], Response::HTTP_BAD_REQUEST);
+                    }
+                    $this->purchaseService->directorSend(
+                        $purchase,
+                        $step,
+                        $user,
+                        $this->collectItemEdits($payload['items'] ?? []),
+                        $approvers,
+                    );
+                    break;
+
+                case 'reject':
+                    if ($reason === '') {
+                        return $this->json(['error' => SpaApiError::PURCHASE_COMMENT_REQUIRED], Response::HTTP_BAD_REQUEST);
+                    }
+                    $this->purchaseService->rejectStep($purchase, $step, $user, $reason);
+                    break;
+
+                case 'cancel':
+                    $this->purchaseService->cancel($purchase, $user, $reason !== '' ? $reason : null);
+                    break;
+
+                case 'defer':
+                    $this->purchaseService->directorDefer($purchase, $step);
+                    break;
+
+                default:
+                    return $this->json(['error' => SpaApiError::PURCHASE_INVALID_STATUS], Response::HTTP_BAD_REQUEST);
+            }
+        } catch (PurchaseTransitionException $e) {
+            return $this->json(['error' => $e->errorCode], Response::HTTP_CONFLICT);
         }
 
-        return $this->transition($id, $user,
-            fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
-            fn (PurchaseRequest $p, User $u) => $this->purchaseService->replaceRoute($p, $steps, $u));
+        return $this->json($this->presenter->presentDetail($purchase));
     }
 
-    /** Отзыв маршрута: сбрасывает согласования и возвращает указатель отделу закупок. */
-    #[Route('/recall', name: 'spa_api_purchases_recall', methods: ['POST'])]
-    public function recall(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    /** Незакрытый шаг директора. У обычной заявки он первый, у быстрой его нет вовсе. */
+    private function findDirectorStep(PurchaseRequest $purchase): ?PurchaseApprovalStep
     {
-        $payload = json_decode($request->getContent(), true) ?? [];
-        $reason = trim((string) ($payload['reason'] ?? ''));
-        if ($reason === '') {
-            return $this->json(['error' => SpaApiError::PURCHASE_COMMENT_REQUIRED], Response::HTTP_BAD_REQUEST);
+        foreach ($purchase->getSteps() as $step) {
+            if ($step->getApproverRole() === UserRole::ROLE_PURCHASE_DIRECTOR->value && $step->isPending()) {
+                return $step;
+            }
         }
 
-        return $this->transition($id, $user,
-            fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
-            fn (PurchaseRequest $p, User $u) => $this->purchaseService->recall($p, $u, $reason));
+        return null;
+    }
+
+    /**
+     * Правки состава из payload. Позиции, которых директор не прислал, остаются как есть.
+     *
+     * @param mixed $rows
+     * @return array<int, array{included: bool, quantity: string|null}>
+     */
+    private function collectItemEdits(mixed $rows): array
+    {
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $edits = [];
+        foreach ($rows as $row) {
+            if (!is_array($row) || !isset($row['id'])) {
+                continue;
+            }
+
+            $quantity = $row['quantity'] ?? null;
+            $edits[(int) $row['id']] = [
+                'included' => (bool) ($row['included'] ?? true),
+                'quantity' => is_numeric($quantity) ? (string) $quantity : null,
+            ];
+        }
+
+        return $edits;
+    }
+
+    /**
+     * Согласанты по id. Пустой список — штатно: заявка уйдёт сразу в отдел закупок.
+     * Несуществующий id — ошибка, а не молчаливый пропуск: директор считает,
+     * что отправил человеку, а тот заявки не увидит.
+     *
+     * @return list<User>|null null — в списке есть неизвестный id
+     */
+    private function collectApprovers(mixed $ids): ?array
+    {
+        if (!is_array($ids)) {
+            return [];
+        }
+
+        $users = [];
+        foreach ($ids as $id) {
+            $approver = $this->userRepo->find((int) $id);
+            if ($approver === null) {
+                return null;
+            }
+            $users[] = $approver;
+        }
+
+        return $users;
     }
 
     /** Шаг конвейера исполнения: body.status должен быть строго следующим. */
@@ -203,64 +290,6 @@ final class PurchaseTransitionController extends AbstractController
         return $this->transition($id, $user,
             fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value),
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->setPriority($p, $u, $priority));
-    }
-
-    /**
-     * Собрать шаги из payload. Позиция берётся из индекса блока, чтобы фронт
-     * не мог прислать дырявую нумерацию; параллельность задаётся полем position.
-     *
-     * @param array<mixed> $rows
-     * @return list<PurchaseApprovalStep>
-     */
-    private function buildSteps(array $rows): array
-    {
-        $steps = [];
-        foreach ($rows as $row) {
-            if (!is_array($row)) {
-                throw new \InvalidArgumentException('step');
-            }
-
-            $kind = PurchaseApproverKind::tryFrom((string) ($row['kind'] ?? ''));
-            if ($kind === null || $kind === PurchaseApproverKind::CATEGORY_RESPONSIBLE) {
-                // CATEGORY_RESPONSIBLE живёт только в шаблоне: в заявке он уже развёрнут в людей
-                throw new \InvalidArgumentException('kind');
-            }
-
-            $step = (new PurchaseApprovalStep())
-                ->setPosition(max(1, (int) ($row['position'] ?? 1)))
-                ->setApproverKind($kind)
-                ->setTitle(isset($row['title']) && trim((string) $row['title']) !== '' ? (string) $row['title'] : null);
-
-            if (isset($row['requiresFileType'])) {
-                $fileType = PurchaseFileType::tryFrom((string) $row['requiresFileType']);
-                if ($fileType === null) {
-                    throw new \InvalidArgumentException('requiresFileType');
-                }
-                $step->setRequiresFileType($fileType);
-            }
-
-            if ($kind === PurchaseApproverKind::ROLE) {
-                $role = UserRole::tryFrom((string) ($row['role'] ?? ''));
-                if ($role === null) {
-                    throw new \InvalidArgumentException('role');
-                }
-                $step->setApproverRole($role->value);
-            } else {
-                $approver = $this->userRepo->find((int) ($row['userId'] ?? 0));
-                if ($approver === null) {
-                    throw new \InvalidArgumentException('userId');
-                }
-                $step->setApproverUser($approver);
-            }
-
-            $steps[] = $step;
-        }
-
-        if ($steps === []) {
-            throw new \InvalidArgumentException('empty');
-        }
-
-        return $steps;
     }
 
     /**

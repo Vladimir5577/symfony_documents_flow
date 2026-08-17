@@ -188,8 +188,8 @@ final class PurchaseController extends AbstractController
     }
 
     /**
-     * Настройки модуля. Читают все авторизованные — порог влияет на маршрут заявки,
-     * и фронт показывает его в подсказках.
+     * Настройки модуля. Читают все авторизованные: форма быстрой заявки
+     * показывает потолок в подсказке до того, как что-то отправлено.
      *
      * Объявлены до /{id}: иначе «settings» уйдёт в маршрут карточки.
      */
@@ -201,22 +201,48 @@ final class PurchaseController extends AbstractController
         }
 
         return $this->json([
-            'ceoApproveMinAmount' => $this->settingRepo->getCeoApproveMinAmount(),
             'fastMaxAmount' => $this->settingRepo->getFastMaxAmount(),
         ]);
     }
 
     /**
-     * Превью маршрута для формы создания: какие шаги получатся при выбранной
-     * кнопке и такой сумме.
+     * Превью маршрута для формы создания: какие шаги получатся при выбранной кнопке.
      *
-     * Считает бэк тем же строителем, что и реальную подачу. Строчки «сумма выше
-     * порога — потребуется директор», посчитанной на фронте по двум настройкам,
-     * мало: в шаблон «Быстрая» могут положить кого-то ещё, и предупреждение
-     * окажется неполной правдой.
+     * Считает бэк тем же строителем, что и реальную подачу, — правило «быстрая
+     * идёт сразу в отдел закупок, обычная к директору» живёт в одном месте.
      *
      * Объявлен до /{id}: иначе «route-preview» уйдёт в маршрут карточки.
      */
+    /**
+     * Очередь разбора директора: заявки, ждущие его решения, по порядку.
+     *
+     * Отдаётся карточками целиком, а не списком id: модалка показывает позиции
+     * и обоснование, и догружать их по одной — лишний круг на каждую заявку.
+     *
+     * Объявлен до /{id}: иначе «director-queue» уйдёт в маршрут карточки.
+     */
+    #[Route('/director-queue', name: 'spa_api_purchases_director_queue', methods: ['GET'])]
+    public function directorQueue(#[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        if (!$this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $queue = $this->purchaseRepo->findDirectorQueue(UserRole::ROLE_PURCHASE_DIRECTOR->value);
+
+        return $this->json([
+            'items' => array_map(
+                fn (PurchaseRequest $purchase): array => $this->presenter->presentDetail($purchase),
+                $queue,
+            ),
+            'total' => count($queue),
+        ]);
+    }
+
     #[Route('/route-preview', name: 'spa_api_purchases_route_preview', methods: ['GET'])]
     public function routePreview(Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -229,15 +255,15 @@ final class PurchaseController extends AbstractController
 
         return $this->json([
             'kind' => $kind->value,
-            'steps' => $this->routeBuilder->preview($kind, (float) $request->query->get('amount', '0')),
+            'steps' => $this->routeBuilder->preview($kind),
         ]);
     }
 
     /**
-     * У каждой настройки свой владелец: порог согласования ставит себе директор,
-     * потолок быстрой заявки — отдел закупок. Числа независимы и друг друга не
-     * ограничивают: потолок 20 000 при пороге 5 000 — штатно, быстрая заявка
-     * на 8 000 просто получит в маршруте шаг директора.
+     * Настройка сейчас одна — потолок быстрой заявки, правит отдел закупок.
+     *
+     * Список писателей оставлен таблицей, хотя строка в ней одна: у настроек
+     * модуля владельцы разные, и следующая добавляется сюда одной строкой.
      */
     #[Route('/settings', name: 'spa_api_purchases_settings_update', methods: ['PUT'])]
     public function updateSettings(Request $request, #[CurrentUser] ?User $user): JsonResponse
@@ -253,10 +279,6 @@ final class PurchaseController extends AbstractController
 
         $isAdmin = $this->isGranted(UserRole::ROLE_ADMIN->value);
         $writable = [
-            'ceoApproveMinAmount' => [
-                PurchaseSettingKey::CEO_APPROVE_MIN_AMOUNT,
-                $isAdmin || $this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value),
-            ],
             'fastMaxAmount' => [
                 PurchaseSettingKey::FAST_MAX_AMOUNT,
                 $isAdmin || $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
@@ -286,7 +308,6 @@ final class PurchaseController extends AbstractController
         $this->em->flush();
 
         return $this->json([
-            'ceoApproveMinAmount' => $this->settingRepo->getCeoApproveMinAmount(),
             'fastMaxAmount' => $this->settingRepo->getFastMaxAmount(),
         ]);
     }
@@ -509,13 +530,11 @@ final class PurchaseController extends AbstractController
         $description = $payload['description'] ?? null;
         $purchase->setDescription(is_string($description) && trim($description) !== '' ? trim($description) : null);
 
-        $justification = $payload['justification'] ?? null;
-        $purchase->setJustification(is_string($justification) && trim($justification) !== '' ? trim($justification) : null);
 
         $technicalSpec = $payload['technicalSpec'] ?? null;
         $purchase->setTechnicalSpec(is_string($technicalSpec) && trim($technicalSpec) !== '' ? trim($technicalSpec) : null);
 
-        $error = $this->applyClassification($purchase, $payload);
+        $error = $this->applyCategory($purchase, $payload);
         if ($error !== null) {
             return $error;
         }
@@ -580,22 +599,17 @@ final class PurchaseController extends AbstractController
     }
 
     /**
-     * Общая часть applyPayload и PATCH classification:
-     * categoryId, law, method — все ключи опциональны, null очищает поле.
+     * Классификация целиком — только для PATCH /classification.
+     *
+     * Закон и способ закупки автор не заполняет: это работа отдела закупок при
+     * рассмотрении. В форме заявки их нет, и принимать их оттуда незачем —
+     * иначе поле, которого нет в интерфейсе, всё равно можно проставить запросом.
      */
     private function applyClassification(PurchaseRequest $purchase, array $payload): ?JsonResponse
     {
-        if (array_key_exists('categoryId', $payload)) {
-            $categoryId = $payload['categoryId'];
-            if ($categoryId === null || $categoryId === '') {
-                $purchase->setCategory(null);
-            } else {
-                $category = $this->categoryRepo->find((int) $categoryId);
-                if ($category === null) {
-                    return $this->json(['error' => SpaApiError::PURCHASE_CATEGORY_NOT_FOUND], Response::HTTP_BAD_REQUEST);
-                }
-                $purchase->setCategory($category);
-            }
+        $error = $this->applyCategory($purchase, $payload);
+        if ($error !== null) {
+            return $error;
         }
 
         if (array_key_exists('law', $payload)) {
@@ -623,6 +637,29 @@ final class PurchaseController extends AbstractController
                 $purchase->setMethod($method);
             }
         }
+
+        return null;
+    }
+
+    /** Категорию выбирает автор в форме, поэтому она отдельно от закона и способа. */
+    private function applyCategory(PurchaseRequest $purchase, array $payload): ?JsonResponse
+    {
+        if (!array_key_exists('categoryId', $payload)) {
+            return null;
+        }
+
+        $categoryId = $payload['categoryId'];
+        if ($categoryId === null || $categoryId === '') {
+            $purchase->setCategory(null);
+
+            return null;
+        }
+
+        $category = $this->categoryRepo->find((int) $categoryId);
+        if ($category === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_CATEGORY_NOT_FOUND], Response::HTTP_BAD_REQUEST);
+        }
+        $purchase->setCategory($category);
 
         return null;
     }

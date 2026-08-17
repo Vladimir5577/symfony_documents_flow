@@ -3,6 +3,7 @@
 namespace App\Entity\Purchase;
 
 use App\Repository\Purchase\PurchaseCategoryItemRepository;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -27,6 +28,14 @@ class PurchaseCategoryItem
     #[Assert\NotBlank(message: 'Название позиции обязательно для заполнения.')]
     #[Assert\Length(max: 255, maxMessage: 'Название позиции не должно превышать {{ limit }} символов.')]
     private ?string $name = null;
+
+    /** Позиция выведена из оборота: в подсказках формы не предлагается. */
+    #[ORM\Column(name: 'is_active', type: Types::BOOLEAN, options: ['default' => true])]
+    private bool $active = true;
+
+    /** Ключ картинки позиции в бакете purchase; наружу отдаётся только imgproxy-ссылкой. */
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $imageKey = null;
 
     public function getId(): ?int
     {
@@ -53,6 +62,41 @@ class PurchaseCategoryItem
     public function setName(string $name): static
     {
         $this->name = $name;
+
+        return $this;
+    }
+
+    public function isActive(): bool
+    {
+        return $this->active;
+    }
+
+    public function setActive(bool $active): static
+    {
+        $this->active = $active;
+
+        return $this;
+    }
+
+    /**
+     * Предлагать ли позицию в форме заявки.
+     *
+     * Выключенная категория гасит свои позиции сама — их собственный флаг при этом
+     * не трогаем: включат категорию обратно, и всё вернётся как было.
+     */
+    public function isAvailable(): bool
+    {
+        return $this->active && ($this->category?->isActive() ?? false);
+    }
+
+    public function getImageKey(): ?string
+    {
+        return $this->imageKey;
+    }
+
+    public function setImageKey(?string $imageKey): static
+    {
+        $this->imageKey = $imageKey;
 
         return $this;
     }

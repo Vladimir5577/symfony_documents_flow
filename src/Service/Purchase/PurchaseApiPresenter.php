@@ -55,20 +55,18 @@ final class PurchaseApiPresenter
                 : null,
             'law' => $law !== null ? ['value' => $law->value, 'label' => $law->getLabel()] : null,
             'method' => $method !== null ? ['value' => $method->value, 'label' => $method->getLabel()] : null,
-            // Обоснование нужно в списке: директор видит его в ховере по строке
-            'justification' => $request->getJustification(),
+            // Описание нужно в списке: директор читает его в ховере по строке и
+            // в разборе новых заявок, а второй раз за карточкой не пойдёт.
+            'description' => $request->getDescription(),
             'createdBy' => $this->presentUser($request->getCreatedBy()),
             'executor' => $this->presentUser($request->getExecutor()),
             'totalAmount' => $request->getTotalAmount(),
             'itemsCount' => $request->getItems()->count(),
-            // Кнопка создания — от неё форма редактирования и потолок; шаблон меняется
+            // Кнопка создания — от неё форма редактирования и потолок быстрой заявки
             'createdAs' => [
                 'value' => $request->getCreatedAs()->value,
                 'label' => $request->getCreatedAs()->getLabel(),
             ],
-            'routeTemplate' => $request->getRouteTemplate() !== null
-                ? ['id' => $request->getRouteTemplate()->getId(), 'name' => $request->getRouteTemplate()->getName()]
-                : null,
             // «У кого заявка» — данные шага, а не статус
             'currentStep' => $this->presentCurrentStepSummary($request),
             // Моя подпись на этой заявке, если её ещё можно снять. Нужна строке
@@ -90,7 +88,6 @@ final class PurchaseApiPresenter
     {
         $data = $this->presentListItem($request);
 
-        $data['description'] = $request->getDescription();
         $data['technicalSpec'] = $request->getTechnicalSpec();
         // array_values: после removeElement ключи коллекции дырявые → JSON-объект, не массив.
         $data['steps'] = array_values(array_map(
@@ -105,6 +102,10 @@ final class PurchaseApiPresenter
                 'unit' => $item->getUnit(),
                 'estimatedPrice' => $item->getEstimatedPrice(),
                 'position' => $item->getPosition(),
+                // Решение директора по позиции: снял галочку и/или урезал количество.
+                // Заявленное автором остаётся в quantity — модалка показывает обе цифры.
+                'excluded' => $item->isExcluded(),
+                'approvedQuantity' => $item->getApprovedQuantity(),
                 'categoryItemId' => $item->getCategoryItem()?->getId(),
             ],
             $request->getItems()->toArray(),
@@ -165,13 +166,13 @@ final class PurchaseApiPresenter
                 : null,
             'approverUser' => $this->presentUser($step->getApproverUser()),
             'requiresFileType' => $step->getRequiresFileType()?->value,
-            'mandatory' => $step->isMandatory(),
             'decision' => [
                 'value' => $step->getDecision()->value,
                 'label' => $step->getDecision()->getLabel(),
             ],
             'decidedBy' => $this->presentUser($step->getDecidedBy()),
             'decidedAt' => $step->getDecidedAt()?->format('c'),
+            'deferredAt' => $step->getDeferredAt()?->format('c'),
             'comment' => $step->getComment(),
             'isActive' => $step->isPending() && $step->getPosition() === $request->getCurrentPosition(),
             'isMine' => $this->canActOn($step),
@@ -266,12 +267,6 @@ final class PurchaseApiPresenter
         $myStep = $this->findMyActiveStep($request);
         $revokableStep = $this->findRevokableStep($request);
         $onApproval = $status === PurchaseStatus::ON_APPROVAL;
-        // Маршрут правится, только пока указатель на первом шаге отдела закупок
-        $routeEditable = $onApproval
-            && $myStep !== null
-            && $isPurchase
-            && $myStep->getApproverRole() === UserRole::ROLE_PURCHASE_DEPARTMENT->value
-            && $request->getCurrentPosition() === $this->firstDepartmentPosition($request);
 
         $nextStatus = $status->nextExecutionStatus();
         // Конвейер ведёт отдел закупок; плательщик — только отметку «Оплачено».
@@ -297,8 +292,6 @@ final class PurchaseApiPresenter
             // Снять свою подпись может только директор и только своё решение
             'canRevokeStep' => $isDirector && $revokableStep !== null,
             'revokableStepId' => $isDirector ? $revokableStep?->getId() : null,
-            'canEditRoute' => $routeEditable,
-            'canRecall' => $isPurchase && $onApproval && !$routeEditable,
             'canClassify' => $isPurchase && $onApproval,
             'canAdvance' => $canAdvance,
             'nextStatus' => $canAdvance
@@ -384,20 +377,6 @@ final class PurchaseApiPresenter
         }
 
         return false;
-    }
-
-    private function firstDepartmentPosition(PurchaseRequest $request): int
-    {
-        $min = null;
-        foreach ($request->getSteps() as $step) {
-            if ($step->getApproverRole() === UserRole::ROLE_PURCHASE_DEPARTMENT->value
-                && ($min === null || $step->getPosition() < $min)
-            ) {
-                $min = $step->getPosition();
-            }
-        }
-
-        return $min ?? 1;
     }
 
     /** Отмена: автор — пока не начали исполнять; отдел закупок — на исполнении; директор — всегда (до финала). */
