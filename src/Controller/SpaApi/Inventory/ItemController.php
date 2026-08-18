@@ -310,6 +310,34 @@ final class ItemController extends AbstractController
         return $this->json(['item' => $this->format($item)]);
     }
 
+    /**
+     * Физическое удаление позиции — только ROLE_ADMIN.
+     *
+     * Штатное выбытие имущества — статус written_off: списанная вещь остаётся в базе
+     * вместе с журналом, по нему сходится инвентаризация прошлых лет. Удаление
+     * существует для ошибок ввода — сорвавшаяся пачка на сто штук, дубль по одному
+     * УПД, — и уносит журнал движений позиции с собой (ON DELETE CASCADE).
+     *
+     * Права здесь строже всего остального модуля: даже главному администратору
+     * инвентаризации операция закрыта. Все прочие его действия обратимы — списание
+     * отменяется сменой статуса, ошибочный вид переводом, — а удалённую позицию
+     * восстановить нечем.
+     */
+    #[Route('/{id}', name: 'spa_api_inventory_items_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function delete(int $id): JsonResponse
+    {
+        [$item, $error] = $this->resolveItem($id);
+        if ($error !== null) {
+            return $error;
+        }
+
+        $this->em->remove($item);
+        $this->em->flush();
+
+        return $this->json(['success' => true]);
+    }
+
     #[Route('/{id}/assign', name: 'spa_api_inventory_items_assign', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function assign(int $id, Request $request, #[CurrentUser] ?User $currentUser): JsonResponse
     {

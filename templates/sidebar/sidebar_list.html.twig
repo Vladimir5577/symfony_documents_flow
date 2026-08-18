@@ -180,7 +180,7 @@
     <!-- ###############################################################
      ################################################################## -->
 
-    {% if is_granted('ROLE_CITIZEN_APPEAL') %}
+    {% if is_granted('ROLE_ADMIN') %}
         <li class="sidebar-group-label">Обращения граждан</li>
 
         <li class="sidebar-item {% if active_tab == 'citizen_appeal' %}active{% endif %}">
@@ -194,7 +194,7 @@
     <!-- ###############################################################
      ################################################################## -->
 
-    {% if is_granted('ROLE_CONTRACT_APPLICATION') %}
+    {% if is_granted('ROLE_ADMIN') %}
         <li class="sidebar-group-label">Заявки на договор</li>
 
         <li class="sidebar-item {% if active_tab == 'contract_application' %}active{% endif %}">
