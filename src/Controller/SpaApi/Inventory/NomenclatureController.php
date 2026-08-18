@@ -19,7 +19,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
- * Справочник видов товара, общий на всю компанию.
+ * Справочник видов имущества, общий на всю компанию.
  *
  * Читают все админы инвентаризации — вид обязателен при заведении позиции, и без
  * списка выбрать было бы не из чего. Правит только главный администратор: именно
@@ -40,21 +40,60 @@ final class NomenclatureController extends AbstractController
     /**
      * У ручки два вызывающих, и они хотят разного.
      *
-     * Экран справочника просит всё и со счётчиками. Пикер в форме позиции шлёт
-     * `search` и `limit` и спрашивает заново на каждый набранный символ — ему нужны
-     * несколько совпадений, а весь справочник на сотни строк он и показать не сможет.
+     * Экран справочника шлёт `page` и `page_size` — тот же контракт, что у
+     * `/spa/api/inventory/items`. Пикер в форме позиции шлёт `search` и `limit`
+     * без page: ему нужны несколько совпадений, а не страница со счётчиками.
      *
-     * Счётчики считаются только главному администратору: экран его, а пикеру числа
-     * не нужны. Заодно это не отдаёт количества по всей компании тому, кто ведёт
-     * одну организацию.
+     * Без page и без limit отдаём весь справочник: так его забирает селект
+     * смены вида в карточке позиции.
+     *
+     * Счётчики считаются только главному администратору: экран его, а пикеру
+     * числа не нужны. Заодно это не отдаёт количества по всей компании тому,
+     * кто ведёт одну организацию.
      */
     #[Route('', name: 'spa_api_inventory_nomenclature_list', methods: ['GET'])]
     public function list(Request $request): JsonResponse
     {
         $search = trim((string) $request->query->get('search', ''));
 
+        if ($request->query->has('page')) {
+            $page = max(1, $request->query->getInt('page', 1));
+            $pageSize = max(1, min(100, $request->query->getInt('page_size', 20)));
+            $sort = (string) $request->query->get('sort', 'createdAt');
+            $direction = strtoupper((string) $request->query->get('direction', 'DESC')) === 'ASC'
+                ? 'ASC'
+                : 'DESC';
+            $pagination = $this->nomenclatureRepository->findPaginated(
+                $search,
+                $page,
+                $pageSize,
+                $sort,
+                $direction,
+            );
+
+            $counts = $this->isGranted('ROLE_INVENTORY_ADMIN')
+                ? $this->itemRepository->countGroupedByNomenclature()
+                : [];
+
+            return $this->json([
+                'nomenclature' => array_map(
+                    fn (Nomenclature $nomenclature): array => $this->format(
+                        $nomenclature,
+                        $counts[(int) $nomenclature->getId()] ?? null,
+                    ),
+                    $pagination['items'],
+                ),
+                'pagination' => [
+                    'current_page' => $pagination['page'],
+                    'total_pages' => $pagination['totalPages'],
+                    'total_items' => $pagination['total'],
+                    'items_per_page' => $pagination['limit'],
+                ],
+            ]);
+        }
+
         // Потолок обязателен, когда его просят: без него подобранный limit=100000
-        // вернул бы весь справочник в обход пагинации, которой тут нет.
+        // вернул бы весь справочник в обход пагинации экрана.
         $limit = $request->query->has('limit')
             ? max(1, min(100, $request->query->getInt('limit')))
             : null;
@@ -238,6 +277,7 @@ final class NomenclatureController extends AbstractController
         $formatted = [
             'id' => $nomenclature->getId(),
             'name' => $nomenclature->getName(),
+            'createdAt' => $nomenclature->getCreatedAt()?->format(\DateTimeInterface::ATOM),
             'category' => $category !== null
                 ? ['id' => $category->getId(), 'name' => $category->getName()]
                 : null,
