@@ -8,11 +8,13 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseApprovalStep;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseCapability;
 use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseStatus;
-use App\Enum\User\UserRole;
+use App\Enum\Purchase\PurchaseStepPurpose;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Repository\User\UserRepository;
+use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseRequestService;
 use App\Service\Purchase\PurchaseTransitionException;
@@ -38,6 +40,7 @@ final class PurchaseTransitionController extends AbstractController
         private readonly UserRepository $userRepo,
         private readonly PurchaseRequestService $purchaseService,
         private readonly PurchaseApiPresenter $presenter,
+        private readonly PurchaseAccess $access,
     ) {
     }
 
@@ -78,16 +81,33 @@ final class PurchaseTransitionController extends AbstractController
     }
 
     /**
-     * Снять свою подпись. Только директор и только со своего решения —
-     * чужую подпись снимает отзыв маршрута отделом закупок.
+     * Вернуть в отдел закупок со своего шага — для бухгалтерии, юристов и всех,
+     * кто идёт после закупок: они бракуют документы, а не саму заявку.
+     * Комментарий обязателен.
+     */
+    #[Route('/steps/{stepId}/return', name: 'spa_api_purchases_step_return', requirements: ['stepId' => '\d+'], methods: ['POST'])]
+    public function returnStep(int $id, int $stepId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        $payload = json_decode($request->getContent(), true) ?? [];
+        $comment = trim((string) ($payload['comment'] ?? ''));
+        if ($comment === '') {
+            return $this->json(['error' => SpaApiError::PURCHASE_COMMENT_REQUIRED], Response::HTTP_BAD_REQUEST);
+        }
+
+        return $this->stepAction($id, $stepId, $user,
+            fn (PurchaseRequest $p, PurchaseApprovalStep $s, User $u) => $this->purchaseService
+                ->returnToDepartment($p, $s, $u, $comment));
+    }
+
+    /**
+     * Снять свою подпись — своё решение и только его. Чью именно подпись можно
+     * снять, проверяет сервис, поэтому ролевого гейта здесь нет: он спрашивал
+     * «ты директор» и расходился со строкой списка, где кнопка отката
+     * показывалась любому подписавшему. Чужую подпись снимает возврат маршрута.
      */
     #[Route('/steps/{stepId}/revoke', name: 'spa_api_purchases_step_revoke', requirements: ['stepId' => '\d+'], methods: ['POST'])]
     public function revokeStep(int $id, int $stepId, #[CurrentUser] ?User $user): JsonResponse
     {
-        if (!$this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
-            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-        }
-
         return $this->stepAction($id, $stepId, $user,
             fn (PurchaseRequest $p, PurchaseApprovalStep $s, User $u) => $this->purchaseService
                 ->revokeStep($p, $s, $u));
@@ -101,7 +121,6 @@ final class PurchaseTransitionController extends AbstractController
      *            согласантам, а если никого не отметили — сразу в отдел закупок
      *   reject — мотивированный отказ: автору на доработку, причина обязательна
      *   cancel — отказ без объяснений: заявка отменена
-     *   defer  — «рассмотрю позже»: остаётся у директора, уходит в конец очереди
      */
     #[Route('/director-decision', name: 'spa_api_purchases_director_decision', methods: ['POST'])]
     public function directorDecision(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
@@ -110,16 +129,14 @@ final class PurchaseTransitionController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        if (!$this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
-            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-        }
-
         $purchase = $this->purchaseRepo->find($id);
         if ($purchase === null) {
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $step = $this->findDirectorStep($purchase);
+        // Гейта «ты директор» здесь нет: право даёт сам шаг разбора, адресованный
+        // этому человеку. Кто разбирает заявки, решает маршрут, а не контроллер.
+        $step = $this->access->findMyActiveStep($purchase, $user, PurchaseStepPurpose::TRIAGE);
         if ($step === null) {
             return $this->json(['error' => SpaApiError::PURCHASE_STEP_NOT_ACTIVE], Response::HTTP_CONFLICT);
         }
@@ -138,6 +155,12 @@ final class PurchaseTransitionController extends AbstractController
                     $approvers = $this->collectApprovers($payload['approverIds'] ?? []);
                     if ($approvers === null) {
                         return $this->json(['error' => SpaApiError::USER_NOT_FOUND], Response::HTTP_BAD_REQUEST);
+                    }
+                    if (!$this->allAreProfileDeputies($approvers)) {
+                        return $this->json(
+                            ['error' => SpaApiError::PURCHASE_APPROVER_NOT_DEPUTY],
+                            Response::HTTP_BAD_REQUEST,
+                        );
                     }
                     $this->purchaseService->directorSend(
                         $purchase,
@@ -159,10 +182,6 @@ final class PurchaseTransitionController extends AbstractController
                     $this->purchaseService->cancel($purchase, $user, $reason !== '' ? $reason : null);
                     break;
 
-                case 'defer':
-                    $this->purchaseService->directorDefer($purchase, $step);
-                    break;
-
                 default:
                     return $this->json(['error' => SpaApiError::PURCHASE_INVALID_STATUS], Response::HTTP_BAD_REQUEST);
             }
@@ -171,18 +190,6 @@ final class PurchaseTransitionController extends AbstractController
         }
 
         return $this->json($this->presenter->presentDetail($purchase));
-    }
-
-    /** Незакрытый шаг директора. У обычной заявки он первый, у быстрой его нет вовсе. */
-    private function findDirectorStep(PurchaseRequest $purchase): ?PurchaseApprovalStep
-    {
-        foreach ($purchase->getSteps() as $step) {
-            if ($step->getApproverRole() === UserRole::ROLE_PURCHASE_DIRECTOR->value && $step->isPending()) {
-                return $step;
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -238,6 +245,24 @@ final class PurchaseTransitionController extends AbstractController
         return $users;
     }
 
+    /**
+     * В подписанты слота идут только те, кому в админке выдали роль профильного
+     * зама. Проверяем на сервере, а не только скрываем в списке: назначение
+     * решает, кто будет подписывать заявку.
+     *
+     * @param list<User> $users
+     */
+    private function allAreProfileDeputies(array $users): bool
+    {
+        foreach ($users as $user) {
+            if (!$this->access->canBeProfileDeputy($user)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /** Шаг конвейера исполнения: body.status должен быть строго следующим. */
     #[Route('/status', name: 'spa_api_purchases_status', methods: ['POST'])]
     public function status(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
@@ -249,23 +274,20 @@ final class PurchaseTransitionController extends AbstractController
         }
 
         return $this->transition($id, $user,
-            // Конвейер ведёт отдел закупок; отметку «Оплачено» может поставить и плательщик.
-            fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)
-                || ($this->isGranted(UserRole::ROLE_PURCHASE_INVOICE->value) && $target === PurchaseStatus::INVOICE_PAID),
+            fn (PurchaseRequest $p, User $u) => $this->access->canAdvanceTo($p, $u, $target),
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->advance($p, $u, $target));
     }
 
-    /** Закрытие DELIVERED → DONE: автор подтверждает получение, отдел закупок может закрыть сам. */
+    /** Закрытие DELIVERED → DONE: конвейер прикрепляет УПД и убирает заявку в архив. */
     #[Route('/confirm', name: 'spa_api_purchases_confirm', methods: ['POST'])]
     public function confirm(int $id, #[CurrentUser] ?User $user): JsonResponse
     {
         return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->isOwner($p, $u)
-                || $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value),
+            fn (PurchaseRequest $p, User $u) => $this->access->can($u, PurchaseCapability::RUN_EXECUTION),
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->confirm($p, $u));
     }
 
-    /** Отмена: автор — до исполнения; отдел закупок — на исполнении; директор — всегда. */
+    /** Отмена: автор — до исполнения; конвейер — на исполнении; надзор — всегда. */
     #[Route('/cancel', name: 'spa_api_purchases_cancel', methods: ['POST'])]
     public function cancel(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -273,11 +295,11 @@ final class PurchaseTransitionController extends AbstractController
         $comment = trim((string) ($payload['comment'] ?? ''));
 
         return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->canCancel($p, $u),
+            fn (PurchaseRequest $p, User $u) => $this->access->canCancel($p, $u),
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->cancel($p, $u, $comment !== '' ? $comment : null));
     }
 
-    /** Смена приоритета (директор). */
+    /** Смена приоритета — полномочие надзора. */
     #[Route('/priority', name: 'spa_api_purchases_priority', methods: ['POST'])]
     public function priority(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -288,7 +310,7 @@ final class PurchaseTransitionController extends AbstractController
         }
 
         return $this->transition($id, $user,
-            fn () => $this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value),
+            fn (PurchaseRequest $p, User $u) => $this->access->can($u, PurchaseCapability::SUPERVISE),
             fn (PurchaseRequest $p, User $u) => $this->purchaseService->setPriority($p, $u, $priority));
     }
 
@@ -320,9 +342,7 @@ final class PurchaseTransitionController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_STEP_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $addressed = $step->isAddressedTo($user)
-            || ($step->getApproverRole() !== null && $this->isGranted($step->getApproverRole()));
-        if (!$addressed) {
+        if (!$this->access->canActOn($step, $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -338,34 +358,7 @@ final class PurchaseTransitionController extends AbstractController
     /** Автор заявки — роль не требуется: создавать может любой пользователь. */
     private function isOwner(PurchaseRequest $purchase, User $user): bool
     {
-        return $purchase->getCreatedBy()?->getId() === $user->getId();
-    }
-
-    private function canCancel(PurchaseRequest $purchase, User $user): bool
-    {
-        if ($purchase->getStatus()->isFinal()) {
-            return false;
-        }
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_DIRECTOR->value)) {
-            return true;
-        }
-        if ($this->isOwner($purchase, $user)) {
-            return in_array($purchase->getStatus(), [
-                PurchaseStatus::DRAFT,
-                PurchaseStatus::ON_APPROVAL,
-                PurchaseStatus::APPROVED,
-                PurchaseStatus::REJECTED,
-            ], true);
-        }
-        if ($this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value)) {
-            return in_array($purchase->getStatus(), [
-                PurchaseStatus::INVOICE_SENT,
-                PurchaseStatus::INVOICE_PAID,
-                PurchaseStatus::DELIVERED,
-            ], true);
-        }
-
-        return false;
+        return $this->access->isOwner($purchase, $user);
     }
 
     /**

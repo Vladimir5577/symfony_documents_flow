@@ -8,6 +8,7 @@ use App\Entity\Purchase\PurchaseApprovalStep;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseStepDecision;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -22,68 +23,33 @@ class PurchaseApprovalStepRepository extends ServiceEntityRepository
     }
 
     /**
-     * Шаги, по которым пользователь может действовать ПРЯМО СЕЙЧАС.
+     * Число заявок, ждущих действия этого человека (бейдж в меню).
      *
-     * Только активные — те, что стоят на позиции указателя. Считать все PENDING
-     * нельзя: будущие шаги пользователю ещё недоступны, и бейдж показал бы
-     * работу, которую он сделать не может.
+     * Только активные шаги — те, что стоят на позиции указателя. Считать все
+     * PENDING нельзя: будущие шаги пользователю ещё недоступны, и бейдж показал
+     * бы работу, которую он сделать не может.
      *
-     * @param list<string> $roles роли пользователя (для ролевых шагов)
-     * @return list<PurchaseApprovalStep>
+     * @param list<string> $roleCodes роли модуля у пользователя (для ролевых шагов)
      */
-    public function findActiveForUser(User $user, array $roles): array
+    public function countActiveForUser(User $user, array $roleCodes): int
     {
-        return $this->activeForUserQb($user, $roles)
-            ->addSelect('r')
-            ->leftJoin('s.purchaseRequest', 'r')
-            ->getQuery()
-            ->getResult();
-    }
-
-    /** Число заявок, ждущих действия этого человека (бейдж в меню). */
-    public function countActiveForUser(User $user, array $roles): int
-    {
-        return (int) $this->activeForUserQb($user, $roles)
+        return (int) $this->activeForUserQb($user, $roleCodes)
             ->select('COUNT(DISTINCT s.purchaseRequest)')
             ->getQuery()
             ->getSingleScalarResult();
     }
 
     /**
-     * Id заявок, где пользователь есть в маршруте на любом шаге —
-     * для фильтра «Я согласант» и для проверки доступа на чтение.
-     *
-     * @param list<string> $roles
-     * @return list<int>
-     */
-    public function findRequestIdsForParticipant(User $user, array $roles): array
-    {
-        $qb = $this->createQueryBuilder('s')
-            ->select('DISTINCT IDENTITY(s.purchaseRequest) AS request_id')
-            ->andWhere($this->addressedExpr($roles))
-            ->setParameter('user', $user);
-
-        if ($roles !== []) {
-            $qb->setParameter('roles', $roles);
-        }
-
-        return array_map(
-            static fn (array $row): int => (int) $row['request_id'],
-            $qb->getQuery()->getResult(),
-        );
-    }
-
-    /**
-     * Шаг адресован пользователю: лично или через роль.
+     * Шаг адресован пользователю: лично или через роль модуля.
      * Вынесено, чтобы условие «кто может» жило в одном месте.
      *
-     * @param list<string> $roles
+     * @param list<string> $roleCodes
      */
-    private function activeForUserQb(User $user, array $roles): QueryBuilder
+    private function activeForUserQb(User $user, array $roleCodes): QueryBuilder
     {
         $qb = $this->createQueryBuilder('s')
             ->andWhere('s.decision = :pending')
-            ->andWhere($this->addressedExpr($roles))
+            ->andWhere($this->addressedExpr($roleCodes))
             // Указатель: шаг стоит на минимальной незакрытой позиции своей заявки
             ->andWhere('s.position = (
                 SELECT MIN(s2.position) FROM ' . PurchaseApprovalStep::class . ' s2
@@ -92,18 +58,18 @@ class PurchaseApprovalStepRepository extends ServiceEntityRepository
             ->setParameter('pending', PurchaseStepDecision::PENDING)
             ->setParameter('user', $user);
 
-        if ($roles !== []) {
-            $qb->setParameter('roles', $roles);
+        if ($roleCodes !== []) {
+            $qb->setParameter('roleCodes', $roleCodes, ArrayParameterType::STRING);
         }
 
         return $qb;
     }
 
-    /** @param list<string> $roles */
-    private function addressedExpr(array $roles): string
+    /** @param list<string> $roleCodes */
+    private function addressedExpr(array $roleCodes): string
     {
-        return $roles === []
+        return $roleCodes === []
             ? 's.approverUser = :user'
-            : '(s.approverUser = :user OR s.approverRole IN (:roles))';
+            : '(s.approverUser = :user OR s.roleCode IN (:roleCodes))';
     }
 }

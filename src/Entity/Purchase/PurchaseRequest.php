@@ -70,6 +70,11 @@ class PurchaseRequest
     #[ORM\Column(name: 'technical_spec', type: Types::TEXT, nullable: true)]
     private ?string $technicalSpec = null;
 
+    // Результат ресёрча отдела закупок: у кого закупаем. Автор его не знает.
+    #[ORM\Column(length: 255, nullable: true)]
+    #[Assert\Length(max: 255, maxMessage: 'Поставщик не должен превышать {{ limit }} символов.')]
+    private ?string $supplier = null;
+
     #[ORM\Column(type: Types::STRING, length: 50, enumType: PurchaseStatus::class)]
     private PurchaseStatus $status = PurchaseStatus::DRAFT;
 
@@ -80,6 +85,18 @@ class PurchaseRequest
 
     #[ORM\Column(type: Types::STRING, length: 20, enumType: PurchasePriority::class, options: ['default' => 'NORMAL'])]
     private PurchasePriority $priority = PurchasePriority::NORMAL;
+
+    /**
+     * Позиция, зарезервированная под профильных замов: их назначает директор
+     * на разборе, и до его решения шагов там нет.
+     *
+     * Число замораживается при подаче вместе с маршрутом. Иначе позицию пришлось
+     * бы каждый раз искать в заготовке, а её к тому времени могли переставить —
+     * и замы встали бы не туда, где их ждут подписи после.
+     * NULL — в маршруте заявки слота замов нет (например, у быстрой).
+     */
+    #[ORM\Column(name: 'approvers_position', type: Types::SMALLINT, nullable: true)]
+    private ?int $approversPosition = null;
 
     #[ORM\Column(name: 'due_date', type: Types::DATE_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $dueDate = null;
@@ -239,6 +256,18 @@ class PurchaseRequest
         return $this;
     }
 
+    public function getSupplier(): ?string
+    {
+        return $this->supplier;
+    }
+
+    public function setSupplier(?string $supplier): static
+    {
+        $this->supplier = $supplier;
+
+        return $this;
+    }
+
     public function getStatus(): PurchaseStatus
     {
         return $this->status;
@@ -259,6 +288,18 @@ class PurchaseRequest
     public function setPriority(PurchasePriority $priority): static
     {
         $this->priority = $priority;
+
+        return $this;
+    }
+
+    public function getApproversPosition(): ?int
+    {
+        return $this->approversPosition;
+    }
+
+    public function setApproversPosition(?int $approversPosition): static
+    {
+        $this->approversPosition = $approversPosition;
 
         return $this;
     }

@@ -10,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Замок на обязательных вложениях: без него загрузивший мог удалить договор
- * у уже оплаченной заявки или записку у поданной.
+ * у уже оплаченной заявки или УПД у закрытой.
  */
 final class PurchaseFileTypeTest extends TestCase
 {
@@ -22,24 +22,21 @@ final class PurchaseFileTypeTest extends TestCase
         self::assertFalse($contract->isLockedAt(PurchaseStatus::ON_APPROVAL));
         self::assertFalse($contract->isLockedAt(PurchaseStatus::APPROVED));
 
-        // Ушли на оплату — договор зафиксирован
-        self::assertTrue($contract->isLockedAt(PurchaseStatus::INVOICE_SENT));
+        // Оплатили — договор зафиксирован
         self::assertTrue($contract->isLockedAt(PurchaseStatus::INVOICE_PAID));
         self::assertTrue($contract->isLockedAt(PurchaseStatus::DELIVERED));
         self::assertTrue($contract->isLockedAt(PurchaseStatus::DONE));
     }
 
-    public function testJustificationLockedAfterSubmit(): void
+    public function testUpdLockedOnceRequestClosed(): void
     {
-        $justification = PurchaseFileType::JUSTIFICATION;
+        $upd = PurchaseFileType::UPD;
 
-        // Заявка редактируема (черновик, возврат на доработку) — записку можно менять
-        self::assertFalse($justification->isLockedAt(PurchaseStatus::DRAFT));
-        self::assertFalse($justification->isLockedAt(PurchaseStatus::REJECTED));
+        // До закрытия УПД можно перезалить: заявку без него всё равно не закрыть
+        self::assertFalse($upd->isLockedAt(PurchaseStatus::DELIVERED));
 
-        // Подана — дальше заявка уже уехала на её основании
-        self::assertTrue($justification->isLockedAt(PurchaseStatus::ON_APPROVAL));
-        self::assertTrue($justification->isLockedAt(PurchaseStatus::INVOICE_PAID));
+        // Закрыли в архив — единственное подтверждение закупки трогать нельзя
+        self::assertTrue($upd->isLockedAt(PurchaseStatus::DONE));
     }
 
     public function testOptionalFilesNeverLocked(): void
@@ -51,14 +48,13 @@ final class PurchaseFileTypeTest extends TestCase
     }
 
     /**
-     * Конвейер исполнения начинается сразу со счёта: договор ушёл из статусов
-     * в шаг маршрута. Если вернуть его сюда, быстрая заявка — у которой шага
-     * «договор» нет — упрётся в требование договора и застрянет на APPROVED.
+     * Конвейер исполнения: согласовали — платим, оплатили — ждём доставку.
+     * Отдельного «счёт отправлен» между ними нет: счёт приходит в пакете
+     * документов отдела закупок ещё внутри маршрута, отмечать нечего.
      */
-    public function testExecutionStartsWithInvoiceNotContract(): void
+    public function testExecutionGoesStraightToPayment(): void
     {
-        self::assertSame(PurchaseStatus::INVOICE_SENT, PurchaseStatus::APPROVED->nextExecutionStatus());
-        self::assertSame(PurchaseStatus::INVOICE_PAID, PurchaseStatus::INVOICE_SENT->nextExecutionStatus());
+        self::assertSame(PurchaseStatus::INVOICE_PAID, PurchaseStatus::APPROVED->nextExecutionStatus());
         self::assertSame(PurchaseStatus::DELIVERED, PurchaseStatus::INVOICE_PAID->nextExecutionStatus());
         self::assertNull(PurchaseStatus::DELIVERED->nextExecutionStatus());
     }

@@ -6,7 +6,9 @@ namespace App\Controller\SpaApi\Purchase;
 
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseApprover;
+use App\Entity\Purchase\PurchaseApproverRole;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseApproverRepository;
 use App\Repository\User\UserRepository;
@@ -19,8 +21,8 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 /**
- * Справочник согласантов закупок: кого директор может отметить в заявке.
- * Ведут админ и отдел закупок, порядок задают руками.
+ * Участники модуля закупок: кого директор может отметить в заявке и кто носит
+ * роли модуля. Ведёт админ, порядок задаёт руками.
  */
 #[Route('/spa/api/purchase-approvers')]
 final class PurchaseApproverController extends AbstractController
@@ -156,10 +158,72 @@ final class PurchaseApproverController extends AbstractController
         return $this->json(['items' => $this->presentAll()]);
     }
 
+    /**
+     * Функции участника целиком: body {roleCodes: ['ACCOUNTING', 'LEGAL']}.
+     *
+     * Список приходит одним куском, как и порядок: галочки в админке правятся
+     * пачкой, и «добавь одну / убери одну» дало бы то же состояние в два-три
+     * запроса, каждый из которых может не дойти.
+     */
+    #[Route('/{id}/roles', name: 'spa_api_purchase_approvers_roles', requirements: ['id' => '\d+'], methods: ['PUT'])]
+    public function setRoles(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        if (!$this->canManage()) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $approver = $this->approverRepo->find($id);
+        if ($approver === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_APPROVER_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        $roleCodes = is_array($payload) && is_array($payload['roleCodes'] ?? null) ? $payload['roleCodes'] : null;
+        if ($roleCodes === null) {
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+        }
+
+        /** @var array<string, PurchaseRoleCode> $wanted */
+        $wanted = [];
+        foreach ($roleCodes as $value) {
+            $code = PurchaseRoleCode::tryFrom((string) $value);
+            if ($code === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_ROLE_NOT_FOUND], Response::HTTP_BAD_REQUEST);
+            }
+            $wanted[$code->value] = $code;
+        }
+
+        foreach ($approver->getRoles()->toArray() as $link) {
+            $code = $link->getRoleCode()?->value;
+            if ($code !== null && isset($wanted[$code])) {
+                unset($wanted[$code]);
+                continue;
+            }
+            $approver->removeRole($link);
+        }
+
+        foreach ($wanted as $code) {
+            $approver->addRole((new PurchaseApproverRole())->setRoleCode($code));
+        }
+
+        $this->em->flush();
+
+        return $this->json(['items' => $this->presentAll()]);
+    }
+
+    /**
+     * Список участников — это выдача прав, а не справочник: вместе с человеком
+     * здесь появляются его функции в модуле. Поэтому ведёт его только админ, а
+     * отдел закупок, который раньше правил список наравне с ним, дописать себе
+     * полномочия не может.
+     */
     private function canManage(): bool
     {
-        return $this->isGranted(UserRole::ROLE_ADMIN->value)
-            || $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value);
+        return $this->isGranted(UserRole::ROLE_ADMIN->value);
     }
 
     /**
@@ -182,6 +246,14 @@ final class PurchaseApproverController extends AbstractController
                         // понимать, кому он отдаёт заявку, а не только «кто это».
                         'position' => $user?->getWorker()?->getProfession(),
                     ],
+                    // Функции в модуле: по ним маршрут и адресует ролевые шаги
+                    'roles' => array_values(array_map(
+                        static fn (PurchaseRoleCode $code): array => [
+                            'code' => $code->value,
+                            'name' => $code->getLabel(),
+                        ],
+                        $approver->getRoleCodes(),
+                    )),
                 ];
             },
             $this->approverRepo->findAllOrdered(),

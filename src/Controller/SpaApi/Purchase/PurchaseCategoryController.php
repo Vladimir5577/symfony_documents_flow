@@ -8,10 +8,10 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseCategory;
 use App\Entity\Purchase\PurchaseCategoryItem;
 use App\Entity\User\User;
-use App\Enum\User\UserRole;
+use App\Enum\Purchase\PurchaseCapability;
 use App\Repository\Purchase\PurchaseCategoryRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
-use App\Repository\User\UserRepository;
+use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseFileStorageService;
 use App\Service\Purchase\PurchaseImageUrlGenerator;
 use Doctrine\ORM\EntityManagerInterface;
@@ -33,10 +33,10 @@ final class PurchaseCategoryController extends AbstractController
     public function __construct(
         private readonly PurchaseCategoryRepository $categoryRepo,
         private readonly PurchaseRequestRepository $purchaseRepo,
-        private readonly UserRepository $userRepo,
         private readonly EntityManagerInterface $em,
         private readonly PurchaseFileStorageService $storage,
         private readonly PurchaseImageUrlGenerator $imageUrlGenerator,
+        private readonly PurchaseAccess $access,
     ) {
     }
 
@@ -151,41 +151,6 @@ final class PurchaseCategoryController extends AbstractController
         $this->em->flush();
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
-    }
-
-    /** Назначить/снять ответственного за категорию: body {userId: int|null}. */
-    #[Route('/{id}/responsible', name: 'spa_api_purchase_categories_responsible', requirements: ['id' => '\d+'], methods: ['PUT'])]
-    public function setResponsible(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        if (!$user instanceof User) {
-            throw $this->createAccessDeniedException();
-        }
-
-        if (!$this->canManage()) {
-            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-        }
-
-        $category = $this->categoryRepo->find($id);
-        if ($category === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_CATEGORY_NOT_FOUND], Response::HTTP_NOT_FOUND);
-        }
-
-        $payload = json_decode($request->getContent(), true);
-        $userId = is_array($payload) ? ($payload['userId'] ?? null) : null;
-
-        if ($userId === null || $userId === '') {
-            $category->setResponsibleUser(null);
-        } else {
-            $responsible = $this->userRepo->find((int) $userId);
-            if ($responsible === null) {
-                return $this->json(['error' => SpaApiError::USER_NOT_FOUND], Response::HTTP_BAD_REQUEST);
-            }
-            $category->setResponsibleUser($responsible);
-        }
-
-        $this->em->flush();
-
-        return $this->json($this->present($category));
     }
 
     #[Route('/{id}/items', name: 'spa_api_purchase_categories_items_create', requirements: ['id' => '\d+'], methods: ['POST'])]
@@ -461,9 +426,16 @@ final class PurchaseCategoryController extends AbstractController
         return $this->storage->isAllowedImage($file) ? null : SpaApiError::PURCHASE_IMAGE_INVALID_TYPE;
     }
 
+    /**
+     * Справочник ведёт тот, у кого полномочие на справочники модуля.
+     * ROLE_ADMIN проходит его всегда — это делает PurchaseRoster.
+     */
     private function canManage(): bool
     {
-        return $this->isGranted(UserRole::ROLE_PURCHASE_DEPARTMENT->value);
+        $user = $this->getUser();
+
+        return $user instanceof User
+            && $this->access->can($user, PurchaseCapability::MANAGE_DICTIONARIES);
     }
 
     private function extractName(Request $request): ?string
@@ -509,22 +481,11 @@ final class PurchaseCategoryController extends AbstractController
      */
     private function present(PurchaseCategory $category): array
     {
-        $responsible = $category->getResponsibleUser();
-        $responsibleName = $responsible !== null
-            ? trim(($responsible->getLastname() ?? '') . ' ' . ($responsible->getFirstname() ?? ''))
-            : '';
-
         return [
             'id' => $category->getId(),
             'name' => $category->getName(),
             'isActive' => $category->isActive(),
             'imageUrl' => $this->imageUrlGenerator->getImageUrl($category->getImageKey()),
-            'responsible' => $responsible !== null
-                ? [
-                    'id' => $responsible->getId(),
-                    'name' => $responsibleName !== '' ? $responsibleName : (string) $responsible->getLogin(),
-                ]
-                : null,
             'items' => array_map(
                 fn (PurchaseCategoryItem $item): array => [
                     'id' => $item->getId(),

@@ -6,6 +6,8 @@ namespace App\Service\Purchase;
 
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseCapability;
+use App\Enum\Purchase\PurchaseStepPurpose;
 use App\Enum\User\UserRole;
 use App\Repository\User\UserRepository;
 use App\Service\Notification\NotificationPublisher;
@@ -26,6 +28,7 @@ final class PurchaseNotificationPublisher
     public function __construct(
         private readonly NotificationPublisher $publisher,
         private readonly UserRepository $userRepository,
+        private readonly PurchaseRoster $roster,
     ) {}
 
     /** Подана (или повторно подана) на рассмотрение — отделу закупок. */
@@ -35,7 +38,7 @@ final class PurchaseNotificationPublisher
             ? sprintf('Заявка на закупку «%s» подана повторно', $this->titleOf($request))
             : sprintf('Новая заявка на закупку «%s» на рассмотрении', $this->titleOf($request));
 
-        $this->publish('submitted', $request, $actor, $this->purchaseDepartment(), $title, 'Новая заявка на закупку');
+        $this->publish('submitted', $request, $actor, $this->moduleStaff(), $title, 'Новая заявка на закупку');
     }
 
     /**
@@ -54,7 +57,7 @@ final class PurchaseNotificationPublisher
                 $recipients[$user->getId()] = $user;
                 continue;
             }
-            foreach ($this->userRepository->findByRoleName((string) $step->getApproverRole()) as $holder) {
+            foreach ($this->roster->usersOfRole($step->getRoleCode()) as $holder) {
                 $recipients[$holder->getId()] = $holder;
             }
         }
@@ -74,10 +77,45 @@ final class PurchaseNotificationPublisher
         );
     }
 
-    /** Согласована — менеджерам департамента и отделу закупок. */
+    /**
+     * Директор назначил профильных замов — им самим.
+     *
+     * Отдельно от step_activated: подписывать они будут ещё долго не сейчас,
+     * а ответственными становятся сразу, и заявку надо начинать отслеживать
+     * с этого момента, а не с момента, когда до них дойдёт очередь.
+     *
+     * @param list<User> $approvers
+     */
+    public function notifyApproversAssigned(PurchaseRequest $request, User $actor, array $approvers): void
+    {
+        if ($approvers === []) {
+            return;
+        }
+
+        $this->publish(
+            'approvers_assigned', $request, $actor, $approvers,
+            sprintf('Вы ответственный по закупке «%s»', $this->titleOf($request)),
+            'Назначение по закупке',
+        );
+    }
+
+    /** Забракованы документы — тем, кто вёл ресёрч: переделывать им. */
+    public function notifyReturnedToDepartment(PurchaseRequest $request, User $actor, string $comment): void
+    {
+        $recipients = $this->sourcingHolders($request);
+
+        $this->publish(
+            'returned_to_department', $request, $actor, $recipients !== [] ? $recipients : $this->moduleStaff(),
+            sprintf('Закупка «%s» вернулась в отдел закупок', $this->titleOf($request)),
+            'Возврат в отдел закупок',
+            $comment !== '' ? $comment : null,
+        );
+    }
+
+    /** Согласована — менеджерам департамента и тем, кто её будет исполнять. */
     public function notifyApproved(PurchaseRequest $request, User $actor): void
     {
-        $recipients = array_merge($this->departmentManagers($request), $this->purchaseDepartment());
+        $recipients = array_merge($this->departmentManagers($request), $this->executionStaff());
 
         $this->publish(
             'approved', $request, $actor, $recipients,
@@ -132,7 +170,7 @@ final class PurchaseNotificationPublisher
     {
         $recipients = array_merge(
             $this->departmentManagers($request),
-            $this->directors(),
+            $this->supervisors(),
             array_filter([$request->getExecutor()]),
         );
 
@@ -192,16 +230,50 @@ final class PurchaseNotificationPublisher
         return $name !== '' ? $name : (string) $user->getLogin();
     }
 
-    /** @return list<User> */
-    private function directors(): array
+    /**
+     * Кому уходят уведомления «модулю», а не шагу. Спрашиваем полномочие, а не
+     * роль: набор ролей ещё будет меняться, и зашивать здесь «Отдел закупок»
+     * значило бы, что переехавшая функция тихо перестанет получать письма.
+     *
+     * @return list<User>
+     */
+    private function moduleStaff(): array
     {
-        return $this->userRepository->findByRoleName(UserRole::ROLE_PURCHASE_DIRECTOR->value);
+        return $this->roster->usersWith(PurchaseCapability::MANAGE_DICTIONARIES);
     }
 
     /** @return list<User> */
-    private function purchaseDepartment(): array
+    private function supervisors(): array
     {
-        return $this->userRepository->findByRoleName(UserRole::ROLE_PURCHASE_DEPARTMENT->value);
+        return $this->roster->usersWith(PurchaseCapability::SUPERVISE);
+    }
+
+    /** @return list<User> */
+    private function executionStaff(): array
+    {
+        return $this->roster->usersWith(PurchaseCapability::RUN_EXECUTION);
+    }
+
+    /**
+     * Носители роли того шага, где заявка делает ресёрч. Возврат документов
+     * адресуется им, а не «отделу закупок» вообще: в маршруте с двумя закупками
+     * переделывать будет тот, кто этот пакет и собирал.
+     *
+     * @return list<User>
+     */
+    private function sourcingHolders(PurchaseRequest $request): array
+    {
+        foreach ($request->getSteps() as $step) {
+            if ($step->getPurpose() !== PurchaseStepPurpose::SOURCING) {
+                continue;
+            }
+
+            $user = $step->getApproverUser();
+
+            return $user !== null ? [$user] : $this->roster->usersOfRole($step->getRoleCode());
+        }
+
+        return [];
     }
 
     /** @return list<User> */

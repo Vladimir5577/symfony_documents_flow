@@ -4,9 +4,12 @@ namespace App\Repository\Purchase;
 
 use App\Entity\Purchase\PurchaseApprovalStep;
 use App\Entity\Purchase\PurchaseRequest;
+use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\Purchase\PurchaseStepDecision;
+use App\Enum\Purchase\PurchaseStepPurpose;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -21,31 +24,49 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     }
 
     /**
-     * Очередь разбора директора: заявки, ждущие его решения.
+     * Очередь разбора: заявки, где шаг разбора ждёт решения этого человека.
      *
-     * Шаг директора в маршруте всегда первый, поэтому «его шаг не решён» и есть
-     * «заявка стоит на нём» — сверять с указателем не требуется.
+     * Гейта «ты директор» здесь больше нет — очередь и есть ответ на вопрос
+     * «что ждёт меня»: пусто у того, к кому шаги разбора не адресованы.
      *
-     * Отложенные («рассмотрю позже») уходят в конец: иначе директор упирался бы
-     * в одну и ту же заявку каждый раз, как открывает разбор.
+     * Шагов разбора в маршруте два — первичное решение и итоговое, — поэтому
+     * «шаг не решён» ещё не значит «заявка стоит на нём»: сразу после подачи не
+     * решены оба. Отсюда подзапрос: перед этим шагом не должно остаться
+     * незакрытых, то есть указатель стоит именно на нём.
      *
+     * @param list<string> $roleCodes роли модуля, выданные пользователю
      * @return list<PurchaseRequest>
      */
-    public function findDirectorQueue(string $directorRole): array
+    public function findTriageQueueFor(User $user, array $roleCodes): array
     {
-        return $this->createQueryBuilder('p')
+        $qb = $this->createQueryBuilder('p')
             ->innerJoin('p.steps', 's')
             ->andWhere('p.status = :onApproval')
-            ->andWhere('s.approverRole = :role')
+            ->andWhere('s.purpose = :triage')
             ->andWhere('s.decision = :pending')
+            ->andWhere(
+                'NOT EXISTS (
+                    SELECT 1 FROM ' . PurchaseApprovalStep::class . ' earlier
+                    WHERE earlier.purchaseRequest = p
+                      AND earlier.decision = :pending
+                      AND earlier.position < s.position
+                )'
+            )
             ->setParameter('onApproval', PurchaseStatus::ON_APPROVAL)
-            ->setParameter('role', $directorRole)
+            ->setParameter('triage', PurchaseStepPurpose::TRIAGE)
             ->setParameter('pending', PurchaseStepDecision::PENDING)
-            ->addOrderBy('CASE WHEN s.deferredAt IS NULL THEN 0 ELSE 1 END', 'ASC')
-            ->addOrderBy('s.deferredAt', 'ASC')
-            ->addOrderBy('p.createdAt', 'ASC')
-            ->getQuery()
-            ->getResult();
+            ->setParameter('user', $user)
+            ->distinct()
+            ->addOrderBy('p.createdAt', 'ASC');
+
+        if ($roleCodes === []) {
+            $qb->andWhere('s.approverUser = :user');
+        } else {
+            $qb->andWhere('s.approverUser = :user OR s.roleCode IN (:roleCodes)')
+                ->setParameter('roleCodes', $roleCodes, ArrayParameterType::STRING);
+        }
+
+        return $qb->getQuery()->getResult();
     }
 
     /**
@@ -53,8 +74,8 @@ class PurchaseRequestRepository extends ServiceEntityRepository
      *
      * @param int|null                  $createdById    только заявки этого автора (null = без ограничения)
      * @param list<PurchaseStatus>|null $statuses        ограничение по статусам (null = все)
-     * @param int|null                  $approverUserId  только заявки, где пользователь есть в маршруте
-     * @param list<string>              $approverRoles   его роли — для ролевых шагов маршрута
+     * @param int|null                  $approverUserId    только заявки, где пользователь есть в маршруте
+     * @param list<string>              $approverRoleCodes его роли модуля — для ролевых шагов маршрута
      * @param float|null                $minAmount       скрыть заявки дешевле порога (сумма считается из позиций)
      * @return array{items: list<PurchaseRequest>, total: int}
      */
@@ -66,7 +87,7 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         int $pageSize,
         ?int $approverUserId = null,
         ?float $minAmount = null,
-        array $approverRoles = [],
+        array $approverRoleCodes = [],
     ): array {
         $qb = $this->createFilteredQueryBuilder($createdById, $statuses, $search, $minAmount);
 
@@ -76,11 +97,11 @@ class PurchaseRequestRepository extends ServiceEntityRepository
                 ->setParameter('approverUserId', $approverUserId)
                 ->distinct();
 
-            if ($approverRoles === []) {
+            if ($approverRoleCodes === []) {
                 $qb->andWhere('st.approverUser = :approverUserId');
             } else {
-                $qb->andWhere('st.approverUser = :approverUserId OR st.approverRole IN (:approverRoles)')
-                    ->setParameter('approverRoles', $approverRoles);
+                $qb->andWhere('st.approverUser = :approverUserId OR st.roleCode IN (:approverRoleCodes)')
+                    ->setParameter('approverRoleCodes', $approverRoleCodes, ArrayParameterType::STRING);
             }
         }
 

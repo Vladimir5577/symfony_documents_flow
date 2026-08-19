@@ -109,6 +109,20 @@ final class SpaApiError
     public const PURCHASE_STEP_NOT_ACTIVE = 'purchase_step_not_active';
     public const PURCHASE_STEP_FILE_REQUIRED = 'purchase_step_file_required';
     public const PURCHASE_STEP_NOT_REVOKABLE = 'purchase_step_not_revokable';
+    public const PURCHASE_UPD_REQUIRED = 'purchase_upd_required';
+    /** Админ выдаёт участнику роль, которой нет в PurchaseRoleCode. */
+    public const PURCHASE_ROLE_NOT_FOUND = 'purchase_role_not_found';
+    /** Директор отмечает замом того, кому роль профильного зама не выдана. */
+    public const PURCHASE_APPROVER_NOT_DEPUTY = 'purchase_approver_not_deputy';
+    /** Подача заявки вида, маршрут которого ещё не собран в админке. */
+    public const PURCHASE_ROUTE_NOT_CONFIGURED = 'purchase_route_not_configured';
+    // Заготовка маршрута в админке
+    /** Маршрут без шагов не сохраняем: по такому заявка не пойдёт никуда. */
+    public const PURCHASE_ROUTE_EMPTY = 'purchase_route_empty';
+    /** В шаге нет роли, позиции или значения нет в справочнике. */
+    public const PURCHASE_ROUTE_STEP_INVALID = 'purchase_route_step_invalid';
+    /** Слот замов один и только позже разбора — иначе директору некуда их назначать. */
+    public const PURCHASE_ROUTE_APPROVERS_SLOT_INVALID = 'purchase_route_approvers_slot_invalid';
     public const INVENTORY_ACCESS_EXISTS = 'inventory_access_exists';
     public const INVENTORY_ACCESS_NOT_FOUND = 'inventory_access_not_found';
     public const INVENTORY_CATEGORY_HAS_ITEMS = 'inventory_category_has_items';

@@ -16,10 +16,9 @@ enum UserRole: string
     case ROLE_FINANCE = 'ROLE_FINANCE';
     case ROLE_CLIENTS_DEPARTMENT = 'ROLE_CLIENTS_DEPARTMENT';
     case ROLE_MECHANIC = 'ROLE_MECHANIC';
-    case ROLE_PURCHASE_DIRECTOR = 'ROLE_PURCHASE_DIRECTOR';
-    case ROLE_PURCHASE_DEPARTMENT = 'ROLE_PURCHASE_DEPARTMENT';
-    case ROLE_PURCHASE_INVOICE = 'ROLE_PURCHASE_INVOICE';
-    case ROLE_PURCHASE_FINANCE_DIRECTOR = 'ROLE_PURCHASE_FINANCE_DIRECTOR';
+    // Роли закупок здесь были и уехали в модуль: справочник purchase_role плюс
+    // полномочия PurchaseCapability. Состав согласантов меняется чаще, чем
+    // выходят релизы, и роль-константа означала деплой на каждую правку.
     case ROLE_INVENTORY_ADMIN = 'ROLE_INVENTORY_ADMIN';
     case ROLE_INVENTORY_MANAGER = 'ROLE_INVENTORY_MANAGER';
     case ROLE_USER = 'ROLE_USER';
@@ -37,10 +36,6 @@ enum UserRole: string
             self::ROLE_FINANCE => 'Роль финансиста',
             self::ROLE_CLIENTS_DEPARTMENT => 'Роль абон отдела',
             self::ROLE_MECHANIC => 'Роль механика',
-            self::ROLE_PURCHASE_DIRECTOR => 'Директор закупок',
-            self::ROLE_PURCHASE_DEPARTMENT => 'Отдел закупок',
-            self::ROLE_PURCHASE_INVOICE => 'Плательщик закупок',
-            self::ROLE_PURCHASE_FINANCE_DIRECTOR => 'Финансовый директор',
             self::ROLE_INVENTORY_ADMIN => 'Роль администратора инвентаризации',
             self::ROLE_INVENTORY_MANAGER => 'Роль инвентаризации по организациям',
             self::ROLE_USER => 'Роль пользователя',

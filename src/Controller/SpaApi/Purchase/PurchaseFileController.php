@@ -9,12 +9,13 @@ use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseFileType;
+use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseStatus;
-use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseFileStorageService;
+use App\Service\Purchase\PurchaseRequestService;
 use Aws\S3\Exception\S3Exception;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -38,6 +39,7 @@ final class PurchaseFileController extends AbstractController
         private readonly PurchaseFileStorageService $storage,
         private readonly EntityManagerInterface $em,
         private readonly PurchaseAccess $access,
+        private readonly PurchaseRequestService $purchaseService,
     ) {
     }
 
@@ -86,7 +88,12 @@ final class PurchaseFileController extends AbstractController
         $purchase->addFile($fileEntity);
 
         $this->em->persist($fileEntity);
-        $this->em->flush();
+        $this->purchaseService->log(
+            $purchase,
+            $user,
+            PurchaseHistoryAction::FILE_UPLOADED,
+            sprintf('%s: %s', $type->getLabel(), (string) $fileEntity->getOriginalName()),
+        );
 
         return $this->json($this->presenter->presentFile($fileEntity), Response::HTTP_CREATED);
     }
@@ -181,9 +188,15 @@ final class PurchaseFileController extends AbstractController
         // объект уже никак не найти — останется висеть в бакете навсегда.
         $this->storage->delete($fileEntity->getStorageKey());
 
+        $description = sprintf(
+            '%s: %s',
+            $fileEntity->getType()->getLabel(),
+            (string) $fileEntity->getOriginalName(),
+        );
+
         $purchase->removeFile($fileEntity);
         $this->em->remove($fileEntity);
-        $this->em->flush();
+        $this->purchaseService->log($purchase, $user, PurchaseHistoryAction::FILE_DELETED, $description);
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }

@@ -7,7 +7,9 @@ namespace App\Entity\Purchase;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseApproverKind;
 use App\Enum\Purchase\PurchaseFileType;
+use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseStepDecision;
+use App\Enum\Purchase\PurchaseStepPurpose;
 use App\Repository\Purchase\PurchaseApprovalStepRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
@@ -20,14 +22,19 @@ use Gedmo\Mapping\Annotation as Gedmo;
  * шаблона не трогает заявки в пути. Текущая позиция не хранится, а считается —
  * минимальный position среди PENDING-шагов (см. PurchaseRequest::getCurrentPosition).
  *
- * approver_* отвечает на вопрос «кого ждали», decided_by — «кто фактически нажал».
- * У ролевого шага approver_user_id так и остаётся пустым: ждали любого носителя роли,
- * и затирать это подписантом нельзя, иначе теряется первый вопрос.
+ * Роль или пользователь отвечают на вопрос «кого ждали», decided_by — «кто
+ * фактически нажал». У ролевого шага approver_user_id так и остаётся пустым:
+ * ждали любого носителя роли, и затирать это подписантом нельзя, иначе
+ * теряется первый вопрос.
+ *
+ * Роль здесь — роль модуля (PurchaseRoleCode), а не Symfony-роль: носителей
+ * роли назначает админ в участниках модуля, и шаг маршрута не должен зависеть
+ * от того, что записано в security.yaml.
  */
 #[ORM\Entity(repositoryClass: PurchaseApprovalStepRepository::class)]
 #[ORM\Index(columns: ['purchase_request_id', 'position'])]
 #[ORM\Index(columns: ['approver_user_id', 'decision'])]
-#[ORM\Index(columns: ['approver_role', 'decision'])]
+#[ORM\Index(columns: ['role_code', 'decision'])]
 class PurchaseApprovalStep
 {
     #[ORM\Id]
@@ -45,8 +52,20 @@ class PurchaseApprovalStep
     #[ORM\Column(name: 'approver_kind', type: Types::STRING, length: 30, enumType: PurchaseApproverKind::class)]
     private PurchaseApproverKind $approverKind = PurchaseApproverKind::ROLE;
 
-    #[ORM\Column(name: 'approver_role', type: Types::STRING, length: 50, nullable: true)]
-    private ?string $approverRole = null;
+    // Что на шаге делают. Логика модуля спрашивает это, а не роль и не позицию.
+    #[ORM\Column(type: Types::STRING, length: 30, enumType: PurchaseStepPurpose::class, options: ['default' => 'SIGN_OFF'])]
+    private PurchaseStepPurpose $purpose = PurchaseStepPurpose::SIGN_OFF;
+
+    #[ORM\Column(name: 'role_code', type: Types::STRING, length: 50, nullable: true, enumType: PurchaseRoleCode::class)]
+    private ?PurchaseRoleCode $roleCode = null;
+
+    /**
+     * Название роли на момент подачи. Снимок, а не удобство: роль переименуют
+     * или уберут из enum, а история подписанных заявок должна остаться читаемой —
+     * «подписала Бухгалтерия», даже если роль давно называется иначе.
+     */
+    #[ORM\Column(name: 'role_name', type: Types::STRING, length: 100, nullable: true)]
+    private ?string $roleName = null;
 
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'approver_user_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
@@ -60,13 +79,6 @@ class PurchaseApprovalStep
 
     #[ORM\Column(type: Types::STRING, length: 20, enumType: PurchaseStepDecision::class, options: ['default' => 'PENDING'])]
     private PurchaseStepDecision $decision = PurchaseStepDecision::PENDING;
-
-    /**
-     * «Рассмотрю позже»: заявка остаётся у директора, но уезжает в конец очереди.
-     * Без этой отметки отложенная заявка заезжала бы в модалку первой по кругу.
-     */
-    #[ORM\Column(name: 'deferred_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $deferredAt = null;
 
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'decided_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
@@ -128,16 +140,35 @@ class PurchaseApprovalStep
         return $this;
     }
 
-    public function getApproverRole(): ?string
+    public function getPurpose(): PurchaseStepPurpose
     {
-        return $this->approverRole;
+        return $this->purpose;
     }
 
-    public function setApproverRole(?string $approverRole): static
+    public function setPurpose(PurchaseStepPurpose $purpose): static
     {
-        $this->approverRole = $approverRole;
+        $this->purpose = $purpose;
 
         return $this;
+    }
+
+    public function getRoleCode(): ?PurchaseRoleCode
+    {
+        return $this->roleCode;
+    }
+
+    /** Снимок названия обновляется вместе с кодом: шаг ждёт роль в её нынешнем виде. */
+    public function setRoleCode(?PurchaseRoleCode $roleCode): static
+    {
+        $this->roleCode = $roleCode;
+        $this->roleName = $roleCode?->getLabel();
+
+        return $this;
+    }
+
+    public function getRoleName(): ?string
+    {
+        return $this->roleName;
     }
 
     public function getApproverUser(): ?User
@@ -185,9 +216,6 @@ class PurchaseApprovalStep
     public function setDecision(PurchaseStepDecision $decision): static
     {
         $this->decision = $decision;
-        // Решение снимает отметку «рассмотрю позже»: откладывать больше нечего,
-        // а подписанный шаг с флагом «отложен» — мусор в карточке и в очереди.
-        $this->deferredAt = null;
 
         return $this;
     }
@@ -245,18 +273,6 @@ class PurchaseApprovalStep
         return $this->createdAt;
     }
 
-    public function getDeferredAt(): ?\DateTimeImmutable
-    {
-        return $this->deferredAt;
-    }
-
-    public function setDeferredAt(?\DateTimeImmutable $deferredAt): static
-    {
-        $this->deferredAt = $deferredAt;
-
-        return $this;
-    }
-
     public function isPending(): bool
     {
         return $this->decision === PurchaseStepDecision::PENDING;
@@ -264,7 +280,7 @@ class PurchaseApprovalStep
 
     /**
      * Шаг адресован лично этому человеку. Ролевые шаги сюда не попадают:
-     * право на них проверяется через isGranted($step->getApproverRole()).
+     * право на них проверяется через PurchaseAccess::canActOn().
      */
     public function isAddressedTo(User $user): bool
     {

@@ -24,6 +24,10 @@ class PurchaseRequestItem
     #[Assert\Length(max: 255, maxMessage: 'Наименование позиции не должно превышать {{ limit }} символов.')]
     private ?string $name = null;
 
+    // Что именно нужно: марка, характеристики, ссылка на аналог. Заполняет автор.
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $description = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 12, scale: 3)]
     #[Assert\Positive(message: 'Количество должно быть больше нуля.')]
     private ?string $quantity = null;
@@ -96,6 +100,18 @@ class PurchaseRequestItem
     public function setName(string $name): static
     {
         $this->name = $name;
+
+        return $this;
+    }
+
+    public function getDescription(): ?string
+    {
+        return $this->description;
+    }
+
+    public function setDescription(?string $description): static
+    {
+        $this->description = $description;
 
         return $this;
     }
