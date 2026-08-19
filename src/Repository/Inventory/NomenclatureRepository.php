@@ -7,6 +7,7 @@ namespace App\Repository\Inventory;
 use App\Entity\Inventory\ItemCategory;
 use App\Entity\Inventory\Nomenclature;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -14,6 +15,11 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class NomenclatureRepository extends ServiceEntityRepository
 {
+    private const SORTABLE = [
+        'name' => 'n.name',
+        'createdAt' => 'n.createdAt',
+    ];
+
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, Nomenclature::class);
@@ -27,8 +33,60 @@ class NomenclatureRepository extends ServiceEntityRepository
      */
     public function findAllOrdered(?string $search = null, ?int $limit = null): array
     {
-        // Категория присоединяется сразу: список показывает её у каждой строки,
-        // а ленивый прокси означал бы отдельный SELECT на каждый вид.
+        $qb = $this->createOrderedQueryBuilder($search);
+
+        if ($limit !== null) {
+            $qb->setMaxResults($limit);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * Как ItemRepository::findPaginated: счёт и срез страницы одним контрактом.
+     *
+     * @return array{items: Nomenclature[], total: int, page: int, limit: int, totalPages: int}
+     */
+    public function findPaginated(
+        string $search,
+        int $page,
+        int $limit,
+        string $sort = 'createdAt',
+        string $direction = 'DESC',
+    ): array {
+        $field = self::SORTABLE[$sort] ?? self::SORTABLE['createdAt'];
+        $direction = strtoupper($direction) === 'ASC' ? 'ASC' : 'DESC';
+        $qb = $this->createOrderedQueryBuilder($search)
+            ->orderBy($field, $direction)
+            ->addOrderBy('n.id', $direction);
+
+        $total = (int) (clone $qb)
+            ->resetDQLPart('orderBy')
+            ->select('COUNT(n.id)')
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        $items = $qb
+            ->setFirstResult(($page - 1) * $limit)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'totalPages' => $total > 0 ? (int) ceil($total / $limit) : 1,
+        ];
+    }
+
+    /**
+     * Категория присоединяется сразу: список показывает её у каждой строки,
+     * а ленивый прокси означал бы отдельный SELECT на каждый вид.
+     */
+    private function createOrderedQueryBuilder(?string $search): QueryBuilder
+    {
         $qb = $this->createQueryBuilder('n')
             ->addSelect('c')
             ->leftJoin('n.category', 'c')
@@ -42,11 +100,7 @@ class NomenclatureRepository extends ServiceEntityRepository
                 ->setParameter('search', '%' . $search . '%');
         }
 
-        if ($limit !== null) {
-            $qb->setMaxResults($limit);
-        }
-
-        return $qb->getQuery()->getResult();
+        return $qb;
     }
 
     /**
