@@ -6,6 +6,7 @@ namespace App\Controller\SpaApi\ExternalApi;
 
 use App\DTO\ContractApplication\ContractApplicationDto;
 use App\Service\ApiExternal\ContractApplication\ContractApplicationApiService;
+use App\Service\ContractApplication\ContractApplicationPdfService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -19,6 +20,7 @@ final class ContractApplicationController extends AbstractController
 {
     public function __construct(
         private readonly ContractApplicationApiService $api,
+        private readonly ContractApplicationPdfService $pdf,
     ) {
     }
 
@@ -82,6 +84,25 @@ final class ContractApplicationController extends AbstractController
         }
 
         return $this->json(['data' => $this->present($app, full: true)]);
+    }
+
+    #[Route('/{id}/pdf', name: 'spa_api_contract_applications_pdf', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function pdf(int $id): Response
+    {
+        try {
+            $app = $this->api->getOne($id);
+        } catch (\RuntimeException $e) {
+            return $this->json(['error' => $e->getMessage()], $e->getCode() ?: Response::HTTP_NOT_FOUND);
+        }
+
+        $pdfContent = $this->pdf->generate($app);
+        $filename   = 'application-' . $app->publicId . '.pdf';
+
+        return new Response($pdfContent, Response::HTTP_OK, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
+            'Content-Length'      => (string) \strlen($pdfContent),
+        ]);
     }
 
     #[Route('/files/{id}', name: 'spa_api_contract_applications_file', requirements: ['id' => '\d+'], methods: ['GET'])]
