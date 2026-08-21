@@ -15,7 +15,7 @@ use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseFileStorageService;
-use App\Service\Purchase\PurchaseRequestService;
+use App\Service\Purchase\PurchaseRequestEditor;
 use Aws\S3\Exception\S3Exception;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -39,7 +39,7 @@ final class PurchaseFileController extends AbstractController
         private readonly PurchaseFileStorageService $storage,
         private readonly EntityManagerInterface $em,
         private readonly PurchaseAccess $access,
-        private readonly PurchaseRequestService $purchaseService,
+        private readonly PurchaseRequestEditor $editor,
     ) {
     }
 
@@ -88,7 +88,7 @@ final class PurchaseFileController extends AbstractController
         $purchase->addFile($fileEntity);
 
         $this->em->persist($fileEntity);
-        $this->purchaseService->log(
+        $this->editor->log(
             $purchase,
             $user,
             PurchaseHistoryAction::FILE_UPLOADED,
@@ -196,7 +196,7 @@ final class PurchaseFileController extends AbstractController
 
         $purchase->removeFile($fileEntity);
         $this->em->remove($fileEntity);
-        $this->purchaseService->log($purchase, $user, PurchaseHistoryAction::FILE_DELETED, $description);
+        $this->editor->log($purchase, $user, PurchaseHistoryAction::FILE_DELETED, $description);
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }

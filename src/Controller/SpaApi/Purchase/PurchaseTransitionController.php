@@ -5,18 +5,19 @@ declare(strict_types=1);
 namespace App\Controller\SpaApi\Purchase;
 
 use App\Controller\SpaApi\SpaApiError;
-use App\Entity\Purchase\PurchaseApprovalStep;
+use App\Entity\Purchase\PurchaseApprovalStage;
+use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseCapability;
 use App\Enum\Purchase\PurchasePriority;
-use App\Enum\Purchase\PurchaseStatus;
-use App\Enum\Purchase\PurchaseStepPurpose;
+use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Repository\Purchase\PurchaseRequestRepository;
+use App\Repository\Purchase\PurchaseRouteTemplateRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
-use App\Service\Purchase\PurchaseRequestService;
+use App\Service\Purchase\PurchaseApprovalWorkflow;
 use App\Service\Purchase\PurchaseTransitionException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -26,19 +27,23 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 /**
- * Движение заявки: подача, решения по шагам маршрута, конвейер исполнения.
+ * Движение заявки: подача и решения по задачам маршрута.
  *
- * Право согласовать больше не выводится из статуса и зашитого списка ролей —
- * оно читается из самого шага: кому он адресован, тот и решает. Поэтому
- * добавление нового согласующего не требует правок здесь.
+ * Право решить не выводится из статуса и зашитого списка ролей — оно читается из
+ * самой задачи: кому она адресована, тот и решает. Поэтому ни новый согласующий,
+ * ни перенос оплаты на другого человека не требуют правок здесь.
+ *
+ * Отдельных ручек под конвейер исполнения нет: оплата, поставка и закрытие — те
+ * же задачи маршрута, и закрываются той же кнопкой, что подпись бухгалтерии.
  */
 #[Route('/spa/api/purchases/{id}', requirements: ['id' => '\d+'])]
 final class PurchaseTransitionController extends AbstractController
 {
     public function __construct(
         private readonly PurchaseRequestRepository $purchaseRepo,
+        private readonly PurchaseRouteTemplateRepository $templateRepo,
         private readonly UserRepository $userRepo,
-        private readonly PurchaseRequestService $purchaseService,
+        private readonly PurchaseApprovalWorkflow $workflow,
         private readonly PurchaseApiPresenter $presenter,
         private readonly PurchaseAccess $access,
     ) {
@@ -49,81 +54,75 @@ final class PurchaseTransitionController extends AbstractController
     public function submit(int $id, #[CurrentUser] ?User $user): JsonResponse
     {
         return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->isOwner($p, $u),
-            fn (PurchaseRequest $p, User $u) => $this->purchaseService->submit($p, $u));
+            fn (PurchaseRequest $p, User $u) => $this->access->isOwner($p, $u),
+            fn (PurchaseRequest $p, User $u) => $this->workflow->submit($p, $u));
     }
 
-    /** Согласовать свой шаг маршрута. */
-    #[Route('/steps/{stepId}/approve', name: 'spa_api_purchases_step_approve', requirements: ['stepId' => '\d+'], methods: ['POST'])]
-    public function approveStep(int $id, int $stepId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    /** Закрыть свою задачу согласием. */
+    #[Route('/tasks/{taskId}/approve', name: 'spa_api_purchases_task_approve', requirements: ['taskId' => '\d+'], methods: ['POST'])]
+    public function approveTask(int $id, int $taskId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
-        $payload = json_decode($request->getContent(), true) ?? [];
-        $comment = trim((string) ($payload['comment'] ?? ''));
+        $comment = $this->comment($request);
 
-        return $this->stepAction($id, $stepId, $user,
-            fn (PurchaseRequest $p, PurchaseApprovalStep $s, User $u) => $this->purchaseService
-                ->approveStep($p, $s, $u, $comment !== '' ? $comment : null));
+        return $this->taskAction($id, $taskId, $user,
+            fn (PurchaseRequest $p, PurchaseApprovalTask $t, User $u) => $this->workflow
+                ->approveTask($p, $t, $u, $comment !== '' ? $comment : null));
     }
 
-    /** Вернуть автору со своего шага. Комментарий обязателен. */
-    #[Route('/steps/{stepId}/reject', name: 'spa_api_purchases_step_reject', requirements: ['stepId' => '\d+'], methods: ['POST'])]
-    public function rejectStep(int $id, int $stepId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    /** Вернуть автору со своей задачи. Комментарий обязателен. */
+    #[Route('/tasks/{taskId}/reject', name: 'spa_api_purchases_task_reject', requirements: ['taskId' => '\d+'], methods: ['POST'])]
+    public function rejectTask(int $id, int $taskId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
-        $payload = json_decode($request->getContent(), true) ?? [];
-        $comment = trim((string) ($payload['comment'] ?? ''));
+        $comment = $this->comment($request);
         if ($comment === '') {
             return $this->json(['error' => SpaApiError::PURCHASE_COMMENT_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
-        return $this->stepAction($id, $stepId, $user,
-            fn (PurchaseRequest $p, PurchaseApprovalStep $s, User $u) => $this->purchaseService
-                ->rejectStep($p, $s, $u, $comment));
+        return $this->taskAction($id, $taskId, $user,
+            fn (PurchaseRequest $p, PurchaseApprovalTask $t, User $u) => $this->workflow
+                ->rejectTask($p, $t, $u, $comment));
     }
 
     /**
-     * Вернуть в отдел закупок со своего шага — для бухгалтерии, юристов и всех,
+     * Вернуть в отдел закупок со своей задачи — для бухгалтерии, юристов и всех,
      * кто идёт после закупок: они бракуют документы, а не саму заявку.
      * Комментарий обязателен.
      */
-    #[Route('/steps/{stepId}/return', name: 'spa_api_purchases_step_return', requirements: ['stepId' => '\d+'], methods: ['POST'])]
-    public function returnStep(int $id, int $stepId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    #[Route('/tasks/{taskId}/return', name: 'spa_api_purchases_task_return', requirements: ['taskId' => '\d+'], methods: ['POST'])]
+    public function returnTask(int $id, int $taskId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
-        $payload = json_decode($request->getContent(), true) ?? [];
-        $comment = trim((string) ($payload['comment'] ?? ''));
+        $comment = $this->comment($request);
         if ($comment === '') {
             return $this->json(['error' => SpaApiError::PURCHASE_COMMENT_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
-        return $this->stepAction($id, $stepId, $user,
-            fn (PurchaseRequest $p, PurchaseApprovalStep $s, User $u) => $this->purchaseService
-                ->returnToDepartment($p, $s, $u, $comment));
+        return $this->taskAction($id, $taskId, $user,
+            fn (PurchaseRequest $p, PurchaseApprovalTask $t, User $u) => $this->workflow
+                ->returnToSourcing($p, $t, $u, $comment));
     }
 
     /**
      * Снять свою подпись — своё решение и только его. Чью именно подпись можно
-     * снять, проверяет сервис, поэтому ролевого гейта здесь нет: он спрашивал
+     * снять, проверяет воркфлоу, поэтому ролевого гейта здесь нет: он спрашивал
      * «ты директор» и расходился со строкой списка, где кнопка отката
      * показывалась любому подписавшему. Чужую подпись снимает возврат маршрута.
      */
-    #[Route('/steps/{stepId}/revoke', name: 'spa_api_purchases_step_revoke', requirements: ['stepId' => '\d+'], methods: ['POST'])]
-    public function revokeStep(int $id, int $stepId, #[CurrentUser] ?User $user): JsonResponse
+    #[Route('/tasks/{taskId}/revoke', name: 'spa_api_purchases_task_revoke', requirements: ['taskId' => '\d+'], methods: ['POST'])]
+    public function revokeTask(int $id, int $taskId, #[CurrentUser] ?User $user): JsonResponse
     {
-        return $this->stepAction($id, $stepId, $user,
-            fn (PurchaseRequest $p, PurchaseApprovalStep $s, User $u) => $this->purchaseService
-                ->revokeStep($p, $s, $u));
+        return $this->taskAction($id, $taskId, $user,
+            fn (PurchaseRequest $p, PurchaseApprovalTask $t, User $u) => $this->workflow
+                ->revokeTask($p, $t, $u));
     }
 
     /**
-     * Решение директора из разбора новых заявок — одно на все кнопки модалки.
+     * Сменить маршрут заявки, пока она на разборе.
      *
-     * body: {action, items?: [{id, included, quantity}], approverIds?: [], reason?}
-     *   send   — применить правки состава и отправить дальше: отмеченным
-     *            согласантам, а если никого не отметили — сразу в отдел закупок
-     *   reject — мотивированный отказ: автору на доработку, причина обязательна
-     *   cancel — отказ без объяснений: заявка отменена
+     * Заявку это не двигает: разбирающий остаётся на разборе нового маршрута и
+     * отправляет её дальше обычной кнопкой.
      */
-    #[Route('/director-decision', name: 'spa_api_purchases_director_decision', methods: ['POST'])]
-    public function directorDecision(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    #[Route('/route', name: 'spa_api_purchases_route_change', methods: ['PATCH'])]
+    public function changeRoute(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
@@ -134,11 +133,57 @@ final class PurchaseTransitionController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        // Гейта «ты директор» здесь нет: право даёт сам шаг разбора, адресованный
+        // Гейта «ты директор» нет: право даёт сама задача разбора, адресованная
         // этому человеку. Кто разбирает заявки, решает маршрут, а не контроллер.
-        $step = $this->access->findMyActiveStep($purchase, $user, PurchaseStepPurpose::TRIAGE);
-        if ($step === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_STEP_NOT_ACTIVE], Response::HTTP_CONFLICT);
+        $task = $this->access->findMyActiveTask($purchase, $user, PurchaseStagePurpose::TRIAGE);
+        if ($task === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_CHANGEABLE], Response::HTTP_CONFLICT);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload)) {
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+        }
+
+        $template = $this->templateRepo->findWithStages((int) ($payload['templateId'] ?? 0));
+        if ($template === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $this->workflow->changeRoute($purchase, $task, $template, $user);
+        } catch (PurchaseTransitionException $e) {
+            return $this->json(['error' => $e->errorCode], Response::HTTP_CONFLICT);
+        }
+
+        return $this->json($this->presenter->presentDetail($purchase));
+    }
+
+    /**
+     * Решение разбирающего — одно на все кнопки модалки разбора.
+     *
+     * body: {action, items?: [{id, included, quantity}], assignments?: {stageId: [userId]},
+     *        approverIds?: [], reason?}
+     *   send   — применить правки состава и отправить дальше: выбранным
+     *            согласантам, а если никого не выбрали — сразу следующему этапу
+     *   reject — мотивированный отказ: автору на доработку, причина обязательна
+     *   cancel — отказ без объяснений: заявка отменена
+     */
+    #[Route('/triage', name: 'spa_api_purchases_triage', methods: ['POST'])]
+    public function triage(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $task = $this->access->findMyActiveTask($purchase, $user, PurchaseStagePurpose::TRIAGE);
+        if ($task === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_TASK_NOT_ACTIVE], Response::HTTP_CONFLICT);
         }
 
         $payload = json_decode($request->getContent(), true);
@@ -152,22 +197,16 @@ final class PurchaseTransitionController extends AbstractController
         try {
             switch ($action) {
                 case 'send':
-                    $approvers = $this->collectApprovers($payload['approverIds'] ?? []);
-                    if ($approvers === null) {
-                        return $this->json(['error' => SpaApiError::USER_NOT_FOUND], Response::HTTP_BAD_REQUEST);
+                    $assignments = $this->collectAssignments($purchase, $payload);
+                    if (is_string($assignments)) {
+                        return $this->json(['error' => $assignments], Response::HTTP_BAD_REQUEST);
                     }
-                    if (!$this->allAreProfileDeputies($approvers)) {
-                        return $this->json(
-                            ['error' => SpaApiError::PURCHASE_APPROVER_NOT_DEPUTY],
-                            Response::HTTP_BAD_REQUEST,
-                        );
-                    }
-                    $this->purchaseService->directorSend(
+                    $this->workflow->triage(
                         $purchase,
-                        $step,
+                        $task,
                         $user,
                         $this->collectItemEdits($payload['items'] ?? []),
-                        $approvers,
+                        $assignments,
                     );
                     break;
 
@@ -175,11 +214,11 @@ final class PurchaseTransitionController extends AbstractController
                     if ($reason === '') {
                         return $this->json(['error' => SpaApiError::PURCHASE_COMMENT_REQUIRED], Response::HTTP_BAD_REQUEST);
                     }
-                    $this->purchaseService->rejectStep($purchase, $step, $user, $reason);
+                    $this->workflow->rejectTask($purchase, $task, $user, $reason);
                     break;
 
                 case 'cancel':
-                    $this->purchaseService->cancel($purchase, $user, $reason !== '' ? $reason : null);
+                    $this->workflow->cancel($purchase, $user, $reason !== '' ? $reason : null);
                     break;
 
                 default:
@@ -192,8 +231,35 @@ final class PurchaseTransitionController extends AbstractController
         return $this->json($this->presenter->presentDetail($purchase));
     }
 
+    /** Отмена: автор — до исполнения; допущенный к деньгам — на исполнении; надзор — всегда. */
+    #[Route('/cancel', name: 'spa_api_purchases_cancel', methods: ['POST'])]
+    public function cancel(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        $comment = $this->comment($request);
+
+        return $this->transition($id, $user,
+            fn (PurchaseRequest $p, User $u) => $this->access->canCancel($p, $u),
+            fn (PurchaseRequest $p, User $u) => $this->workflow->cancel($p, $u, $comment !== '' ? $comment : null));
+    }
+
+    /** Смена приоритета — полномочие надзора. */
+    #[Route('/priority', name: 'spa_api_purchases_priority', methods: ['POST'])]
+    public function priority(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        $payload = json_decode($request->getContent(), true) ?? [];
+        $priority = PurchasePriority::tryFrom((string) ($payload['priority'] ?? ''));
+        if ($priority === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_INVALID_PRIORITY], Response::HTTP_BAD_REQUEST);
+        }
+
+        return $this->transition($id, $user,
+            fn (PurchaseRequest $p, User $u) => $this->access->can($u, PurchaseCapability::SUPERVISE),
+            fn (PurchaseRequest $p, User $u) => $this->workflow->setPriority($p, $u, $priority));
+    }
+
     /**
-     * Правки состава из payload. Позиции, которых директор не прислал, остаются как есть.
+     * Правки состава из payload. Позиции, которых разбирающий не прислал,
+     * остаются как есть.
      *
      * @param mixed $rows
      * @return array<int, array{included: bool, quantity: string|null}>
@@ -221,106 +287,84 @@ final class PurchaseTransitionController extends AbstractController
     }
 
     /**
-     * Согласанты по id. Пустой список — штатно: заявка уйдёт сразу в отдел закупок.
-     * Несуществующий id — ошибка, а не молчаливый пропуск: директор считает,
-     * что отправил человеку, а тот заявки не увидит.
+     * Согласанты по этапам: {stageId: [userId]}.
      *
-     * @return list<User>|null null — в списке есть неизвестный id
+     * Плоский approverIds тоже принимаем — маршрут с одним динамическим этапом
+     * самый частый, и заставлять фронт узнавать его id ради одного списка незачем.
+     *
+     * Несуществующий пользователь — ошибка, а не молчаливый пропуск: разбирающий
+     * считает, что отправил человеку, а тот заявки не увидит. Так же и человек не
+     * из пула этапа: назначение решает, кто будет подписывать заявку, и проверять
+     * это только скрытием в списке нельзя.
+     *
+     * @param array<string, mixed> $payload
+     * @return array<int, list<User>>|string код ошибки, если состав не годится
      */
-    private function collectApprovers(mixed $ids): ?array
+    private function collectAssignments(PurchaseRequest $purchase, array $payload): array|string
     {
-        if (!is_array($ids)) {
-            return [];
-        }
+        $rows = $payload['assignments'] ?? null;
 
-        $users = [];
-        foreach ($ids as $id) {
-            $approver = $this->userRepo->find((int) $id);
-            if ($approver === null) {
-                return null;
+        if (!is_array($rows)) {
+            $flat = $payload['approverIds'] ?? [];
+            if (!is_array($flat) || $flat === []) {
+                return [];
             }
-            $users[] = $approver;
+
+            $stages = $this->access->findAssignableStages($purchase, $this->currentUser());
+            if (count($stages) !== 1) {
+                return SpaApiError::PURCHASE_TASK_NOT_ACTIVE;
+            }
+
+            $rows = [(string) $stages[0]->getId() => $flat];
         }
 
-        return $users;
+        $assignments = [];
+        foreach ($rows as $stageId => $ids) {
+            if (!is_array($ids)) {
+                return SpaApiError::PURCHASE_TASK_NOT_FOUND;
+            }
+
+            $stage = $this->findStage($purchase, (int) $stageId);
+            if ($stage === null) {
+                return SpaApiError::PURCHASE_TASK_NOT_FOUND;
+            }
+
+            $users = [];
+            foreach ($ids as $userId) {
+                $candidate = $this->userRepo->find((int) $userId);
+                if ($candidate === null) {
+                    return SpaApiError::USER_NOT_FOUND;
+                }
+                if (!$this->access->canBeAssignedTo($stage, $candidate)) {
+                    return SpaApiError::PURCHASE_APPROVER_NOT_DEPUTY;
+                }
+                $users[] = $candidate;
+            }
+
+            $assignments[(int) $stageId] = $users;
+        }
+
+        return $assignments;
+    }
+
+    private function findStage(PurchaseRequest $purchase, int $stageId): ?PurchaseApprovalStage
+    {
+        foreach ($purchase->getStages() as $stage) {
+            if ($stage->getId() === $stageId) {
+                return $stage;
+            }
+        }
+
+        return null;
     }
 
     /**
-     * В подписанты слота идут только те, кому в админке выдали роль профильного
-     * зама. Проверяем на сервере, а не только скрываем в списке: назначение
-     * решает, кто будет подписывать заявку.
+     * Решение по задаче: задача должна принадлежать заявке и быть адресована
+     * этому человеку — лично или через роль, записанную на ней.
      *
-     * @param list<User> $users
+     * @param callable(PurchaseRequest, PurchaseApprovalTask, User): void $action
      */
-    private function allAreProfileDeputies(array $users): bool
-    {
-        foreach ($users as $user) {
-            if (!$this->access->canBeProfileDeputy($user)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /** Шаг конвейера исполнения: body.status должен быть строго следующим. */
-    #[Route('/status', name: 'spa_api_purchases_status', methods: ['POST'])]
-    public function status(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        $payload = json_decode($request->getContent(), true) ?? [];
-        $target = PurchaseStatus::tryFrom((string) ($payload['status'] ?? ''));
-        if ($target === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_INVALID_STATUS], Response::HTTP_BAD_REQUEST);
-        }
-
-        return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->access->canAdvanceTo($p, $u, $target),
-            fn (PurchaseRequest $p, User $u) => $this->purchaseService->advance($p, $u, $target));
-    }
-
-    /** Закрытие DELIVERED → DONE: конвейер прикрепляет УПД и убирает заявку в архив. */
-    #[Route('/confirm', name: 'spa_api_purchases_confirm', methods: ['POST'])]
-    public function confirm(int $id, #[CurrentUser] ?User $user): JsonResponse
-    {
-        return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->access->can($u, PurchaseCapability::RUN_EXECUTION),
-            fn (PurchaseRequest $p, User $u) => $this->purchaseService->confirm($p, $u));
-    }
-
-    /** Отмена: автор — до исполнения; конвейер — на исполнении; надзор — всегда. */
-    #[Route('/cancel', name: 'spa_api_purchases_cancel', methods: ['POST'])]
-    public function cancel(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        $payload = json_decode($request->getContent(), true) ?? [];
-        $comment = trim((string) ($payload['comment'] ?? ''));
-
-        return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->access->canCancel($p, $u),
-            fn (PurchaseRequest $p, User $u) => $this->purchaseService->cancel($p, $u, $comment !== '' ? $comment : null));
-    }
-
-    /** Смена приоритета — полномочие надзора. */
-    #[Route('/priority', name: 'spa_api_purchases_priority', methods: ['POST'])]
-    public function priority(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        $payload = json_decode($request->getContent(), true) ?? [];
-        $priority = PurchasePriority::tryFrom((string) ($payload['priority'] ?? ''));
-        if ($priority === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_INVALID_PRIORITY], Response::HTTP_BAD_REQUEST);
-        }
-
-        return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->access->can($u, PurchaseCapability::SUPERVISE),
-            fn (PurchaseRequest $p, User $u) => $this->purchaseService->setPriority($p, $u, $priority));
-    }
-
-    /**
-     * Решение по шагу: шаг должен принадлежать заявке и быть адресован
-     * этому человеку — лично или через роль, записанную на шаге.
-     *
-     * @param callable(PurchaseRequest, PurchaseApprovalStep, User): void $action
-     */
-    private function stepAction(int $id, int $stepId, ?User $user, callable $action): JsonResponse
+    private function taskAction(int $id, int $taskId, ?User $user, callable $action): JsonResponse
     {
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
@@ -331,34 +375,22 @@ final class PurchaseTransitionController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $step = null;
-        foreach ($purchase->getSteps() as $candidate) {
-            if ($candidate->getId() === $stepId) {
-                $step = $candidate;
-                break;
-            }
-        }
-        if ($step === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_STEP_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        $task = $purchase->findTask($taskId);
+        if ($task === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_TASK_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        if (!$this->access->canActOn($step, $user)) {
+        if (!$this->access->canActOn($task, $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
         try {
-            $action($purchase, $step, $user);
+            $action($purchase, $task, $user);
         } catch (PurchaseTransitionException $e) {
             return $this->json(['error' => $e->errorCode], Response::HTTP_CONFLICT);
         }
 
         return $this->json($this->presenter->presentDetail($purchase));
-    }
-
-    /** Автор заявки — роль не требуется: создавать может любой пользователь. */
-    private function isOwner(PurchaseRequest $purchase, User $user): bool
-    {
-        return $this->access->isOwner($purchase, $user);
     }
 
     /**
@@ -387,5 +419,22 @@ final class PurchaseTransitionController extends AbstractController
         }
 
         return $this->json($this->presenter->presentDetail($purchase));
+    }
+
+    private function comment(Request $request): string
+    {
+        $payload = json_decode($request->getContent(), true) ?? [];
+
+        return is_array($payload) ? trim((string) ($payload['comment'] ?? '')) : '';
+    }
+
+    private function currentUser(): User
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        return $user;
     }
 }

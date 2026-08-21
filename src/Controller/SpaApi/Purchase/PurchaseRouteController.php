@@ -6,16 +6,18 @@ namespace App\Controller\SpaApi\Purchase;
 
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseRouteTemplate;
-use App\Entity\Purchase\PurchaseRouteTemplateStep;
 use App\Entity\User\User;
-use App\Enum\Purchase\PurchaseApproverKind;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseRoleCode;
-use App\Enum\Purchase\PurchaseStepPurpose;
+use App\Enum\Purchase\PurchaseStagePurpose;
+use App\Enum\Purchase\PurchaseTaskAssignment;
 use App\Enum\User\UserRole;
+use App\Repository\Purchase\PurchaseRouteDefaultRepository;
 use App\Repository\Purchase\PurchaseRouteTemplateRepository;
+use App\Service\Purchase\ApprovalRouteBuilder;
 use App\Service\Purchase\ApprovalRouteEditor;
+use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseRouteException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -25,26 +27,29 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 /**
- * Заготовки маршрутов согласования: из каких шагов пойдут новые заявки.
+ * Заготовки маршрутов согласования: по каким цепочкам этапов идут заявки.
  *
  * Правит только админ. Это не справочник, а регламент: тот, кто меняет маршрут,
- * решает, кого в закупках вообще спрашивают, — поэтому полномочия модуля
- * (в том числе «справочники») такого права не дают.
+ * решает, кого в закупках вообще спрашивают, — поэтому полномочия модуля (в том
+ * числе «справочники») такого права не дают.
  *
- * Читать может любой авторизованный: маршрут виден всем в превью формы создания
- * и в шагах своей заявки, скрывать тут нечего, а фронту нужны справочники ролей
- * и назначений, чтобы нарисовать экран.
+ * Читать может любой авторизованный: маршрут виден всем в превью формы создания и
+ * в этапах своей заявки, скрывать тут нечего, а фронту нужны справочники ролей и
+ * назначений, чтобы нарисовать экран.
  */
 #[Route('/spa/api/purchase-routes')]
 final class PurchaseRouteController extends AbstractController
 {
     public function __construct(
         private readonly PurchaseRouteTemplateRepository $templates,
+        private readonly PurchaseRouteDefaultRepository $defaults,
         private readonly ApprovalRouteEditor $editor,
+        private readonly ApprovalRouteBuilder $builder,
+        private readonly PurchaseApiPresenter $presenter,
     ) {
     }
 
-    /** Оба маршрута плюс справочники для формы редактора. */
+    /** Все заготовки, дефолты по видам заявок и справочники для формы редактора. */
     #[Route('', name: 'spa_api_purchase_routes_list', methods: ['GET'])]
     public function list(#[CurrentUser] ?User $user): JsonResponse
     {
@@ -52,24 +57,198 @@ final class PurchaseRouteController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
+        $defaults = [];
+        foreach (PurchaseRequestKind::cases() as $kind) {
+            $default = $this->defaults->findByKind($kind);
+            $defaults[] = [
+                'kind' => $kind->value,
+                'name' => $kind->getLabel(),
+                'templateId' => $default?->getTemplate()?->getId(),
+                // Вид заявки без дефолта подать нельзя — экран обязан сказать это прямо.
+                'isConfigured' => $default?->getTemplate() !== null
+                    && $default->getTemplate()->isActive()
+                    && !$default->getTemplate()->isEmpty(),
+                'updatedAt' => $default?->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
+            ];
+        }
+
         return $this->json([
-            'items' => array_map($this->present(...), PurchaseRequestKind::cases()),
-            'roles' => $this->choices(PurchaseRoleCode::stepRoles()),
-            'purposes' => $this->choices(PurchaseStepPurpose::cases()),
-            'approverKinds' => $this->choices(PurchaseApproverKind::cases()),
+            'items' => array_map(
+                $this->presenter->presentRouteTemplate(...),
+                $this->templates->findAllOrdered(),
+            ),
+            'defaults' => $defaults,
+            'kinds' => $this->choices(PurchaseRequestKind::cases()),
+            // Пул для динамического этапа — любая роль: «выбрать поимённо из
+            // охраны» такое же требование, как «из профильных замов».
+            'roles' => $this->choices(PurchaseRoleCode::cases()),
+            'taskRoles' => $this->choices(PurchaseRoleCode::taskRoles()),
+            'purposes' => $this->choices(PurchaseStagePurpose::cases()),
+            'assignmentTypes' => $this->choices(PurchaseTaskAssignment::templateAssignments()),
             'fileTypes' => $this->choices(PurchaseFileType::cases()),
             'canManage' => $this->canManage(),
         ]);
     }
 
+    /** Превью маршрута: какие этапы получатся. Считает бэк, чтобы фронт не дублировал правила. */
+    #[Route('/{id}/preview', name: 'spa_api_purchase_routes_preview', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function preview(int $id, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $template = $this->templates->findWithStages($id);
+        if ($template === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->json(['stages' => $this->builder->preview($template)]);
+    }
+
     /**
-     * Заменить маршрут целиком: body {steps: [...]}.
-     *
-     * Целиком, а не пошагово: порядок и параллельность — свойства всего списка,
-     * и «подвинь один шаг» разъезжался бы с тем, что видит админ на экране.
+     * Создать заготовку: body {code, name, allowedKinds, stages: [...]}.
      */
-    #[Route('/{kind}', name: 'spa_api_purchase_routes_update', methods: ['PUT'])]
-    public function update(string $kind, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    #[Route('', name: 'spa_api_purchase_routes_create', methods: ['POST'])]
+    public function create(Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        return $this->manage($user, function (User $actor) use ($request): JsonResponse {
+            $payload = $this->payload($request);
+            if ($payload === null) {
+                return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+            }
+
+            $template = $this->editor->create($payload, $actor);
+
+            return $this->json(
+                ['item' => $this->presenter->presentRouteTemplate($template)],
+                Response::HTTP_CREATED,
+            );
+        });
+    }
+
+    /**
+     * Заменить заготовку целиком: body {name, allowedKinds, stages: [{purpose, tasks: [...]}]}.
+     *
+     * Целиком, а не по одному этапу: порядок этапов и состав задач — свойства
+     * всего маршрута, и «подвинь один этап» разъезжался бы с тем, что видит админ.
+     */
+    #[Route('/{id}', name: 'spa_api_purchase_routes_update', requirements: ['id' => '\d+'], methods: ['PUT'])]
+    public function update(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        return $this->manage($user, function (User $actor) use ($id, $request): JsonResponse {
+            $template = $this->templates->findWithStages($id);
+            if ($template === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+            }
+
+            $payload = $this->payload($request);
+            if ($payload === null) {
+                return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+            }
+
+            $this->editor->update($template, $payload, $actor);
+
+            return $this->json(['item' => $this->presenter->presentRouteTemplate($template)]);
+        });
+    }
+
+    /**
+     * Копия заготовки: body {code, name}.
+     *
+     * Маршруты в большой компании отличаются на один-два этапа, и собирать похожий
+     * с нуля значит переписывать десяток строк ради одной.
+     */
+    #[Route('/{id}/clone', name: 'spa_api_purchase_routes_clone', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function clone(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        return $this->manage($user, function (User $actor) use ($id, $request): JsonResponse {
+            $source = $this->templates->findWithStages($id);
+            if ($source === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+            }
+
+            $payload = $this->payload($request);
+            if ($payload === null) {
+                return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+            }
+
+            $copy = $this->editor->clone(
+                $source,
+                (string) ($payload['code'] ?? ''),
+                (string) ($payload['name'] ?? ''),
+                $actor,
+            );
+
+            return $this->json(
+                ['item' => $this->presenter->presentRouteTemplate($copy)],
+                Response::HTTP_CREATED,
+            );
+        });
+    }
+
+    /**
+     * Включить или выключить заготовку: body {isActive}.
+     *
+     * Удаления нет намеренно: на заготовку ссылаются прошедшие заявки, и вопрос
+     * «по какому регламенту это согласовали» должен иметь ответ.
+     */
+    #[Route('/{id}/active', name: 'spa_api_purchase_routes_active', requirements: ['id' => '\d+'], methods: ['PATCH'])]
+    public function setActive(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        return $this->manage($user, function (User $actor) use ($id, $request): JsonResponse {
+            $template = $this->templates->findWithStages($id);
+            if ($template === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+            }
+
+            $payload = $this->payload($request);
+            if ($payload === null) {
+                return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+            }
+
+            $this->editor->setActive($template, (bool) ($payload['isActive'] ?? true), $actor);
+
+            return $this->json(['item' => $this->presenter->presentRouteTemplate($template)]);
+        });
+    }
+
+    /**
+     * Назначить заготовку маршрутом по умолчанию: body {kind, templateId}.
+     *
+     * Касается только будущих подач: у заявки в пути свой снимок маршрута.
+     */
+    #[Route('/defaults', name: 'spa_api_purchase_routes_default', methods: ['PUT'])]
+    public function setDefault(Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        return $this->manage($user, function (User $actor) use ($request): JsonResponse {
+            $payload = $this->payload($request);
+            if ($payload === null) {
+                return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+            }
+
+            $kind = PurchaseRequestKind::tryFrom((string) ($payload['kind'] ?? ''));
+            if ($kind === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_INVALID_STATUS], Response::HTTP_BAD_REQUEST);
+            }
+
+            $template = $this->templates->findWithStages((int) ($payload['templateId'] ?? 0));
+            if ($template === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+            }
+
+            $this->editor->setDefault($kind, $template, $actor);
+
+            return $this->json(['item' => $this->presenter->presentRouteTemplate($template)]);
+        });
+    }
+
+    /**
+     * Гейт админа и обработка правил заготовки — один на все правящие ручки.
+     *
+     * @param callable(User): JsonResponse $action
+     */
+    private function manage(?User $user, callable $action): JsonResponse
     {
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
@@ -78,83 +257,31 @@ final class PurchaseRouteController extends AbstractController
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
-        $requestKind = PurchaseRequestKind::tryFrom($kind);
-        if ($requestKind === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_STEP_INVALID], Response::HTTP_NOT_FOUND);
-        }
-
-        $payload = json_decode($request->getContent(), true);
-        $steps = is_array($payload) && is_array($payload['steps'] ?? null) ? $payload['steps'] : null;
-        if ($steps === null) {
-            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
-        }
-
         try {
-            $this->editor->replace($requestKind, array_values($steps), $user);
+            return $action($user);
         } catch (PurchaseRouteException $exception) {
             return $this->json(['error' => $exception->errorCode], Response::HTTP_BAD_REQUEST);
         }
+    }
 
-        return $this->json(['item' => $this->present($requestKind)]);
+    /** @return array<string, mixed>|null */
+    private function payload(Request $request): ?array
+    {
+        $payload = json_decode($request->getContent(), true);
+
+        return is_array($payload) ? $payload : null;
     }
 
     /**
-     * Маршрут вида заявки. Умолчания в коде нет: пустой список означает, что
-     * заявки этого вида подать нельзя, и экран обязан сказать это прямо.
-     *
-     * @return array<string, mixed>
-     */
-    private function present(PurchaseRequestKind $kind): array
-    {
-        $template = $this->templates->findByKind($kind);
-        $steps = array_values($template?->getSteps()->toArray() ?? []);
-
-        return [
-            'kind' => $kind->value,
-            'name' => $kind->getLabel(),
-            'isConfigured' => $steps !== [],
-            'updatedAt' => $template?->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
-            'updatedBy' => $this->nameOf($template),
-            'steps' => array_map(
-                static fn (PurchaseRouteTemplateStep $step): array => [
-                    'position' => $step->getPosition(),
-                    'approverKind' => $step->getApproverKind()->value,
-                    'roleCode' => $step->getRoleCode()?->value,
-                    'roleName' => $step->getRoleCode()?->getLabel(),
-                    'purpose' => $step->getPurpose()->value,
-                    'purposeName' => $step->getPurpose()->getLabel(),
-                    // Свой заголовок и готовый — разные вещи: редактор правит
-                    // первый, а пустой означает «подставь название роли», и
-                    // подсунуть ему туда label значит заморозить его навсегда.
-                    'title' => $step->getTitle(),
-                    'label' => $step->resolveTitle(),
-                    'requiresFileType' => $step->getRequiresFileType()?->value,
-                ],
-                $steps,
-            ),
-        ];
-    }
-
-    private function nameOf(?PurchaseRouteTemplate $template): ?string
-    {
-        $user = $template?->getUpdatedBy();
-        if ($user === null) {
-            return null;
-        }
-
-        $name = trim(($user->getLastname() ?? '') . ' ' . ($user->getFirstname() ?? ''));
-
-        return $name !== '' ? $name : (string) $user->getLogin();
-    }
-
-    /**
-     * @param list<PurchaseRoleCode|PurchaseStepPurpose|PurchaseApproverKind|PurchaseFileType> $cases
+     * @param list<PurchaseRoleCode|PurchaseStagePurpose|PurchaseTaskAssignment|PurchaseFileType|PurchaseRequestKind> $cases
      * @return list<array{value: string, label: string}>
      */
     private function choices(array $cases): array
     {
         return array_map(
-            static fn (PurchaseRoleCode|PurchaseStepPurpose|PurchaseApproverKind|PurchaseFileType $case): array => [
+            static fn (
+                PurchaseRoleCode|PurchaseStagePurpose|PurchaseTaskAssignment|PurchaseFileType|PurchaseRequestKind $case,
+            ): array => [
                 'value' => $case->value,
                 'label' => $case->getLabel(),
             ],

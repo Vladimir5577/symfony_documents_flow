@@ -4,29 +4,36 @@ declare(strict_types=1);
 
 namespace App\Service\Purchase;
 
-use App\Entity\Purchase\PurchaseApprovalStep;
+use App\Entity\Purchase\PurchaseApprovalStage;
+use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestComment;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\Purchase\PurchaseRequestHistory;
 use App\Entity\Purchase\PurchaseRequestItem;
+use App\Entity\Purchase\PurchaseRouteTemplate;
+use App\Entity\Purchase\PurchaseRouteTemplateStage;
+use App\Entity\Purchase\PurchaseRouteTemplateTask;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseCapability;
-use App\Enum\Purchase\PurchaseFileType;
+use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
-use App\Enum\Purchase\PurchaseStepDecision;
-use App\Enum\Purchase\PurchaseStepPurpose;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
 use Symfony\Bundle\SecurityBundle\Security;
 
 /**
  * Форматирование заявок закупок для SpaApi.
+ *
+ * Маршрут отдаётся деревом: этапы, внутри — задачи. Плоский список шагов, где
+ * параллельность выражалась совпадением позиций, фронт вынужден был группировать
+ * сам — то есть повторять правило, живущее на сервере.
  */
 final class PurchaseApiPresenter
 {
     public function __construct(
         private readonly Security $security,
         private readonly PurchaseAccess $access,
+        private readonly ApprovalRouteResolver $resolver,
         private readonly DocumentApiPresenter $documentPresenter,
     ) {}
 
@@ -70,12 +77,17 @@ final class PurchaseApiPresenter
                 'value' => $request->getCreatedAs()->value,
                 'label' => $request->getCreatedAs()->getLabel(),
             ],
-            // «У кого заявка» — данные шага, а не статус
-            'currentStep' => $this->presentCurrentStepSummary($request),
+            // По какому регламенту заявка идёт — снимок названия на момент подачи
+            'route' => [
+                'templateId' => $request->getAppliedRouteTemplate()?->getId(),
+                'name' => $request->getAppliedRouteTemplateName(),
+            ],
+            // «У кого заявка» — данные этапа, а не статус
+            'currentStage' => $this->presentCurrentStageSummary($request),
             // Моя подпись на этой заявке, если её ещё можно снять. Нужна строке
             // списка: без неё тоггл в таблице не знает, что откатывать.
-            // Коллекция шагов здесь и так уже загружена ради currentStep.
-            'myApprovedStepId' => $this->findRevokableStep($request)?->getId(),
+            // Маршрут здесь и так уже загружен ради currentStage.
+            'myApprovedTaskId' => $this->findRevokableTask($request)?->getId(),
             'dueDate' => $request->getDueDate()?->format('Y-m-d'),
             'createdAt' => $request->getCreatedAt()?->format('c'),
             'updatedAt' => $request->getUpdatedAt()?->format('c'),
@@ -94,9 +106,9 @@ final class PurchaseApiPresenter
         $data['technicalSpec'] = $request->getTechnicalSpec();
         $data['supplier'] = $request->getSupplier();
         // array_values: после removeElement ключи коллекции дырявые → JSON-объект, не массив.
-        $data['steps'] = array_values(array_map(
-            fn (PurchaseApprovalStep $step): array => $this->presentStep($step, $request),
-            $request->getSteps()->toArray(),
+        $data['stages'] = array_values(array_map(
+            fn (PurchaseApprovalStage $stage): array => $this->presentStage($stage),
+            $request->getStages()->toArray(),
         ));
         $data['items'] = array_values(array_map(
             fn (PurchaseRequestItem $item): array => [
@@ -107,7 +119,7 @@ final class PurchaseApiPresenter
                 'unit' => $item->getUnit(),
                 'estimatedPrice' => $item->getEstimatedPrice(),
                 'position' => $item->getPosition(),
-                // Решение директора по позиции: снял галочку и/или урезал количество.
+                // Решение разбирающего по позиции: снял галочку и/или урезал количество.
                 // Заявленное автором остаётся в quantity — модалка показывает обе цифры.
                 'excluded' => $item->isExcluded(),
                 'approvedQuantity' => $item->getApprovedQuantity(),
@@ -154,68 +166,97 @@ final class PurchaseApiPresenter
     }
 
     /**
-     * Шаг маршрута для степпера: что за шаг, кого ждали и кто фактически решил.
+     * Этап маршрута для степпера: что за этап, кого ждут и в каком он состоянии.
      *
      * @return array<string, mixed>
      */
-    private function presentStep(PurchaseApprovalStep $step, PurchaseRequest $request): array
+    private function presentStage(PurchaseApprovalStage $stage): array
     {
-        // Название берём из снимка: роль могли переименовать или убрать из enum,
-        // а шаг должен читаться так, как читался в день подписи.
-        $roleLabel = $step->getRoleName();
+        $status = $stage->getStatus();
+        $purpose = $stage->getPurpose();
 
         return [
-            'id' => $step->getId(),
-            'position' => $step->getPosition(),
-            'title' => $step->getTitle() ?? $roleLabel,
-            // Кого ждали: роль ИЛИ человек. У ролевого шага approverUser пуст
-            // намеренно — ждали любого носителя, подписант лежит в decidedBy.
-            'approverRole' => $roleLabel !== null
+            'id' => $stage->getId(),
+            'position' => $stage->getPosition(),
+            'title' => $stage->resolveTitle(),
+            // Что на этапе делают. Фронту нужно отличать разбор и ресёрч от
+            // обычной подписи, и выводить это из роли он больше не должен.
+            'purpose' => ['value' => $purpose->value, 'label' => $purpose->getLabel()],
+            'isExecution' => $purpose->isExecution(),
+            'status' => ['value' => $status->value, 'label' => $status->getLabel()],
+            'isActive' => $stage->isActive(),
+            // Этап, куда разбирающий ещё не выбрал людей: степпер показывает его
+            // как «ожидает назначения», а не как пустой провал в маршруте.
+            'awaitingAssignment' => $stage->isAwaitingAssignment(),
+            'candidateRole' => $stage->getCandidateRoleCode() !== null
                 ? [
-                    'value' => $step->getRoleCode()?->value,
-                    'label' => $roleLabel,
+                    'value' => $stage->getCandidateRoleCode()->value,
+                    'label' => $stage->getCandidateRoleCode()->getLabel(),
                 ]
                 : null,
-            'approverUser' => $this->presentUser($step->getApproverUser()),
-            // Что на шаге делают. Фронту нужно отличать разбор и ресёрч от
-            // обычной подписи, и выводить это из роли он больше не должен.
-            'purpose' => [
-                'value' => $step->getPurpose()->value,
-                'label' => $step->getPurpose()->getLabel(),
-            ],
-            'requiresFileType' => $step->getRequiresFileType()?->value,
+            'startedAt' => $stage->getStartedAt()?->format('c'),
+            'completedAt' => $stage->getCompletedAt()?->format('c'),
+            'tasks' => array_values(array_map(
+                fn (PurchaseApprovalTask $task): array => $this->presentTask($task, $stage),
+                $stage->getTasks()->toArray(),
+            )),
+        ];
+    }
+
+    /**
+     * Задача этапа: кого ждали и кто фактически решил.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentTask(PurchaseApprovalTask $task, PurchaseApprovalStage $stage): array
+    {
+        // Название роли берём из снимка: её могли переименовать или убрать из
+        // enum, а задача должна читаться так, как читалась в день подписи.
+        $roleLabel = $task->getRoleName();
+
+        return [
+            'id' => $task->getId(),
+            'title' => $task->resolveTitle(),
+            'assignmentType' => $task->getAssignmentType()->value,
+            // Кого ждали: роль ИЛИ человек. У ролевой задачи assigneeUser пуст
+            // намеренно — ждали любого носителя, подписант лежит в decidedBy.
+            'approverRole' => $roleLabel !== null
+                ? ['value' => $task->getRoleCode()?->value, 'label' => $roleLabel]
+                : null,
+            'approverUser' => $this->presentUser($task->getAssigneeUser()),
+            'requiresFileType' => $task->getRequiresFileType()?->value,
             'decision' => [
-                'value' => $step->getDecision()->value,
-                'label' => $step->getDecision()->getLabel(),
+                'value' => $task->getDecision()->value,
+                'label' => $task->getDecision()->getLabel(),
             ],
-            'decidedBy' => $this->presentUser($step->getDecidedBy()),
-            'decidedAt' => $step->getDecidedAt()?->format('c'),
-            'comment' => $step->getComment(),
-            'isActive' => $step->isPending() && $step->getPosition() === $request->getCurrentPosition(),
-            'isMine' => $this->canActOn($step),
+            'decidedBy' => $this->presentUser($task->getDecidedBy()),
+            'decidedAt' => $task->getDecidedAt()?->format('c'),
+            'comment' => $task->getComment(),
+            'isActive' => $task->isPending() && $stage->isActive(),
+            'isMine' => $this->canActOn($task),
         ];
     }
 
     /** Короткая сводка «у кого сейчас» для строки списка. */
-    private function presentCurrentStepSummary(PurchaseRequest $request): ?array
+    private function presentCurrentStageSummary(PurchaseRequest $request): ?array
     {
-        $active = $request->getActiveSteps();
-        if ($active === []) {
+        $stage = $request->getCurrentStage();
+        if ($stage === null) {
             return null;
         }
 
         $labels = [];
-        foreach ($active as $step) {
-            $labels[] = $step->getTitle()
-                ?? $step->getRoleName()
-                ?? $this->presentUser($step->getApproverUser())['name']
-                ?? 'Согласование';
+        foreach ($stage->getPendingTasks() as $task) {
+            $labels[] = $task->resolveTitle();
         }
 
         return [
-            'position' => $active[0]->getPosition(),
+            'id' => $stage->getId(),
+            'position' => $stage->getPosition(),
+            'title' => $stage->resolveTitle(),
+            'purpose' => $stage->getPurpose()->value,
             'labels' => array_values(array_unique($labels)),
-            'isMine' => $this->findMyActiveStep($request) !== null,
+            'isMine' => $this->findMyActiveTask($request) !== null,
         ];
     }
 
@@ -236,6 +277,48 @@ final class PurchaseApiPresenter
                 $file->getPurchaseRequest()?->getId(),
                 $file->getId(),
             ),
+        ];
+    }
+
+    /** Заготовка маршрута для админки и для выбора при разборе. */
+    public function presentRouteTemplate(PurchaseRouteTemplate $template): array
+    {
+        return [
+            'id' => $template->getId(),
+            'code' => $template->getCode(),
+            'name' => $template->getName(),
+            'description' => $template->getDescription(),
+            'isActive' => $template->isActive(),
+            'sortOrder' => $template->getSortOrder(),
+            // Форма правки обязана вернуть эту версию обратно: по ней видно, что
+            // админ правил тот маршрут, который открывал.
+            'version' => $template->getVersion(),
+            'allowedKinds' => array_map(
+                static fn ($kind): string => $kind->value,
+                $template->getAllowedKinds(),
+            ),
+            'updatedBy' => $this->presentUser($template->getUpdatedBy()),
+            'updatedAt' => $template->getUpdatedAt()?->format('c'),
+            'stages' => array_values(array_map(
+                static fn (PurchaseRouteTemplateStage $stage): array => [
+                    'position' => $stage->getPosition(),
+                    'title' => $stage->getTitle(),
+                    'purpose' => $stage->getPurpose()->value,
+                    'allowsReject' => $stage->allowsReject(),
+                    'tasks' => array_values(array_map(
+                        static fn (PurchaseRouteTemplateTask $task): array => [
+                            'position' => $task->getPosition(),
+                            'assignmentType' => $task->getAssignmentType()->value,
+                            'roleCode' => $task->getRoleCode()?->value,
+                            'candidateRoleCode' => $task->getCandidateRoleCode()?->value,
+                            'title' => $task->getTitle(),
+                            'requiresFileType' => $task->getRequiresFileType()?->value,
+                        ],
+                        $stage->getTasks()->toArray(),
+                    )),
+                ],
+                $template->getStages()->toArray(),
+            )),
         ];
     }
 
@@ -260,9 +343,10 @@ final class PurchaseApiPresenter
     /**
      * Доступные текущему пользователю действия — фронт рисует кнопки по ним.
      *
-     * Согласование больше не спрашивает «какой статус»: единственный вопрос —
-     * стоит ли указатель на моём шаге. Роль читается из самого шага, поэтому
-     * зашитого списка «кто и когда имеет право подписать» здесь нет.
+     * Ни одна кнопка согласования не спрашивает «какой статус»: единственный
+     * вопрос — стоит ли указатель на моей задаче. Это касается и оплаты с
+     * поставкой: они стали задачами маршрута, и зашитого списка «кто и когда имеет
+     * право закрыть заявку» здесь больше нет.
      *
      * @return array<string, mixed>
      */
@@ -278,50 +362,54 @@ final class PurchaseApiPresenter
         }
 
         $isOwner = $this->access->isOwner($request, $user);
-        $canRunExecution = $this->access->can($user, PurchaseCapability::RUN_EXECUTION);
+        $myTask = $this->access->findMyActiveTask($request, $user);
+        $revokableTask = $this->access->findMyRevokableTask($request, $user);
+        $stage = $myTask?->getStage();
 
-        $myStep = $this->findMyActiveStep($request);
-        $revokableStep = $this->findRevokableStep($request);
-
-        $nextStatus = $status->nextExecutionStatus();
-        $canAdvance = $this->access->canAdvanceTo($request, $user, $nextStatus);
-
-        // Вернуть в закупки может тот, кто идёт после них: он бракует документы,
-        // а не саму заявку. У быстрой заявки закупки первые — возвращать некуда.
-        $sourcingPosition = $this->findSourcingPosition($request);
-        $canReturnToDepartment = $myStep !== null
-            && $sourcingPosition !== null
-            && $myStep->getPosition() > $sourcingPosition;
+        $assignableStages = $this->access->findAssignableStages($request, $user);
 
         return [
             'canEdit' => $isOwner && $status->isEditable(),
             'canDelete' => $isOwner && $status === PurchaseStatus::DRAFT,
             'canSubmit' => $isOwner && $status->isEditable(),
-            // Согласовать/вернуть — одна пара кнопок на всех, включается шагом
-            'canApproveStep' => $myStep !== null,
-            'canRejectStep' => $myStep !== null,
-            'canReturnToDepartment' => $canReturnToDepartment,
-            'activeStepId' => $myStep?->getId(),
-            // Снять можно только свою подпись — «кто именно» решает сам шаг.
-            // Отдельного гейта «только директор» здесь нет: он расходился со
-            // строкой списка, где кнопка показывалась любому подписавшему.
-            'canRevokeStep' => $revokableStep !== null,
-            'revokableStepId' => $revokableStep?->getId(),
+            // Согласовать/вернуть — одна пара кнопок на всех, включается задачей
+            'canApproveTask' => $myTask !== null,
+            // Возврат автору разрешает этап: на исполнении его нет — деньги ушли
+            'canRejectTask' => $myTask !== null && $stage?->allowsReject() === true,
+            'canReturnToSourcing' => $this->access->canReturnToSourcing($request, $user),
+            'activeTaskId' => $myTask?->getId(),
+            // Снять можно только свою подпись — «кто именно» решает сама задача.
+            'canRevokeTask' => $revokableTask !== null,
+            'revokableTaskId' => $revokableTask?->getId(),
             'canClassify' => $this->access->canClassify($request, $user),
-            // Есть ли куда назначать замов: слот под них задаётся в маршруте, и
-            // модалка разбора без этого флага предлагала бы отметить людей,
-            // которых сервер не примет.
-            'canAssignApprovers' => $this->access->canAssignApprovers($request, $user),
-            // Поставщик и цены — работа шага ресёрча, и только пока он активен.
-            // Роль здесь не спрашиваем: шаг мой — значит он мне и адресован.
-            'canEditSourcing' => $myStep?->getPurpose() === PurchaseStepPurpose::SOURCING,
-            'canAdvance' => $canAdvance,
-            'nextStatus' => $canAdvance && $nextStatus !== null
-                ? ['value' => $nextStatus->value, 'label' => $nextStatus->getLabel()]
-                : null,
-            // Закрытие в архив: конвейер исполнения, и только когда УПД приложен
-            'canConfirm' => $canRunExecution && $status === PurchaseStatus::DELIVERED
-                && $request->hasFileOfType(PurchaseFileType::UPD),
+            // Куда назначать согласантов: динамические этапы задаются в маршруте,
+            // и без этого модалка разбора предлагала бы отметить людей, которых
+            // сервер не примет.
+            'assignableStages' => array_map(
+                static fn (PurchaseApprovalStage $s): array => [
+                    'id' => $s->getId(),
+                    'title' => $s->resolveTitle(),
+                    'candidateRoleCode' => $s->getCandidateRoleCode()?->value,
+                ],
+                $assignableStages,
+            ),
+            'canAssignApprovers' => $assignableStages !== [],
+            // Сменить маршрут можно только на разборе: дальше в маршруте уже
+            // лежат чужие решения, и пересборка сожгла бы их.
+            'canChangeRoute' => $this->access->canChangeRoute($request, $user),
+            'routeOptions' => $this->access->canChangeRoute($request, $user)
+                ? array_map(
+                    static fn (PurchaseRouteTemplate $t): array => [
+                        'id' => $t->getId(),
+                        'code' => $t->getCode(),
+                        'name' => $t->getName(),
+                    ],
+                    $this->resolver->options($request),
+                )
+                : [],
+            // Поставщик и цены — работа этапа ресёрча, и только пока он активен.
+            // Роль здесь не спрашиваем: задача моя — значит она мне и адресована.
+            'canEditSourcing' => $stage?->getPurpose() === PurchaseStagePurpose::SOURCING,
             'canCancel' => $this->access->canCancel($request, $user),
             'canSetPriority' => !$status->isFinal()
                 && $this->access->can($user, PurchaseCapability::SUPERVISE),
@@ -329,68 +417,35 @@ final class PurchaseApiPresenter
         ];
     }
 
-    /** Позиция шага ресёрча — граница, до которой можно откатить заявку. */
-    private function findSourcingPosition(PurchaseRequest $request): ?int
-    {
-        $position = null;
-        foreach ($request->getSteps() as $step) {
-            if ($step->getPurpose() !== PurchaseStepPurpose::SOURCING) {
-                continue;
-            }
-            if ($position === null || $step->getPosition() < $position) {
-                $position = $step->getPosition();
-            }
-        }
-
-        return $position;
-    }
-
-    /** Активный шаг, по которому текущий пользователь вправе принять решение. */
-    private function findMyActiveStep(PurchaseRequest $request): ?PurchaseApprovalStep
+    /** Активная задача, по которой текущий пользователь вправе принять решение. */
+    private function findMyActiveTask(PurchaseRequest $request): ?PurchaseApprovalTask
     {
         $user = $this->security->getUser();
 
         return $user instanceof User
-            ? $this->access->findMyActiveStep($request, $user)
+            ? $this->access->findMyActiveTask($request, $user)
+            : null;
+    }
+
+    /** Задача, подписанная лично мной, которую ещё можно откатить. */
+    private function findRevokableTask(PurchaseRequest $request): ?PurchaseApprovalTask
+    {
+        $user = $this->security->getUser();
+
+        return $user instanceof User
+            ? $this->access->findMyRevokableTask($request, $user)
             : null;
     }
 
     /**
-     * Шаг, подписанный лично мной, который ещё можно откатить.
-     *
-     * Пока заявка не ушла в исполнение: ON_APPROVAL или APPROVED. После счёта
-     * откатывать нечего — деньги уже пошли, там только отмена заявки.
-     */
-    private function findRevokableStep(PurchaseRequest $request): ?PurchaseApprovalStep
-    {
-        $user = $this->security->getUser();
-        if (!$user instanceof User) {
-            return null;
-        }
-        if (!in_array($request->getStatus(), [PurchaseStatus::ON_APPROVAL, PurchaseStatus::APPROVED], true)) {
-            return null;
-        }
-
-        foreach ($request->getSteps() as $step) {
-            if ($step->getDecision() === PurchaseStepDecision::APPROVED
-                && $step->getDecidedBy()?->getId() === $user->getId()
-            ) {
-                return $step;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Шаг адресован мне. Считает PurchaseAccess — тот же вызов, что и в гейте
+     * Задача адресована мне. Считает PurchaseAccess — тот же вызов, что и в гейте
      * контроллера: иначе кнопка и право разъезжаются.
      */
-    private function canActOn(PurchaseApprovalStep $step): bool
+    private function canActOn(PurchaseApprovalTask $task): bool
     {
         $user = $this->security->getUser();
 
-        return $user instanceof User && $this->access->canActOn($step, $user);
+        return $user instanceof User && $this->access->canActOn($task, $user);
     }
 
     /**

@@ -7,28 +7,33 @@ namespace App\Enum\Purchase;
 /**
  * Статусы заявки на закупку.
  *
- * Согласование статусами больше не описывается: весь его отрезок — отдел
- * закупок, согласанты, директор, подготовка договора, финдиректор — это шаги
- * маршрута (PurchaseApprovalStep), а заявка всё это время стоит в ON_APPROVAL.
- * «У кого заявка» — данные шага, а не статус. Поэтому добавление нового
- * согласующего больше не требует нового статуса.
+ * Статус — проекция маршрута, а не его движок. Весь путь заявки, включая оплату,
+ * поставку и закрытие, идёт этапами (PurchaseApprovalStage); статус лишь отмечает,
+ * какой отрезок пройден, чтобы списки, счётчики и фильтры не поднимали этапы
+ * каждой строки. «У кого заявка» — данные этапа, а не статус, поэтому новый
+ * согласующий не требует нового статуса.
  *
- * Цепочка: DRAFT → ON_APPROVAL → APPROVED → INVOICE_PAID → DELIVERED → DONE;
- *   REJECTED — возврат автору (и снова ON_APPROVAL при повторной подаче),
- *   CANCELLED — отмена.
+ * Раньше отрезок после согласования был отдельным механизмом: цепочка статусов со
+ * своими правилами «кому можно». Из-за этого «добавить в согласование охрану»
+ * стоило правки в админке, а «доставку подтверждает склад, а не заявитель» —
+ * релиза. Теперь оба требования одного порядка и стоят одинаково.
  *
- * Отдельного «счёт отправлен» между согласованием и оплатой нет: счёт приходит
- * в пакете документов отдела закупок ещё внутри маршрута, а платит финдиректор
- * сразу после своей подписи — отмечать нечего.
+ * Проекция: этапы согласования → ON_APPROVAL, пройдены все → APPROVED,
+ * пройден этап оплаты → INVOICE_PAID, поставки → DELIVERED, закрытия → DONE.
+ * Маршрут из одних подписей заканчивается на APPROVED — это законная настройка,
+ * а не зависшая заявка: согласование состоялось, исполнения в регламенте нет.
+ *
+ * Записывает статус только PurchaseApprovalWorkflow: две записи одной правды
+ * расходятся тем быстрее, чем больше у них авторов.
  */
 enum PurchaseStatus: string
 {
     case DRAFT = 'DRAFT';                  // Черновик — у автора
-    case ON_APPROVAL = 'ON_APPROVAL';      // Идёт по маршруту согласования
-    case APPROVED = 'APPROVED';            // Маршрут пройден, можно оплачивать
+    case ON_APPROVAL = 'ON_APPROVAL';      // Идёт по маршруту
+    case APPROVED = 'APPROVED';            // Согласование пройдено
     case INVOICE_PAID = 'INVOICE_PAID';    // Оплачено
     case DELIVERED = 'DELIVERED';          // Доставлено
-    case DONE = 'DONE';                    // Выполнено
+    case DONE = 'DONE';                    // Закрыто в архив
     case REJECTED = 'REJECTED';            // Возвращено на доработку
     case CANCELLED = 'CANCELLED';          // Отменено
 
@@ -47,16 +52,20 @@ enum PurchaseStatus: string
     }
 
     /**
-     * Следующий шаг конвейера исполнения. Договора здесь нет — он стал шагом
-     * маршрута, и файл требует тот шаг, а не переход.
-     * Исполнитель назначается при первом шаге (APPROVED → INVOICE_PAID).
+     * Какой статус означает, что этап такого назначения пройден.
+     *
+     * NULL — этап согласования: заявка остаётся на согласовании, пока маршрут не
+     * дойдёт до конца согласующей части.
      */
-    public function nextExecutionStatus(): ?self
+    public static function afterStage(PurchaseStagePurpose $purpose): ?self
     {
-        return match ($this) {
-            self::APPROVED => self::INVOICE_PAID,
-            self::INVOICE_PAID => self::DELIVERED,
-            default => null,
+        return match ($purpose) {
+            PurchaseStagePurpose::PAYMENT => self::INVOICE_PAID,
+            PurchaseStagePurpose::DELIVERY => self::DELIVERED,
+            PurchaseStagePurpose::CLOSING => self::DONE,
+            PurchaseStagePurpose::TRIAGE,
+            PurchaseStagePurpose::SOURCING,
+            PurchaseStagePurpose::SIGN_OFF => null,
         };
     }
 
@@ -71,11 +80,20 @@ enum PurchaseStatus: string
         return $this === self::DRAFT || $this === self::REJECTED;
     }
 
+    /** Заявка идёт по маршруту: этапы согласования или исполнения ещё не пройдены. */
+    public function isInRoute(): bool
+    {
+        return match ($this) {
+            self::ON_APPROVAL, self::APPROVED, self::INVOICE_PAID, self::DELIVERED => true,
+            self::DRAFT, self::DONE, self::REJECTED, self::CANCELLED => false,
+        };
+    }
+
     /**
      * Что видит носитель полномочия «видеть все заявки»: весь путь заявки,
      * кроме чужих черновиков — заявки ещё нет, есть замысел автора.
      *
-     * Право согласовать это не даёт: его даёт только шаг маршрута.
+     * Право согласовать это не даёт: его даёт только задача маршрута.
      *
      * @return list<PurchaseStatus>
      */
@@ -85,18 +103,5 @@ enum PurchaseStatus: string
             self::cases(),
             static fn (self $status): bool => $status !== self::DRAFT,
         ));
-    }
-
-    /**
-     * @return array<string, string> [value => label]
-     */
-    public static function getChoices(): array
-    {
-        $choices = [];
-        foreach (self::cases() as $case) {
-            $choices[$case->value] = $case->getLabel();
-        }
-
-        return $choices;
     }
 }

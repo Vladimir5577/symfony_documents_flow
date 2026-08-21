@@ -2,12 +2,14 @@
 
 namespace App\Repository\Purchase;
 
-use App\Entity\Purchase\PurchaseApprovalStep;
+use App\Entity\Purchase\PurchaseApprovalStage;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseStageStatus;
+use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
-use App\Enum\Purchase\PurchaseStepDecision;
-use App\Enum\Purchase\PurchaseStepPurpose;
+use App\Enum\Purchase\PurchaseTaskAssignment;
+use App\Enum\Purchase\PurchaseTaskDecision;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\QueryBuilder;
@@ -24,15 +26,15 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     }
 
     /**
-     * Очередь разбора: заявки, где шаг разбора ждёт решения этого человека.
+     * Очередь разбора: заявки, где этап разбора ждёт решения этого человека.
      *
-     * Гейта «ты директор» здесь больше нет — очередь и есть ответ на вопрос
-     * «что ждёт меня»: пусто у того, к кому шаги разбора не адресованы.
+     * Гейта «ты директор» здесь нет — очередь и есть ответ на вопрос «что ждёт
+     * меня»: пусто у того, к кому задачи разбора не адресованы.
      *
-     * Шагов разбора в маршруте два — первичное решение и итоговое, — поэтому
-     * «шаг не решён» ещё не значит «заявка стоит на нём»: сразу после подачи не
-     * решены оба. Отсюда подзапрос: перед этим шагом не должно остаться
-     * незакрытых, то есть указатель стоит именно на нём.
+     * Прежде здесь стоял подзапрос «перед этим шагом не осталось незакрытых»:
+     * шагов разбора в маршруте было два, и «шаг не решён» не значило «заявка
+     * стоит на нём». Теперь разбор в маршруте один, а стоит ли на нём заявка,
+     * говорит статус этапа.
      *
      * @param list<string> $roleCodes роли модуля, выданные пользователю
      * @return list<PurchaseRequest>
@@ -40,30 +42,24 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     public function findTriageQueueFor(User $user, array $roleCodes): array
     {
         $qb = $this->createQueryBuilder('p')
-            ->innerJoin('p.steps', 's')
+            ->innerJoin('p.stages', 's')
+            ->innerJoin('s.tasks', 't')
             ->andWhere('p.status = :onApproval')
             ->andWhere('s.purpose = :triage')
-            ->andWhere('s.decision = :pending')
-            ->andWhere(
-                'NOT EXISTS (
-                    SELECT 1 FROM ' . PurchaseApprovalStep::class . ' earlier
-                    WHERE earlier.purchaseRequest = p
-                      AND earlier.decision = :pending
-                      AND earlier.position < s.position
-                )'
-            )
+            ->andWhere('s.status = :active')
+            ->andWhere('t.decision = :pending')
             ->setParameter('onApproval', PurchaseStatus::ON_APPROVAL)
-            ->setParameter('triage', PurchaseStepPurpose::TRIAGE)
-            ->setParameter('pending', PurchaseStepDecision::PENDING)
+            ->setParameter('triage', PurchaseStagePurpose::TRIAGE)
+            ->setParameter('active', PurchaseStageStatus::ACTIVE)
+            ->setParameter('pending', PurchaseTaskDecision::PENDING)
+            ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
             ->setParameter('user', $user)
             ->distinct()
             ->addOrderBy('p.createdAt', 'ASC');
 
-        if ($roleCodes === []) {
-            $qb->andWhere('s.approverUser = :user');
-        } else {
-            $qb->andWhere('s.approverUser = :user OR s.roleCode IN (:roleCodes)')
-                ->setParameter('roleCodes', $roleCodes, ArrayParameterType::STRING);
+        $qb->andWhere($this->addressedExpr($roleCodes, 't', 'p'));
+        if ($roleCodes !== []) {
+            $qb->setParameter('roleCodes', $roleCodes, ArrayParameterType::STRING);
         }
 
         return $qb->getQuery()->getResult();
@@ -72,11 +68,11 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     /**
      * Список с фильтрами и пагинацией. Срочные — сверху, затем новые.
      *
-     * @param int|null                  $createdById    только заявки этого автора (null = без ограничения)
-     * @param list<PurchaseStatus>|null $statuses        ограничение по статусам (null = все)
+     * @param int|null                  $createdById       только заявки этого автора (null = без ограничения)
+     * @param list<PurchaseStatus>|null $statuses          ограничение по статусам (null = все)
      * @param int|null                  $approverUserId    только заявки, где пользователь есть в маршруте
-     * @param list<string>              $approverRoleCodes его роли модуля — для ролевых шагов маршрута
-     * @param float|null                $minAmount       скрыть заявки дешевле порога (сумма считается из позиций)
+     * @param list<string>              $approverRoleCodes его роли модуля — для ролевых задач маршрута
+     * @param float|null                $minAmount         скрыть заявки дешевле порога (сумма считается из позиций)
      * @return array{items: list<PurchaseRequest>, total: int}
      */
     public function findByFilters(
@@ -91,17 +87,18 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     ): array {
         $qb = $this->createFilteredQueryBuilder($createdById, $statuses, $search, $minAmount);
 
-        // «Я согласант» — заявки, где человек есть в маршруте: лично или через роль.
+        // «Я согласант» — заявки, где человек есть в маршруте: лично, через роль
+        // или как автор задачи, адресованной заявителю.
         if ($approverUserId !== null) {
-            $qb->join(PurchaseApprovalStep::class, 'st', 'WITH', 'st.purchaseRequest = pr')
-                ->setParameter('approverUserId', $approverUserId)
+            $qb->join(PurchaseApprovalStage::class, 'fs', 'WITH', 'fs.purchaseRequest = pr')
+                ->join('fs.tasks', 'ft')
+                ->setParameter('user', $approverUserId)
+                ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
+                ->andWhere($this->addressedExpr($approverRoleCodes, 'ft', 'pr'))
                 ->distinct();
 
-            if ($approverRoleCodes === []) {
-                $qb->andWhere('st.approverUser = :approverUserId');
-            } else {
-                $qb->andWhere('st.approverUser = :approverUserId OR st.roleCode IN (:approverRoleCodes)')
-                    ->setParameter('approverRoleCodes', $approverRoleCodes, ArrayParameterType::STRING);
+            if ($approverRoleCodes !== []) {
+                $qb->setParameter('roleCodes', $approverRoleCodes, ArrayParameterType::STRING);
             }
         }
 
@@ -119,35 +116,55 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
 
-        $this->warmUpSteps($items);
+        $this->warmUpStages($items);
 
         return ['items' => $items, 'total' => $total];
     }
 
     /**
-     * Догрузить шаги маршрута для страницы списка одним запросом.
+     * Задача адресована пользователю: лично, через роль модуля или как автору.
      *
-     * Презентеру списка шаги нужны у каждой строки: «у кого сейчас заявка» и
+     * @param list<string> $roleCodes
+     */
+    private function addressedExpr(array $roleCodes, string $task, string $request): string
+    {
+        $personal = sprintf(
+            '%s.assigneeUser = :user OR (%s.assignmentType = :author AND %s.createdBy = :user)',
+            $task,
+            $task,
+            $request,
+        );
+
+        return $roleCodes === []
+            ? '(' . $personal . ')'
+            : sprintf('(%s OR %s.roleCode IN (:roleCodes))', $personal, $task);
+    }
+
+    /**
+     * Догрузить маршрут для страницы списка одним запросом.
+     *
+     * Презентеру списка этапы нужны у каждой строки: «у кого сейчас заявка» и
      * «моя подпись, которую ещё можно снять». Без этого Doctrine поднимает
      * коллекцию лениво на каждую строку — двадцать заявок, двадцать запросов.
      *
      * Fetch-join прямо в основной запрос делать нельзя: коллекция размножает
-     * строки, и setMaxResults начинает резать не заявки, а их шаги. Поэтому
+     * строки, и setMaxResults начинает резать не заявки, а их этапы. Поэтому
      * вторым запросом по id уже отобранной страницы — он подтягивает те же
      * объекты из identity map и заодно инициализирует их коллекции.
      *
      * @param list<PurchaseRequest> $items
      */
-    private function warmUpSteps(array $items): void
+    private function warmUpStages(array $items): void
     {
         if ($items === []) {
             return;
         }
 
         $this->createQueryBuilder('wpr')
-            ->leftJoin('wpr.steps', 'wst')->addSelect('wst')
-            ->leftJoin('wst.approverUser', 'wau')->addSelect('wau')
-            ->leftJoin('wst.decidedBy', 'wdb')->addSelect('wdb')
+            ->leftJoin('wpr.stages', 'wst')->addSelect('wst')
+            ->leftJoin('wst.tasks', 'wta')->addSelect('wta')
+            ->leftJoin('wta.assigneeUser', 'wau')->addSelect('wau')
+            ->leftJoin('wta.decidedBy', 'wdb')->addSelect('wdb')
             ->andWhere('wpr.id IN (:ids)')
             ->setParameter('ids', array_map(
                 static fn (PurchaseRequest $request): int => (int) $request->getId(),

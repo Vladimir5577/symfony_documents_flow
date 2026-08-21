@@ -47,15 +47,4 @@ final class PurchaseFileTypeTest extends TestCase
         }
     }
 
-    /**
-     * Конвейер исполнения: согласовали — платим, оплатили — ждём доставку.
-     * Отдельного «счёт отправлен» между ними нет: счёт приходит в пакете
-     * документов отдела закупок ещё внутри маршрута, отмечать нечего.
-     */
-    public function testExecutionGoesStraightToPayment(): void
-    {
-        self::assertSame(PurchaseStatus::INVOICE_PAID, PurchaseStatus::APPROVED->nextExecutionStatus());
-        self::assertSame(PurchaseStatus::DELIVERED, PurchaseStatus::INVOICE_PAID->nextExecutionStatus());
-        self::assertNull(PurchaseStatus::DELIVERED->nextExecutionStatus());
-    }
 }

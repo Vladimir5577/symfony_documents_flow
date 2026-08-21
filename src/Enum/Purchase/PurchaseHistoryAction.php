@@ -7,10 +7,11 @@ namespace App\Enum\Purchase;
 /**
  * Что именно сделал человек — код события для ленты истории.
  *
- * Раньше в историю попадали только смены статуса, а всё согласование идёт
- * внутри одного ON_APPROVAL: подписи лежали на шагах и исчезали вместе с ними
- * при повторной подаче. Теперь каждое действие пишется отдельной строкой, и
- * «кто, что, когда» читается из одной таблицы.
+ * В историю попадают не только смены статуса. Согласование целиком идёт внутри
+ * одного ON_APPROVAL, а решения лежат на задачах и исчезают вместе с ними при
+ * повторной подаче, возврате в закупки и смене маршрута. Поэтому каждое действие
+ * пишется отдельной строкой: след того, что подпись была и сгорела, должен
+ * пережить сами задачи.
  *
  * Код нужен, чтобы фронт строил ленту по нему, а не разбирал русский текст
  * комментария.
@@ -19,11 +20,13 @@ enum PurchaseHistoryAction: string
 {
     case CREATED = 'CREATED';
     case SUBMITTED = 'SUBMITTED';
-    case STEP_APPROVED = 'STEP_APPROVED';
-    case STEP_REJECTED = 'STEP_REJECTED';
-    case STEP_REVOKED = 'STEP_REVOKED';
+    case TASK_APPROVED = 'TASK_APPROVED';
+    case TASK_REJECTED = 'TASK_REJECTED';
+    case TASK_REVOKED = 'TASK_REVOKED';
     case RETURNED_TO_DEPARTMENT = 'RETURNED_TO_DEPARTMENT';
     case APPROVERS_ASSIGNED = 'APPROVERS_ASSIGNED';
+    /** Маршрут заявки сменили на разборе — снимок собран заново. */
+    case ROUTE_CHANGED = 'ROUTE_CHANGED';
     case ITEMS_EDITED = 'ITEMS_EDITED';
     case SOURCING_UPDATED = 'SOURCING_UPDATED';
     case CLASSIFICATION_UPDATED = 'CLASSIFICATION_UPDATED';
@@ -38,11 +41,12 @@ enum PurchaseHistoryAction: string
         return match ($this) {
             self::CREATED => 'Заявка создана',
             self::SUBMITTED => 'Заявка подана',
-            self::STEP_APPROVED => 'Шаг согласован',
-            self::STEP_REJECTED => 'Возвращена автору',
-            self::STEP_REVOKED => 'Подпись снята',
+            self::TASK_APPROVED => 'Согласовано',
+            self::TASK_REJECTED => 'Возвращена автору',
+            self::TASK_REVOKED => 'Подпись снята',
             self::RETURNED_TO_DEPARTMENT => 'Возвращена в отдел закупок',
-            self::APPROVERS_ASSIGNED => 'Назначены профильные замы',
+            self::APPROVERS_ASSIGNED => 'Назначены согласанты',
+            self::ROUTE_CHANGED => 'Маршрут изменён',
             self::ITEMS_EDITED => 'Состав заявки изменён',
             self::SOURCING_UPDATED => 'Поставщик и цены обновлены',
             self::CLASSIFICATION_UPDATED => 'Классификация изменена',

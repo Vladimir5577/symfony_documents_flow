@@ -9,6 +9,7 @@ use App\Enum\Purchase\PurchaseLaw;
 use App\Enum\Purchase\PurchaseMethod;
 use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseRequestKind;
+use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -87,19 +88,48 @@ class PurchaseRequest
     private PurchasePriority $priority = PurchasePriority::NORMAL;
 
     /**
-     * Позиция, зарезервированная под профильных замов: их назначает директор
-     * на разборе, и до его решения шагов там нет.
+     * Какой заготовкой пустить заявку. NULL — возьмётся дефолт для createdAs.
      *
-     * Число замораживается при подаче вместе с маршрутом. Иначе позицию пришлось
-     * бы каждый раз искать в заготовке, а её к тому времени могли переставить —
-     * и замы встали бы не туда, где их ждут подписи после.
-     * NULL — в маршруте заявки слота замов нет (например, у быстрой).
+     * Намерение, а не запись о факте: назначить маршрут можно до подачи и сменить
+     * на разборе, а сработает он только в момент сборки снимка.
      */
-    #[ORM\Column(name: 'approvers_position', type: Types::SMALLINT, nullable: true)]
-    private ?int $approversPosition = null;
+    #[ORM\ManyToOne(targetEntity: PurchaseRouteTemplate::class)]
+    #[ORM\JoinColumn(name: 'route_template_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseRouteTemplate $routeTemplate = null;
+
+    /**
+     * Какой заготовкой снимок собрали фактически.
+     *
+     * Отдельно от намерения, потому что отвечает на другой вопрос: не «чем
+     * пустить», а «по какому регламенту это согласовали». Спросят через полгода,
+     * когда заготовку успеют переименовать и выключить.
+     */
+    #[ORM\ManyToOne(targetEntity: PurchaseRouteTemplate::class)]
+    #[ORM\JoinColumn(name: 'applied_route_template_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseRouteTemplate $appliedRouteTemplate = null;
+
+    /**
+     * Название заготовки на момент подачи. Снимок по той же причине, по которой
+     * задача хранит снимок названия роли: заготовку переименуют, а история
+     * должна читаться как в день подачи.
+     */
+    #[ORM\Column(name: 'applied_route_template_name', length: 255, nullable: true)]
+    private ?string $appliedRouteTemplateName = null;
 
     #[ORM\Column(name: 'due_date', type: Types::DATE_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $dueDate = null;
+
+    /**
+     * Версия строки — оптимистичная блокировка.
+     *
+     * Нужна из-за параллельных этапов: двое согласантов, нажавшие одновременно,
+     * оба прочитали бы незакрытый этап и оба записали решение, а проверка «этап
+     * только что закрылся», от которой зависят уведомления и переход к следующему
+     * этапу, сработала бы дважды или не сработала вовсе.
+     */
+    #[ORM\Version]
+    #[ORM\Column(type: Types::INTEGER, options: ['default' => 1])]
+    private int $version = 1;
 
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
@@ -128,10 +158,10 @@ class PurchaseRequest
     #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseRequestFile::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $files;
 
-    /** @var Collection<int, PurchaseApprovalStep> */
-    #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseApprovalStep::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    /** @var Collection<int, PurchaseApprovalStage> */
+    #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseApprovalStage::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['position' => 'ASC', 'id' => 'ASC'])]
-    private Collection $steps;
+    private Collection $stages;
 
     public function __construct()
     {
@@ -139,7 +169,7 @@ class PurchaseRequest
         $this->comments = new ArrayCollection();
         $this->history = new ArrayCollection();
         $this->files = new ArrayCollection();
-        $this->steps = new ArrayCollection();
+        $this->stages = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -292,18 +322,6 @@ class PurchaseRequest
         return $this;
     }
 
-    public function getApproversPosition(): ?int
-    {
-        return $this->approversPosition;
-    }
-
-    public function setApproversPosition(?int $approversPosition): static
-    {
-        $this->approversPosition = $approversPosition;
-
-        return $this;
-    }
-
     public function getDueDate(): ?\DateTimeImmutable
     {
         return $this->dueDate;
@@ -324,6 +342,21 @@ class PurchaseRequest
     public function getUpdatedAt(): ?\DateTimeImmutable
     {
         return $this->updatedAt;
+    }
+
+    /**
+     * Отметить, что с заявкой что-то произошло.
+     *
+     * Нужно не для даты, а для блокировки: Doctrine сверяет версию только когда
+     * обновляется сама строка заявки, а решение по задаче правит строку задачи.
+     * Без отметки двое согласантов параллельного этапа записались бы, не заметив
+     * друг друга.
+     */
+    public function touch(): static
+    {
+        $this->updatedAt = new \DateTimeImmutable();
+
+        return $this;
     }
 
     /**
@@ -452,74 +485,170 @@ class PurchaseRequest
         return $this;
     }
 
-    /**
-     * @return Collection<int, PurchaseApprovalStep>
-     */
-    public function getSteps(): Collection
+    public function getRouteTemplate(): ?PurchaseRouteTemplate
     {
-        return $this->steps;
+        return $this->routeTemplate;
     }
 
-    public function addStep(PurchaseApprovalStep $step): static
+    public function setRouteTemplate(?PurchaseRouteTemplate $routeTemplate): static
     {
-        if (!$this->steps->contains($step)) {
-            $this->steps->add($step);
-            $step->setPurchaseRequest($this);
+        $this->routeTemplate = $routeTemplate;
+
+        return $this;
+    }
+
+    public function getAppliedRouteTemplate(): ?PurchaseRouteTemplate
+    {
+        return $this->appliedRouteTemplate;
+    }
+
+    public function getAppliedRouteTemplateName(): ?string
+    {
+        return $this->appliedRouteTemplateName;
+    }
+
+    /** Отметить, какой заготовкой собран снимок. Вызывает сборщик маршрута. */
+    public function setAppliedRouteTemplate(?PurchaseRouteTemplate $template): static
+    {
+        $this->appliedRouteTemplate = $template;
+        $this->appliedRouteTemplateName = $template?->getName();
+
+        return $this;
+    }
+
+    public function getVersion(): int
+    {
+        return $this->version;
+    }
+
+    /**
+     * @return Collection<int, PurchaseApprovalStage>
+     */
+    public function getStages(): Collection
+    {
+        return $this->stages;
+    }
+
+    public function addStage(PurchaseApprovalStage $stage): static
+    {
+        if (!$this->stages->contains($stage)) {
+            $this->stages->add($stage);
+            $stage->setPurchaseRequest($this);
         }
 
         return $this;
     }
 
-    public function removeStep(PurchaseApprovalStep $step): static
+    public function removeStage(PurchaseApprovalStage $stage): static
     {
-        $this->steps->removeElement($step);
+        $this->stages->removeElement($stage);
 
         return $this;
     }
 
     /**
-     * Указатель маршрута: минимальная позиция среди незакрытых шагов.
-     * NULL — незакрытых нет, то есть маршрут пройден (или ещё не построен).
-     * Отдельной колонкой не хранится, чтобы её нельзя было рассинхронить с шагами.
-     */
-    public function getCurrentPosition(): ?int
-    {
-        $min = null;
-        foreach ($this->steps as $step) {
-            if ($step->isPending() && ($min === null || $step->getPosition() < $min)) {
-                $min = $step->getPosition();
-            }
-        }
-
-        return $min;
-    }
-
-    /**
-     * Шаги, по которым можно действовать прямо сейчас — вся текущая позиция.
-     * Параллельные шаги закрываются в любом порядке, позиция уходит, когда закрыты все.
+     * Этап, на котором заявка стоит прямо сейчас. NULL — маршрут пройден, ещё не
+     * построен или заявка не на согласовании.
      *
-     * @return list<PurchaseApprovalStep>
+     * Активный этап в маршруте один: его отмечает воркфлоу, а не вычисляет
+     * читающий. Если их вдруг оказалось несколько, берём самый ранний — вести себя
+     * непредсказуемо хуже, чем предсказуемо.
      */
-    public function getActiveSteps(): array
+    public function getCurrentStage(): ?PurchaseApprovalStage
     {
-        $position = $this->getCurrentPosition();
-        if ($position === null) {
-            return [];
-        }
-
-        $active = [];
-        foreach ($this->steps as $step) {
-            if ($step->isPending() && $step->getPosition() === $position) {
-                $active[] = $step;
+        $current = null;
+        foreach ($this->stages as $stage) {
+            if (!$stage->isActive()) {
+                continue;
+            }
+            if ($current === null || $stage->getPosition() < $current->getPosition()) {
+                $current = $stage;
             }
         }
 
-        return $active;
+        return $current;
+    }
+
+    /**
+     * Задачи, по которым можно действовать прямо сейчас.
+     *
+     * @return list<PurchaseApprovalTask>
+     */
+    public function getActiveTasks(): array
+    {
+        return $this->getCurrentStage()?->getPendingTasks() ?? [];
+    }
+
+    /** Первый непройденный этап — куда указатель поедет дальше. */
+    public function findNextOpenStage(): ?PurchaseApprovalStage
+    {
+        foreach ($this->stages as $stage) {
+            if (!$stage->isClosed()) {
+                return $stage;
+            }
+        }
+
+        return null;
+    }
+
+    /** Этап заявки по его позиции. */
+    public function findStageByPosition(int $position): ?PurchaseApprovalStage
+    {
+        foreach ($this->stages as $stage) {
+            if ($stage->getPosition() === $position) {
+                return $stage;
+            }
+        }
+
+        return null;
+    }
+
+    /** Самый ранний этап такого назначения. */
+    public function findStageByPurpose(PurchaseStagePurpose $purpose): ?PurchaseApprovalStage
+    {
+        foreach ($this->stages as $stage) {
+            if ($stage->getPurpose() === $purpose) {
+                return $stage;
+            }
+        }
+
+        return null;
+    }
+
+    /** Задача заявки по id — среди всех этапов. */
+    public function findTask(int $taskId): ?PurchaseApprovalTask
+    {
+        foreach ($this->stages as $stage) {
+            foreach ($stage->getTasks() as $task) {
+                if ($task->getId() === $taskId) {
+                    return $task;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Все задачи маршрута по порядку.
+     *
+     * @return list<PurchaseApprovalTask>
+     */
+    public function getAllTasks(): array
+    {
+        $tasks = [];
+        foreach ($this->stages as $stage) {
+            foreach ($stage->getTasks() as $task) {
+                $tasks[] = $task;
+            }
+        }
+
+        return $tasks;
     }
 
     /** Маршрут построен и полностью пройден. */
     public function isRouteComplete(): bool
     {
-        return !$this->steps->isEmpty() && $this->getCurrentPosition() === null;
+        return !$this->stages->isEmpty() && $this->findNextOpenStage() === null;
     }
 }

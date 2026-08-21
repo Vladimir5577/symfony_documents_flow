@@ -24,7 +24,8 @@
 
 ## Формат ответов
 
-    Список:         { "items": [...], "pagination": { page, limit, total, pages } }
+    Список:         { "items": [...], "newAppealsCount": 3,
+                      "pagination": { page, limit, total, pages } }
     Один объект:    { "data": {...} }
     После PATCH:    { "data": {...} }   — обновлённый объект целиком
     Ошибка:         { "error": "текст на русском для показа пользователю" }
@@ -75,8 +76,20 @@ Query-параметры (все опциональны):
           "createdAt": "2026-07-10T14:05:00+03:00"
         }
       ],
+      "newAppealsCount": 3,
       "pagination": { "page": 1, "limit": 20, "total": 3, "pages": 1 }
     }
+
+Поля верхнего уровня:
+
+    items             array   обращения текущей страницы
+    newAppealsCount   int     сколько всего обращений в статусе new
+    pagination        object  page, limit, total, pages
+
+`newAppealsCount` не зависит от фильтров и страницы: при `status=done` или
+`city=Донецк` он останется тем же. Нужен для бейджа «новые» в меню, чтобы не
+делать отдельный запрос. Не путать с `pagination.total` — тот считает
+обращения, попавшие под текущие фильтры.
 
 Поля элемента списка:
 

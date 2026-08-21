@@ -16,16 +16,4 @@ enum PurchaseLaw: string
             self::FZ_223 => '223-ФЗ',
         };
     }
-
-    /**
-     * @return array<string, string> [value => label]
-     */
-    public static function getChoices(): array
-    {
-        $choices = [];
-        foreach (self::cases() as $case) {
-            $choices[$case->value] = $case->getLabel();
-        }
-        return $choices;
-    }
 }

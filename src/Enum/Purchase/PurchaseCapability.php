@@ -43,15 +43,4 @@ enum PurchaseCapability: string
             self::SUPERVISE => 'Приоритет и отмена заявок',
         };
     }
-
-    /** @return array<string, string> [value => label] */
-    public static function getChoices(): array
-    {
-        $choices = [];
-        foreach (self::cases() as $case) {
-            $choices[$case->value] = $case->getLabel();
-        }
-
-        return $choices;
-    }
 }

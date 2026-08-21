@@ -15,19 +15,20 @@ use App\Enum\Purchase\PurchaseLaw;
 use App\Enum\Purchase\PurchaseMethod;
 use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseRoleCode;
-use App\Enum\Purchase\PurchaseSettingKey;
 use App\Enum\Purchase\PurchaseStatus;
-use App\Enum\Purchase\PurchaseStepPurpose;
+use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\User\UserRole;
-use App\Repository\Purchase\PurchaseApprovalStepRepository;
+use App\Repository\Purchase\PurchaseApprovalTaskRepository;
 use App\Repository\Purchase\PurchaseCategoryRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
-use App\Repository\Purchase\PurchaseSettingRepository;
+use App\Repository\Purchase\PurchaseRouteDefaultRepository;
+use App\Repository\Purchase\PurchaseRouteTemplateRepository;
 use App\Service\Purchase\ApprovalRouteBuilder;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseFileStorageService;
-use App\Service\Purchase\PurchaseRequestService;
+use App\Service\Purchase\PurchaseApprovalWorkflow;
+use App\Service\Purchase\PurchaseRequestEditor;
 use App\Service\Purchase\PurchaseRoster;
 use App\Service\Purchase\PurchaseTransitionException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -48,15 +49,17 @@ final class PurchaseController extends AbstractController
     public function __construct(
         private readonly PurchaseRequestRepository $purchaseRepo,
         private readonly PurchaseCategoryRepository $categoryRepo,
-        private readonly PurchaseApprovalStepRepository $stepRepo,
-        private readonly PurchaseSettingRepository $settingRepo,
+        private readonly PurchaseApprovalTaskRepository $taskRepo,
         private readonly PurchaseApiPresenter $presenter,
-        private readonly PurchaseRequestService $purchaseService,
+        private readonly PurchaseApprovalWorkflow $workflow,
+        private readonly PurchaseRequestEditor $editor,
         private readonly PurchaseFileStorageService $fileStorage,
         private readonly EntityManagerInterface $em,
         private readonly PurchaseAccess $access,
         private readonly PurchaseRoster $roster,
         private readonly ApprovalRouteBuilder $routeBuilder,
+        private readonly PurchaseRouteDefaultRepository $routeDefaults,
+        private readonly PurchaseRouteTemplateRepository $templateRepo,
     ) {
     }
 
@@ -152,7 +155,7 @@ final class PurchaseController extends AbstractController
         // Согласование — активные шаги, ждущие лично меня или мою роль.
         // Именно активные: будущие шаги мне ещё недоступны, и бейдж показал бы
         // работу, которую сделать нельзя.
-        $approverPending = $this->stepRepo->countActiveForUser($user, $this->roster->roleCodesOf($user));
+        $approverPending = $this->taskRepo->countActiveForUser($user, $this->roster->roleCodesOf($user));
 
         [$createdById] = $this->resolveScope($user);
         $byStatus = $this->purchaseRepo->countByStatuses($createdById);
@@ -223,35 +226,9 @@ final class PurchaseController extends AbstractController
     }
 
     /**
-     * Настройки модуля. Читают все авторизованные: форма быстрой заявки
-     * показывает потолок в подсказке до того, как что-то отправлено.
-     *
-     * Объявлены до /{id}: иначе «settings» уйдёт в маршрут карточки.
-     */
-    #[Route('/settings', name: 'spa_api_purchases_settings_get', methods: ['GET'])]
-    public function getSettings(#[CurrentUser] ?User $user): JsonResponse
-    {
-        if (!$user instanceof User) {
-            throw $this->createAccessDeniedException();
-        }
-
-        return $this->json([
-            'fastMaxAmount' => $this->settingRepo->getFastMaxAmount(),
-        ]);
-    }
-
-    /**
-     * Превью маршрута для формы создания: какие шаги получатся при выбранной кнопке.
-     *
-     * Считает бэк тем же строителем, что и реальную подачу, — правило «быстрая
-     * идёт сразу в отдел закупок, обычная к директору» живёт в одном месте.
-     *
-     * Объявлен до /{id}: иначе «route-preview» уйдёт в маршрут карточки.
-     */
-    /**
      * Очередь разбора: заявки, ждущие решения этого человека, по порядку.
      *
-     * Ролевого гейта нет — очередь сама и есть ответ: у того, к кому шаги
+     * Ролевого гейта нет — очередь сама и есть ответ: у того, к кому задачи
      * разбора не адресованы, она пустая. Раньше гейт спрашивал «ты директор»,
      * и второй разбирающий в маршруте потребовал бы правки контроллера.
      *
@@ -278,6 +255,15 @@ final class PurchaseController extends AbstractController
         ]);
     }
 
+    /**
+     * Превью маршрута для формы создания: какие этапы получатся при выбранной
+     * кнопке, и какие маршруты этому виду заявки вообще доступны.
+     *
+     * Считает бэк тем же резолвером и сборщиком, что и реальная подача, — правило
+     * «какой маршрут по умолчанию» живёт в одном месте.
+     *
+     * Объявлен до /{id}: иначе «route-preview» уйдёт в маршрут карточки.
+     */
     #[Route('/route-preview', name: 'spa_api_purchases_route_preview', methods: ['GET'])]
     public function routePreview(Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -288,60 +274,22 @@ final class PurchaseController extends AbstractController
         $kind = PurchaseRequestKind::tryFrom((string) $request->query->get('kind', ''))
             ?? PurchaseRequestKind::STANDARD;
 
+        $template = $this->routeDefaults->findByKind($kind)?->getTemplate();
+        $usable = $template !== null && $template->isActive() && !$template->isEmpty();
+
         return $this->json([
             'kind' => $kind->value,
-            'steps' => $this->routeBuilder->preview($kind),
-        ]);
-    }
-
-    /**
-     * Настройка сейчас одна — потолок быстрой заявки, правит отдел закупок.
-     *
-     * Список писателей оставлен таблицей, хотя строка в ней одна: у настроек
-     * модуля владельцы разные, и следующая добавляется сюда одной строкой.
-     */
-    #[Route('/settings', name: 'spa_api_purchases_settings_update', methods: ['PUT'])]
-    public function updateSettings(Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        if (!$user instanceof User) {
-            throw $this->createAccessDeniedException();
-        }
-
-        $payload = json_decode($request->getContent(), true);
-        if (!is_array($payload)) {
-            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
-        }
-
-        // ROLE_ADMIN проходит любое полномочие — это делает PurchaseRoster.
-        $canManageDictionaries = $this->access->can($user, PurchaseCapability::MANAGE_DICTIONARIES);
-        $writable = [
-            'fastMaxAmount' => [PurchaseSettingKey::FAST_MAX_AMOUNT, $canManageDictionaries],
-        ];
-
-        $touched = false;
-        foreach ($writable as $field => [$key, $allowed]) {
-            if (!array_key_exists($field, $payload)) {
-                continue;
-            }
-            if (!$allowed) {
-                return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-            }
-            // Тип значения БД не контролирует (JSON) — проверяем по ключу
-            if (!$key->isValid($payload[$field])) {
-                return $this->json(['error' => SpaApiError::PURCHASE_INVALID_SETTING], Response::HTTP_BAD_REQUEST);
-            }
-            $this->settingRepo->set($key, (float) $payload[$field]);
-            $touched = true;
-        }
-
-        if (!$touched) {
-            return $this->json(['error' => SpaApiError::PURCHASE_INVALID_SETTING], Response::HTTP_BAD_REQUEST);
-        }
-
-        $this->em->flush();
-
-        return $this->json([
-            'fastMaxAmount' => $this->settingRepo->getFastMaxAmount(),
+            // Маршрут не настроен — форма обязана сказать это прямо, а не
+            // показать пустую цепочку, будто согласований не будет.
+            'isConfigured' => $usable,
+            'route' => $usable
+                ? ['id' => $template->getId(), 'name' => $template->getName()]
+                : null,
+            'stages' => $usable ? $this->routeBuilder->preview($template) : [],
+            'options' => array_map(
+                static fn ($t): array => ['id' => $t->getId(), 'name' => $t->getName()],
+                $this->templateRepo->findActiveForKind($kind),
+            ),
         ]);
     }
 
@@ -378,7 +326,7 @@ final class PurchaseController extends AbstractController
         }
 
         $this->em->persist($purchase);
-        $this->purchaseService->logCreated($purchase, $user);
+        $this->workflow->logCreated($purchase, $user);
         $this->em->flush();
 
         return $this->json($this->presenter->presentDetail($purchase), Response::HTTP_CREATED);
@@ -498,7 +446,7 @@ final class PurchaseController extends AbstractController
             return $error;
         }
 
-        $this->purchaseService->log($purchase, $user, PurchaseHistoryAction::CLASSIFICATION_UPDATED);
+        $this->editor->log($purchase, $user, PurchaseHistoryAction::CLASSIFICATION_UPDATED);
 
         return $this->json($this->presenter->presentDetail($purchase));
     }
@@ -525,7 +473,7 @@ final class PurchaseController extends AbstractController
         // Правит тот, на чьём шаге ресёрча стоит заявка, а не всякий носитель
         // роли: у маршрута может не быть шага закупок вовсе, а у отдела —
         // заявок, до которых ещё не дошла очередь.
-        if ($this->access->findMyActiveStep($purchase, $user, PurchaseStepPurpose::SOURCING) === null) {
+        if ($this->access->findMyActiveTask($purchase, $user, PurchaseStagePurpose::SOURCING) === null) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -547,7 +495,7 @@ final class PurchaseController extends AbstractController
         }
 
         try {
-            $this->purchaseService->applySourcing($purchase, $user, $supplier, $prices);
+            $this->editor->applySourcing($purchase, $user, $supplier, $prices);
         } catch (PurchaseTransitionException $e) {
             return $this->json(['error' => $e->errorCode], Response::HTTP_CONFLICT);
         }

@@ -5,28 +5,37 @@ declare(strict_types=1);
 namespace App\Tests\Service\Purchase;
 
 use App\Controller\SpaApi\SpaApiError;
-use App\Entity\Purchase\PurchaseApprovalStep;
+use App\Entity\Purchase\PurchaseApprovalStage;
+use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
+use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\Purchase\PurchaseRequestItem;
+use App\Entity\Purchase\PurchaseRouteDefault;
 use App\Entity\Purchase\PurchaseRouteTemplate;
-use App\Entity\Purchase\PurchaseRouteTemplateStep;
+use App\Entity\Purchase\PurchaseRouteTemplateStage;
+use App\Entity\Purchase\PurchaseRouteTemplateTask;
 use App\Entity\User\User;
-use App\Enum\Purchase\PurchaseApproverKind;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseRoleCode;
+use App\Enum\Purchase\PurchaseStagePurpose;
+use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseStatus;
-use App\Enum\Purchase\PurchaseStepDecision;
-use App\Enum\Purchase\PurchaseStepPurpose;
+use App\Enum\Purchase\PurchaseTaskAssignment;
+use App\Enum\Purchase\PurchaseTaskDecision;
 use App\Repository\Purchase\PurchaseApproverRoleRepository;
+use App\Repository\Purchase\PurchaseRouteDefaultRepository;
 use App\Repository\Purchase\PurchaseRouteTemplateRepository;
-use App\Repository\Purchase\PurchaseSettingRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Notification\NotificationPublisher;
 use App\Service\Purchase\ApprovalRouteBuilder;
+use App\Service\Purchase\ApprovalRouteResolver;
+use App\Service\Purchase\PurchaseAccess;
+use App\Service\Purchase\PurchaseApprovalWorkflow;
+use App\Service\Purchase\PurchaseHistoryLogger;
 use App\Service\Purchase\PurchaseNotificationPublisher;
-use App\Service\Purchase\PurchaseRequestService;
+use App\Service\Purchase\PurchaseRequestEditor;
 use App\Service\Purchase\PurchaseRoster;
 use App\Service\Purchase\PurchaseTransitionException;
 use Doctrine\ORM\EntityManagerInterface;
@@ -37,85 +46,96 @@ use Symfony\Component\Messenger\MessageBusInterface;
 /**
  * Сценарии согласования заявки на закупку — регламент целиком.
  *
- * Проверяется поведение, а не форма данных: маршрут собирает настоящий
- * ApprovalRouteBuilder, решения проводит настоящий PurchaseRequestService.
- * Из инфраструктуры подменены только шина сообщений и репозитории — БД
- * согласованию не нужна, указатель маршрута считается в памяти по шагам.
+ * Проверяется поведение, а не форма данных: снимок маршрута собирает настоящий
+ * ApprovalRouteBuilder, решения проводит настоящий PurchaseApprovalWorkflow. Из
+ * инфраструктуры подменены только шина сообщений и репозитории — БД согласованию
+ * не нужна.
  *
- * Маршруты берутся из заготовок-фикстур ниже — они описывают тот регламент,
- * который в проекте считают типовым. В коде модуля его нет: маршрут собирают в
- * админке, поэтому «как согласуют закупки» — вопрос данных, и здесь эти данные
- * задаёт тест. Проверяется от них не «маршрут собрался», а то, что ломается
- * неочевидно: кто становится исполнителем, какие подписи сгорают при возврате и
- * куда встают назначенные директором замы. Правку самих заготовок и правила
- * редактора проверяет PurchaseRouteTemplateTest.
+ * Маршруты берутся из заготовок-фикстур ниже: они описывают тот регламент, который
+ * в проекте считают типовым. В коде модуля его нет — маршруты собирают в админке,
+ * поэтому «как согласуют закупки» вопрос данных, и здесь эти данные задаёт тест.
+ * Проверяется от них не «снимок собрался», а то, что ломается неочевидно: кто
+ * становится исполнителем, какие подписи сгорают при возврате, куда встают
+ * выбранные разбирающим согласанты и как маршрут проецируется в статус заявки.
+ * Правку самих заготовок и правила редактора проверяет PurchaseRouteTemplateTest.
  */
 final class PurchaseApprovalFlowTest extends TestCase
 {
-    /** Позиции маршрутов из фикстур ниже: fastRoute() и standardRoute(). */
+    /** Позиции этапов маршрутов из фикстур ниже. */
 
     /** У быстрой заявки отдел закупок первый и единственный. */
-    private const POSITION_FAST_DEPARTMENT = 1;
+    private const STAGE_FAST_SOURCING = 1;
 
-    private const POSITION_DIRECTOR = 1;
-    private const POSITION_DEPARTMENT = 2;
-    private const POSITION_CHECKS = 3;
-    private const POSITION_APPROVERS = 4;
-    private const POSITION_DIRECTOR_FINAL = 5;
-    private const POSITION_FINANCE = 6;
+    private const STAGE_TRIAGE = 1;
+    private const STAGE_SOURCING = 2;
+    private const STAGE_CHECKS = 3;
+    private const STAGE_APPROVERS = 4;
+    private const STAGE_FINANCE = 5;
+
+    /** Хвост исполнения — только в полном маршруте. */
+    private const STAGE_PAYMENT = 6;
+    private const STAGE_DELIVERY = 7;
+    private const STAGE_CLOSING = 8;
 
     // Быстрый маршрут
 
-    public function testFastRouteIsSingleDepartmentStep(): void
+    public function testFastRouteIsSingleSourcingStage(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::FAST, $author);
-
-        $service->submit($request, $author);
+        $request = $this->submitted(PurchaseRequestKind::FAST);
 
         self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
-        self::assertSame(
-            [[self::POSITION_FAST_DEPARTMENT, PurchaseRoleCode::PURCHASE_DEPARTMENT->value]],
-            $this->shape($request),
-        );
+        self::assertSame([
+            [self::STAGE_FAST_SOURCING, PurchaseStagePurpose::SOURCING->value, [PurchaseRoleCode::PURCHASE_DEPARTMENT->value]],
+        ], $this->shape($request));
     }
 
-    /** Единственный шаг закрыт — согласовывать больше нечего, заявка утверждена. */
+    /** Единственный этап закрыт — согласовывать больше нечего, заявка утверждена. */
     public function testFastRouteCompletesOnSingleApproval(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $buyer = $this->user(2);
-        $request = $this->request(PurchaseRequestKind::FAST, $author);
+        $request = $this->submitted(PurchaseRequestKind::FAST);
 
-        $service->submit($request, $author);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_FAST_DEPARTMENT), $buyer);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_FAST_SOURCING), $this->user(2));
 
         self::assertSame(PurchaseStatus::APPROVED, $request->getStatus());
-        self::assertNull($request->getCurrentPosition());
+        self::assertNull($request->getCurrentStage());
         self::assertTrue($request->isRouteComplete());
     }
 
-    /** Потолок быстрой заявки стережёт сервер: спрятанная кнопка защитой не является. */
-    public function testFastSubmitAboveCapIsRejected(): void
+    /** Суммой подача не ограничена: любая сумма идёт по маршруту своего вида. */
+    public function testFastSubmitIsNotLimitedByAmount(): void
     {
-        $service = $this->service(fastMaxAmount: 1000.0);
         $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::FAST, $author, ['1500.00']);
+        $request = $this->request(PurchaseRequestKind::FAST, $author, ['1500000.00']);
 
-        $this->expectTransitionError(SpaApiError::PURCHASE_FAST_LIMIT_EXCEEDED);
-        $service->submit($request, $author);
+        $this->workflow()->submit($request, $author);
+
+        self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
     }
 
     public function testSubmitWithoutItemsIsRejected(): void
     {
-        $service = $this->service();
         $author = $this->user(1);
         $request = $this->request(PurchaseRequestKind::STANDARD, $author, []);
 
         $this->expectTransitionError(SpaApiError::PURCHASE_ITEMS_REQUIRED);
-        $service->submit($request, $author);
+        $this->workflow()->submit($request, $author);
+    }
+
+    /**
+     * Маршрута по умолчанию нет — подать нельзя.
+     *
+     * Умолчания в коде нет намеренно: заявка без этапов висела бы на согласовании,
+     * не стоя ни у кого, а типовой маршрут из кода был бы вторым ответом на вопрос
+     * «как согласуют закупки».
+     */
+    public function testSubmitWithoutConfiguredRouteIsRejected(): void
+    {
+        $author = $this->user(1);
+        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $workflow = $this->workflow(configured: false);
+
+        $this->expectTransitionError(SpaApiError::PURCHASE_ROUTE_NOT_CONFIGURED);
+        $workflow->submit($request, $author);
     }
 
     // Обычный маршрут
@@ -123,194 +143,171 @@ final class PurchaseApprovalFlowTest extends TestCase
     /**
      * Порядок именно такой: отдел закупок готовит документы РАНЬШЕ согласующих,
      * потому что подписывать нечего, пока нет поставщика, цен и договора.
+     *
+     * Бухгалтерия и юристы стоят двумя задачами ОДНОГО этапа — параллельность
+     * теперь состав этапа, а не совпадение номеров позиций.
      */
     public function testStandardRouteShape(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
-
-        $service->submit($request, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
 
         self::assertSame([
-            [self::POSITION_DIRECTOR, PurchaseRoleCode::DIRECTOR->value],
-            [self::POSITION_DEPARTMENT, PurchaseRoleCode::PURCHASE_DEPARTMENT->value],
-            [self::POSITION_CHECKS, PurchaseRoleCode::ACCOUNTING->value],
-            [self::POSITION_CHECKS, PurchaseRoleCode::LEGAL->value],
-            [self::POSITION_DIRECTOR_FINAL, PurchaseRoleCode::DIRECTOR->value],
-            [self::POSITION_FINANCE, PurchaseRoleCode::FINANCE_DIRECTOR->value],
+            [self::STAGE_TRIAGE, PurchaseStagePurpose::TRIAGE->value, [PurchaseRoleCode::DIRECTOR->value]],
+            [self::STAGE_SOURCING, PurchaseStagePurpose::SOURCING->value, [PurchaseRoleCode::PURCHASE_DEPARTMENT->value]],
+            [self::STAGE_CHECKS, PurchaseStagePurpose::SIGN_OFF->value, [
+                PurchaseRoleCode::ACCOUNTING->value,
+                PurchaseRoleCode::LEGAL->value,
+            ]],
+            [self::STAGE_APPROVERS, PurchaseStagePurpose::SIGN_OFF->value, []],
+            [self::STAGE_FINANCE, PurchaseStagePurpose::SIGN_OFF->value, [PurchaseRoleCode::FINANCE_DIRECTOR->value]],
         ], $this->shape($request));
-        self::assertSame(self::POSITION_DIRECTOR, $request->getCurrentPosition());
+        self::assertSame(self::STAGE_TRIAGE, $request->getCurrentStage()?->getPosition());
     }
 
     /**
-     * Позиция замов при подаче пустая: до решения директора неизвестно, кто они
-     * и есть ли вообще. Место под них зарезервировано, шага нет.
+     * Этап согласантов при подаче пуст: до решения разбирающего неизвестно, кто
+     * они и есть ли вообще. Этап при этом виден и помечен ожиданием назначения —
+     * это не провал в маршруте.
      */
-    public function testApproversSlotIsEmptyUntilDirectorDecides(): void
+    public function testDynamicStageIsEmptyUntilTriageDecides(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $stage = $this->stageAt($request, self::STAGE_APPROVERS);
 
-        $service->submit($request, $author);
-
-        self::assertSame([], $this->stepsAt($request, self::POSITION_APPROVERS));
+        self::assertCount(0, $stage->getTasks());
+        self::assertSame(PurchaseStageStatus::AWAITING_ASSIGNMENT, $stage->getStatus());
+        self::assertTrue($stage->isDynamic());
+        self::assertSame(PurchaseRoleCode::PROFILE_DEPUTY, $stage->getCandidateRoleCode());
     }
 
-    /** Бухгалтерия и юристы параллельны: позиция уходит, когда подписали оба. */
-    public function testParallelPositionWaitsForBothSignatures(): void
+    /** Бухгалтерия и юристы параллельны: этап уходит, когда подписали оба. */
+    public function testParallelStageWaitsForBothSignatures(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $this->approveThrough($request, self::STAGE_SOURCING);
 
-        $service->submit($request, $author);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DIRECTOR), $this->user(2));
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DEPARTMENT), $this->user(3));
-
-        $service->approveStep(
+        $this->workflow->approveTask(
             $request,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::ACCOUNTING),
+            $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
             $this->user(4),
         );
 
-        self::assertSame(self::POSITION_CHECKS, $request->getCurrentPosition());
+        self::assertSame(self::STAGE_CHECKS, $request->getCurrentStage()?->getPosition());
 
-        $service->approveStep(
+        $this->workflow->approveTask(
             $request,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::LEGAL),
+            $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::LEGAL),
             $this->user(5),
         );
 
-        self::assertSame(self::POSITION_DIRECTOR_FINAL, $request->getCurrentPosition());
+        // Этап согласантов пуст — разбирающий никого не выбрал, и указатель его
+        // проезжает, а не встаёт ждать тех, кого не будет.
+        self::assertSame(self::STAGE_FINANCE, $request->getCurrentStage()?->getPosition());
+        self::assertSame(
+            PurchaseStageStatus::SKIPPED,
+            $this->stageAt($request, self::STAGE_APPROVERS)->getStatus(),
+        );
     }
 
     /**
-     * Исполнитель — тот, кто закрыл шаг отдела закупок: он вёл ресёрч и документы.
-     * Не первый подписант конвейера и не тот, кто платит.
+     * Исполнитель — тот, кто закрыл этап ресёрча: он вёл поиск поставщика и
+     * документы. Не первый коснувшийся исполнения и не тот, кто платит.
      */
-    public function testExecutorIsTheOneWhoClosedDepartmentStep(): void
+    public function testExecutorIsTheOneWhoClosedSourcingStage(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
         $director = $this->user(2);
         $buyer = $this->user(3);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
 
-        $service->submit($request, $author);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DIRECTOR), $director);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_TRIAGE), $director);
 
-        self::assertNull($request->getExecutor(), 'подпись директора исполнителя не назначает');
+        self::assertNull($request->getExecutor(), 'подпись разбирающего исполнителя не назначает');
 
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DEPARTMENT), $buyer);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_SOURCING), $buyer);
 
         self::assertSame($buyer, $request->getExecutor());
     }
 
     public function testApprovingOutOfTurnIsRejected(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
 
-        $service->submit($request, $author);
-
-        $this->expectTransitionError(SpaApiError::PURCHASE_STEP_NOT_ACTIVE);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_FINANCE), $this->user(9));
+        $this->expectTransitionError(SpaApiError::PURCHASE_TASK_NOT_ACTIVE);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_FINANCE), $this->user(9));
     }
 
     /**
-     * Требование файла живёт на шаге, а не в конвейере: пока проверка нигде не
-     * включена, но она работает — на неё будет опираться редактор шаблонов.
+     * Требование файла живёт на задаче, а не в конвейере: у быстрого маршрута
+     * задачи «договор» нет, и требовать с него договор не за что.
      */
-    public function testStepRequiringFileBlocksApproval(): void
+    public function testTaskRequiringFileBlocksApproval(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::FAST, $author);
+        $request = $this->submitted(PurchaseRequestKind::FAST);
+        $task = $this->taskAt($request, self::STAGE_FAST_SOURCING);
+        $task->setRequiresFileType(PurchaseFileType::CONTRACT);
 
-        $service->submit($request, $author);
-        $step = $this->stepAt($request, self::POSITION_FAST_DEPARTMENT);
-        $step->setRequiresFileType(PurchaseFileType::CONTRACT);
-
-        $this->expectTransitionError(SpaApiError::PURCHASE_STEP_FILE_REQUIRED);
-        $service->approveStep($request, $step, $this->user(2));
+        $this->expectTransitionError(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
+        $this->workflow->approveTask($request, $task, $this->user(2));
     }
 
-    // Решение директора
+    // Разбор
 
     /**
-     * Замы встают на свою позицию — далеко позади отдела закупок, — а заявка
-     * после подписи директора уезжает именно в закупки. Автор согласантом не
+     * Согласанты встают на свой этап — далеко позади отдела закупок, — а заявка
+     * после решения разбирающего уезжает именно в закупки. Автор согласантом не
      * становится, повторы схлопываются.
      */
-    public function testDirectorSendAssignsApproversToReservedPosition(): void
+    public function testTriageAssignsApproversToDynamicStage(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $director = $this->user(2);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $author = $request->getCreatedBy();
+        self::assertInstanceOf(User::class, $author);
         $deputy = $this->user(7);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $stage = $this->stageAt($request, self::STAGE_APPROVERS);
 
-        $service->submit($request, $author);
-        $service->directorSend(
+        $this->workflow->triage(
             $request,
-            $this->stepAt($request, self::POSITION_DIRECTOR),
-            $director,
+            $this->taskAt($request, self::STAGE_TRIAGE),
+            $this->user(2),
             [],
-            [$deputy, $deputy, $author],
+            [(int) $stage->getId() => [$deputy, $deputy, $author]],
         );
 
-        $assigned = $this->stepsAt($request, self::POSITION_APPROVERS);
-        self::assertCount(1, $assigned, 'автор и дубликаты в согласанты не попадают');
-        self::assertSame($deputy, $assigned[0]->getApproverUser());
-        self::assertSame(self::POSITION_DEPARTMENT, $request->getCurrentPosition());
+        self::assertCount(1, $stage->getTasks(), 'автор и дубликаты в согласанты не попадают');
+        $assigned = $stage->getTasks()->first();
+        self::assertInstanceOf(PurchaseApprovalTask::class, $assigned);
+        self::assertSame($deputy, $assigned->getAssigneeUser());
+        self::assertSame(PurchaseStageStatus::PENDING, $stage->getStatus());
+        self::assertSame(self::STAGE_SOURCING, $request->getCurrentStage()?->getPosition());
     }
 
-    /** С итогового решения замов назначить нельзя: их позиция уже позади. */
-    public function testApproversCannotBeAssignedFromFinalDirectorStep(): void
+    /**
+     * Назначить согласантов можно только пока активен разбор: дальше выбирать их
+     * некому, а указатель поехал бы назад.
+     */
+    public function testApproversCannotBeAssignedAfterTriage(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $director = $this->user(2);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $this->approveThrough($request, self::STAGE_TRIAGE);
 
-        $service->submit($request, $author);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DIRECTOR), $director);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DEPARTMENT), $this->user(3));
-        $service->approveStep(
+        $this->expectTransitionError(SpaApiError::PURCHASE_TASK_NOT_ACTIVE);
+        $this->workflow->triage(
             $request,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::ACCOUNTING),
-            $this->user(4),
-        );
-        $service->approveStep(
-            $request,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::LEGAL),
-            $this->user(5),
-        );
-
-        $this->expectTransitionError(SpaApiError::PURCHASE_INVALID_STATUS);
-        $service->directorSend(
-            $request,
-            $this->stepAt($request, self::POSITION_DIRECTOR_FINAL),
-            $director,
+            $this->taskAt($request, self::STAGE_SOURCING),
+            $this->user(3),
             [],
-            [$this->user(7)],
+            [],
         );
     }
 
     /** Снятая позиция в сумму не идёт, количество берётся утверждённое. */
-    public function testDirectorEditsAffectTotalAmount(): void
+    public function testTriageEditsAffectTotalAmount(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author, ['100.00', '200.00']);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00', '200.00']);
 
-        $service->submit($request, $author);
-        $service->directorSend(
+        $this->workflow->triage(
             $request,
-            $this->stepAt($request, self::POSITION_DIRECTOR),
+            $this->taskAt($request, self::STAGE_TRIAGE),
             $this->user(2),
             [
                 1 => ['included' => true, 'quantity' => '3.000'],
@@ -323,18 +320,14 @@ final class PurchaseApprovalFlowTest extends TestCase
     }
 
     /** Заявка без единой позиции — это отказ, и оформлять его надо отказом. */
-    public function testDirectorCannotExcludeEveryItem(): void
+    public function testTriageCannotExcludeEveryItem(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
-
-        $service->submit($request, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
 
         $this->expectTransitionError(SpaApiError::PURCHASE_ITEMS_REQUIRED);
-        $service->directorSend(
+        $this->workflow->triage(
             $request,
-            $this->stepAt($request, self::POSITION_DIRECTOR),
+            $this->taskAt($request, self::STAGE_TRIAGE),
             $this->user(2),
             [1 => ['included' => false, 'quantity' => null]],
             [],
@@ -344,78 +337,99 @@ final class PurchaseApprovalFlowTest extends TestCase
     // Возврат в отдел закупок
 
     /**
-     * Бухгалтерия и юристы бракуют пакет документов, а не заявку: она остаётся
-     * на согласовании и откатывается на шаг закупок. Подписи, успевшие лечь
-     * после этого шага, сбрасываются — пакет будет другой.
+     * Бухгалтерия и юристы бракуют пакет документов, а не заявку: она остаётся на
+     * согласовании и откатывается на этап закупок. Решения, успевшие лечь после
+     * этого этапа, сбрасываются — пакет будет другой.
      */
-    public function testReturnToDepartmentResetsLaterSignatures(): void
+    public function testReturnToSourcingResetsLaterSignatures(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
-
-        $service->submit($request, $author);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DIRECTOR), $this->user(2));
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DEPARTMENT), $this->user(3));
-        $service->approveStep(
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $this->approveThrough($request, self::STAGE_SOURCING);
+        $this->workflow->approveTask(
             $request,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::ACCOUNTING),
+            $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
             $this->user(4),
         );
 
-        $service->returnToDepartment(
+        $this->workflow->returnToSourcing(
             $request,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::LEGAL),
+            $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::LEGAL),
             $this->user(5),
             'Договор без реквизитов',
         );
 
         self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
-        self::assertSame(self::POSITION_DEPARTMENT, $request->getCurrentPosition());
+        self::assertSame(self::STAGE_SOURCING, $request->getCurrentStage()?->getPosition());
         self::assertSame(
-            PurchaseStepDecision::APPROVED,
-            $this->stepAt($request, self::POSITION_DIRECTOR)->getDecision(),
-            'подпись директора стоит раньше закупок и не сгорает',
+            PurchaseTaskDecision::APPROVED,
+            $this->taskAt($request, self::STAGE_TRIAGE)->getDecision(),
+            'решение разбирающего стоит раньше закупок и не сгорает',
         );
         self::assertSame(
-            PurchaseStepDecision::PENDING,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::ACCOUNTING)->getDecision(),
+            PurchaseTaskDecision::PENDING,
+            $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING)->getDecision(),
             'подпись бухгалтерии легла после закупок и сброшена',
         );
     }
 
-    public function testReturnToDepartmentRequiresComment(): void
+    /**
+     * Выбранные согласанты возврат переживают: их поставили на всю жизнь заявки,
+     * а не на один пакет документов. Сбрасывается только их решение.
+     */
+    public function testReturnToSourcingKeepsAssignedApprovers(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $deputy = $this->user(7);
+        $stage = $this->stageAt($request, self::STAGE_APPROVERS);
 
-        $service->submit($request, $author);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DIRECTOR), $this->user(2));
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DEPARTMENT), $this->user(3));
+        $this->workflow->triage(
+            $request,
+            $this->taskAt($request, self::STAGE_TRIAGE),
+            $this->user(2),
+            [],
+            [(int) $stage->getId() => [$deputy]],
+        );
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_SOURCING), $this->user(3));
+        $this->workflow->approveTask(
+            $request,
+            $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
+            $this->user(4),
+        );
+
+        $this->workflow->returnToSourcing(
+            $request,
+            $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::LEGAL),
+            $this->user(5),
+            'Счёт не тот',
+        );
+
+        self::assertCount(1, $stage->getTasks(), 'назначенный согласант остаётся в маршруте');
+        self::assertSame(PurchaseStageStatus::PENDING, $stage->getStatus());
+    }
+
+    public function testReturnToSourcingRequiresComment(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $this->approveThrough($request, self::STAGE_SOURCING);
 
         $this->expectTransitionError(SpaApiError::PURCHASE_COMMENT_REQUIRED);
-        $service->returnToDepartment(
+        $this->workflow->returnToSourcing(
             $request,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::ACCOUNTING),
+            $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
             $this->user(4),
             '   ',
         );
     }
 
     /** У быстрой заявки закупки первые — возвращать документы некуда. */
-    public function testReturnToDepartmentImpossibleOnFastRoute(): void
+    public function testReturnToSourcingImpossibleOnFastRoute(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::FAST, $author);
+        $request = $this->submitted(PurchaseRequestKind::FAST);
 
-        $service->submit($request, $author);
-
-        $this->expectTransitionError(SpaApiError::PURCHASE_STEP_NOT_FOUND);
-        $service->returnToDepartment(
+        $this->expectTransitionError(SpaApiError::PURCHASE_TASK_NOT_ACTIVE);
+        $this->workflow->returnToSourcing(
             $request,
-            $this->stepAt($request, self::POSITION_FAST_DEPARTMENT),
+            $this->taskAt($request, self::STAGE_FAST_SOURCING),
             $this->user(2),
             'Не хочу',
         );
@@ -425,239 +439,498 @@ final class PurchaseApprovalFlowTest extends TestCase
 
     public function testRejectSendsRequestBackToAuthor(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $task = $this->taskAt($request, self::STAGE_TRIAGE);
 
-        $service->submit($request, $author);
-        $step = $this->stepAt($request, self::POSITION_DIRECTOR);
-        $service->rejectStep($request, $step, $this->user(2), 'Не сейчас');
+        $this->workflow->rejectTask($request, $task, $this->user(2), 'Не сейчас');
 
         self::assertSame(PurchaseStatus::REJECTED, $request->getStatus());
-        self::assertSame(PurchaseStepDecision::REJECTED, $step->getDecision());
-        self::assertSame('Не сейчас', $step->getComment());
+        self::assertSame(PurchaseTaskDecision::REJECTED, $task->getDecision());
+        self::assertSame('Не сейчас', $task->getComment());
     }
 
     /** Повторная подача начинает согласование с нуля: состав и сумма могли измениться. */
     public function testResubmitRebuildsRouteFromScratch(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $author = $request->getCreatedBy();
+        self::assertInstanceOf(User::class, $author);
 
-        $service->submit($request, $author);
-        $service->rejectStep($request, $this->stepAt($request, self::POSITION_DIRECTOR), $this->user(2), 'Доработать');
-        $service->submit($request, $author);
+        $this->workflow->rejectTask(
+            $request,
+            $this->taskAt($request, self::STAGE_TRIAGE),
+            $this->user(2),
+            'Доработать',
+        );
+        $this->workflow->submit($request, $author);
+        $this->assignIds($request);
 
         self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
-        self::assertCount(6, $request->getSteps());
-        self::assertSame(self::POSITION_DIRECTOR, $request->getCurrentPosition());
-        foreach ($request->getSteps() as $step) {
-            self::assertTrue($step->isPending(), 'после пересборки все шаги ждут решения');
+        self::assertCount(5, $request->getStages());
+        self::assertSame(self::STAGE_TRIAGE, $request->getCurrentStage()?->getPosition());
+        foreach ($request->getAllTasks() as $task) {
+            self::assertTrue($task->isPending(), 'после пересборки все задачи ждут решения');
         }
     }
 
     /**
-     * Персональный откат директора: его подпись закрывает позицию сразу, окна
-     * «на передумать» не остаётся, а ошибиться тогглом легко. Сбрасывается его
-     * шаг и всё, что успело подписаться после него.
+     * Персональный откат: подпись закрывает этап сразу, окна «на передумать» не
+     * остаётся, а ошибиться тогглом легко. Сбрасывается своя задача и всё, что
+     * успело решиться после неё.
      */
     public function testRevokeResetsOwnAndLaterSignatures(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $director = $this->user(2);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $this->approveThrough($request, self::STAGE_CHECKS);
 
-        $service->submit($request, $author);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DIRECTOR), $director);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_DEPARTMENT), $this->user(3));
-        $service->approveStep(
-            $request,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::ACCOUNTING),
-            $this->user(4),
-        );
-        $service->approveStep(
-            $request,
-            $this->stepAt($request, self::POSITION_CHECKS, PurchaseRoleCode::LEGAL),
-            $this->user(5),
-        );
-        $finalStep = $this->stepAt($request, self::POSITION_DIRECTOR_FINAL);
-        $service->approveStep($request, $finalStep, $director);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_FINANCE), $this->user(6));
+        $financeTask = $this->taskAt($request, self::STAGE_FINANCE);
+        $financeDirector = $this->user(6);
+        $this->workflow->approveTask($request, $financeTask, $financeDirector);
 
         self::assertSame(PurchaseStatus::APPROVED, $request->getStatus());
 
-        $service->revokeStep($request, $finalStep, $director);
+        $this->workflow->revokeTask($request, $financeTask, $financeDirector);
 
         self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
-        self::assertSame(self::POSITION_DIRECTOR_FINAL, $request->getCurrentPosition());
+        self::assertSame(self::STAGE_FINANCE, $request->getCurrentStage()?->getPosition());
+        self::assertSame(PurchaseTaskDecision::PENDING, $financeTask->getDecision());
         self::assertSame(
-            PurchaseStepDecision::PENDING,
-            $this->stepAt($request, self::POSITION_FINANCE)->getDecision(),
-            'подпись финдиректора легла после отозванной и сброшена',
+            PurchaseTaskDecision::APPROVED,
+            $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::LEGAL)->getDecision(),
+            'подписи раньше отозванной не сгорают',
         );
+    }
+
+    /**
+     * Кнопка отката предлагает последнюю из моих подписей.
+     *
+     * Отзыв отматывает маршрут к этапу подписи, и кнопка, снимающая первую, сожгла
+     * бы всё, что после неё подписали остальные, — а человек нажимал «я передумал».
+     */
+    public function testRevokeOffersTheLatestOfMySignatures(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $director = $this->user(2);
+
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_TRIAGE), $director);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_SOURCING), $this->user(3));
+        $late = $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING);
+        $this->workflow->approveTask($request, $late, $director);
+
+        self::assertSame($late, $this->access()->findMyRevokableTask($request, $director));
     }
 
     /** Чужую подпись снимает только отзыв маршрута отделом закупок. */
     public function testForeignSignatureCannotBeRevoked(): void
     {
-        $service = $this->service();
-        $author = $this->user(1);
-        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $task = $this->taskAt($request, self::STAGE_TRIAGE);
+        $this->workflow->approveTask($request, $task, $this->user(2));
 
-        $service->submit($request, $author);
-        $step = $this->stepAt($request, self::POSITION_DIRECTOR);
-        $service->approveStep($request, $step, $this->user(2));
-
-        $this->expectTransitionError(SpaApiError::PURCHASE_STEP_NOT_REVOKABLE);
-        $service->revokeStep($request, $step, $this->user(3));
+        $this->expectTransitionError(SpaApiError::PURCHASE_TASK_NOT_REVOKABLE);
+        $this->workflow->revokeTask($request, $task, $this->user(3));
     }
 
     /**
      * В историю пишется каждое действие, а не только смена статуса: согласование
-     * целиком идёт внутри ON_APPROVAL, а шаги при повторной подаче пересобираются.
+     * целиком идёт внутри ON_APPROVAL, а задачи при повторной подаче
+     * пересобираются — след «кто что нажал» должен жить отдельно от них.
      */
     public function testHistoryKeepsEveryAction(): void
     {
-        $service = $this->service();
         $author = $this->user(1);
         $request = $this->request(PurchaseRequestKind::FAST, $author);
+        $workflow = $this->workflow();
 
-        $service->logCreated($request, $author);
-        $service->submit($request, $author);
-        $service->approveStep($request, $this->stepAt($request, self::POSITION_FAST_DEPARTMENT), $this->user(2), 'Куплено');
-
-        $actions = array_map(
-            static fn ($entry): ?string => $entry->getAction()?->value,
-            $request->getHistory()->toArray(),
+        $workflow->logCreated($request, $author);
+        $workflow->submit($request, $author);
+        $this->assignIds($request);
+        $workflow->approveTask(
+            $request,
+            $this->taskAt($request, self::STAGE_FAST_SOURCING),
+            $this->user(2),
+            'Куплено',
         );
 
         self::assertSame([
             PurchaseHistoryAction::CREATED->value,
             PurchaseHistoryAction::SUBMITTED->value,
-            PurchaseHistoryAction::STEP_APPROVED->value,
+            PurchaseHistoryAction::TASK_APPROVED->value,
             PurchaseHistoryAction::STATUS_CHANGED->value,
-        ], array_values($actions));
+        ], $this->actions($request));
+    }
+
+    // Смена маршрута
+
+    /**
+     * Маршрут меняют на разборе, и снимок собирается заново. Заявку это не
+     * двигает: разбирающий остаётся на разборе нового маршрута.
+     */
+    public function testRouteChangeRebuildsSnapshotAtTriage(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+
+        $this->workflow->changeRoute(
+            $request,
+            $this->taskAt($request, self::STAGE_TRIAGE),
+            $this->fullRoute(),
+            $this->user(2),
+        );
+        $this->assignIds($request);
+
+        self::assertCount(8, $request->getStages(), 'снимок собран по новому маршруту');
+        self::assertSame(self::STAGE_TRIAGE, $request->getCurrentStage()?->getPosition());
+        self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
+        self::assertSame('Полный маршрут', $request->getAppliedRouteTemplateName());
+        self::assertContains(PurchaseHistoryAction::ROUTE_CHANGED->value, $this->actions($request));
+    }
+
+    /** Дальше разбора менять нельзя: в маршруте уже лежат чужие решения. */
+    public function testRouteCannotBeChangedAfterTriage(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $this->approveThrough($request, self::STAGE_TRIAGE);
+
+        $this->expectTransitionError(SpaApiError::PURCHASE_ROUTE_NOT_CHANGEABLE);
+        $this->workflow->changeRoute(
+            $request,
+            $this->taskAt($request, self::STAGE_SOURCING),
+            $this->fullRoute(),
+            $this->user(3),
+        );
+    }
+
+    // Исполнение этапами
+
+    /**
+     * Согласование кончилось — заявка APPROVED, хотя маршрут ещё не пройден: дальше
+     * идут этапы исполнения. Иначе оплату ждала бы заявка, по статусу всё ещё
+     * «на согласовании».
+     */
+    public function testApprovalPartClosesBeforeExecution(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
+        $this->approveThrough($request, self::STAGE_FINANCE);
+
+        self::assertSame(PurchaseStatus::APPROVED, $request->getStatus());
+        self::assertSame(self::STAGE_PAYMENT, $request->getCurrentStage()?->getPosition());
+        self::assertFalse($request->isRouteComplete());
+    }
+
+    /** Статус — проекция маршрута: закрылся этап оплаты, значит оплачено. */
+    public function testPaymentStageMovesStatusToInvoicePaid(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
+        $this->approveThrough($request, self::STAGE_PAYMENT);
+
+        self::assertSame(PurchaseStatus::INVOICE_PAID, $request->getStatus());
+        self::assertSame(self::STAGE_DELIVERY, $request->getCurrentStage()?->getPosition());
+    }
+
+    /**
+     * Поставку принимает автор — так настроен маршрут, а не зашито в коде.
+     * Пройденное закрытие уводит заявку в архив.
+     */
+    public function testFullRouteEndsInDone(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
+        $author = $request->getCreatedBy();
+        self::assertInstanceOf(User::class, $author);
+
+        $this->approveThrough($request, self::STAGE_PAYMENT);
+
+        $delivery = $this->taskAt($request, self::STAGE_DELIVERY);
+        self::assertSame(PurchaseTaskAssignment::AUTHOR, $delivery->getAssignmentType());
+        self::assertTrue($delivery->isAddressedTo($author));
+
+        $this->workflow->approveTask($request, $delivery, $author);
+        self::assertSame(PurchaseStatus::DELIVERED, $request->getStatus());
+
+        $request->addFile($this->updFile());
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_CLOSING), $this->user(3));
+
+        self::assertSame(PurchaseStatus::DONE, $request->getStatus());
+        self::assertTrue($request->isRouteComplete());
+    }
+
+    /**
+     * Без УПД заявку не закрыть. Это требование файла на задаче закрытия, а не
+     * условие перехода статуса: перенести его на другой этап — правка в админке.
+     */
+    public function testClosingRequiresUpd(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
+        $author = $request->getCreatedBy();
+        self::assertInstanceOf(User::class, $author);
+
+        $this->approveThrough($request, self::STAGE_PAYMENT);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_DELIVERY), $author);
+
+        $this->expectTransitionError(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_CLOSING), $this->user(3));
+    }
+
+    /**
+     * С исполнения вернуть автору нельзя: товар уже оплачен, и «вернуть» означало
+     * бы не решение по заявке, а потерянные деньги.
+     */
+    public function testRejectIsNotAllowedOnExecutionStage(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
+        $this->approveThrough($request, self::STAGE_FINANCE);
+
+        $this->expectTransitionError(SpaApiError::PURCHASE_REJECT_NOT_ALLOWED);
+        $this->workflow->rejectTask(
+            $request,
+            $this->taskAt($request, self::STAGE_PAYMENT),
+            $this->user(6),
+            'Передумали',
+        );
+    }
+
+    /** Подпись об оплате не отзывается: деньги уже ушли. */
+    public function testExecutionSignatureCannotBeRevoked(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
+        $financeDirector = $this->user(6);
+
+        $this->approveThrough($request, self::STAGE_FINANCE);
+        $payment = $this->taskAt($request, self::STAGE_PAYMENT);
+        $this->workflow->approveTask($request, $payment, $financeDirector);
+
+        $this->expectTransitionError(SpaApiError::PURCHASE_INVALID_STATUS);
+        $this->workflow->revokeTask($request, $payment, $financeDirector);
     }
 
     // Обвязка
+
+    private PurchaseApprovalWorkflow $workflow;
 
     /**
      * Настоящие сервисы на подменённой инфраструктуре: согласование не делает
      * запросов, а flush в мок-менеджере просто ничего не делает.
      */
-    private function service(float $fastMaxAmount = 10_000.0): PurchaseRequestService
+    private function workflow(bool $configured = true): PurchaseApprovalWorkflow
     {
-        $em = $this->createMock(EntityManagerInterface::class);
+        $em = $this->createStub(EntityManagerInterface::class);
 
-        $bus = $this->createMock(MessageBusInterface::class);
+        $bus = $this->createStub(MessageBusInterface::class);
         $bus->method('dispatch')->willReturnCallback(
             static fn (object $message, array $stamps = []): Envelope => new Envelope($message),
         );
 
-        $users = $this->createMock(UserRepository::class);
+        $users = $this->createStub(UserRepository::class);
         $users->method('findByRoleName')->willReturn([]);
 
-        $settings = $this->createMock(PurchaseSettingRepository::class);
-        $settings->method('getFastMaxAmount')->willReturn($fastMaxAmount);
-
-        // Носителей ролей в сценариях нет: маршрут адресует шаги ролям, а
-        // подписывает кто угодно — сервис проверяет указатель, а не права.
-        $approverRoles = $this->createMock(PurchaseApproverRoleRepository::class);
+        // Носителей ролей в сценариях нет: маршрут адресует задачи ролям, а
+        // закрывает кто угодно — воркфлоу проверяет указатель, а не права.
+        $approverRoles = $this->createStub(PurchaseApproverRoleRepository::class);
         $approverRoles->method('findRoleCodesForUser')->willReturn([]);
         $approverRoles->method('findUsersByRoleCodes')->willReturn([]);
 
         $roster = new PurchaseRoster($approverRoles);
 
-        $templates = $this->createMock(PurchaseRouteTemplateRepository::class);
-        $templates->method('findByKind')->willReturnCallback(
-            fn (PurchaseRequestKind $kind): PurchaseRouteTemplate => $kind === PurchaseRequestKind::FAST
-                ? $this->fastRoute()
-                : $this->standardRoute(),
+        $templates = $this->createStub(PurchaseRouteTemplateRepository::class);
+        $templates->method('findActiveForKind')->willReturnCallback(
+            fn (PurchaseRequestKind $kind): array => [$this->routeFor($kind), $this->fullRoute()],
         );
 
-        return new PurchaseRequestService(
+        $defaults = $this->createStub(PurchaseRouteDefaultRepository::class);
+        $defaults->method('findByKind')->willReturnCallback(
+            fn (PurchaseRequestKind $kind): ?PurchaseRouteDefault => $configured
+                ? (new PurchaseRouteDefault())->setKind($kind)->setTemplate($this->routeFor($kind))
+                : null,
+        );
+
+        $history = new PurchaseHistoryLogger($em);
+
+        $this->workflow = new PurchaseApprovalWorkflow(
             $em,
             new PurchaseNotificationPublisher(new NotificationPublisher($bus), $users, $roster),
-            $settings,
-            new ApprovalRouteBuilder($em, $templates),
+            new ApprovalRouteResolver($templates, $defaults),
+            new ApprovalRouteBuilder($em),
+            $history,
+            new PurchaseRequestEditor($em, $history),
         );
+
+        return $this->workflow;
+    }
+
+    /** Права на заявку. Ролей модуля ни у кого нет — задачи адресные. */
+    private function access(): PurchaseAccess
+    {
+        $approverRoles = $this->createStub(PurchaseApproverRoleRepository::class);
+        $approverRoles->method('findRoleCodesForUser')->willReturn([]);
+
+        return new PurchaseAccess(new PurchaseRoster($approverRoles));
+    }
+
+    /**
+     * Поданная заявка с проставленными id — их обычно проставляет БД, а
+     * назначение согласантов адресуется этапу по id.
+     *
+     * @param list<string> $prices
+     */
+    private function submitted(
+        PurchaseRequestKind $kind,
+        array $prices = ['100.00'],
+        bool $full = false,
+    ): PurchaseRequest {
+        $author = $this->user(1);
+        $request = $this->request($kind, $author, $prices);
+        if ($full) {
+            $request->setRouteTemplate($this->fullRoute());
+        }
+
+        $this->workflow()->submit($request, $author);
+        $this->assignIds($request);
+
+        return $request;
+    }
+
+    /** Закрыть согласием все этапы вплоть до указанного включительно. */
+    private function approveThrough(PurchaseRequest $request, int $position): void
+    {
+        $guard = 0;
+        while (($stage = $request->getCurrentStage()) !== null && $stage->getPosition() <= $position) {
+            self::assertLessThan(50, ++$guard, 'указатель маршрута не двигается');
+
+            foreach ($stage->getPendingTasks() as $task) {
+                $actor = $task->getAssignmentType() === PurchaseTaskAssignment::AUTHOR
+                    ? $request->getCreatedBy()
+                    : $this->user($stage->getPosition() + 1);
+                self::assertInstanceOf(User::class, $actor);
+
+                $this->workflow->approveTask($request, $task, $actor);
+            }
+        }
+    }
+
+    private function routeFor(PurchaseRequestKind $kind): PurchaseRouteTemplate
+    {
+        return $kind === PurchaseRequestKind::FAST ? $this->fastRoute() : $this->standardRoute();
     }
 
     /** Быстрый маршрут: отдел закупок первый и единственный — дальше ведёт заявку сам. */
     private function fastRoute(): PurchaseRouteTemplate
     {
-        return $this->route(PurchaseRequestKind::FAST, [
-            $this->roleStep(
-                self::POSITION_FAST_DEPARTMENT,
-                PurchaseRoleCode::PURCHASE_DEPARTMENT,
-                PurchaseStepPurpose::SOURCING,
-            ),
+        return $this->route('FAST', 'Быстрый маршрут', [PurchaseRequestKind::FAST], [
+            $this->stage(PurchaseStagePurpose::SOURCING, [
+                $this->roleTask(PurchaseRoleCode::PURCHASE_DEPARTMENT),
+            ]),
         ]);
     }
 
     /**
-     * Обычный маршрут: директор → отдел закупок → бухгалтерия и юристы →
-     * профильные замы → директор повторно → финансовый директор.
+     * Обычный маршрут: разбор → отдел закупок → бухгалтерия и юристы →
+     * профильные замы → финансовый директор.
      *
      * Порядок именно такой: отдел закупок делает ресёрч и готовит документы
-     * РАНЬШЕ согласующих, потому что подписывать нечего, пока нет поставщика,
-     * цен и договора. Итоговый шаг директора — тоже разбор: он смотрит
-     * проверенный пакет и может урезать состав перед оплатой.
+     * РАНЬШЕ согласующих, потому что подписывать нечего, пока нет поставщика, цен
+     * и договора. Замы стоят позади закупок — они подписывают готовый пакет,
+     * хотя выбирают их ещё на разборе.
      */
     private function standardRoute(): PurchaseRouteTemplate
     {
-        return $this->route(PurchaseRequestKind::STANDARD, [
-            $this->roleStep(self::POSITION_DIRECTOR, PurchaseRoleCode::DIRECTOR, PurchaseStepPurpose::TRIAGE),
-            $this->roleStep(
-                self::POSITION_DEPARTMENT,
-                PurchaseRoleCode::PURCHASE_DEPARTMENT,
-                PurchaseStepPurpose::SOURCING,
-            ),
-            $this->roleStep(self::POSITION_CHECKS, PurchaseRoleCode::ACCOUNTING, PurchaseStepPurpose::SIGN_OFF),
-            $this->roleStep(self::POSITION_CHECKS, PurchaseRoleCode::LEGAL, PurchaseStepPurpose::SIGN_OFF),
-            (new PurchaseRouteTemplateStep())
-                ->setPosition(self::POSITION_APPROVERS)
-                ->setApproverKind(PurchaseApproverKind::USER)
-                ->setPurpose(PurchaseStepPurpose::SIGN_OFF)
-                ->setTitle('Профильные замы'),
-            $this->roleStep(self::POSITION_DIRECTOR_FINAL, PurchaseRoleCode::DIRECTOR, PurchaseStepPurpose::TRIAGE),
-            $this->roleStep(
-                self::POSITION_FINANCE,
-                PurchaseRoleCode::FINANCE_DIRECTOR,
-                PurchaseStepPurpose::SIGN_OFF,
-            ),
+        return $this->route('STANDARD', 'Обычный маршрут', [PurchaseRequestKind::STANDARD], [
+            $this->stage(PurchaseStagePurpose::TRIAGE, [$this->roleTask(PurchaseRoleCode::DIRECTOR)]),
+            $this->stage(PurchaseStagePurpose::SOURCING, [$this->roleTask(PurchaseRoleCode::PURCHASE_DEPARTMENT)]),
+            // Один этап, две задачи — это и есть параллельные подписи.
+            $this->stage(PurchaseStagePurpose::SIGN_OFF, [
+                $this->roleTask(PurchaseRoleCode::ACCOUNTING),
+                $this->roleTask(PurchaseRoleCode::LEGAL),
+            ]),
+            $this->stage(PurchaseStagePurpose::SIGN_OFF, [
+                $this->dynamicTask(PurchaseRoleCode::PROFILE_DEPUTY),
+            ], 'Профильные замы'),
+            $this->stage(PurchaseStagePurpose::SIGN_OFF, [$this->roleTask(PurchaseRoleCode::FINANCE_DIRECTOR)]),
         ]);
     }
 
-    /** @param list<PurchaseRouteTemplateStep> $steps */
-    private function route(PurchaseRequestKind $kind, array $steps): PurchaseRouteTemplate
+    /**
+     * Тот же маршрут с хвостом исполнения: оплата, поставка и закрытие — такие же
+     * этапы, а не отдельная цепочка статусов.
+     */
+    private function fullRoute(): PurchaseRouteTemplate
     {
-        $template = (new PurchaseRouteTemplate())->setKind($kind);
-        foreach ($steps as $step) {
-            $template->addStep($step);
+        $template = $this->standardRoute();
+        $template->setCode('FULL')->setName('Полный маршрут');
+
+        $payment = $this->stage(PurchaseStagePurpose::PAYMENT, [
+            $this->roleTask(PurchaseRoleCode::FINANCE_DIRECTOR),
+        ]);
+        $delivery = $this->stage(PurchaseStagePurpose::DELIVERY, [
+            (new PurchaseRouteTemplateTask())
+                ->setPosition(1)
+                ->setAssignmentType(PurchaseTaskAssignment::AUTHOR),
+        ]);
+        $closing = $this->stage(PurchaseStagePurpose::CLOSING, [
+            $this->roleTask(PurchaseRoleCode::PURCHASE_DEPARTMENT)
+                ->setRequiresFileType(PurchaseFileType::UPD),
+        ]);
+
+        // Вернуть автору с исполнения нельзя: деньги уже потрачены.
+        $position = $template->getStages()->count();
+        foreach ([$payment, $delivery, $closing] as $stage) {
+            $template->addStage($stage->setPosition(++$position)->setAllowsReject(false));
         }
 
         return $template;
     }
 
-    private function roleStep(
-        int $position,
-        PurchaseRoleCode $code,
-        PurchaseStepPurpose $purpose,
-    ): PurchaseRouteTemplateStep {
-        return (new PurchaseRouteTemplateStep())
-            ->setPosition($position)
-            ->setApproverKind(PurchaseApproverKind::ROLE)
+    /**
+     * @param list<PurchaseRequestKind> $kinds
+     * @param list<PurchaseRouteTemplateStage> $stages
+     */
+    private function route(string $code, string $name, array $kinds, array $stages): PurchaseRouteTemplate
+    {
+        $template = (new PurchaseRouteTemplate())
+            ->setCode($code)
+            ->setName($name)
+            ->setAllowedKinds($kinds);
+
+        $position = 0;
+        foreach ($stages as $stage) {
+            $template->addStage($stage->setPosition(++$position));
+        }
+
+        return $template;
+    }
+
+    /** @param list<PurchaseRouteTemplateTask> $tasks */
+    private function stage(
+        PurchaseStagePurpose $purpose,
+        array $tasks,
+        ?string $title = null,
+    ): PurchaseRouteTemplateStage {
+        $stage = (new PurchaseRouteTemplateStage())->setPurpose($purpose)->setTitle($title);
+
+        $position = 0;
+        foreach ($tasks as $task) {
+            $stage->addTask($task->setPosition(++$position));
+        }
+
+        return $stage;
+    }
+
+    private function roleTask(PurchaseRoleCode $code): PurchaseRouteTemplateTask
+    {
+        return (new PurchaseRouteTemplateTask())
+            ->setAssignmentType(PurchaseTaskAssignment::ROLE)
             ->setRoleCode($code)
-            ->setPurpose($purpose)
             ->setTitle($code->getLabel());
+    }
+
+    private function dynamicTask(PurchaseRoleCode $pool): PurchaseRouteTemplateTask
+    {
+        return (new PurchaseRouteTemplateTask())
+            ->setAssignmentType(PurchaseTaskAssignment::DYNAMIC_USERS)
+            ->setCandidateRoleCode($pool);
     }
 
     /**
      * Черновик с позициями по одной штуке: id проставляются вручную, потому что
-     * правки состава директором приходят с фронта ключами по id позиции.
+     * правки состава приходят с фронта ключами по id позиции.
      *
      * @param list<string> $prices
      */
@@ -685,6 +958,14 @@ final class PurchaseApprovalFlowTest extends TestCase
         return $request;
     }
 
+    private function updFile(): PurchaseRequestFile
+    {
+        return (new PurchaseRequestFile())
+            ->setType(PurchaseFileType::UPD)
+            ->setOriginalName('upd.pdf')
+            ->setStorageKey('purchase/500/upd.pdf');
+    }
+
     private function user(int $id): User
     {
         $user = new User();
@@ -694,48 +975,72 @@ final class PurchaseApprovalFlowTest extends TestCase
     }
 
     /**
-     * Форма маршрута: позиция и код роли каждого шага в порядке создания.
+     * Форма маршрута: позиция, назначение и роли задач каждого этапа.
      *
-     * @return list<array{0: int, 1: string|null}>
+     * @return list<array{0: int, 1: string, 2: list<string|null>}>
      */
     private function shape(PurchaseRequest $request): array
     {
         $shape = [];
-        foreach ($request->getSteps() as $step) {
-            $shape[] = [$step->getPosition(), $step->getRoleCode()?->value];
+        foreach ($request->getStages() as $stage) {
+            $roles = [];
+            foreach ($stage->getTasks() as $task) {
+                $roles[] = $task->getRoleCode()?->value;
+            }
+            $shape[] = [$stage->getPosition(), $stage->getPurpose()->value, $roles];
         }
 
         return $shape;
     }
 
-    /** Шаг позиции; при параллельных шагах нужна ещё и роль. */
-    private function stepAt(PurchaseRequest $request, int $position, ?PurchaseRoleCode $code = null): PurchaseApprovalStep
+    /** @return list<string|null> */
+    private function actions(PurchaseRequest $request): array
     {
-        foreach ($request->getSteps() as $step) {
-            if ($step->getPosition() !== $position) {
-                continue;
-            }
-            if ($code !== null && $step->getRoleCode() !== $code) {
-                continue;
-            }
-
-            return $step;
-        }
-
-        self::fail(sprintf('В маршруте нет шага на позиции %d', $position));
+        return array_values(array_map(
+            static fn ($entry): ?string => $entry->getAction()?->value,
+            $request->getHistory()->toArray(),
+        ));
     }
 
-    /** @return list<PurchaseApprovalStep> */
-    private function stepsAt(PurchaseRequest $request, int $position): array
+    private function stageAt(PurchaseRequest $request, int $position): PurchaseApprovalStage
     {
-        $steps = [];
-        foreach ($request->getSteps() as $step) {
-            if ($step->getPosition() === $position) {
-                $steps[] = $step;
+        $stage = $request->findStageByPosition($position);
+        self::assertInstanceOf(
+            PurchaseApprovalStage::class,
+            $stage,
+            sprintf('В маршруте нет этапа на позиции %d', $position),
+        );
+
+        return $stage;
+    }
+
+    /** Задача этапа; при параллельных задачах нужна ещё и роль. */
+    private function taskAt(
+        PurchaseRequest $request,
+        int $position,
+        ?PurchaseRoleCode $code = null,
+    ): PurchaseApprovalTask {
+        foreach ($this->stageAt($request, $position)->getTasks() as $task) {
+            if ($code === null || $task->getRoleCode() === $code) {
+                return $task;
             }
         }
 
-        return $steps;
+        self::fail(sprintf('В этапе %d нет подходящей задачи', $position));
+    }
+
+    /** Автоинкремент БД: этапам и задачам нужны id, назначение адресуется по ним. */
+    private function assignIds(PurchaseRequest $request): void
+    {
+        $stageId = 1000;
+        $taskId = 2000;
+
+        foreach ($request->getStages() as $stage) {
+            self::setId($stage, ++$stageId);
+            foreach ($stage->getTasks() as $task) {
+                self::setId($task, ++$taskId);
+            }
+        }
     }
 
     private function expectTransitionError(string $errorCode): void
