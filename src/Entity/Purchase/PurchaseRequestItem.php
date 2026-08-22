@@ -24,6 +24,10 @@ class PurchaseRequestItem
     #[Assert\Length(max: 255, maxMessage: 'Наименование позиции не должно превышать {{ limit }} символов.')]
     private ?string $name = null;
 
+    // Что именно нужно: марка, характеристики, ссылка на аналог. Заполняет автор.
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $description = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 12, scale: 3)]
     #[Assert\Positive(message: 'Количество должно быть больше нуля.')]
     private ?string $quantity = null;
@@ -39,6 +43,17 @@ class PurchaseRequestItem
 
     #[ORM\Column]
     private int $position = 0;
+
+    /**
+     * Директор снял галочку с позиции. Строку не удаляем: заявленный автором
+     * состав — часть аудита, а «просили 10 позиций, согласовали 8» иначе не показать.
+     */
+    #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $excluded = false;
+
+    /** Количество, утверждённое директором. NULL — сколько просил автор. */
+    #[ORM\Column(name: 'approved_quantity', type: Types::DECIMAL, precision: 12, scale: 3, nullable: true)]
+    private ?string $approvedQuantity = null;
 
     /**
      * Ссылка на номенклатуру справочника — есть только у позиций, добавленных
@@ -89,6 +104,18 @@ class PurchaseRequestItem
         return $this;
     }
 
+    public function getDescription(): ?string
+    {
+        return $this->description;
+    }
+
+    public function setDescription(?string $description): static
+    {
+        $this->description = $description;
+
+        return $this;
+    }
+
     public function getQuantity(): ?string
     {
         return $this->quantity;
@@ -123,6 +150,36 @@ class PurchaseRequestItem
         $this->estimatedPrice = $estimatedPrice;
 
         return $this;
+    }
+
+    public function isExcluded(): bool
+    {
+        return $this->excluded;
+    }
+
+    public function setExcluded(bool $excluded): static
+    {
+        $this->excluded = $excluded;
+
+        return $this;
+    }
+
+    public function getApprovedQuantity(): ?string
+    {
+        return $this->approvedQuantity;
+    }
+
+    public function setApprovedQuantity(?string $approvedQuantity): static
+    {
+        $this->approvedQuantity = $approvedQuantity;
+
+        return $this;
+    }
+
+    /** Сколько закупать на самом деле: решение директора, а без него — заявка автора. */
+    public function getEffectiveQuantity(): string
+    {
+        return $this->approvedQuantity ?? (string) $this->quantity;
     }
 
     public function getPosition(): int

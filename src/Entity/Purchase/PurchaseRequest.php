@@ -8,6 +8,8 @@ use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseLaw;
 use App\Enum\Purchase\PurchaseMethod;
 use App\Enum\Purchase\PurchasePriority;
+use App\Enum\Purchase\PurchaseRequestKind;
+use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -56,29 +58,78 @@ class PurchaseRequest
     #[ORM\JoinColumn(name: 'category_id', referencedColumnName: 'id', nullable: true, onDelete: 'RESTRICT')]
     private ?PurchaseCategory $category = null;
 
+    // Закон: по умолчанию 223-ФЗ — по нему идёт почти всё. Автор его не выбирает,
+    // при рассмотрении поправит отдел закупок.
     #[ORM\Column(type: Types::STRING, length: 20, nullable: true, enumType: PurchaseLaw::class)]
-    private ?PurchaseLaw $law = null;
+    private ?PurchaseLaw $law = PurchaseLaw::FZ_223;
 
     // Способ закупки; NULL — определит отдел закупок при рассмотрении
     #[ORM\Column(type: Types::STRING, length: 30, nullable: true, enumType: PurchaseMethod::class)]
     private ?PurchaseMethod $method = null;
 
-    // Пояснительная записка текстом (альтернатива — файл типа JUSTIFICATION)
-    #[ORM\Column(type: Types::TEXT, nullable: true)]
-    private ?string $justification = null;
-
     // Техническое задание текстом (альтернатива — файл типа TECHNICAL_SPEC)
     #[ORM\Column(name: 'technical_spec', type: Types::TEXT, nullable: true)]
     private ?string $technicalSpec = null;
 
+    // Результат ресёрча отдела закупок: у кого закупаем. Автор его не знает.
+    #[ORM\Column(length: 255, nullable: true)]
+    #[Assert\Length(max: 255, maxMessage: 'Поставщик не должен превышать {{ limit }} символов.')]
+    private ?string $supplier = null;
+
     #[ORM\Column(type: Types::STRING, length: 50, enumType: PurchaseStatus::class)]
     private PurchaseStatus $status = PurchaseStatus::DRAFT;
+
+    // Какой кнопкой создана. НЕ меняется: от неё зависят набор полей формы
+    // при редактировании и проверка потолка быстрой заявки при подаче.
+    #[ORM\Column(name: 'created_as', type: Types::STRING, length: 20, enumType: PurchaseRequestKind::class, options: ['default' => 'STANDARD'])]
+    private PurchaseRequestKind $createdAs = PurchaseRequestKind::STANDARD;
 
     #[ORM\Column(type: Types::STRING, length: 20, enumType: PurchasePriority::class, options: ['default' => 'NORMAL'])]
     private PurchasePriority $priority = PurchasePriority::NORMAL;
 
+    /**
+     * Какой заготовкой пустить заявку. NULL — возьмётся дефолт для createdAs.
+     *
+     * Намерение, а не запись о факте: назначить маршрут можно до подачи и сменить
+     * на разборе, а сработает он только в момент сборки снимка.
+     */
+    #[ORM\ManyToOne(targetEntity: PurchaseRouteTemplate::class)]
+    #[ORM\JoinColumn(name: 'route_template_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseRouteTemplate $routeTemplate = null;
+
+    /**
+     * Какой заготовкой снимок собрали фактически.
+     *
+     * Отдельно от намерения, потому что отвечает на другой вопрос: не «чем
+     * пустить», а «по какому регламенту это согласовали». Спросят через полгода,
+     * когда заготовку успеют переименовать и выключить.
+     */
+    #[ORM\ManyToOne(targetEntity: PurchaseRouteTemplate::class)]
+    #[ORM\JoinColumn(name: 'applied_route_template_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseRouteTemplate $appliedRouteTemplate = null;
+
+    /**
+     * Название заготовки на момент подачи. Снимок по той же причине, по которой
+     * задача хранит снимок названия роли: заготовку переименуют, а история
+     * должна читаться как в день подачи.
+     */
+    #[ORM\Column(name: 'applied_route_template_name', length: 255, nullable: true)]
+    private ?string $appliedRouteTemplateName = null;
+
     #[ORM\Column(name: 'due_date', type: Types::DATE_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $dueDate = null;
+
+    /**
+     * Версия строки — оптимистичная блокировка.
+     *
+     * Нужна из-за параллельных этапов: двое согласантов, нажавшие одновременно,
+     * оба прочитали бы незакрытый этап и оба записали решение, а проверка «этап
+     * только что закрылся», от которой зависят уведомления и переход к следующему
+     * этапу, сработала бы дважды или не сработала вовсе.
+     */
+    #[ORM\Version]
+    #[ORM\Column(type: Types::INTEGER, options: ['default' => 1])]
+    private int $version = 1;
 
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
@@ -107,10 +158,10 @@ class PurchaseRequest
     #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseRequestFile::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $files;
 
-    /** @var Collection<int, PurchaseRequestApprover> */
-    #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseRequestApprover::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
-    #[ORM\OrderBy(['createdAt' => 'ASC'])]
-    private Collection $approvers;
+    /** @var Collection<int, PurchaseApprovalStage> */
+    #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseApprovalStage::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[ORM\OrderBy(['position' => 'ASC', 'id' => 'ASC'])]
+    private Collection $stages;
 
     public function __construct()
     {
@@ -118,7 +169,7 @@ class PurchaseRequest
         $this->comments = new ArrayCollection();
         $this->history = new ArrayCollection();
         $this->files = new ArrayCollection();
-        $this->approvers = new ArrayCollection();
+        $this->stages = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -222,17 +273,6 @@ class PurchaseRequest
         return $this;
     }
 
-    public function getJustification(): ?string
-    {
-        return $this->justification;
-    }
-
-    public function setJustification(?string $justification): static
-    {
-        $this->justification = $justification;
-
-        return $this;
-    }
 
     public function getTechnicalSpec(): ?string
     {
@@ -242,6 +282,18 @@ class PurchaseRequest
     public function setTechnicalSpec(?string $technicalSpec): static
     {
         $this->technicalSpec = $technicalSpec;
+
+        return $this;
+    }
+
+    public function getSupplier(): ?string
+    {
+        return $this->supplier;
+    }
+
+    public function setSupplier(?string $supplier): static
+    {
+        $this->supplier = $supplier;
 
         return $this;
     }
@@ -293,6 +345,21 @@ class PurchaseRequest
     }
 
     /**
+     * Отметить, что с заявкой что-то произошло.
+     *
+     * Нужно не для даты, а для блокировки: Doctrine сверяет версию только когда
+     * обновляется сама строка заявки, а решение по задаче правит строку задачи.
+     * Без отметки двое согласантов параллельного этапа записались бы, не заметив
+     * друг друга.
+     */
+    public function touch(): static
+    {
+        $this->updatedAt = new \DateTimeImmutable();
+
+        return $this;
+    }
+
+    /**
      * @return Collection<int, PurchaseRequestItem>
      */
     public function getItems(): Collection
@@ -324,7 +391,11 @@ class PurchaseRequest
     {
         $total = 0.0;
         foreach ($this->items as $item) {
-            $total += (float) $item->getQuantity() * (float) $item->getEstimatedPrice();
+            // Снятые директором позиции в сумму не идут, количество — утверждённое
+            if ($item->isExcluded()) {
+                continue;
+            }
+            $total += (float) $item->getEffectiveQuantity() * (float) $item->getEstimatedPrice();
         }
 
         return round($total, 2);
@@ -402,39 +473,182 @@ class PurchaseRequest
         return false;
     }
 
-    /**
-     * @return Collection<int, PurchaseRequestApprover>
-     */
-    public function getApprovers(): Collection
+    public function getCreatedAs(): PurchaseRequestKind
     {
-        return $this->approvers;
+        return $this->createdAs;
     }
 
-    public function addApprover(PurchaseRequestApprover $approver): static
+    public function setCreatedAs(PurchaseRequestKind $createdAs): static
     {
-        if (!$this->approvers->contains($approver)) {
-            $this->approvers->add($approver);
-            $approver->setPurchaseRequest($this);
+        $this->createdAs = $createdAs;
+
+        return $this;
+    }
+
+    public function getRouteTemplate(): ?PurchaseRouteTemplate
+    {
+        return $this->routeTemplate;
+    }
+
+    public function setRouteTemplate(?PurchaseRouteTemplate $routeTemplate): static
+    {
+        $this->routeTemplate = $routeTemplate;
+
+        return $this;
+    }
+
+    public function getAppliedRouteTemplate(): ?PurchaseRouteTemplate
+    {
+        return $this->appliedRouteTemplate;
+    }
+
+    public function getAppliedRouteTemplateName(): ?string
+    {
+        return $this->appliedRouteTemplateName;
+    }
+
+    /** Отметить, какой заготовкой собран снимок. Вызывает сборщик маршрута. */
+    public function setAppliedRouteTemplate(?PurchaseRouteTemplate $template): static
+    {
+        $this->appliedRouteTemplate = $template;
+        $this->appliedRouteTemplateName = $template?->getName();
+
+        return $this;
+    }
+
+    public function getVersion(): int
+    {
+        return $this->version;
+    }
+
+    /**
+     * @return Collection<int, PurchaseApprovalStage>
+     */
+    public function getStages(): Collection
+    {
+        return $this->stages;
+    }
+
+    public function addStage(PurchaseApprovalStage $stage): static
+    {
+        if (!$this->stages->contains($stage)) {
+            $this->stages->add($stage);
+            $stage->setPurchaseRequest($this);
         }
 
         return $this;
     }
 
-    public function removeApprover(PurchaseRequestApprover $approver): static
+    public function removeStage(PurchaseApprovalStage $stage): static
     {
-        $this->approvers->removeElement($approver);
+        $this->stages->removeElement($stage);
 
         return $this;
     }
 
-    public function findApproverFor(User $user): ?PurchaseRequestApprover
+    /**
+     * Этап, на котором заявка стоит прямо сейчас. NULL — маршрут пройден, ещё не
+     * построен или заявка не на согласовании.
+     *
+     * Активный этап в маршруте один: его отмечает воркфлоу, а не вычисляет
+     * читающий. Если их вдруг оказалось несколько, берём самый ранний — вести себя
+     * непредсказуемо хуже, чем предсказуемо.
+     */
+    public function getCurrentStage(): ?PurchaseApprovalStage
     {
-        foreach ($this->approvers as $approver) {
-            if ($approver->getUser()?->getId() === $user->getId()) {
-                return $approver;
+        $current = null;
+        foreach ($this->stages as $stage) {
+            if (!$stage->isActive()) {
+                continue;
+            }
+            if ($current === null || $stage->getPosition() < $current->getPosition()) {
+                $current = $stage;
+            }
+        }
+
+        return $current;
+    }
+
+    /**
+     * Задачи, по которым можно действовать прямо сейчас.
+     *
+     * @return list<PurchaseApprovalTask>
+     */
+    public function getActiveTasks(): array
+    {
+        return $this->getCurrentStage()?->getPendingTasks() ?? [];
+    }
+
+    /** Первый непройденный этап — куда указатель поедет дальше. */
+    public function findNextOpenStage(): ?PurchaseApprovalStage
+    {
+        foreach ($this->stages as $stage) {
+            if (!$stage->isClosed()) {
+                return $stage;
             }
         }
 
         return null;
+    }
+
+    /** Этап заявки по его позиции. */
+    public function findStageByPosition(int $position): ?PurchaseApprovalStage
+    {
+        foreach ($this->stages as $stage) {
+            if ($stage->getPosition() === $position) {
+                return $stage;
+            }
+        }
+
+        return null;
+    }
+
+    /** Самый ранний этап такого назначения. */
+    public function findStageByPurpose(PurchaseStagePurpose $purpose): ?PurchaseApprovalStage
+    {
+        foreach ($this->stages as $stage) {
+            if ($stage->getPurpose() === $purpose) {
+                return $stage;
+            }
+        }
+
+        return null;
+    }
+
+    /** Задача заявки по id — среди всех этапов. */
+    public function findTask(int $taskId): ?PurchaseApprovalTask
+    {
+        foreach ($this->stages as $stage) {
+            foreach ($stage->getTasks() as $task) {
+                if ($task->getId() === $taskId) {
+                    return $task;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Все задачи маршрута по порядку.
+     *
+     * @return list<PurchaseApprovalTask>
+     */
+    public function getAllTasks(): array
+    {
+        $tasks = [];
+        foreach ($this->stages as $stage) {
+            foreach ($stage->getTasks() as $task) {
+                $tasks[] = $task;
+            }
+        }
+
+        return $tasks;
+    }
+
+    /** Маршрут построен и полностью пройден. */
+    public function isRouteComplete(): bool
+    {
+        return !$this->stages->isEmpty() && $this->findNextOpenStage() === null;
     }
 }

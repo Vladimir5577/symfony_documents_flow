@@ -15,6 +15,7 @@ final readonly class CitizenAppealListDto
         public int $limit,
         public int $total,
         public int $pages,
+        public int $newAppealsCount,
     ) {
     }
 
@@ -34,6 +35,7 @@ final readonly class CitizenAppealListDto
             limit: (int) $data['pagination']['limit'],
             total: (int) $data['pagination']['total'],
             pages: (int) $data['pagination']['pages'],
+            newAppealsCount: (int) $data['newAppealsCount'],
         );
     }
 }

@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Service\Purchase;
 
+use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseCapability;
+use App\Enum\Purchase\PurchaseStagePurpose;
+use App\Enum\Purchase\PurchaseTaskAssignment;
 use App\Enum\User\UserRole;
 use App\Repository\User\UserRepository;
 use App\Service\Notification\NotificationPublisher;
@@ -26,6 +30,7 @@ final class PurchaseNotificationPublisher
     public function __construct(
         private readonly NotificationPublisher $publisher,
         private readonly UserRepository $userRepository,
+        private readonly PurchaseRoster $roster,
     ) {}
 
     /** Подана (или повторно подана) на рассмотрение — отделу закупок. */
@@ -35,45 +40,79 @@ final class PurchaseNotificationPublisher
             ? sprintf('Заявка на закупку «%s» подана повторно', $this->titleOf($request))
             : sprintf('Новая заявка на закупку «%s» на рассмотрении', $this->titleOf($request));
 
-        $this->publish('submitted', $request, $actor, $this->purchaseDepartment(), $title, 'Новая заявка на закупку');
+        $this->publish('submitted', $request, $actor, $this->moduleStaff(), $title, 'Новая заявка на закупку');
     }
 
-    /** Отдел закупок направил заявку директору. */
-    public function notifySentToDirector(PurchaseRequest $request, User $actor): void
+    /**
+     * Активировался этап маршрута — зовём всех, кто в нём стоит.
+     *
+     * Ролевые задачи разворачиваем в носителей роли. Это критично: согласантом
+     * может быть человек без закупочных ролей, и колокольчик для него —
+     * единственная точка входа в заявку.
+     */
+    public function notifyStageActivated(PurchaseRequest $request, User $actor): void
     {
+        $recipients = [];
+        foreach ($request->getActiveTasks() as $task) {
+            foreach ($this->addresseesOf($task, $request) as $user) {
+                $recipients[$user->getId()] = $user;
+            }
+        }
+
+        // Себе уведомление не шлём: закрыл задачу и тут же стоишь на следующей —
+        // бывает у отдела закупок, они в маршруте дважды.
+        unset($recipients[$actor->getId()]);
+
+        if ($recipients === []) {
+            return;
+        }
+
         $this->publish(
-            'sent_to_director', $request, $actor, $this->directors(),
-            sprintf('Заявка на закупку «%s» направлена на согласование', $this->titleOf($request)),
-            'Заявка на согласовании',
+            'stage_activated', $request, $actor, array_values($recipients),
+            sprintf('Закупка «%s» ждёт вашего решения', $this->titleOf($request)),
+            'Требуется решение',
         );
     }
 
-    /** Приглашение согласанта — приглашённому. */
-    public function notifyApproverInvited(PurchaseRequest $request, User $actor, User $invited): void
+    /**
+     * Разбирающий выбрал согласантов — им самим.
+     *
+     * Отдельно от stage_activated: подписывать они будут ещё долго не сейчас, а
+     * ответственными становятся сразу, и заявку надо начинать отслеживать с этого
+     * момента, а не с момента, когда до них дойдёт очередь.
+     *
+     * @param list<User> $approvers
+     */
+    public function notifyApproversAssigned(PurchaseRequest $request, User $actor, array $approvers): void
     {
+        if ($approvers === []) {
+            return;
+        }
+
         $this->publish(
-            'approver_invited', $request, $actor, [$invited],
-            sprintf('Вас пригласили согласовать закупку «%s»', $this->titleOf($request)),
-            'Приглашение согласовать',
+            'approvers_assigned', $request, $actor, $approvers,
+            sprintf('Вы ответственный по закупке «%s»', $this->titleOf($request)),
+            'Назначение по закупке',
         );
     }
 
-    /** Согласант подтвердил — пригласившему (или отделу закупок, если пригласивший удалён). */
-    public function notifyApproverConfirmed(PurchaseRequest $request, User $approver, ?User $invitedBy): void
+    /** Забракованы документы — тем, кто вёл ресёрч: переделывать им. */
+    public function notifyReturnedToDepartment(PurchaseRequest $request, User $actor, string $comment): void
     {
-        $recipients = $invitedBy !== null ? [$invitedBy] : $this->purchaseDepartment();
+        $recipients = $this->sourcingHolders($request);
 
         $this->publish(
-            'approver_confirmed', $request, $approver, $recipients,
-            sprintf('%s подтвердил(а) согласование закупки «%s»', $this->nameOf($approver), $this->titleOf($request)),
-            'Согласование подтверждено',
+            'returned_to_department', $request, $actor, $recipients !== [] ? $recipients : $this->moduleStaff(),
+            sprintf('Закупка «%s» вернулась в отдел закупок', $this->titleOf($request)),
+            'Возврат в отдел закупок',
+            $comment !== '' ? $comment : null,
         );
     }
 
-    /** Согласована — менеджерам департамента и отделу закупок. */
+    /** Согласована — менеджерам департамента и тем, кто её будет исполнять. */
     public function notifyApproved(PurchaseRequest $request, User $actor): void
     {
-        $recipients = array_merge($this->departmentManagers($request), $this->purchaseDepartment());
+        $recipients = array_merge($this->departmentManagers($request), $this->executionStaff());
 
         $this->publish(
             'approved', $request, $actor, $recipients,
@@ -128,7 +167,7 @@ final class PurchaseNotificationPublisher
     {
         $recipients = array_merge(
             $this->departmentManagers($request),
-            $this->directors(),
+            $this->supervisors(),
             array_filter([$request->getExecutor()]),
         );
 
@@ -188,16 +227,74 @@ final class PurchaseNotificationPublisher
         return $name !== '' ? $name : (string) $user->getLogin();
     }
 
-    /** @return list<User> */
-    private function directors(): array
+    /**
+     * Кому уходят уведомления «модулю», а не шагу. Спрашиваем полномочие, а не
+     * роль: набор ролей ещё будет меняться, и зашивать здесь «Отдел закупок»
+     * значило бы, что переехавшая функция тихо перестанет получать письма.
+     *
+     * @return list<User>
+     */
+    private function moduleStaff(): array
     {
-        return $this->userRepository->findByRoleName(UserRole::ROLE_PURCHASE_DIRECTOR->value);
+        return $this->roster->usersWith(PurchaseCapability::MANAGE_DICTIONARIES);
     }
 
     /** @return list<User> */
-    private function purchaseDepartment(): array
+    private function supervisors(): array
     {
-        return $this->userRepository->findByRoleName(UserRole::ROLE_PURCHASE_DEPARTMENT->value);
+        return $this->roster->usersWith(PurchaseCapability::SUPERVISE);
+    }
+
+    /** @return list<User> */
+    private function executionStaff(): array
+    {
+        return $this->roster->usersWith(PurchaseCapability::RUN_EXECUTION);
+    }
+
+    /**
+     * Кому адресована задача: конкретному человеку, автору заявки или носителям
+     * роли.
+     *
+     * @return list<User>
+     */
+    private function addresseesOf(PurchaseApprovalTask $task, PurchaseRequest $request): array
+    {
+        if ($task->getAssignmentType() === PurchaseTaskAssignment::AUTHOR) {
+            $author = $request->getCreatedBy();
+
+            return $author !== null ? [$author] : [];
+        }
+
+        $user = $task->getAssigneeUser();
+        if ($user !== null) {
+            return [$user];
+        }
+
+        return $this->roster->usersOfRole($task->getRoleCode());
+    }
+
+    /**
+     * Адресаты того этапа, где заявка делает ресёрч. Возврат документов
+     * адресуется им, а не «отделу закупок» вообще: в маршруте с двумя закупками
+     * переделывать будет тот, кто этот пакет и собирал.
+     *
+     * @return list<User>
+     */
+    private function sourcingHolders(PurchaseRequest $request): array
+    {
+        $stage = $request->findStageByPurpose(PurchaseStagePurpose::SOURCING);
+        if ($stage === null) {
+            return [];
+        }
+
+        $recipients = [];
+        foreach ($stage->getTasks() as $task) {
+            foreach ($this->addresseesOf($task, $request) as $user) {
+                $recipients[$user->getId()] = $user;
+            }
+        }
+
+        return array_values($recipients);
     }
 
     /** @return list<User> */

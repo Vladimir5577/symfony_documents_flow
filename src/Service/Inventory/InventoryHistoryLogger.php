@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Inventory;
 
-use App\Entity\Inventory\Item;
-use App\Entity\Inventory\ItemHistory;
+use App\Entity\Inventory\NomenclatureItem;
+use App\Entity\Inventory\NomenclatureHistory;
 use App\Entity\User\User;
 use App\Enum\Inventory\ItemHistoryAction;
 use App\Enum\Inventory\ItemStatus;
@@ -28,7 +28,7 @@ final class InventoryHistoryLogger
     ) {
     }
 
-    public function logCreated(Item $item): ItemHistory
+    public function logCreated(NomenclatureItem $item): NomenclatureHistory
     {
         return $this->create($item, ItemHistoryAction::CREATED);
     }
@@ -36,7 +36,7 @@ final class InventoryHistoryLogger
     /**
      * Назначение и снятие — одно событие с двумя сторонами.
      */
-    public function logAssignment(Item $item, ?User $oldAssignee, ?User $newAssignee): ItemHistory
+    public function logAssignment(NomenclatureItem $item, ?User $oldAssignee, ?User $newAssignee): NomenclatureHistory
     {
         $history = $this->create(
             $item,
@@ -49,7 +49,7 @@ final class InventoryHistoryLogger
         return $history;
     }
 
-    public function logStatusChanged(Item $item, ItemStatus $oldStatus, ItemStatus $newStatus): ItemHistory
+    public function logStatusChanged(NomenclatureItem $item, ItemStatus $oldStatus, ItemStatus $newStatus): NomenclatureHistory
     {
         $history = $this->create($item, ItemHistoryAction::STATUS_CHANGED);
         $history->setOldStatus($oldStatus);
@@ -58,7 +58,7 @@ final class InventoryHistoryLogger
         return $history;
     }
 
-    public function logMoved(Item $item, string $oldOrganization, string $newOrganization): ItemHistory
+    public function logMoved(NomenclatureItem $item, string $oldOrganization, string $newOrganization): NomenclatureHistory
     {
         return $this->create(
             $item,
@@ -67,20 +67,27 @@ final class InventoryHistoryLogger
         );
     }
 
-    public function logCategoryChanged(Item $item, string $oldCategory, string $newCategory): ItemHistory
-    {
+    /**
+     * Смена вида товара. Категория приезжает вместе с видом и отдельно не логируется:
+     * в ленте это одно событие, читаемое глазами как «было → стало».
+     */
+    public function logNomenclatureChanged(
+        NomenclatureItem $item,
+        string $oldNomenclature,
+        string $newNomenclature,
+    ): NomenclatureHistory {
         return $this->create(
             $item,
-            ItemHistoryAction::CATEGORY_CHANGED,
-            sprintf('%s → %s', $oldCategory, $newCategory),
+            ItemHistoryAction::NOMENCLATURE_CHANGED,
+            sprintf('%s → %s', $oldNomenclature, $newNomenclature),
         );
     }
 
     /**
      * Привязка и отвязка документа — одно событие с текстом «было → стало»,
-     * как у категории: типизировать ссылку на УПД в истории незачем, её читают глазами.
+     * как у вида: типизировать ссылку на УПД в истории незачем, её читают глазами.
      */
-    public function logUpdChanged(Item $item, string $oldUpd, string $newUpd): ItemHistory
+    public function logUpdChanged(NomenclatureItem $item, string $oldUpd, string $newUpd): NomenclatureHistory
     {
         return $this->create(
             $item,
@@ -89,11 +96,11 @@ final class InventoryHistoryLogger
         );
     }
 
-    private function create(Item $item, ItemHistoryAction $action, ?string $comment = null): ItemHistory
+    private function create(NomenclatureItem $item, ItemHistoryAction $action, ?string $comment = null): NomenclatureHistory
     {
         $user = $this->security->getUser();
 
-        $history = new ItemHistory();
+        $history = new NomenclatureHistory();
         $history->setItem($item);
         $history->setChangedBy($user instanceof User ? $user : null);
         $history->setAction($action);

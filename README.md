@@ -115,6 +115,9 @@ create database don_stroy_mash;
 
 // ============================
 
+To mach attempt to login
+docker exec php_container php bin/console cache:pool:clear cache.rate_limiter
+
 Mugration
 $ php bin/console make:migration
 $ php bin/console doctrine:migrations:migrate

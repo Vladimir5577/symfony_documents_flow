@@ -18,16 +18,4 @@ enum PurchaseMethod: string
             self::DIRECT => 'Прямая',
         };
     }
-
-    /**
-     * @return array<string, string> [value => label]
-     */
-    public static function getChoices(): array
-    {
-        $choices = [];
-        foreach (self::cases() as $case) {
-            $choices[$case->value] = $case->getLabel();
-        }
-        return $choices;
-    }
 }

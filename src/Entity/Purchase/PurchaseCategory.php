@@ -2,10 +2,10 @@
 
 namespace App\Entity\Purchase;
 
-use App\Entity\User\User;
 use App\Repository\Purchase\PurchaseCategoryRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -27,15 +27,22 @@ class PurchaseCategory
     #[Assert\Length(max: 255, maxMessage: 'Название категории не должно превышать {{ limit }} символов.')]
     private ?string $name = null;
 
+    /**
+     * Категория выведена из оборота: в форме заявки не предлагается, в справочнике
+     * остаётся. Удалить её нельзя, пока на неё ссылаются заявки, — без этого флага
+     * отжившая категория висела бы в выпадашке вечно.
+     */
+    #[ORM\Column(name: 'is_active', type: Types::BOOLEAN, options: ['default' => true])]
+    private bool $active = true;
+
+    /** Ключ картинки категории в бакете purchase; наружу отдаётся только imgproxy-ссылкой. */
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $imageKey = null;
+
     /** @var Collection<int, PurchaseCategoryItem> */
     #[ORM\OneToMany(mappedBy: 'category', targetEntity: PurchaseCategoryItem::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['name' => 'ASC'])]
     private Collection $items;
-
-    /** Ответственный за категорию: при подаче заявки с этой категорией автоматически приглашается согласантом. */
-    #[ORM\ManyToOne(targetEntity: User::class)]
-    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
-    private ?User $responsibleUser = null;
 
     public function __construct()
     {
@@ -55,6 +62,30 @@ class PurchaseCategory
     public function setName(string $name): static
     {
         $this->name = $name;
+
+        return $this;
+    }
+
+    public function isActive(): bool
+    {
+        return $this->active;
+    }
+
+    public function setActive(bool $active): static
+    {
+        $this->active = $active;
+
+        return $this;
+    }
+
+    public function getImageKey(): ?string
+    {
+        return $this->imageKey;
+    }
+
+    public function setImageKey(?string $imageKey): static
+    {
+        $this->imageKey = $imageKey;
 
         return $this;
     }
@@ -80,18 +111,6 @@ class PurchaseCategory
     public function removeItem(PurchaseCategoryItem $item): static
     {
         $this->items->removeElement($item);
-
-        return $this;
-    }
-
-    public function getResponsibleUser(): ?User
-    {
-        return $this->responsibleUser;
-    }
-
-    public function setResponsibleUser(?User $user): static
-    {
-        $this->responsibleUser = $user;
 
         return $this;
     }

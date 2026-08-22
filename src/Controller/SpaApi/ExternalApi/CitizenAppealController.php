@@ -45,8 +45,9 @@ final class CitizenAppealController extends AbstractController
         }
 
         return $this->json([
-            'items'      => array_map($this->present(...), $list->items),
-            'pagination' => [
+            'items'           => array_map($this->present(...), $list->items),
+            'newAppealsCount' => $list->newAppealsCount,
+            'pagination'      => [
                 'page'  => $list->page,
                 'limit' => $list->limit,
                 'total' => $list->total,

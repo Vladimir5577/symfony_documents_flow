@@ -18,6 +18,11 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
  */
 final class PurchaseFileStorageService
 {
+    /** Только растр: фото товара в вектор не переводится, а SVG наружу — это XSS. */
+    private const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+    public const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
+
     public function __construct(
         private readonly S3Client $s3,
         private readonly string $bucket,
@@ -51,6 +56,46 @@ final class PurchaseFileStorageService
         return $storageKey;
     }
 
+    /** Тип берём из содержимого, а не из заголовка запроса: клиент врёт. */
+    public function isAllowedImage(UploadedFile $file): bool
+    {
+        $mimeType = $file->getMimeType() ?: $file->getClientMimeType();
+
+        return $mimeType !== null && in_array($mimeType, self::IMAGE_MIME_TYPES, true);
+    }
+
+    /**
+     * Картинка справочника (категория, позиция номенклатуры) в тот же бакет.
+     *
+     * Префикс задаёт вызывающий, потому что ключ должен пережить удаление строки:
+     * по нему и только по нему объект потом находят, чтобы снести.
+     */
+    public function uploadImage(string $prefix, UploadedFile $file): string
+    {
+        $mimeType = $file->getMimeType() ?: $file->getClientMimeType();
+
+        $extension = strtolower($file->getClientOriginalExtension());
+        if ($extension === '') {
+            $extension = match ($mimeType) {
+                'image/png' => 'png',
+                'image/gif' => 'gif',
+                'image/webp' => 'webp',
+                default => 'jpg',
+            };
+        }
+
+        $storageKey = sprintf('%s/%s.%s', trim($prefix, '/'), bin2hex(random_bytes(16)), $extension);
+
+        $this->s3->putObject([
+            'Bucket' => $this->bucket,
+            'Key' => $storageKey,
+            'SourceFile' => $file->getPathname(),
+            'ContentType' => $mimeType ?: 'application/octet-stream',
+        ]);
+
+        return $storageKey;
+    }
+
     /**
      * Тело объекта вместе с ContentType и ContentLength.
      *
@@ -68,8 +113,13 @@ final class PurchaseFileStorageService
      * Объекта может уже не быть — например, бакет чистили руками. Это не повод
      * отказываться удалять строку: иначе она останется навсегда неудаляемой.
      */
-    public function delete(string $storageKey): void
+    public function delete(?string $storageKey): void
     {
+        // Пустой ключ — это «картинки не было»: удалять нечего, и запрос в MinIO лишний.
+        if ($storageKey === null || $storageKey === '') {
+            return;
+        }
+
         try {
             $this->s3->deleteObject([
                 'Bucket' => $this->bucket,

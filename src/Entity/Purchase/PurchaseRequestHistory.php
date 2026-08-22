@@ -3,6 +3,7 @@
 namespace App\Entity\Purchase;
 
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Repository\Purchase\PurchaseRequestHistoryRepository;
 use Doctrine\DBAL\Types\Types;
@@ -24,6 +25,10 @@ class PurchaseRequestHistory
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?User $user = null;
+
+    // Что нажали. NULL — строки, записанные до появления поля.
+    #[ORM\Column(type: Types::STRING, length: 30, nullable: true, enumType: PurchaseHistoryAction::class)]
+    private ?PurchaseHistoryAction $action = null;
 
     // NULL = создание заявки
     #[ORM\Column(name: 'from_status', type: Types::STRING, length: 50, nullable: true, enumType: PurchaseStatus::class)]
@@ -65,6 +70,18 @@ class PurchaseRequestHistory
     public function setUser(User $user): static
     {
         $this->user = $user;
+
+        return $this;
+    }
+
+    public function getAction(): ?PurchaseHistoryAction
+    {
+        return $this->action;
+    }
+
+    public function setAction(?PurchaseHistoryAction $action): static
+    {
+        $this->action = $action;
 
         return $this;
     }

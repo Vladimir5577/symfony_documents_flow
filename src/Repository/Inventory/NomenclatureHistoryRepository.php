@@ -4,25 +4,25 @@ declare(strict_types=1);
 
 namespace App\Repository\Inventory;
 
-use App\Entity\Inventory\Item;
-use App\Entity\Inventory\ItemHistory;
+use App\Entity\Inventory\NomenclatureItem;
+use App\Entity\Inventory\NomenclatureHistory;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
- * @extends ServiceEntityRepository<ItemHistory>
+ * @extends ServiceEntityRepository<NomenclatureHistory>
  */
-class ItemHistoryRepository extends ServiceEntityRepository
+class NomenclatureHistoryRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
     {
-        parent::__construct($registry, ItemHistory::class);
+        parent::__construct($registry, NomenclatureHistory::class);
     }
 
     /**
-     * @return ItemHistory[]
+     * @return NomenclatureHistory[]
      */
-    public function findByItem(Item $item): array
+    public function findByItem(NomenclatureItem $item): array
     {
         // Работники (`*w`) в ответе не нужны, но без них Doctrine делает по SELECT
         // на каждого из трёх пользователей каждой записи: worker — инверсная сторона

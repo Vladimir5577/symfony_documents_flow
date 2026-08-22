@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Repository\Inventory;
 
-use App\Entity\Inventory\Item;
 use App\Entity\Inventory\ItemCategory;
+use App\Entity\Inventory\NomenclatureItem;
 use App\Entity\Inventory\Upd;
 use App\Entity\User\User;
 use App\Enum\Inventory\ItemStatus;
@@ -15,18 +15,27 @@ use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
- * @extends ServiceEntityRepository<Item>
+ * @extends ServiceEntityRepository<NomenclatureItem>
  */
-class ItemRepository extends ServiceEntityRepository
+class NomenclatureItemRepository extends ServiceEntityRepository
 {
-    // Белый список: значение подставляется в DQL, произвольное поле сюда пускать нельзя.
-    // `id` нужен, чтобы колонка ID в списке была кликабельной, — заодно это порядок,
-    // в котором позиции лежат в выгрузке, по нему сверяют xlsx с экраном.
-    private const SORTABLE = ['id', 'name', 'inventoryNumber', 'status', 'createdAt'];
+    /**
+     * Белый список сортировок: значение подставляется в DQL, произвольное поле сюда
+     * пускать нельзя. Наименование живёт на виде, поэтому у него другой алиас.
+     * `id` нужен, чтобы колонка ID в списке была кликабельной, — заодно это порядок,
+     * в котором позиции лежат в выгрузке, по нему сверяют xlsx с экраном.
+     */
+    private const SORTABLE = [
+        'id' => 'i.id',
+        'name' => 'n.name',
+        'inventoryNumber' => 'i.inventoryNumber',
+        'status' => 'i.status',
+        'createdAt' => 'i.createdAt',
+    ];
 
     public function __construct(ManagerRegistry $registry)
     {
-        parent::__construct($registry, Item::class);
+        parent::__construct($registry, NomenclatureItem::class);
     }
 
     /**
@@ -43,7 +52,7 @@ class ItemRepository extends ServiceEntityRepository
      *     direction?: string
      * } $filters
      *
-     * @return array{items: Item[], total: int, page: int, limit: int, totalPages: int}
+     * @return array{items: NomenclatureItem[], total: int, page: int, limit: int, totalPages: int}
      */
     public function findPaginated(InventoryScope $scope, array $filters, int $page, int $limit): array
     {
@@ -57,7 +66,7 @@ class ItemRepository extends ServiceEntityRepository
      * Счёт и срез страницы. Общее для списка и «моего имущества»: расчёт числа
      * страниц, разложенный по двум местам, однажды разъехался бы.
      *
-     * @return array{items: Item[], total: int, page: int, limit: int, totalPages: int}
+     * @return array{items: NomenclatureItem[], total: int, page: int, limit: int, totalPages: int}
      */
     private function paginate(QueryBuilder $qb, int $page, int $limit): array
     {
@@ -89,7 +98,7 @@ class ItemRepository extends ServiceEntityRepository
      *
      * @param array<string, mixed> $filters
      *
-     * @return Item[]
+     * @return NomenclatureItem[]
      */
     public function findFiltered(InventoryScope $scope, array $filters, int $limit): array
     {
@@ -115,18 +124,21 @@ class ItemRepository extends ServiceEntityRepository
      */
     private function createFilteredQueryBuilder(InventoryScope $scope, array $filters): QueryBuilder
     {
-        // Категория присоединяется левым join-ом: она необязательна, и внутренний
-        // выкинул бы неразобранные товары из всех списков, ничего об этом не сказав.
-        // Документ присоединяется сразу: и список, и выгрузка показывают его у каждой
-        // строки, а ленивый прокси означал бы отдельный SELECT на каждый документ.
-        // Работник владельца (`aw`) в ответ не идёт, но джойн обязателен: worker —
-        // инверсная сторона OneToOne у User, прокси на неё построить нельзя. Без джойна
-        // страница с разными владельцами стоит +20 запросов, а выгрузка — до +10000.
+        // Вид присоединяется внутренним join-ом: он обязателен у каждой позиции,
+        // и наименование в списке берётся оттуда. Категория и организация — левыми:
+        // обе необязательны, и внутренний молча выкинул бы неразобранные позиции
+        // из всех списков. Документ присоединяется сразу: и список, и выгрузка
+        // показывают его у каждой строки, а ленивый прокси означал бы отдельный
+        // SELECT на каждый документ. Работник владельца (`aw`) в ответ не идёт, но
+        // джойн обязателен: worker — инверсная сторона OneToOne у User, прокси на неё
+        // построить нельзя. Без джойна страница с разными владельцами стоит
+        // +20 запросов, а выгрузка — до +10000.
         $qb = $this->createQueryBuilder('i')
-            ->addSelect('c', 'o', 'a', 'aw', 'u')
-            ->leftJoin('i.category', 'c')
-            ->join('i.organization', 'o')
-            ->leftJoin('i.assignedTo', 'a')
+            ->addSelect('n', 'c', 'o', 'a', 'aw', 'u')
+            ->join('i.nomenclature', 'n')
+            ->leftJoin('n.category', 'c')
+            ->leftJoin('i.organization', 'o')
+            ->leftJoin('i.user', 'a')
             ->leftJoin('a.worker', 'aw')
             ->leftJoin('i.upd', 'u');
 
@@ -141,38 +153,39 @@ class ItemRepository extends ServiceEntityRepository
      */
     private function applySorting(QueryBuilder $qb, array $filters): void
     {
-        $sort = in_array($filters['sort'] ?? '', self::SORTABLE, true) ? $filters['sort'] : 'createdAt';
+        $field = self::SORTABLE[$filters['sort'] ?? ''] ?? self::SORTABLE['createdAt'];
         $direction = strtoupper($filters['direction'] ?? '') === 'ASC' ? 'ASC' : 'DESC';
 
-        $qb->orderBy('i.' . $sort, $direction);
+        $qb->orderBy($field, $direction);
 
         // Добивка по id. Статус, наименование и даже createdAt (TIMESTAMP с точностью
         // до секунды) не уникальны, а без тай-брейкера PostgreSQL волен возвращать
         // равные строки в любом порядке — и при постраничном выводе одна и та же
         // позиция попала бы на две страницы подряд, а другая не попала бы никуда.
-        if ($sort !== 'id') {
+        if ($field !== 'i.id') {
             $qb->addOrderBy('i.id', $direction);
         }
     }
 
     /**
-     * Товары, назначенные на пользователя. Скоуп не применяется: свои вещи видит любой.
+     * Позиции, назначенные на пользователя. Скоуп не применяется: свои вещи видит любой.
      *
      * Постранично и с поиском: на подотчёте у кладовщика бывают тысячи позиций, и
      * отдавать их одним куском нельзя. Скоуп сюда не передаётся намеренно — условие
      * по владельцу зашито прямо здесь, и подменить его запросом снаружи нельзя.
      *
-     * @return array{items: Item[], total: int, page: int, limit: int, totalPages: int}
+     * @return array{items: NomenclatureItem[], total: int, page: int, limit: int, totalPages: int}
      */
     public function findAssignedTo(User $user, string $search, int $page, int $limit): array
     {
         $qb = $this->createQueryBuilder('i')
-            ->addSelect('c', 'o')
-            ->leftJoin('i.category', 'c')
-            ->join('i.organization', 'o')
-            ->andWhere('i.assignedTo = :user')
+            ->addSelect('n', 'c', 'o')
+            ->join('i.nomenclature', 'n')
+            ->leftJoin('n.category', 'c')
+            ->leftJoin('i.organization', 'o')
+            ->andWhere('i.user = :user')
             ->setParameter('user', $user)
-            ->orderBy('i.name', 'ASC')
+            ->orderBy('n.name', 'ASC')
             // Добивка по id — та же причина, что в applySorting: наименования не
             // уникальны, и без тай-брейкера строки разъезжались бы между страницами.
             ->addOrderBy('i.id', 'ASC');
@@ -183,14 +196,65 @@ class ItemRepository extends ServiceEntityRepository
     }
 
     /**
-     * Сколько товаров в категории — категорию с товарами удалять нельзя.
+     * Сколько позиций в категории — категорию с имуществом удалять нельзя.
+     * Категория висит на виде, поэтому считаем через join, а не по своему полю.
      */
     public function countByCategory(ItemCategory $category): int
     {
         return (int) $this->createQueryBuilder('i')
             ->select('COUNT(i.id)')
-            ->andWhere('i.category = :category')
+            ->join('i.nomenclature', 'n')
+            ->andWhere('n.category = :category')
             ->setParameter('category', $category)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Счётчики для списка видов: сколько всего штук и сколько из них у людей.
+     *
+     * Одним запросом с группировкой, а не по запросу на вид: справочник живёт сотнями
+     * строк, и счёт в цикле стоил бы сотни SELECT-ов на открытие экрана.
+     *
+     * Списанные не считаются: «сколько у нас мониторов» — вопрос про то, чем можно
+     * пользоваться, а списанный монитор остаётся в базе только ради истории.
+     *
+     * @return array<int, array{total: int, assigned: int}> ключ — id вида
+     */
+    public function countGroupedByNomenclature(): array
+    {
+        $rows = $this->createQueryBuilder('i')
+            ->select(
+                'IDENTITY(i.nomenclature) AS nomenclatureId',
+                'COUNT(i.id) AS total',
+                'SUM(CASE WHEN i.user IS NULL THEN 0 ELSE 1 END) AS assigned',
+            )
+            ->andWhere('i.status <> :writtenOff')
+            ->setParameter('writtenOff', ItemStatus::WRITTEN_OFF)
+            ->groupBy('i.nomenclature')
+            ->getQuery()
+            ->getArrayResult();
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[(int) $row['nomenclatureId']] = [
+                'total' => (int) $row['total'],
+                'assigned' => (int) $row['assigned'],
+            ];
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Сколько позиций заведено на вид — вид с имуществом удалять нельзя.
+     */
+    public function countByNomenclature(int $nomenclatureId): int
+    {
+        return (int) $this->createQueryBuilder('i')
+            ->select('COUNT(i.id)')
+            ->andWhere('i.nomenclature = :nomenclature')
+            ->setParameter('nomenclature', $nomenclatureId)
             ->getQuery()
             ->getSingleScalarResult();
     }
@@ -209,8 +273,8 @@ class ItemRepository extends ServiceEntityRepository
     }
 
     /**
-     * Сколько товаров числится за организациями. Нужен перед удалением организации:
-     * она удаляется мягко, поэтому ON DELETE RESTRICT на товарах не срабатывает.
+     * Сколько позиций числится за организациями. Нужен перед удалением организации:
+     * она удаляется мягко, поэтому ON DELETE RESTRICT на позициях не срабатывает.
      *
      * @param int[] $organizationIds
      */
@@ -228,14 +292,23 @@ class ItemRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
-    public function inventoryNumberExists(int $organizationId, string $inventoryNumber, ?int $exceptId = null): bool
+    /**
+     * Занят ли инвентарный номер. Организация необязательна, и позиции без неё
+     * проверяются между собой: у них номер защищён отдельным партиальным индексом,
+     * а `= NULL` в SQL не сравнивается ни с чем и молча пропустил бы дубль.
+     */
+    public function inventoryNumberExists(?int $organizationId, string $inventoryNumber, ?int $exceptId = null): bool
     {
         $qb = $this->createQueryBuilder('i')
             ->select('COUNT(i.id)')
-            ->andWhere('i.organization = :organizationId')
             ->andWhere('i.inventoryNumber = :inventoryNumber')
-            ->setParameter('organizationId', $organizationId)
             ->setParameter('inventoryNumber', $inventoryNumber);
+
+        if ($organizationId === null) {
+            $qb->andWhere('i.organization IS NULL');
+        } else {
+            $qb->andWhere('i.organization = :organizationId')->setParameter('organizationId', $organizationId);
+        }
 
         if ($exceptId !== null) {
             $qb->andWhere('i.id <> :exceptId')->setParameter('exceptId', $exceptId);
@@ -246,7 +319,11 @@ class ItemRepository extends ServiceEntityRepository
 
     /**
      * Ограничение видимости: объединение по всем привязкам пользователя.
-     * Админ организации видит в своём поддереве всё, ответственный — только свою категорию.
+     * Админ организации видит в своём поддереве всё, ответственный — только свою
+     * категорию. Категория теперь на виде, поэтому условие идёт по алиасу `n`.
+     *
+     * Позиции без организации не видит никто, кроме главного администратора:
+     * NULL не совпадает с IN, и такая строка не пройдёт ни одну ветку ниже.
      */
     private function applyScope(QueryBuilder $qb, InventoryScope $scope): void
     {
@@ -268,7 +345,7 @@ class ItemRepository extends ServiceEntityRepository
             }
 
             $or->add(sprintf(
-                '(i.category = :scopeCategory%1$d AND i.organization IN (:scopeCategoryOrgs%1$d))',
+                '(n.category = :scopeCategory%1$d AND i.organization IN (:scopeCategoryOrgs%1$d))',
                 $index,
             ));
             $qb->setParameter('scopeCategory' . $index, $categoryId);
@@ -286,7 +363,8 @@ class ItemRepository extends ServiceEntityRepository
     }
 
     /**
-     * Рассчитывает на алиасы из findPaginated: `i` — товар, `a` — левый join на владельца.
+     * Рассчитывает на алиасы из createFilteredQueryBuilder: `i` — позиция,
+     * `n` — вид, `a` — левый join на владельца.
      */
     private function applyFilters(QueryBuilder $qb, array $filters): void
     {
@@ -296,13 +374,18 @@ class ItemRepository extends ServiceEntityRepository
         }
 
         if (!empty($filters['noCategory'])) {
-            $qb->andWhere('i.category IS NULL');
+            $qb->andWhere('n.category IS NULL');
         } elseif (!empty($filters['categoryId'])) {
-            $qb->andWhere('i.category = :categoryId')->setParameter('categoryId', $filters['categoryId']);
+            $qb->andWhere('n.category = :categoryId')->setParameter('categoryId', $filters['categoryId']);
+        }
+
+        if (!empty($filters['nomenclatureId'])) {
+            $qb->andWhere('i.nomenclature = :nomenclatureId')
+                ->setParameter('nomenclatureId', $filters['nomenclatureId']);
         }
 
         // Позиции одного документа — этим же фильтром карточка УПД показывает,
-        // что по нему приехало, не дублируя форматирование товара у себя.
+        // что по нему приехало, не дублируя форматирование позиции у себя.
         if (!empty($filters['updId'])) {
             $qb->andWhere('i.upd = :updId')->setParameter('updId', $filters['updId']);
         }
@@ -312,23 +395,26 @@ class ItemRepository extends ServiceEntityRepository
         }
 
         if (!empty($filters['unassigned'])) {
-            $qb->andWhere('i.assignedTo IS NULL');
+            $qb->andWhere('i.user IS NULL');
         } elseif (!empty($filters['assigneeFired'])) {
             // Внешний ключ заполнен, а сотрудник не подтянулся: его убрал глобальный
-            // фильтр soft-delete, то есть человек уволен. Такой товар не попадает ни в
-            // «мои товары», ни в «не присвоенные» — без этого фильтра он теряется совсем.
-            $qb->andWhere('i.assignedTo IS NOT NULL')->andWhere('a.id IS NULL');
+            // фильтр soft-delete, то есть человек уволен. Такая позиция не попадает ни в
+            // «мои товары», ни в «не присвоенные» — без этого фильтра она теряется совсем.
+            $qb->andWhere('i.user IS NOT NULL')->andWhere('a.id IS NULL');
         } elseif (!empty($filters['assignedToId'])) {
-            $qb->andWhere('i.assignedTo = :assignedToId')->setParameter('assignedToId', $filters['assignedToId']);
+            $qb->andWhere('i.user = :assignedToId')->setParameter('assignedToId', $filters['assignedToId']);
         }
 
         $this->applySearch($qb, (string) ($filters['search'] ?? ''));
     }
 
     /**
-     * Поиск по наименованию, инвентарному и серийному номеру. Вынесен отдельно,
+     * Поиск по наименованию вида, инвентарному и серийному номеру. Вынесен отдельно,
      * потому что им пользуются и общий список, и «моё имущество»: два скопированных
      * поиска однажды начали бы искать по разным полям.
+     *
+     * Наименование ищется по виду — ровно ради этого справочник и заводился:
+     * одна опечатка в карточке больше не прячет позицию от поиска.
      */
     private function applySearch(QueryBuilder $qb, string $search): void
     {
@@ -338,7 +424,7 @@ class ItemRepository extends ServiceEntityRepository
         }
 
         $qb->andWhere(
-            'LOWER(i.name) LIKE LOWER(:search)'
+            'LOWER(n.name) LIKE LOWER(:search)'
             . ' OR LOWER(i.inventoryNumber) LIKE LOWER(:search)'
             . ' OR LOWER(i.serialNumber) LIKE LOWER(:search)',
         )->setParameter('search', '%' . $search . '%');

@@ -88,20 +88,64 @@ final class SpaApiError
     public const PURCHASE_INVALID_ITEM = 'purchase_invalid_item';
     public const PURCHASE_INVALID_DUE_DATE = 'purchase_invalid_due_date';
     public const PURCHASE_FILE_NOT_FOUND = 'purchase_file_not_found';
-    public const PURCHASE_JUSTIFICATION_REQUIRED = 'purchase_justification_required';
-    public const PURCHASE_CONTRACT_REQUIRED = 'purchase_contract_required';
     public const PURCHASE_FILE_LOCKED = 'purchase_file_locked';
     public const PURCHASE_CATEGORY_NOT_FOUND = 'purchase_category_not_found';
     public const PURCHASE_CATEGORY_IN_USE = 'purchase_category_in_use';
     public const PURCHASE_CATEGORY_NAME_REQUIRED = 'purchase_category_name_required';
     public const PURCHASE_CATEGORY_NAME_TAKEN = 'purchase_category_name_taken';
+    public const PURCHASE_IMAGE_INVALID_TYPE = 'purchase_image_invalid_type';
     public const PURCHASE_INVALID_LAW = 'purchase_invalid_law';
     public const PURCHASE_INVALID_METHOD = 'purchase_invalid_method';
     public const PURCHASE_INVALID_FILE_TYPE = 'purchase_invalid_file_type';
     public const PURCHASE_APPROVER_NOT_FOUND = 'purchase_approver_not_found';
-    public const PURCHASE_APPROVALS_PENDING = 'purchase_approvals_pending';
-    public const PURCHASE_APPROVERS_REQUIRED = 'purchase_approvers_required';
-    public const PURCHASE_INVALID_SETTING = 'purchase_invalid_setting';
+    public const PURCHASE_APPROVER_ALREADY_ADDED = 'purchase_approver_already_added';
+    // Маршрут согласования
+    public const PURCHASE_TASK_NOT_FOUND = 'purchase_task_not_found';
+    public const PURCHASE_TASK_NOT_ACTIVE = 'purchase_task_not_active';
+    public const PURCHASE_TASK_FILE_REQUIRED = 'purchase_task_file_required';
+    public const PURCHASE_TASK_NOT_REVOKABLE = 'purchase_task_not_revokable';
+    /** С этого этапа возвращать автору нельзя — например, товар уже оплачен. */
+    public const PURCHASE_REJECT_NOT_ALLOWED = 'purchase_reject_not_allowed';
+    /** Админ выдаёт участнику роль, которой нет в PurchaseRoleCode. */
+    public const PURCHASE_ROLE_NOT_FOUND = 'purchase_role_not_found';
+    /** Разбирающий отмечает согласантом того, кто не входит в пул этапа. */
+    public const PURCHASE_APPROVER_NOT_DEPUTY = 'purchase_approver_not_deputy';
+    /** Подача заявки, маршрут которой не назначен или больше не годится. */
+    public const PURCHASE_ROUTE_NOT_CONFIGURED = 'purchase_route_not_configured';
+    /** Маршрут заявки нельзя сменить: разбор не активен или дальше уже есть решения. */
+    public const PURCHASE_ROUTE_NOT_CHANGEABLE = 'purchase_route_not_changeable';
+    /** Двое изменили заявку одновременно — повторить с актуальными данными. */
+    public const PURCHASE_CONCURRENT_UPDATE = 'purchase_concurrent_update';
+    // Заготовка маршрута в админке
+    public const PURCHASE_ROUTE_NOT_FOUND = 'purchase_route_not_found';
+    /** Маршрут без этапов не сохраняем: по такому заявка не пойдёт никуда. */
+    public const PURCHASE_ROUTE_EMPTY = 'purchase_route_empty';
+    /** Машинное имя маршрута занято другой заготовкой. */
+    public const PURCHASE_ROUTE_CODE_TAKEN = 'purchase_route_code_taken';
+    /**
+     * Шапка заготовки не годится: пустое имя, негодный код или не указаны виды заявок.
+     *
+     * Отдельно от PURCHASE_ROUTE_STAGE_INVALID намеренно: раньше и то и другое
+     * отвечало «проверьте этап», и клиент, забывший поле в шапке, отправлял
+     * разработчика искать ошибку в дереве этапов, где её не было.
+     */
+    public const PURCHASE_ROUTE_META_INVALID = 'purchase_route_meta_invalid';
+    /** В этапе нет задач, назначения или значения нет в справочнике. */
+    public const PURCHASE_ROUTE_STAGE_INVALID = 'purchase_route_stage_invalid';
+    /** В задаче нет роли, пула или назначение недопустимо в заготовке. */
+    public const PURCHASE_ROUTE_TASK_INVALID = 'purchase_route_task_invalid';
+    /** Разборов в маршруте больше одного, либо динамический этап стоит раньше разбора. */
+    public const PURCHASE_ROUTE_STAGE_ORDER_INVALID = 'purchase_route_stage_order_invalid';
+    /** Заготовку нельзя выключить: она назначена маршрутом по умолчанию. */
+    public const PURCHASE_ROUTE_IS_DEFAULT = 'purchase_route_is_default';
+    /**
+     * Правка маршрута без версии, которую админ видел, когда открывал форму.
+     *
+     * Отдельно от PURCHASE_CONCURRENT_UPDATE намеренно: иначе клиент, забывший
+     * прислать поле, получал бы «вас опередили» и разработчик искал бы второго
+     * админа, которого не было.
+     */
+    public const PURCHASE_ROUTE_VERSION_REQUIRED = 'purchase_route_version_required';
     public const INVENTORY_ACCESS_EXISTS = 'inventory_access_exists';
     public const INVENTORY_ACCESS_NOT_FOUND = 'inventory_access_not_found';
     public const INVENTORY_CATEGORY_HAS_ITEMS = 'inventory_category_has_items';
@@ -116,11 +160,16 @@ final class SpaApiError
     public const INVENTORY_FILE_UPLOAD_FAILED = 'inventory_file_upload_failed';
     public const INVENTORY_INVALID_DATE = 'inventory_invalid_date';
     public const INVENTORY_INVALID_PRICE = 'inventory_invalid_price';
+    public const INVENTORY_INVALID_QUANTITY = 'inventory_invalid_quantity';
     public const INVENTORY_INVALID_STATUS = 'inventory_invalid_status';
-    public const INVENTORY_ITEM_NAME_REQUIRED = 'inventory_item_name_required';
     public const INVENTORY_ITEM_NOT_FOUND = 'inventory_item_not_found';
     public const INVENTORY_ITEM_NUMBER_EXISTS = 'inventory_item_number_exists';
     public const INVENTORY_NO_ACCESS = 'inventory_no_access';
+    public const INVENTORY_NOMENCLATURE_HAS_ITEMS = 'inventory_nomenclature_has_items';
+    public const INVENTORY_NOMENCLATURE_NAME_EXISTS = 'inventory_nomenclature_name_exists';
+    public const INVENTORY_NOMENCLATURE_NAME_REQUIRED = 'inventory_nomenclature_name_required';
+    public const INVENTORY_NOMENCLATURE_NOT_FOUND = 'inventory_nomenclature_not_found';
+    public const INVENTORY_NOMENCLATURE_REQUIRED = 'inventory_nomenclature_required';
     public const INVENTORY_ORGANIZATION_NOT_ALLOWED = 'inventory_organization_not_allowed';
     public const INVENTORY_UPD_HAS_ITEMS = 'inventory_upd_has_items';
     public const INVENTORY_UPD_NOT_FOUND = 'inventory_upd_not_found';

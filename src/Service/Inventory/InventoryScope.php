@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Inventory;
 
-use App\Entity\Inventory\Item;
+use App\Entity\Inventory\NomenclatureItem;
 
 /**
  * Что конкретный пользователь видит в инвентаризации.
@@ -40,10 +40,17 @@ final class InventoryScope
      * Товар без категории доступен только админу организации: ответственный отвечает
      * за конкретную категорию, а неразобранный предмет ещё ни к одной не отнесён.
      */
-    public function canSee(int $organizationId, ?int $categoryId): bool
+    public function canSee(?int $organizationId, ?int $categoryId): bool
     {
         if ($this->full) {
             return true;
+        }
+
+        // Организация не проставлена — позицию видит только главный администратор.
+        // Все привязки выданы на конкретные организации, отнести такую строку к чьей-то
+        // зоне нельзя: это то же «неразобранное», что и вид без категории.
+        if ($organizationId === null) {
+            return false;
         }
 
         if (in_array($organizationId, $this->adminOrgIds, true)) {
@@ -57,11 +64,15 @@ final class InventoryScope
         return in_array($organizationId, $this->categoryOrgIds[$categoryId] ?? [], true);
     }
 
-    public function canSeeItem(Item $item): bool
+    public function canSeeItem(NomenclatureItem $item): bool
     {
+        $organizationId = $item->getOrganization()?->getId();
         $categoryId = $item->getCategory()?->getId();
 
-        return $this->canSee((int) $item->getOrganization()->getId(), $categoryId !== null ? (int) $categoryId : null);
+        return $this->canSee(
+            $organizationId !== null ? (int) $organizationId : null,
+            $categoryId !== null ? (int) $categoryId : null,
+        );
     }
 
     /**

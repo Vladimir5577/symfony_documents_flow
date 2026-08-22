@@ -30,6 +30,7 @@ final class ItemFilterFactory
         return [
             'organizationIds' => $this->resolveOrganizationIds($request),
             'categoryId' => $request->query->getInt('category_id') ?: null,
+            'nomenclatureId' => $request->query->getInt('nomenclature_id') ?: null,
             'updId' => $request->query->getInt('upd_id') ?: null,
             'noCategory' => $request->query->getBoolean('no_category'),
             'status' => ItemStatus::tryFrom((string) $request->query->get('status', '')),

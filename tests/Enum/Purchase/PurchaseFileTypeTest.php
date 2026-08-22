@@ -10,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Замок на обязательных вложениях: без него загрузивший мог удалить договор
- * у уже оплаченной заявки или записку у поданной.
+ * у уже оплаченной заявки или УПД у закрытой.
  */
 final class PurchaseFileTypeTest extends TestCase
 {
@@ -18,28 +18,25 @@ final class PurchaseFileTypeTest extends TestCase
     {
         $contract = PurchaseFileType::CONTRACT;
 
-        // Пока договор готовят — ошибочный файл можно снести и перезалить
-        self::assertFalse($contract->isLockedAt(PurchaseStatus::CEO_APPROVED));
-        self::assertFalse($contract->isLockedAt(PurchaseStatus::CONTRACT_PENDING));
+        // Пока идёт согласование и договор готовят — ошибочный файл можно снести и перезалить
+        self::assertFalse($contract->isLockedAt(PurchaseStatus::ON_APPROVAL));
+        self::assertFalse($contract->isLockedAt(PurchaseStatus::APPROVED));
 
-        // Ушли на оплату — договор зафиксирован
-        self::assertTrue($contract->isLockedAt(PurchaseStatus::INVOICE_SENT));
+        // Оплатили — договор зафиксирован
         self::assertTrue($contract->isLockedAt(PurchaseStatus::INVOICE_PAID));
         self::assertTrue($contract->isLockedAt(PurchaseStatus::DELIVERED));
         self::assertTrue($contract->isLockedAt(PurchaseStatus::DONE));
     }
 
-    public function testJustificationLockedAfterSubmit(): void
+    public function testUpdLockedOnceRequestClosed(): void
     {
-        $justification = PurchaseFileType::JUSTIFICATION;
+        $upd = PurchaseFileType::UPD;
 
-        // Заявка редактируема (черновик, возврат на доработку) — записку можно менять
-        self::assertFalse($justification->isLockedAt(PurchaseStatus::DRAFT));
-        self::assertFalse($justification->isLockedAt(PurchaseStatus::REJECTED));
+        // До закрытия УПД можно перезалить: заявку без него всё равно не закрыть
+        self::assertFalse($upd->isLockedAt(PurchaseStatus::DELIVERED));
 
-        // Подана — дальше заявка уже уехала на её основании
-        self::assertTrue($justification->isLockedAt(PurchaseStatus::NEW));
-        self::assertTrue($justification->isLockedAt(PurchaseStatus::INVOICE_PAID));
+        // Закрыли в архив — единственное подтверждение закупки трогать нельзя
+        self::assertTrue($upd->isLockedAt(PurchaseStatus::DONE));
     }
 
     public function testOptionalFilesNeverLocked(): void
@@ -50,10 +47,4 @@ final class PurchaseFileTypeTest extends TestCase
         }
     }
 
-    /** Цепочка исполнения проходит через договор и нигде не зацикливается. */
-    public function testContractStageSitsBetweenApprovalAndPayment(): void
-    {
-        self::assertSame(PurchaseStatus::CONTRACT_PENDING, PurchaseStatus::CEO_APPROVED->nextExecutionStatus());
-        self::assertSame(PurchaseStatus::INVOICE_SENT, PurchaseStatus::CONTRACT_PENDING->nextExecutionStatus());
-    }
 }
