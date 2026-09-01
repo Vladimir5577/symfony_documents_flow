@@ -80,20 +80,26 @@ final class PurchaseApprovalWorkflow
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_REQUIRED);
         }
 
-        $this->builder->build($request, $this->resolver->resolve($request));
+        // Сборка снимка — две записи в БД (ApprovalRouteBuilder::build), и снос
+        // предыдущего маршрута не должен пережить отказ на второй: заявка
+        // осталась бы вообще без этапов. Уведомления — за транзакцией, чтобы
+        // откат никого не оповестил о подаче, которой не было.
+        $this->em->wrapInTransaction(function () use ($request, $actor, $from): void {
+            $this->builder->build($request, $this->resolver->resolve($request));
 
-        $request->setStatus(PurchaseStatus::ON_APPROVAL);
-        $this->history->logTransition(
-            $request,
-            $actor,
-            $from,
-            PurchaseStatus::ON_APPROVAL,
-            PurchaseHistoryAction::SUBMITTED,
-            $request->getAppliedRouteTemplateName(),
-        );
+            $request->setStatus(PurchaseStatus::ON_APPROVAL);
+            $this->history->logTransition(
+                $request,
+                $actor,
+                $from,
+                PurchaseStatus::ON_APPROVAL,
+                PurchaseHistoryAction::SUBMITTED,
+                $request->getAppliedRouteTemplateName(),
+            );
 
-        $this->advance($request, $actor);
-        $this->save($request);
+            $this->advance($request, $actor);
+            $this->save($request);
+        });
 
         $this->notifier->notifySubmitted($request, $actor, resubmitted: $from === PurchaseStatus::REJECTED);
         $this->notifier->notifyStageActivated($request, $actor);
@@ -408,17 +414,21 @@ final class PurchaseApprovalWorkflow
 
         $was = $request->getAppliedRouteTemplateName();
 
-        $request->setRouteTemplate($template);
-        $this->builder->build($request, $template);
-        $this->advance($request, $actor);
+        // Транзакция по той же причине, что и в submit(): снос старого снимка и
+        // запись нового — две записи, и отказ на второй оставит заявку без маршрута.
+        $this->em->wrapInTransaction(function () use ($request, $template, $actor, $was): void {
+            $request->setRouteTemplate($template);
+            $this->builder->build($request, $template);
+            $this->advance($request, $actor);
 
-        $this->history->log(
-            $request,
-            $actor,
-            PurchaseHistoryAction::ROUTE_CHANGED,
-            sprintf('%s → %s', $was ?? 'маршрут по умолчанию', (string) $template->getName()),
-        );
-        $this->save($request);
+            $this->history->log(
+                $request,
+                $actor,
+                PurchaseHistoryAction::ROUTE_CHANGED,
+                sprintf('%s → %s', $was ?? 'маршрут по умолчанию', (string) $template->getName()),
+            );
+            $this->save($request);
+        });
     }
 
     /** Отмена из любого нефинального статуса. */

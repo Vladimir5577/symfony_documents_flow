@@ -29,7 +29,8 @@ use Doctrine\ORM\EntityManagerInterface;
  * AWAITING_ASSIGNMENT — он виден в карточке как «ожидает назначения», и вставка
  * людей в середину маршрута не двигает соседние этапы.
  *
- * Flush — на вызывающей стороне.
+ * Снос предыдущего снимка пишется отдельным flush — иначе повторная подача
+ * падает на уникальном ключе (см. build). Остальное — на вызывающей стороне.
  */
 final class ApprovalRouteBuilder
 {
@@ -43,6 +44,9 @@ final class ApprovalRouteBuilder
      *
      * Заготовку выбирает вызывающий через ApprovalRouteResolver: сборщик не
      * решает, какой маршрут применить, он только переносит его в заявку.
+     *
+     * Две записи, и порядок между ними обязателен — вызывающий обязан держать
+     * транзакцию, иначе отказ на второй оставит заявку вообще без маршрута.
      */
     public function build(PurchaseRequest $request, PurchaseRouteTemplate $template): void
     {
@@ -50,6 +54,11 @@ final class ApprovalRouteBuilder
             $request->removeStage($stage);
             $this->em->remove($stage);
         }
+        // Старые позиции должны уйти из таблицы до вставки новых: у этапа
+        // уникальны (заявка, позиция), а Doctrine всегда пишет INSERT раньше
+        // DELETE — новый этап на позиции 1 упирался в старый, ещё не удалённый,
+        // и повторная подача после доработки падала на уникальном ключе.
+        $this->em->flush();
 
         $request->setAppliedRouteTemplate($template);
 

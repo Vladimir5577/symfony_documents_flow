@@ -713,6 +713,12 @@ final class PurchaseApprovalFlowTest extends TestCase
     private function workflow(bool $configured = true): PurchaseApprovalWorkflow
     {
         $em = $this->createStub(EntityManagerInterface::class);
+        // Заглушка обязана выполнять тело транзакции: подача и смена маршрута
+        // идут внутри неё, и без этого тесты проверяли бы заявку, которую не
+        // подавали.
+        $em->method('wrapInTransaction')->willReturnCallback(
+            static fn (callable $work): mixed => $work($em),
+        );
 
         $bus = $this->createStub(MessageBusInterface::class);
         $bus->method('dispatch')->willReturnCallback(
