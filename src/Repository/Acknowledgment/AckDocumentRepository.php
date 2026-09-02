@@ -156,7 +156,14 @@ class AckDocumentRepository extends ServiceEntityRepository
             ->setParameter('later', AckStatus::LATER);
     }
 
-    /** Документ «для всех», по которому у меня нет закрывающей строки. */
+    /**
+     * Документ «для всех», по которому у меня нет закрывающей отметки.
+     *
+     * Пустой статус проверяем наравне с отсутствием строки: строка могла
+     * остаться от черновика, который заводили адресным, а публиковали на всех.
+     * Без этого условия документ молча не показался бы ровно тем, кого когда-то
+     * выбрали поимённо.
+     */
     private function pendingAllQb(User $user): QueryBuilder
     {
         return $this->activeQb()
@@ -167,7 +174,7 @@ class AckDocumentRepository extends ServiceEntityRepository
                 'adu.document = d AND adu.user = :user'
             )
             ->andWhere('d.audience = :all')
-            ->andWhere('adu.id IS NULL OR adu.status = :later')
+            ->andWhere('adu.id IS NULL OR adu.status IS NULL OR adu.status = :later')
             ->setParameter('user', $user)
             ->setParameter('all', AckAudience::ALL)
             ->setParameter('later', AckStatus::LATER);

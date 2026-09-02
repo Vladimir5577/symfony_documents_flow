@@ -97,4 +97,25 @@ final class AckQueryCompilesTest extends KernelTestCase
             $sql,
         );
     }
+
+    /**
+     * Пустой статус — такой же «не ознакомлен», как и отсутствие строки.
+     *
+     * Строка со статусом NULL остаётся, если черновик заводили адресным, а
+     * опубликовали на всех. Без этой ветки документ не показывался бы ровно
+     * тем, кого когда-то выбрали поимённо, и молча: ошибки нет, просто пусто.
+     */
+    public function testPendingForAllTreatsEmptyStatusAsPending(): void
+    {
+        $repository = $this->em->getRepository(AckDocument::class);
+        $builder = new \ReflectionMethod($repository, 'pendingAllQb');
+
+        /** @var QueryBuilder $qb */
+        $qb = $builder->invokeArgs($repository, [new User()]);
+
+        self::assertMatchesRegularExpression(
+            '/\w+\.id IS NULL OR \w+\.status IS NULL OR \w+\.status = \?/',
+            $qb->getQuery()->getSQL(),
+        );
+    }
 }
