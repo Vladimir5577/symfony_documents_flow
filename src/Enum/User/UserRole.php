@@ -21,6 +21,7 @@ enum UserRole: string
     // выходят релизы, и роль-константа означала деплой на каждую правку.
     case ROLE_INVENTORY_ADMIN = 'ROLE_INVENTORY_ADMIN';
     case ROLE_INVENTORY_MANAGER = 'ROLE_INVENTORY_MANAGER';
+    case ROLE_DOC_OFFICE = 'ROLE_DOC_OFFICE';
     case ROLE_USER = 'ROLE_USER';
 
     public function getLabel(): string
@@ -38,6 +39,7 @@ enum UserRole: string
             self::ROLE_MECHANIC => 'Роль механика',
             self::ROLE_INVENTORY_ADMIN => 'Роль администратора инвентаризации',
             self::ROLE_INVENTORY_MANAGER => 'Роль инвентаризации по организациям',
+            self::ROLE_DOC_OFFICE => 'Роль делопроизводства',
             self::ROLE_USER => 'Роль пользователя',
         };
     }
