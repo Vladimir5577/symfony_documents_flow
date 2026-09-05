@@ -6,6 +6,8 @@
 
     var MERCURE_URL = window.__chatConfig ? window.__chatConfig.mercureUrl : '';
     var CURRENT_USER_ID = window.__chatConfig ? window.__chatConfig.currentUserId : 0;
+    // Подписной JWT хаба: без него подписка не открывается (директива anonymous снята).
+    var MERCURE_TOKEN = window.__chatConfig ? (window.__chatConfig.mercureToken || '') : '';
 
     var state = {
         rooms: [],
@@ -828,6 +830,7 @@
         if (!MERCURE_URL || !CURRENT_USER_ID) return;
         var url = new URL(MERCURE_URL);
         url.searchParams.append('topic', '/chat/user/' + CURRENT_USER_ID);
+        if (MERCURE_TOKEN) url.searchParams.append('authorization', MERCURE_TOKEN);
 
         state.eventSourceUser = new EventSource(url);
         state.eventSourceUser.onmessage = function (e) {
@@ -849,6 +852,7 @@
 
         var url = new URL(MERCURE_URL);
         url.searchParams.append('topic', '/chat/room/' + roomId);
+        if (MERCURE_TOKEN) url.searchParams.append('authorization', MERCURE_TOKEN);
 
         state.eventSourceRoom = new EventSource(url);
         state.eventSourceRoom.onmessage = function (e) {

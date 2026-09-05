@@ -21,12 +21,30 @@ final class AnalyticsDashboardController extends AbstractController
         return in_array($scale, self::ALLOWED_SCALES, true) ? $scale : 'month';
     }
 
+    /**
+     * Легаси-дашборд собирает все разделы (включая финансы) по любой организации
+     * из org_id и сравнение по всем видимым — профильным ролям (HR, механики…)
+     * он давал бы чужие показатели в обход скоупа SPA-контроллеров (BE-08/09).
+     * Поэтому вход только глобальным аналитикам и администраторам; профильные
+     * роли работают в SPA-разделах со своим скоупом.
+     */
+    private function hasAnalyticsRole(): bool
+    {
+        return $this->isGranted('ROLE_ANALYTIC') || $this->isGranted('ROLE_ADMIN');
+    }
+
     #[Route('/analytics/dashboard', name: 'app_analytics_dashboard')]
     public function index(
         Request $request,
         AnalyticsOrganizationRepository $analyticsOrganizationRepository,
         DashboardDataService $dashboardDataService,
     ): Response {
+        // BE-09: легаси-дашборд отдавал агрегаты холдинга любому ROLE_USER.
+        // Пускаем тех же, кому доступна SPA-аналитика (список ролей — OR).
+        if (!$this->hasAnalyticsRole()) {
+            throw $this->createAccessDeniedException('Недостаточно прав для просмотра аналитики.');
+        }
+
         $analyticsOrganizations = $analyticsOrganizationRepository->findVisibleOrdered();
         $organizations = array_map(
             static fn ($analyticsOrganization) => $analyticsOrganization->getOrganization(),

@@ -7,7 +7,11 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
+// BE-05 / SEC-09: кадровые данные кандидатов — только ROLE_HR, как у SPA-близнеца
+// (src/Controller/SpaApi/ExternalApi/Hr/*). Раньше маршруты попадали под catch-all ROLE_USER.
+#[IsGranted('ROLE_HR')]
 final class VacancyApplicationController extends AbstractController
 {
     public function __construct(
@@ -65,6 +69,12 @@ final class VacancyApplicationController extends AbstractController
     #[Route('/hr_vacancies_applications/{id}/update', name: 'app_vacancy_application_update', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function update(int $id, Request $request): Response
     {
+        if (!$this->isCsrfTokenValid('hr_vacancy', (string) $request->request->get('_token', ''))) {
+            $this->addFlash('error', 'Неверный токен. Обновите страницу и повторите.');
+
+            return $this->redirectToRoute('app_vacancy_application_show', ['id' => $id]);
+        }
+
         $status       = $request->request->get('status') ?: null;
         $adminComment = $request->request->get('adminComment') ?: null;
 

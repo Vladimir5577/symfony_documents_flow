@@ -123,6 +123,18 @@ final class MeController extends AbstractController
         $password = (string) ($payload['password'] ?? '');
         $passwordRepeat = (string) ($payload['password_repeat'] ?? '');
 
+        // BE-27: смена логина или пароля подтверждается текущим паролем. Токен в
+        // localStorage, украденный на минуту, иначе превращался в постоянный
+        // захват аккаунта. Проверяем ДО мутаций: исключение ловится выше и flush
+        // не идёт, но грязная сущность в UnitOfWork улетела бы при следующем flush.
+        // Только телефон/статус/аватар текущего пароля не требуют.
+        if ($password !== '' || $passwordRepeat !== '' || $login !== $user->getLogin()) {
+            $currentPassword = (string) ($payload['current_password'] ?? '');
+            if ($currentPassword === '' || !$this->passwordHasher->isPasswordValid($user, $currentPassword)) {
+                throw new \InvalidArgumentException('Для смены логина или пароля укажите текущий пароль.');
+            }
+        }
+
         $user->setLogin($login);
         $user->setPhone($phone !== '' ? $phone : null);
 
@@ -149,8 +161,8 @@ final class MeController extends AbstractController
             if ($password !== $passwordRepeat) {
                 throw new \InvalidArgumentException('Пароли не совпадают.');
             }
-            if (mb_strlen($password) < 6) {
-                throw new \InvalidArgumentException('Новый пароль должен быть не короче 6 символов.');
+            if (mb_strlen($password) < 8) {
+                throw new \InvalidArgumentException('Новый пароль должен быть не короче 8 символов.');
             }
 
             $user->setPassword($this->passwordHasher->hashPassword($user, $password));

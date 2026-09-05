@@ -109,10 +109,10 @@ final class PurchaseNotificationPublisher
         );
     }
 
-    /** Согласована — менеджерам департамента и тем, кто её будет исполнять. */
+    /** Согласована — автору, менеджерам департамента и тем, кто её будет исполнять. */
     public function notifyApproved(PurchaseRequest $request, User $actor): void
     {
-        $recipients = array_merge($this->departmentManagers($request), $this->executionStaff());
+        $recipients = $this->stakeholders($request, $this->executionStaff());
 
         $this->publish(
             'approved', $request, $actor, $recipients,
@@ -121,32 +121,32 @@ final class PurchaseNotificationPublisher
         );
     }
 
-    /** Возвращена на доработку — менеджерам департамента. */
+    /** Возвращена на доработку — автору и менеджерам департамента. */
     public function notifyRejected(PurchaseRequest $request, User $actor, string $comment): void
     {
         $this->publish(
-            'rejected', $request, $actor, $this->departmentManagers($request),
+            'rejected', $request, $actor, $this->stakeholders($request),
             sprintf('Заявка на закупку «%s» возвращена на доработку', $this->titleOf($request)),
             'Возврат на доработку',
             $comment !== '' ? $comment : null,
         );
     }
 
-    /** Продвижение по конвейеру исполнения — менеджерам департамента. */
+    /** Продвижение по конвейеру исполнения — автору и менеджерам департамента. */
     public function notifyStatusChanged(PurchaseRequest $request, User $actor): void
     {
         $this->publish(
-            'status_changed', $request, $actor, $this->departmentManagers($request),
+            'status_changed', $request, $actor, $this->stakeholders($request),
             sprintf('Заявка на закупку «%s»: %s', $this->titleOf($request), $request->getStatus()->getLabel()),
             'Статус закупки изменён',
         );
     }
 
-    /** Доставлено, пора принимать — менеджерам департамента. */
+    /** Доставлено, пора принимать — автору и менеджерам департамента. */
     public function notifyDelivered(PurchaseRequest $request, User $actor): void
     {
         $this->publish(
-            'delivered', $request, $actor, $this->departmentManagers($request),
+            'delivered', $request, $actor, $this->stakeholders($request),
             sprintf('Закупка «%s» доставлена — подтвердите получение', $this->titleOf($request)),
             'Закупка доставлена',
         );
@@ -162,13 +162,12 @@ final class PurchaseNotificationPublisher
         );
     }
 
-    /** Отменена — всем участникам процесса. */
+    /** Отменена — всем участникам процесса, включая автора. */
     public function notifyCancelled(PurchaseRequest $request, User $actor, ?string $comment): void
     {
-        $recipients = array_merge(
-            $this->departmentManagers($request),
-            $this->supervisors(),
-            array_filter([$request->getExecutor()]),
+        $recipients = $this->stakeholders(
+            $request,
+            array_merge($this->supervisors(), array_filter([$request->getExecutor()])),
         );
 
         $this->publish(
@@ -306,5 +305,26 @@ final class PurchaseNotificationPublisher
         }
 
         return $this->userRepository->findByRoleName(UserRole::ROLE_MANAGER->value, $organization);
+    }
+
+    /**
+     * Кому важна судьба заявки: автор + менеджеры департамента (+ дополнительные
+     * адресаты). Автор здесь обязателен (BE-22): заявку подаёт любой сотрудник, а
+     * ROLE_MANAGER ему не требуется — раньше возврат на доработку, согласование
+     * и отмена уходили только менеджерам, и в организации без ROLE_MANAGER не
+     * уходили никому. Дедупликация по id, как в notifyStageActivated: автор
+     * может быть и менеджером.
+     *
+     * @param list<User> $extra
+     * @return list<User>
+     */
+    private function stakeholders(PurchaseRequest $request, array $extra = []): array
+    {
+        $out = [];
+        foreach (array_merge(array_filter([$request->getCreatedBy()]), $this->departmentManagers($request), $extra) as $user) {
+            $out[$user->getId()] = $user;
+        }
+
+        return array_values($out);
     }
 }

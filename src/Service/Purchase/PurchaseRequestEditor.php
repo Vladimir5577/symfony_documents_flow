@@ -10,6 +10,7 @@ use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\OptimisticLockException;
 
 /**
  * Правки содержимого заявки, которая уже идёт по маршруту.
@@ -21,6 +22,10 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class PurchaseRequestEditor
 {
+    /** quantity/approved_quantity NUMERIC(12,3), estimated_price NUMERIC(12,2) — как в PurchaseController. */
+    private const MAX_QUANTITY = 1_000_000_000;
+    private const MAX_PRICE = 10_000_000_000;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly PurchaseHistoryLogger $history,
@@ -67,7 +72,8 @@ final class PurchaseRequestEditor
                 $item->setApprovedQuantity(null);
                 continue;
             }
-            if ((float) $quantity <= 0) {
+            // Тот же потолок, что при создании: approved_quantity NUMERIC(12,3).
+            if ((float) $quantity <= 0 || round((float) $quantity, 3) >= self::MAX_QUANTITY) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
             }
 
@@ -117,6 +123,11 @@ final class PurchaseRequestEditor
 
         $changes = [];
 
+        if ($supplier !== null && mb_strlen($supplier) > 255) {
+            // Колонка VARCHAR(255): без проверки flush падал с 500 (BE-17).
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
+        }
+
         if ($supplier !== null && $supplier !== $request->getSupplier()) {
             $request->setSupplier($supplier !== '' ? $supplier : null);
             $changes[] = $supplier !== ''
@@ -129,7 +140,8 @@ final class PurchaseRequestEditor
             if ($price === null) {
                 continue;
             }
-            if (!is_numeric($price) || (float) $price < 0) {
+            // estimated_price NUMERIC(12,2): без потолка ресёрч ронял запись на переполнении.
+            if (!is_numeric($price) || (float) $price < 0 || round((float) $price, 2) >= self::MAX_PRICE) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
             }
             if ((float) $price === (float) $item->getEstimatedPrice()) {
@@ -156,7 +168,7 @@ final class PurchaseRequestEditor
             implode('; ', $changes),
         );
         $request->touch();
-        $this->em->flush();
+        $this->flushOrConflict();
     }
 
     /** Запись в историю о чужом действии — файлы и классификация правятся вне этого сервиса. */
@@ -167,6 +179,23 @@ final class PurchaseRequestEditor
         ?string $comment = null,
     ): void {
         $this->history->log($request, $actor, $action, $comment);
-        $this->em->flush();
+        $this->flushOrConflict();
+    }
+
+    /**
+     * Столкновение с параллельной правкой — 409, а не 500 (BE-29): та же
+     * семантика, что у PurchaseApprovalWorkflow::save(). Иначе закупщик, правящий
+     * цены, пока согласант закрывает задачу, получал необработанное исключение и
+     * закрытый EntityManager.
+     *
+     * @throws PurchaseTransitionException
+     */
+    private function flushOrConflict(): void
+    {
+        try {
+            $this->em->flush();
+        } catch (OptimisticLockException) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONCURRENT_UPDATE);
+        }
     }
 }

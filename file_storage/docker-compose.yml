@@ -60,7 +60,13 @@ services:
       IMGPROXY_KEY: ${IMGPROXY_KEY:-}
       IMGPROXY_SALT: ${IMGPROXY_SALT:-}
       # Если ключ/соль пустые — подпись отключена (ТОЛЬКО для локальной отладки).
+      # Symfony (App\Service\Media\ImgproxyUrlSigner) и go_kanban_service подписывают
+      # URL теми же KEY/SALT, поэтому на стенде задайте их и переключите в 0.
       IMGPROXY_ALLOW_UNSAFE_URL: ${IMGPROXY_ALLOW_UNSAFE_URL:-1}
+      # Только объекты MinIO (BE-03 / FE-01). Без этого imgproxy принимал
+      # plain/http://<любой-хост> и по анонимному запросу ходил во внутреннюю сеть
+      # (SSRF). Схема s3:// покрывает все бакеты; http(s) отсечены целиком.
+      IMGPROXY_ALLOWED_SOURCES: ${IMGPROXY_ALLOWED_SOURCES:-s3://}
 
       # --- Источник исходников: MinIO (S3) ---
       IMGPROXY_USE_S3: "1"

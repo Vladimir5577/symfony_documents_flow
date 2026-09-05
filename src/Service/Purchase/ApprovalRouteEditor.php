@@ -395,7 +395,10 @@ final class ApprovalRouteEditor
                 ->setTitle($this->parseTitle($row['title'] ?? null))
                 ->setPurpose($purpose)
                 // Отказ на исполнении не имеет смысла: деньги уже потрачены.
-                ->setAllowsReject((bool) ($row['allowsReject'] ?? !$purpose->isExecution()));
+                // Это принуждение, а не умолчание: allowsReject=true, присланный
+                // для PAYMENT/DELIVERY/CLOSING, гасится, иначе оплаченная заявка
+                // уйдёт автору на доработку (BE-21).
+                ->setAllowsReject(!$purpose->isExecution() && (bool) ($row['allowsReject'] ?? true));
 
             foreach ($this->parseTasks($row['tasks'] ?? []) as $task) {
                 $stage->addTask($task);

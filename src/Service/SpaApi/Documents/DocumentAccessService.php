@@ -32,6 +32,16 @@ final class DocumentAccessService
             return true;
         }
 
+        // BE-23: получатели добавляются уже при создании, но неопубликованный
+        // документ — черновик автора. Список входящих его не показывает
+        // (фильтр isPublished), а карточка по id показывала: получатель видел
+        // черновик, вложения и комментарии, и его строка переходила в VIEWED.
+        // Один шов здесь закрывает и карточку, и вложения, и историю — все
+        // потребители идут через canViewDocument.
+        if (!$document->isPublished()) {
+            return false;
+        }
+
         return $this->findUserRecipient($document, $user) !== null;
     }
 
@@ -92,7 +102,7 @@ final class DocumentAccessService
                 && $document->getStatus() !== null
                 && !$document->isPublished()
                 && !$document->getUserRecipients()->isEmpty(),
-            'canChangeRecipientStatus' => $recipient !== null,
+            'canChangeRecipientStatus' => $recipient !== null && $document->isPublished(),
             'canComment' => $this->canCommentDocument($document, $user),
             'canViewRecipientHistory' => $canView || $canEdit,
         ];

@@ -9,9 +9,15 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
+// BE-08/BE-09 (SEC-10): профильная роль на классе, как у TkoAnalyticsController.
+// Раньше отчёты отдавались любому ROLE_USER по общему правилу ^/spa/api.
+#[IsGranted('ROLE_FINANCE')]
 final class FinancialAnalyticsController extends AbstractController
 {
+    use AnalyticsOrganizationScopeTrait;
+
     private const DEFAULT_LIMIT = 12;
     private const MAX_LIMIT = 100;
     private const DEFAULT_PER_PAGE = 20;
@@ -28,7 +34,10 @@ final class FinancialAnalyticsController extends AbstractController
         Request $request,
         FinanceReportTreeService $financeReportTreeService,
     ): JsonResponse {
-        $orgId = $request->query->getInt('org_id', 0);
+        $orgId = $this->scopeOrganizationId($request->query->getInt('org_id', 0));
+        if ($orgId === null) {
+            return $this->json(['availableWeeks' => [], 'weeks' => []]);
+        }
 
         $from = $this->validateDateParam($request->query->get('from'));
         $to   = $this->validateDateParam($request->query->get('to'));
@@ -60,8 +69,6 @@ final class FinancialAnalyticsController extends AbstractController
         Request $request,
         FinanceReportTreeService $financeReportTreeService,
     ): JsonResponse {
-        $orgId = $request->query->getInt('org_id', 0);
-
         $from = $this->validateDateParam($request->query->get('from'));
         $to   = $this->validateDateParam($request->query->get('to'));
 
@@ -75,6 +82,11 @@ final class FinancialAnalyticsController extends AbstractController
             $perPage = self::DEFAULT_PER_PAGE;
         } elseif ($perPage > self::MAX_PER_PAGE) {
             $perPage = self::MAX_PER_PAGE;
+        }
+
+        $orgId = $this->scopeOrganizationId($request->query->getInt('org_id', 0));
+        if ($orgId === null) {
+            return $this->json(['items' => [], 'page' => $page, 'perPage' => $perPage, 'total' => 0]);
         }
 
         return $this->json(

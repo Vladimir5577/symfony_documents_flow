@@ -34,6 +34,7 @@
         </div>
         <div class="card-body">
             <form method="post" action="{{ path('app_hr_vacancies_publish', {id: vacancy.id}) }}" class="d-inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('hr_vacancy') }}">
                 {% if vacancy.isPublished %}
                     <input type="hidden" name="isPublished" value="0">
                     <button type="submit" class="btn btn-outline-secondary">Скрыть вакансию</button>

@@ -104,9 +104,13 @@ services:
       SERVER_NAME: ':80'
       MERCURE_PUBLISHER_JWT_KEY: '${MERCURE_JWT_SECRET}'
       MERCURE_SUBSCRIBER_JWT_KEY: '${MERCURE_JWT_SECRET}'
+      # Директива `anonymous` снята (FE-02 / SEC-03): с ней любой, кто знал id
+      # доски или чата, читал realtime-поток без входа. Подписчики получают
+      # короткоживущий JWT у Symfony (/spa/api/mercure/token для SPA, страница
+      # /dashboard для легаси-чата) и передают его query-параметром
+      # `authorization`. Выкатывать вместе с фронтом, иначе realtime отвалится.
       MERCURE_EXTRA_DIRECTIVES: |
         cors_origins ${MERCURE_CORS_ORIGINS:-http://localhost:${NGINX_PORT:-8080}}
-        anonymous
     ports:
       - "${MERCURE_PORT:-3000}:80"
     networks:

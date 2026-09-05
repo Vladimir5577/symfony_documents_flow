@@ -31,6 +31,11 @@ final class DocumentRecipientStatusService
         if ($userRecipient === null) {
             throw new AccessDeniedHttpException(SpaApiError::ACCESS_DENIED);
         }
+        // Defence-in-depth (BE-23): сервис публичный, контроллер можно обойти.
+        // Статус по неопубликованному документу не выставляется.
+        if (!$document->isPublished()) {
+            throw new AccessDeniedHttpException(SpaApiError::ACCESS_DENIED);
+        }
 
         $statusValue = trim((string) ($payload['status'] ?? ''));
         if ($statusValue === '') {

@@ -47,7 +47,14 @@ class AdminStartFixtures extends Fixture implements FixtureGroupInterface
         $admin->setEmail('admin@admin.com');
         // Админ без привязки к конкретной организации
         $admin->setOrganization(null);
-        $admin->setPassword($this->passwordHasher->hashPassword($admin, '1234'));
+        // BE-04: пароль admin — из FIXTURE_ADMIN_PASSWORD, иначе случайный с выводом
+        // в консоль. Зашитый «1234» оставался на dev-стенде с APP_ENV=dev.
+        $password = (string) ($_ENV['FIXTURE_ADMIN_PASSWORD'] ?? $_SERVER['FIXTURE_ADMIN_PASSWORD'] ?? '');
+        if ($password === '') {
+            $password = bin2hex(random_bytes(8));
+            fwrite(STDERR, sprintf("[fixtures] Пароль пользователя admin: %s (задайте FIXTURE_ADMIN_PASSWORD, чтобы выбрать свой)\n", $password));
+        }
+        $admin->setPassword($this->passwordHasher->hashPassword($admin, $password));
         $admin->addRoleEntity($adminRole);
         $manager->persist($admin);
 

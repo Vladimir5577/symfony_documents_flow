@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\User;
 
 use App\Entity\User\User;
+use App\Service\Media\ImgproxyUrlSigner;
 
 final class UserAvatarUrlGenerator
 {
@@ -15,6 +16,7 @@ final class UserAvatarUrlGenerator
     public function __construct(
         private readonly string $imgproxyCacheBaseUrl,
         private readonly string $minioUserBucket,
+        private readonly ImgproxyUrlSigner $signer,
     ) {
     }
 
@@ -30,13 +32,9 @@ final class UserAvatarUrlGenerator
             default => [200, 200],
         };
 
-        return sprintf(
-            '%s/unsafe/rs:fill:%d:%d/plain/s3://%s/%s',
-            rtrim($this->imgproxyCacheBaseUrl, '/'),
-            $width,
-            $height,
-            $this->minioUserBucket,
-            $storageKey,
-        );
+        // Путь подписывается при заданных IMGPROXY_KEY/SALT, иначе /unsafe/ (BE-03).
+        $path = sprintf('/rs:fill:%d:%d/plain/s3://%s/%s', $width, $height, $this->minioUserBucket, $storageKey);
+
+        return rtrim($this->imgproxyCacheBaseUrl, '/') . $this->signer->sign($path);
     }
 }

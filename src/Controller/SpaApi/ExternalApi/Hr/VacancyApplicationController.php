@@ -6,6 +6,7 @@ namespace App\Controller\SpaApi\ExternalApi\Hr;
 
 use App\DTO\VacancyApplication\VacancyApplicationDto;
 use App\Service\ApiExternal\VacancyApplication\VacancyApplicationApiService;
+use App\Service\ApiExternal\ProxiedFileResponseFactory;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -19,6 +20,7 @@ final class VacancyApplicationController extends AbstractController
 {
     public function __construct(
         private readonly VacancyApplicationApiService $api,
+        private readonly ProxiedFileResponseFactory $files,
     ) {
     }
 
@@ -93,12 +95,14 @@ final class VacancyApplicationController extends AbstractController
             return $this->json(['error' => $e->getMessage()], $e->getCode() ?: Response::HTTP_NOT_FOUND);
         }
 
-        $response = new Response($file['content'], Response::HTTP_OK, ['Content-Type' => $file['contentType']]);
-        if ($file['disposition'] !== null) {
-            $response->headers->set('Content-Disposition', $file['disposition']);
-        }
-
-        return $response;
+        // BE-13: тип и диспозиция — свои (белый список + магические байты), а не
+        // апстрима; сервис поле disposition больше не отдаёт.
+        return $this->files->create(
+            $file['content'],
+            $file['contentType'],
+            $request->query->getBoolean('download'),
+            'resume-' . $id,
+        );
     }
 
     /** DTO → массив; statusLabel уже посчитан в DTO, резюме — через наш прокси. */

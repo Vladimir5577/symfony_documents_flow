@@ -97,6 +97,36 @@ final class PurchaseAccess
     }
 
     /**
+     * Может ли человек ЗАКРЫТЬ задачу — адресность плюс запрет самосогласования.
+     *
+     * Ролевая задача решающего этапа (разбор, согласование) не закрывается
+     * автором заявки, даже если он носит роль этапа: бухгалтер с ролью
+     * ACCOUNTING подавал заявку для своего отдела и сам же закрывал этап
+     * «Бухгалтерия». Для динамических этапов то же правило уже стоит в
+     * ApprovalRouteBuilder::assign («сам себе согласантом человек не бывает»).
+     *
+     * Этапы работы (ресёрч) и исполнения (оплата, поставка, закрытие) под запрет
+     * не попадают: там задача адресуется автору штатно, и запрет заблокировал бы
+     * заявку намертво.
+     */
+    public function canDecide(PurchaseApprovalTask $task, User $user): bool
+    {
+        return $this->canActOn($task, $user) && !$this->isSelfApproval($task, $user);
+    }
+
+    /** Автор заявки на решающем этапе своей же заявки. */
+    public function isSelfApproval(PurchaseApprovalTask $task, User $user): bool
+    {
+        $stage = $task->getStage();
+        $purchase = $stage?->getPurchaseRequest();
+        if ($stage === null || $purchase === null || !$this->isOwner($purchase, $user)) {
+            return false;
+        }
+
+        return in_array($stage->getPurpose(), [PurchaseStagePurpose::TRIAGE, PurchaseStagePurpose::SIGN_OFF], true);
+    }
+
+    /**
      * Моя задача в этапе, на котором заявка стоит прямо сейчас; с $purpose —
      * только если этап такого назначения.
      *
@@ -118,7 +148,9 @@ final class PurchaseAccess
         }
 
         foreach ($stage->getPendingTasks() as $task) {
-            if ($this->canActOn($task, $user)) {
+            // canDecide, а не canActOn: иначе presenter нарисует автору кнопку
+            // «согласовать» на собственной заявке, а гейт её отклонит.
+            if ($this->canDecide($task, $user)) {
                 return $task;
             }
         }
@@ -239,8 +271,12 @@ final class PurchaseAccess
         $sourcing = $purchase->findStageByPurpose(PurchaseStagePurpose::SOURCING);
         $stage = $task->getStage();
 
+        // С исполнения (оплата, поставка, закрытие) не возвращают: деньги уже
+        // ушли, а откат сбросил бы отметку об оплате. Зеркало проверки в
+        // PurchaseApprovalWorkflow::returnToSourcing.
         return $sourcing !== null
             && $stage !== null
+            && !$stage->getPurpose()->isExecution()
             && $sourcing->getPosition() < $stage->getPosition();
     }
 

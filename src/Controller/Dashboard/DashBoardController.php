@@ -10,6 +10,7 @@ use Grpc\TestService\NoParam;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class DashBoardController extends AbstractController
@@ -18,6 +19,7 @@ final class DashBoardController extends AbstractController
     public function dashBoard(
         #[Autowire('%env(MERCURE_PUBLIC_URL)%')] string $mercurePublicUrl,
         OrganizationRepository $organizationRepository,
+        HubInterface $hub,
     ): Response
     {
         $user = $this->getUser();
@@ -25,6 +27,21 @@ final class DashBoardController extends AbstractController
             throw $this->createAccessDeniedException();
         }
         $organization = $user->getOrganization();
+
+        // Хаб больше не пускает анонимов (FE-02 / SEC-03): легаси-чат получает
+        // подписной JWT вместе со страницей и передаёт его хабу query-параметром.
+        $mercureSubscriberToken = '';
+        $factory = $hub->getFactory();
+        if ($factory !== null) {
+            $mercureSubscriberToken = $factory->create(
+                subscribe: ['/chat/user/' . $user->getId(), '/chat/room/{id}'],
+                publish: [],
+                additionalClaims: [
+                    'exp' => new \DateTimeImmutable('+12 hours'),
+                    'sub' => (string) $user->getId(),
+                ],
+            );
+        }
 
         $userDisplayName = trim(implode(' ', array_filter([
             $user->getLastname(),
@@ -58,6 +75,7 @@ final class DashBoardController extends AbstractController
             'organization' => $organization,
             'organizations' => $organizations,
             'mercure_public_url' => $mercurePublicUrl,
+            'mercure_subscriber_token' => $mercureSubscriberToken,
             'current_user_id' => $user->getId(),
         ]);
     }

@@ -4,24 +4,63 @@ namespace App\Controller\Document;
 
 use App\Entity\Document\Document;
 use App\Entity\Document\File;
+use App\Entity\User\User;
 use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\FileRepository;
+use App\Service\SpaApi\Documents\DocumentAccessService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
+/**
+ * Вложения документа в легаси-портале.
+ *
+ * Политика доступа та же, что у карточки документа (DocumentAccessService):
+ * читать вложения могут админ, автор и получатели, прикладывать — те же, удалять —
+ * админ и автор. Раньше файл искался по глобальному id без проверки, чей он
+ * (BE-06 / SEC-06), и любой сотрудник скачивал любое вложение перебором номера.
+ */
 final class DocumentFileController extends AbstractController
 {
+    /**
+     * Что можно открыть прямо в браузере. Всё остальное — только как attachment:
+     * HTML/SVG, отданные inline на origin портала, исполняют скрипт в сессии
+     * сотрудника (stored XSS).
+     */
+    private const INLINE_MIME_ALLOWLIST = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+    public function __construct(
+        private readonly DocumentAccessService $accessService,
+    ) {
+    }
+
     #[Route('/document_upload_files_action/{id}', name: 'document_upload_files_action', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function new(Request $request, int $id, DocumentRepository $documentRepository, \Doctrine\ORM\EntityManagerInterface $entityManager): Response
     {
-        $document = $documentRepository->find($id);
+        $document = $documentRepository->findOneWithRelations($id);
         if (!$document) {
             throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        // Форма уже отдаёт токен 'document_upload_files', но он нигде не проверялся.
+        $token = (string) ($request->request->get('_token') ?? $request->headers->get('X-CSRF-Token') ?? '');
+        if (!$this->isCsrfTokenValid('document_upload_files', $token)) {
+            if ($request->isXmlHttpRequest()) {
+                return new JsonResponse(['success' => false, 'message' => 'Неверный токен. Обновите страницу.'], Response::HTTP_FORBIDDEN);
+            }
+            $this->addFlash('error', 'Неверный токен. Обновите страницу и повторите.');
+
+            return $this->redirectToRoute('app_view_outgoing_document', ['id' => $id], Response::HTTP_SEE_OTHER);
+        }
+
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User || !$this->accessService->canViewDocument($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к этому документу.');
         }
 
         $baseUploadDir = $this->getParameter('private_upload_dir_documents_originals');
@@ -109,12 +148,19 @@ final class DocumentFileController extends AbstractController
             throw $this->createNotFoundException('Файл не найден.');
         }
 
+        // Object-level проверка: файл отдаётся только участнику его документа.
+        $document = $fileEntity->getDocument();
+        $currentUser = $this->getUser();
+        if (!$document instanceof Document || !$currentUser instanceof User || !$this->accessService->canViewDocument($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к этому файлу.');
+        }
+
         $filePath = $fileEntity->getFilePath();
         if (!$filePath) {
             throw $this->createNotFoundException('Файл не прикреплён.');
         }
 
-        $documentId = $fileEntity->getDocument()?->getId();
+        $documentId = $document->getId();
         $uploadDir = $this->getParameter('private_upload_dir_documents_originals');
         $absolutePath = str_contains($filePath, '/')
             ? $uploadDir . '/' . $filePath
@@ -128,8 +174,6 @@ final class DocumentFileController extends AbstractController
             ? $fileEntity->getTitle().'.'.pathinfo($filePath, PATHINFO_EXTENSION)
             : $filePath;
 
-        $inline = $request->query->getBoolean('inline');
-
         $response = new StreamedResponse(static function () use ($absolutePath) {
             $handle = fopen($absolutePath, 'rb');
             if ($handle === false) {
@@ -142,10 +186,30 @@ final class DocumentFileController extends AbstractController
             fclose($handle);
         });
 
-        $response->headers->set('Content-Type', mime_content_type($absolutePath) ?: 'application/octet-stream');
-        $response->headers->set('Content-Disposition', ($inline ? 'inline' : 'attachment').'; filename="'.addslashes($filename).'"');
+        // Тип берём по содержимому, но inline разрешаем только безопасным типам;
+        // остальное — attachment с octet-stream, чтобы браузер не угадывал.
+        $mime = mime_content_type($absolutePath) ?: 'application/octet-stream';
+        $inlineAllowed = in_array($mime, self::INLINE_MIME_ALLOWLIST, true);
+        $inline = $request->query->getBoolean('inline') && $inlineAllowed;
+
+        $response->headers->set('Content-Type', $inlineAllowed ? $mime : 'application/octet-stream');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('Content-Disposition', HeaderUtils::makeDisposition(
+            $inline ? HeaderUtils::DISPOSITION_INLINE : HeaderUtils::DISPOSITION_ATTACHMENT,
+            $filename,
+            $this->asciiFallback($filename),
+        ));
 
         return $response;
+    }
+
+    /** ASCII-версия имени для старых клиентов; Symfony сам добавит filename* в UTF-8. */
+    private function asciiFallback(string $filename): string
+    {
+        $ascii = preg_replace('/[^\x20-\x7E]/', '_', $filename) ?? 'file';
+        $ascii = str_replace(['"', '\\', '%', '/'], '_', $ascii);
+
+        return $ascii !== '' ? $ascii : 'file';
     }
 
     #[Route('/document_file_delete/{id}', name: 'document_file_delete', methods: ['POST'], requirements: ['id' => '\d+'])]
@@ -156,7 +220,14 @@ final class DocumentFileController extends AbstractController
             throw $this->createNotFoundException('Файл не найден.');
         }
 
-        $documentId = $fileEntity->getDocument()?->getId();
+        // Удаляет админ или автор документа — как правка самого документа.
+        $ownerDocument = $fileEntity->getDocument();
+        $currentUser = $this->getUser();
+        if (!$ownerDocument instanceof Document || !$currentUser instanceof User || !$this->accessService->canEditOutgoingDocument($ownerDocument, $currentUser)) {
+            throw $this->createAccessDeniedException('Удалять вложения может только автор документа.');
+        }
+
+        $documentId = $ownerDocument->getId();
 
         $csrfToken = 'document_file_delete_'.$id;
         if (!$this->isCsrfTokenValid($csrfToken, $request->request->get('_token'))) {

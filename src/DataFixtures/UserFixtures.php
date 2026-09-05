@@ -17,7 +17,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFixtureInterface
 {
-    private const PASSWORD = '1234';
+    /** Общий пароль тестовых сотрудников: FIXTURE_USER_PASSWORD или случайный на прогон (BE-04). */
+    private ?string $password = null;
 
     /** Работников в департаменте: от N до M */
     private const WORKERS_PER_DEPARTMENT_MIN = 5;
@@ -53,6 +54,20 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
     public static function getGroups(): array
     {
         return ['users'];
+    }
+
+    /** Зашитый «1234» оставался на стендах; теперь из FIXTURE_USER_PASSWORD или случайный с выводом в консоль. */
+    private function fixturePassword(): string
+    {
+        if ($this->password === null) {
+            $configured = (string) ($_ENV['FIXTURE_USER_PASSWORD'] ?? $_SERVER['FIXTURE_USER_PASSWORD'] ?? '');
+            $this->password = $configured !== '' ? $configured : bin2hex(random_bytes(8));
+            if ($configured === '') {
+                fwrite(STDERR, sprintf("[fixtures] Пароль тестовых сотрудников: %s (задайте FIXTURE_USER_PASSWORD, чтобы выбрать свой)\n", $this->password));
+            }
+        }
+
+        return $this->password;
     }
 
     public function getDependencies(): array
@@ -168,7 +183,7 @@ class UserFixtures extends Fixture implements FixtureGroupInterface, DependentFi
             random_int(10, 99),
             random_int(10, 99)
         ));
-        $user->setPassword($this->passwordHasher->hashPassword($user, self::PASSWORD));
+        $user->setPassword($this->passwordHasher->hashPassword($user, $this->fixturePassword()));
         $user->setOrganization($unit);
         if ($boss) {
             $user->setBoss($boss);

@@ -61,7 +61,8 @@ final class DocumentUsersController extends AbstractController
             return $this->json(['users' => []]);
         }
 
-        $result = $this->userRepository->findPaginated(1, 20, $query);
+        // Та же граница, что в /spa/api/users: по логину и телефону ищет только ROLE_MANAGER.
+        $result = $this->userRepository->findPaginated(1, 20, $query, includeCredentials: $this->isGranted('ROLE_MANAGER'));
 
         return $this->json([
             'users' => array_map(

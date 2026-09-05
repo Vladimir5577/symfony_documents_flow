@@ -87,6 +87,14 @@ services:
             $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
             $minioUserBucket: '%env(MINIO_USER_BUCKET)%'
 
+    # Подпись URL imgproxy (BE-03). Ключ и соль — hex из `openssl rand -hex 32`,
+    # те же, что у контейнера imgproxy (file_storage/docker-compose.yml) и у
+    # go_kanban_service. Не заданы — URL остаются /unsafe/, как раньше.
+    App\Service\Media\ImgproxyUrlSigner:
+        arguments:
+            $keyHex: '%env(default::IMGPROXY_KEY)%'
+            $saltHex: '%env(default::IMGPROXY_SALT)%'
+
     App\Service\ApiExternal\CitizenAppeal\CitizenAppealApiService:
         arguments:
             $apiUrl: '%don_snab_api_url%'

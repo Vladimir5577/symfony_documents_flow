@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Purchase;
 
+use App\Service\Media\ImgproxyUrlSigner;
 use App\Service\Purchase\PurchaseFileStorageService;
 use App\Service\Purchase\PurchaseImageUrlGenerator;
 use Aws\S3\S3Client;
@@ -32,7 +33,7 @@ final class PurchaseFileStorageServiceTest extends TestCase
 
     public function testImageUrlIsNullWithoutKey(): void
     {
-        $generator = new PurchaseImageUrlGenerator('/media/preview', 'purchase');
+        $generator = new PurchaseImageUrlGenerator('/media/preview', 'purchase', new ImgproxyUrlSigner(null, null));
 
         self::assertNull($generator->getImageUrl(null));
         self::assertNull($generator->getImageUrl(''));
@@ -40,12 +41,38 @@ final class PurchaseFileStorageServiceTest extends TestCase
 
     public function testImageUrlGoesThroughImgproxy(): void
     {
-        $generator = new PurchaseImageUrlGenerator('/media/preview', 'purchase');
+        $generator = new PurchaseImageUrlGenerator('/media/preview', 'purchase', new ImgproxyUrlSigner(null, null));
 
         self::assertSame(
             '/media/preview/unsafe/rs:fit:96:96/plain/s3://purchase/categories/3/abc.png',
             $generator->getImageUrl('categories/3/abc.png'),
         );
+    }
+
+    /** При заданных IMGPROXY_KEY/SALT сегмент /unsafe/ заменяется подписью (BE-03). */
+    public function testImageUrlIsSignedWhenKeyAndSaltConfigured(): void
+    {
+        $signer = new ImgproxyUrlSigner(bin2hex(random_bytes(32)), bin2hex(random_bytes(32)));
+        $generator = new PurchaseImageUrlGenerator('/media/preview', 'purchase', $signer);
+
+        $url = (string) $generator->getImageUrl('categories/3/abc.png');
+
+        self::assertTrue($signer->isEnabled());
+        self::assertStringStartsWith('/media/preview/', $url);
+        self::assertStringNotContainsString('/unsafe/', $url);
+        self::assertStringEndsWith('/rs:fit:96:96/plain/s3://purchase/categories/3/abc.png', $url);
+        // base64url без «=»: 32 байта HMAC-SHA256 → 43 символа
+        self::assertMatchesRegularExpression('#^/media/preview/[A-Za-z0-9_-]{43}/rs:fit#', $url);
+        self::assertSame($url, $generator->getImageUrl('categories/3/abc.png'), 'подпись детерминирована');
+    }
+
+    /** Битый hex ключа не должен «включать» подпись с мусором — остаёмся на /unsafe/. */
+    public function testMalformedKeyFallsBackToUnsafe(): void
+    {
+        $signer = new ImgproxyUrlSigner('not-hex', 'zz');
+
+        self::assertFalse($signer->isEnabled());
+        self::assertSame('/unsafe/rs:fit:1:1/plain/s3://b/k', $signer->sign('/rs:fit:1:1/plain/s3://b/k'));
     }
 
     public function testRasterImageIsAllowed(): void
