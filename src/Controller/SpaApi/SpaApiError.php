@@ -176,4 +176,26 @@ final class SpaApiError
     public const INVENTORY_UPD_ORGANIZATION_MISMATCH = 'inventory_upd_organization_mismatch';
     public const INVENTORY_UPD_NUMBER_REQUIRED = 'inventory_upd_number_required';
     public const INVENTORY_USER_NOT_IN_ORGANIZATION = 'inventory_user_not_in_organization';
+
+    // Документы к ознакомлению
+    public const ACK_CATEGORY_HAS_DOCUMENTS = 'ack_category_has_documents';
+    public const ACK_CATEGORY_NAME_REQUIRED = 'ack_category_name_required';
+    public const ACK_CATEGORY_NAME_TAKEN = 'ack_category_name_taken';
+    public const ACK_CATEGORY_NOT_FOUND = 'ack_category_not_found';
+    public const ACK_DOCUMENT_ALREADY_PUBLISHED = 'ack_document_already_published';
+    public const ACK_DOCUMENT_AUDIENCE_INVALID = 'ack_document_audience_invalid';
+    public const ACK_DOCUMENT_DEADLINE_INVALID = 'ack_document_deadline_invalid';
+    /** Действие требует опубликованного и неархивного документа. */
+    public const ACK_DOCUMENT_NOT_ACTIVE = 'ack_document_not_active';
+    public const ACK_DOCUMENT_NOT_FOUND = 'ack_document_not_found';
+    public const ACK_DOCUMENT_NO_FILES = 'ack_document_no_files';
+    public const ACK_DOCUMENT_NO_RECIPIENTS = 'ack_document_no_recipients';
+    public const ACK_DOCUMENT_TITLE_REQUIRED = 'ack_document_title_required';
+    public const ACK_FILE_NOT_FOUND = 'ack_file_not_found';
+    public const ACK_FILE_TOO_LARGE = 'ack_file_too_large';
+    public const ACK_FILE_TYPE_NOT_ALLOWED = 'ack_file_type_not_allowed';
+    /** Ознакомление уже отмечено: назад его не отыгрывают. */
+    public const ACK_STATUS_ALREADY_FINAL = 'ack_status_already_final';
+    public const ACK_STATUS_COMMENT_REQUIRED = 'ack_status_comment_required';
+    public const ACK_STATUS_INVALID = 'ack_status_invalid';
 }
