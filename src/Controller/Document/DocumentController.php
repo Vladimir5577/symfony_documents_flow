@@ -177,11 +177,16 @@ final class DocumentController extends AbstractController
         if ($statusStr !== '') {
             try {
                 $status = DocumentStatus::from($statusStr);
-                $document->setStatus($status);
             } catch (\ValueError $e) {
                 $this->addFlash('error', 'Неверный статус документа.');
                 return $renderForm($formData);
             }
+            // BE-24: автор создаёт документ только «Черновиком» или «Новым», как в SPA.
+            if (!array_key_exists($status->value, DocumentStatus::getCreationChoices())) {
+                $this->addFlash('error', 'Статус документа выставляют получатели; автору доступны только «Черновик» и «Новый».');
+                return $renderForm($formData);
+            }
+            $document->setStatus($status);
         } else {
             $document->setStatus(DocumentStatus::DRAFT);
         }
@@ -439,7 +444,7 @@ final class DocumentController extends AbstractController
             return new JsonResponse([]);
         }
 
-        $result = $userRepository->findPaginated(1, 20, $query);
+        $result = $userRepository->findPaginated(1, 20, $query, includeCredentials: $this->isGranted('ROLE_MANAGER'));
         $data = [];
         foreach ($result['users'] as $user) {
             $fullName = trim(sprintf(
@@ -606,6 +611,12 @@ final class DocumentController extends AbstractController
         $userRecipient = null;
         foreach ($document->getUserRecipients() as $recipient) {
             if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
+                // Неопубликованный документ — черновик автора: получателю он не
+                // показывается и «просмотрено» по нему не ставится (та же политика,
+                // что DocumentAccessService::canViewDocument в SPA, BE-23).
+                if (!$document->isPublished()) {
+                    break;
+                }
                 $isRecipient = true;
                 $userRecipient = $recipient;
 
@@ -668,7 +679,8 @@ final class DocumentController extends AbstractController
         $isRecipient = false;
         foreach ($document->getUserRecipients() as $recipient) {
             if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
-                $isRecipient = true;
+                // BE-23: получателю документ виден только после публикации.
+                $isRecipient = $document->isPublished();
                 break;
             }
         }
@@ -797,12 +809,22 @@ final class DocumentController extends AbstractController
             $this->addFlash('error', 'Выбранная организация не найдена.');
             return $renderForm($formData);
         }
+        // BE-24: организацию-отправителя меняет только администратор — как в SPA.
+        if (!$this->isGranted('ROLE_ADMIN') && $organization->getId() !== $document->getOrganizationCreator()?->getId()) {
+            $this->addFlash('error', 'Сменить организацию документа может только администратор.');
+            return $renderForm($formData);
+        }
 
         // Валидация статуса
         $statusValue = trim((string)($formData['status'] ?? ''));
         $status = DocumentStatus::tryFrom($statusValue);
         if (!$status) {
             $this->addFlash('error', 'Некорректный статус документа.');
+            return $renderForm($formData);
+        }
+        // BE-24: автор двигает статус только между «Черновик» и «Новый» — как в SPA.
+        if ($status !== $document->getStatus() && !array_key_exists($status->value, DocumentStatus::getCreationChoices())) {
+            $this->addFlash('error', 'Статус документа выставляют получатели; автору доступны только «Черновик» и «Новый».');
             return $renderForm($formData);
         }
 
@@ -817,7 +839,10 @@ final class DocumentController extends AbstractController
             }
         }
 
-        $wantsPublish = isset($formData['is_published']) && (bool) $formData['is_published'];
+        // Опубликованный документ формой не отзывается: отсутствие чекбокса в
+        // POST раньше молча снимало публикацию (BE-24).
+        $wantsPublish = $document->isPublished()
+            || (isset($formData['is_published']) && (bool) $formData['is_published']);
         if ($wantsPublish) {
             if ($status === DocumentStatus::DRAFT) {
                 $this->addFlash('error', 'Документ нельзя опубликовать в статусе черновик.');
@@ -1214,7 +1239,8 @@ final class DocumentController extends AbstractController
         $isRecipient = false;
         foreach ($document->getUserRecipients() as $recipient) {
             if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
-                $isRecipient = true;
+                // BE-23: получателю документ виден только после публикации.
+                $isRecipient = $document->isPublished();
                 break;
             }
         }
@@ -1279,6 +1305,12 @@ final class DocumentController extends AbstractController
         if (!$userRecipient) {
             $this->addFlash('error', 'Вы можете изменять статус только для входящих документов.');
             return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
+        }
+
+        // BE-23: по неопубликованному документу статус получателя не меняется.
+        if (!$document->isPublished()) {
+            $this->addFlash('error', 'Документ ещё не опубликован.');
+            return $this->redirectToRoute('app_incoming_documents');
         }
 
         // Валидация CSRF токена
@@ -1393,7 +1425,8 @@ final class DocumentController extends AbstractController
         $isRecipient = false;
         foreach ($document->getUserRecipients() as $recipient) {
             if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
-                $isRecipient = true;
+                // BE-23: получателю документ виден только после публикации.
+                $isRecipient = $document->isPublished();
                 break;
             }
         }

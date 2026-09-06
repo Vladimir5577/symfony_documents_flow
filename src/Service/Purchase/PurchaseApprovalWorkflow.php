@@ -117,7 +117,7 @@ final class PurchaseApprovalWorkflow
         User $actor,
         ?string $comment = null,
     ): void {
-        $stage = $this->assertActiveTask($request, $task);
+        $stage = $this->assertActiveTask($request, $task, $actor);
 
         // Требование файла живёт на задаче, а не в конвейере: у быстрого маршрута
         // задачи «договор» нет, и требовать с него договор не за что. Так же и УПД
@@ -167,12 +167,15 @@ final class PurchaseApprovalWorkflow
         User $actor,
         string $comment,
     ): void {
-        $stage = $this->assertActiveTask($request, $task);
+        $stage = $this->assertActiveTask($request, $task, $actor);
 
         if (trim($comment) === '') {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_COMMENT_REQUIRED);
         }
-        if (!$stage->allowsReject()) {
+        // BE-21: флаг allowsReject на этапе исполнения — безусловный запрет, а не
+        // умолчание: снимок маршрута мог быть собран из заготовки, где флаг
+        // выставили руками, и уже оплаченная заявка ушла бы автору на доработку.
+        if (!$stage->allowsReject() || $stage->getPurpose()->isExecution()) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_REJECT_NOT_ALLOWED);
         }
 
@@ -210,10 +213,18 @@ final class PurchaseApprovalWorkflow
         User $actor,
         string $comment,
     ): void {
-        $stage = $this->assertActiveTask($request, $task);
+        $stage = $this->assertActiveTask($request, $task, $actor);
 
         if (trim($comment) === '') {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_COMMENT_REQUIRED);
+        }
+
+        // BE-11: с этапа исполнения возврата нет. rewindTo сбросил бы решение по
+        // оплате (кто и когда платил), и заявка ушла бы на второй круг с
+        // повторной оплатой. assertActiveTask пропускает INVOICE_PAID/DELIVERED
+        // как «в маршруте», поэтому проверка нужна здесь явно.
+        if ($stage->getPurpose()->isExecution()) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_RETURN_NOT_ALLOWED);
         }
 
         $sourcing = $request->findStageByPurpose(PurchaseStagePurpose::SOURCING);
@@ -321,7 +332,7 @@ final class PurchaseApprovalWorkflow
         array $itemEdits,
         array $assignments,
     ): void {
-        $stage = $this->assertActiveTask($request, $task);
+        $stage = $this->assertActiveTask($request, $task, $actor);
 
         if ($stage->getPurpose() !== PurchaseStagePurpose::TRIAGE) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_NOT_ACTIVE);
@@ -398,7 +409,7 @@ final class PurchaseApprovalWorkflow
         PurchaseRouteTemplate $template,
         User $actor,
     ): void {
-        $stage = $this->assertActiveTask($request, $task);
+        $stage = $this->assertActiveTask($request, $task, $actor);
 
         if ($stage->getPurpose() !== PurchaseStagePurpose::TRIAGE) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_ROUTE_NOT_CHANGEABLE);
@@ -633,7 +644,7 @@ final class PurchaseApprovalWorkflow
      *
      * @throws PurchaseTransitionException
      */
-    private function assertActiveTask(PurchaseRequest $request, PurchaseApprovalTask $task): PurchaseApprovalStage
+    private function assertActiveTask(PurchaseRequest $request, PurchaseApprovalTask $task, ?User $actor = null): PurchaseApprovalStage
     {
         $stage = $task->getStage();
         if ($stage === null || $stage->getPurchaseRequest()?->getId() !== $request->getId()) {
@@ -644,6 +655,15 @@ final class PurchaseApprovalWorkflow
         }
         if (!$task->isPending() || !$stage->isActive()) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_NOT_ACTIVE);
+        }
+        // BE-10: автор не закрывает решающие этапы (разбор, согласование) своей
+        // заявки, даже нося роль этапа. Единственная защита ниже контроллера —
+        // triage/changeRoute зовут сюда напрямую. Зеркало: PurchaseAccess::canDecide.
+        if ($actor !== null
+            && $request->getCreatedBy()?->getId() === $actor->getId()
+            && in_array($stage->getPurpose(), [PurchaseStagePurpose::TRIAGE, PurchaseStagePurpose::SIGN_OFF], true)
+        ) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_SELF_APPROVAL_FORBIDDEN);
         }
 
         return $stage;

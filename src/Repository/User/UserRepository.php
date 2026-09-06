@@ -59,12 +59,15 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
      *
      * @param int $page Номер страницы (начиная с 1)
      * @param int $limit Количество элементов на странице
-     * @param string $search Поиск по ФИО, логину, телефону
+     * @param string $search Поиск по ФИО (и по логину/телефону — только с $includeCredentials)
      * @param int|null $organizationId Фильтр по организации (null = все)
      * @param string|null $status Фильтр по статусу (enum value, null = все)
+     * @param bool $includeCredentials искать ещё и по логину/телефону. Решение о правах
+     *        принимает вызывающий (обычно isGranted('ROLE_MANAGER')): подбирая строку и
+     *        глядя, кто нашёлся, телефон коллеги восстанавливается по цифре (BE-16).
      * @return array{users: array, total: int, page: int, limit: int, totalPages: int}
      */
-    public function findPaginated(int $page = 1, int $limit = 10, string $search = '', ?int $organizationId = null, ?string $status = null): array
+    public function findPaginated(int $page = 1, int $limit = 10, string $search = '', ?int $organizationId = null, ?string $status = null, bool $includeCredentials = false): array
     {
         $offset = ($page - 1) * $limit;
 
@@ -75,7 +78,15 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             ->select('COUNT(u.id)');
 
         if ($search !== '') {
-            $searchCondition = 'LOWER(u.lastname) LIKE LOWER(:search) OR LOWER(u.firstname) LIKE LOWER(:search) OR LOWER(u.patronymic) LIKE LOWER(:search) OR LOWER(u.login) LIKE LOWER(:search) OR LOWER(u.phone) LIKE LOWER(:search)';
+            $searchFields = ['u.lastname', 'u.firstname', 'u.patronymic'];
+            if ($includeCredentials) {
+                $searchFields[] = 'u.login';
+                $searchFields[] = 'u.phone';
+            }
+            $searchCondition = implode(' OR ', array_map(
+                static fn (string $field): string => sprintf('LOWER(%s) LIKE LOWER(:search)', $field),
+                $searchFields,
+            ));
             $qb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
             $countQb->andWhere($searchCondition)->setParameter('search', '%' . $search . '%');
         }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller\ApiExternal\ContractApplication;
 
 use App\Service\ApiExternal\ContractApplication\ContractApplicationApiService;
+use App\Service\ApiExternal\ProxiedFileResponseFactory;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,6 +15,7 @@ final class ContractApplicationFileProxyController extends AbstractController
 {
     public function __construct(
         private readonly ContractApplicationApiService $contractApplicationApiService,
+        private readonly ProxiedFileResponseFactory $responseFactory,
     ) {
     }
 
@@ -29,14 +31,12 @@ final class ContractApplicationFileProxyController extends AbstractController
             throw $e;
         }
 
-        $response = new Response($file['content'], Response::HTTP_OK, [
-            'Content-Type' => $file['contentType'],
-        ]);
-
-        if ($file['disposition'] !== null) {
-            $response->headers->set('Content-Disposition', $file['disposition']);
-        }
-
-        return $response;
+        // BE-13: тип и диспозиция — свои (белый список + магические байты), не апстрима.
+        return $this->responseFactory->create(
+            $file['content'],
+            $file['contentType'],
+            $request->query->getBoolean('download'),
+            'contract-application-file-' . $id,
+        );
     }
 }

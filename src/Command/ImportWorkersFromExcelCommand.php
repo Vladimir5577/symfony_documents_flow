@@ -16,6 +16,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 #[AsCommand(
     name: 'app:import-workers-from-excel',
@@ -28,6 +29,7 @@ class ImportWorkersFromExcelCommand extends Command
         private readonly string $privateUploadDir,
         private readonly EntityManagerInterface $entityManager,
         private readonly LoginGeneratorService $loginGenerator,
+        private readonly UserPasswordHasherInterface $passwordHasher,
     ) {
         parent::__construct();
     }
@@ -109,7 +111,10 @@ class ImportWorkersFromExcelCommand extends Command
                 $user->setOrganization($department);
                 $login = $this->loginGenerator->generateLoginBase($lastName, $firstName);
                 $user->setLogin($login);
-                $user->setPassword('$2y$13$QG.67c6h2u0y2e0YyRaWHOqZVgGAoLo0jOix4TaJLckj36PaQaQVO');
+                // BE-04 (SEC-04): раньше всем импортированным ставился один известный
+                // пароль «1234». Теперь — случайный, войти по нему нельзя; пароль
+                // выдаётся администратором через штатную смену.
+                $user->setPassword($this->passwordHasher->hashPassword($user, bin2hex(random_bytes(32))));
                 $birthDayStr = trim((string) ($row[22] ?? ''), " \t\n\r\0\x0B'");
                 $birthDay = $birthDayStr !== ''
                     ? \DateTimeImmutable::createFromFormat('d.m.Y', $birthDayStr) ?: null

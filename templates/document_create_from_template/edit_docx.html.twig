@@ -42,7 +42,9 @@
     const triggerSaveUrl = "{{ path('app_trigger_forcesave')|e('js') }}";
     const documentId = {{ documentId ?? 'null' }};
     const filename = "{{ filename|e('js') }}";
-    const callbackUrl = "http://nginx/save_docx?filename=" + encodeURIComponent(filename);
+    {# Токен привязывает callback к файлу: без него /save_docx отвечает 403 #}
+    const callbackToken = "{{ callbackToken|e('js') }}";
+    const callbackUrl = "http://nginx/save_docx?filename=" + encodeURIComponent(filename) + "&token=" + encodeURIComponent(callbackToken);
 
     const docEditor = new DocsAPI.DocEditor("editor", {
         width: "100%",

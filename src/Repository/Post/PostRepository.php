@@ -3,8 +3,11 @@
 namespace App\Repository\Post;
 
 use App\Entity\Post\Post;
+use App\Entity\Post\PostUserStatus;
 use App\Entity\User\User;
 use App\Enum\Post\PostType;
+use App\Enum\Post\PostUserStatusType;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -27,6 +30,7 @@ class PostRepository extends ServiceEntityRepository
         int $limit = 10,
         bool $isActive = true,
         ?User $author = null,
+        ?User $unacknowledgedFor = null,
     ): array {
         $qb = $this->createQueryBuilder('p')
             ->addSelect('a')
@@ -50,11 +54,19 @@ class PostRepository extends ServiceEntityRepository
                 ->setParameter('type', $type);
         }
 
+        if ($unacknowledgedFor !== null) {
+            $this->applyUnacknowledgedFilter($qb, $unacknowledgedFor);
+        }
+
         return $qb->getQuery()->getResult();
     }
 
-    public function countActive(?PostType $type, bool $isActive = true, ?User $author = null): int
-    {
+    public function countActive(
+        ?PostType $type,
+        bool $isActive = true,
+        ?User $author = null,
+        ?User $unacknowledgedFor = null,
+    ): int {
         $qb = $this->createQueryBuilder('p')
             ->select('COUNT(p.id)')
             ->where('p.isActive = :isActive')
@@ -71,6 +83,35 @@ class PostRepository extends ServiceEntityRepository
                 ->setParameter('type', $type);
         }
 
+        if ($unacknowledgedFor !== null) {
+            $this->applyUnacknowledgedFilter($qb, $unacknowledgedFor);
+        }
+
         return (int) $qb->getQuery()->getSingleScalarResult();
+    }
+
+    /**
+     * Сколько активных обязательных публикаций сотрудник ещё не подтвердил —
+     * по всей ленте, а не по странице (FE-17: блок «К ознакомлению» на фронте
+     * считал только текущую страницу и рапортовал «вы ознакомились со всеми»).
+     */
+    public function countUnacknowledgedFor(User $user): int
+    {
+        return $this->countActive(null, true, null, $user);
+    }
+
+    /**
+     * «Требуют ознакомления»: обязательная публикация без отметки ACKNOWLEDGED
+     * у этого сотрудника. Тот же критерий, что у SPA-фильтра unacknowledged_only.
+     */
+    private function applyUnacknowledgedFilter(QueryBuilder $qb, User $user): void
+    {
+        $qb->andWhere('p.isRequiredAcknowledgment = true')
+            ->andWhere(sprintf(
+                'NOT EXISTS (SELECT 1 FROM %s s WHERE s.post = p AND s.user = :unackUser AND s.status = :unackStatus)',
+                PostUserStatus::class,
+            ))
+            ->setParameter('unackUser', $user)
+            ->setParameter('unackStatus', PostUserStatusType::ACKNOWLEDGED);
     }
 }

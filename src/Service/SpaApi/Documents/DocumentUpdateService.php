@@ -48,7 +48,10 @@ final class DocumentUpdateService
             throw new BadRequestHttpException(SpaApiError::DOCUMENT_NAME_REQUIRED);
         }
 
-        $organizationId = (int) ($payload['organizationId'] ?? $document->getOrganizationCreator()?->getId() ?? 0);
+        // Организацию из payload принимает только админ — как в DocumentCreateService::resolveOrganization.
+        $organizationId = $this->accessService->isAdmin()
+            ? (int) ($payload['organizationId'] ?? $document->getOrganizationCreator()?->getId() ?? 0)
+            : (int) ($document->getOrganizationCreator()?->getId() ?? $currentUser->getOrganization()?->getId() ?? 0);
         if ($organizationId <= 0) {
             throw new BadRequestHttpException(SpaApiError::ORGANIZATION_REQUIRED);
         }
@@ -61,6 +64,15 @@ final class DocumentUpdateService
         $statusStr = trim((string) ($payload['status'] ?? $document->getStatus()?->value ?? ''));
         $status = DocumentStatus::tryFrom($statusStr);
         if ($status === null) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_INVALID_STATUS);
+        }
+        // BE-24 (SYM-03): статус уровня документа автор двигает только между
+        // «Черновик» и «Новый» — то же, что предлагает форма. APPROVED/DONE от
+        // автора без участия получателей не принимаются; сменить существующий
+        // «нестандартный» статус без правки (status не прислан) по-прежнему можно.
+        if ($status !== $document->getStatus()
+            && !array_key_exists($status->value, DocumentStatus::getCreationChoices())
+        ) {
             throw new BadRequestHttpException(SpaApiError::DOCUMENT_INVALID_STATUS);
         }
 
@@ -77,6 +89,12 @@ final class DocumentUpdateService
         }
 
         $wantsPublish = (bool) ($payload['isPublished'] ?? $document->isPublished());
+        // Опубликованный документ через PATCH не отзывается: получатели уже
+        // уведомлены, а снятие isPublished молча убирало его из их входящих.
+        // Заодно закрывает спам повторной публикацией (false→true шлёт notify заново).
+        if ($document->isPublished() && !$wantsPublish) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_CANNOT_UNPUBLISH);
+        }
         if ($wantsPublish && $status === DocumentStatus::DRAFT) {
             throw new BadRequestHttpException(SpaApiError::DOCUMENT_CANNOT_PUBLISH_DRAFT);
         }

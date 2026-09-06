@@ -45,6 +45,15 @@ final class PurchaseController extends AbstractController
     private const DEFAULT_PAGE_SIZE = 20;
     private const MAX_PAGE_SIZE = 100;
     private const MAX_ITEMS_PER_REQUEST = 100;
+    /** Потолки полей — по колонкам БД (BE-17); фронт дублирует их через maxLength. */
+    private const MAX_TITLE_LENGTH = 255;
+    private const MAX_ITEM_NAME_LENGTH = 255;
+    private const MAX_ITEM_UNIT_LENGTH = 20;
+    /** NUMERIC(12,3) и NUMERIC(14,2): всё, что больше, переполняет колонку. */
+    /** quantity NUMERIC(12,3): 9 целых разрядов; проверяем после округления до 3 знаков. */
+    private const MAX_ITEM_QUANTITY = 1_000_000_000;
+    /** estimated_price NUMERIC(12,2): 10 целых разрядов; проверяем после округления до 2 знаков. */
+    private const MAX_ITEM_PRICE = 10_000_000_000;
 
     public function __construct(
         private readonly PurchaseRequestRepository $purchaseRepo,
@@ -259,14 +268,20 @@ final class PurchaseController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $queue = $this->purchaseRepo->findTriageQueueFor($user, $this->roster->roleCodesOf($user));
+        $roleCodes = $this->roster->roleCodesOf($user);
+        $queue = $this->purchaseRepo->findTriageQueueFor($user, $roleCodes);
+        // Очередь отдаётся страницей (TRIAGE_QUEUE_LIMIT); total — по отдельному
+        // COUNT, чтобы модалка знала, что заявок больше, чем показано.
+        $total = count($queue) < PurchaseRequestRepository::TRIAGE_QUEUE_LIMIT
+            ? count($queue)
+            : $this->purchaseRepo->countTriageQueueFor($user, $roleCodes);
 
         return $this->json([
             'items' => array_map(
                 fn (PurchaseRequest $purchase): array => $this->presenter->presentDetail($purchase),
                 $queue,
             ),
-            'total' => count($queue),
+            'total' => $total,
         ]);
     }
 
@@ -461,7 +476,11 @@ final class PurchaseController extends AbstractController
             return $error;
         }
 
-        $this->editor->log($purchase, $user, PurchaseHistoryAction::CLASSIFICATION_UPDATED);
+        try {
+            $this->editor->log($purchase, $user, PurchaseHistoryAction::CLASSIFICATION_UPDATED);
+        } catch (PurchaseTransitionException $e) {
+            return $this->json(['error' => $e->errorCode], Response::HTTP_CONFLICT);
+        }
 
         return $this->json($this->presenter->presentDetail($purchase));
     }
@@ -569,6 +588,11 @@ final class PurchaseController extends AbstractController
         if ($title === '') {
             return $this->json(['error' => SpaApiError::PURCHASE_TITLE_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
+        // BE-17: Assert-констрейнты сущностей здесь не выполняются, а колонка —
+        // VARCHAR(255): без проверки длинное название давало 500 на flush.
+        if (mb_strlen($title) > self::MAX_TITLE_LENGTH) {
+            return $this->json(['error' => SpaApiError::PURCHASE_TITLE_TOO_LONG], Response::HTTP_BAD_REQUEST);
+        }
         $purchase->setTitle($title);
 
         $description = $payload['description'] ?? null;
@@ -613,9 +637,16 @@ final class PurchaseController extends AbstractController
             $unit = trim((string) ($itemPayload['unit'] ?? ''));
             $price = $itemPayload['estimatedPrice'] ?? null;
 
+            // Потолки согласованы с колонками: name VARCHAR(255), unit VARCHAR(20),
+            // quantity NUMERIC(12,3), estimated_price NUMERIC(12,2). is_numeric
+            // пропускает «1e20» — оно переполняло NUMERIC и тоже давало 500.
+            // Сравниваем округлённое значение: 999999999.9999 после округления
+            // до трёх знаков даёт 1e9 и переполняет колонку.
             if ($name === '' || $unit === ''
-                || !is_numeric($quantity) || (float) $quantity <= 0
-                || !is_numeric($price) || (float) $price < 0
+                || mb_strlen($name) > self::MAX_ITEM_NAME_LENGTH
+                || mb_strlen($unit) > self::MAX_ITEM_UNIT_LENGTH
+                || !is_numeric($quantity) || (float) $quantity <= 0 || round((float) $quantity, 3) >= self::MAX_ITEM_QUANTITY
+                || !is_numeric($price) || (float) $price < 0 || round((float) $price, 2) >= self::MAX_ITEM_PRICE
             ) {
                 return $this->json(['error' => SpaApiError::PURCHASE_INVALID_ITEM], Response::HTTP_BAD_REQUEST);
             }
@@ -632,10 +663,12 @@ final class PurchaseController extends AbstractController
             $categoryItemId = $itemPayload['categoryItemId'] ?? null;
             if ($categoryItemId !== null && $categoryItemId !== '') {
                 $categoryItem = $this->em->find(PurchaseCategoryItem::class, (int) $categoryItemId);
-                if ($categoryItem === null) {
-                    return $this->json(['error' => SpaApiError::PURCHASE_INVALID_ITEM], Response::HTTP_BAD_REQUEST);
+                // Номенклатуру могли удалить, пока форма была открыта (FE-21):
+                // позиция остаётся без привязки, как после ON DELETE SET NULL,
+                // а не рушит сохранение всей заявки.
+                if ($categoryItem !== null) {
+                    $item->setCategoryItem($categoryItem);
                 }
-                $item->setCategoryItem($categoryItem);
             }
 
             $purchase->addItem($item);

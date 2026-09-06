@@ -137,30 +137,35 @@
         </div>
         <div class="card-body d-flex flex-wrap gap-2">
             <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('hr_vacancy') }}">
                 <input type="hidden" name="status" value="new">
                 <button type="submit" class="btn {{ application.status == 'new' ? 'btn-primary' : 'btn-outline-primary' }}">
                     Новый
                 </button>
             </form>
             <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('hr_vacancy') }}">
                 <input type="hidden" name="status" value="viewed">
                 <button type="submit" class="btn {{ application.status == 'viewed' ? 'btn-info' : 'btn-outline-info' }}">
                     Просмотрен
                 </button>
             </form>
             <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('hr_vacancy') }}">
                 <input type="hidden" name="status" value="invited">
                 <button type="submit" class="btn {{ application.status == 'invited' ? 'btn-success' : 'btn-outline-success' }}">
                     Приглашён
                 </button>
             </form>
             <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('hr_vacancy') }}">
                 <input type="hidden" name="status" value="rejected">
                 <button type="submit" class="btn {{ application.status == 'rejected' ? 'btn-danger' : 'btn-outline-danger' }}">
                     Отказ
                 </button>
             </form>
             <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}" class="d-inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('hr_vacancy') }}">
                 <input type="hidden" name="status" value="archived">
                 <button type="submit" class="btn {{ application.status == 'archived' ? 'btn-secondary' : 'btn-outline-secondary' }}">
                     Архив
@@ -175,6 +180,7 @@
         </div>
         <div class="card-body">
             <form method="post" action="{{ path('app_vacancy_application_update', {id: application.id}) }}">
+            <input type="hidden" name="_token" value="{{ csrf_token('hr_vacancy') }}">
                 <div class="mb-3">
                     <textarea name="adminComment" class="form-control" rows="4">{{ application.adminComment }}</textarea>
                 </div>

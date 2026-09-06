@@ -48,6 +48,11 @@ security:
         main:
             lazy: true
             provider: app_user_provider
+            # BE-04 (SEC-04): у legacy-формы входа не было ограничения попыток —
+            # симметрично spa_api. Лимитер по IP на POST /login — в nginx (limit_req).
+            login_throttling:
+                max_attempts: 5
+                interval: '15 minutes'
             form_login:
                 login_path: app_login
                 check_path: app_login
@@ -104,6 +109,19 @@ security:
         - { path: ^/spa/api/login_check, roles: PUBLIC_ACCESS }
         - { path: ^/spa/api/token/refresh, roles: PUBLIC_ACCESS }
         - { path: ^/spa/api/logout, roles: PUBLIC_ACCESS }
+
+        # Аналитика SPA: профильные роли (BE-08/BE-09, SEC-10). Второй рубеж к
+        # #[IsGranted] на контроллерах — ловит будущие маршруты без атрибута.
+        # ROLE_ANALYTIC наследует все профильные, обратного наследования нет,
+        # поэтому общее правило — СПИСОК ролей (OR), а не одна ROLE_ANALYTIC.
+        - { path: ^/spa/api/analytics/finance, roles: ROLE_FINANCE }
+        - { path: ^/spa/api/analytics/hr, roles: ROLE_HR }
+        - { path: ^/spa/api/analytics/citizen-appeals, roles: ROLE_CITIZEN_APPEAL }
+        - { path: ^/spa/api/analytics/clients-department, roles: ROLE_CLIENTS_DEPARTMENT }
+        - { path: ^/spa/api/analytics/mechanics, roles: ROLE_MECHANIC }
+        - { path: ^/spa/api/analytics/tko, roles: ROLE_TKO }
+        - { path: ^/spa/api/analytics, roles: [ROLE_ANALYTIC, ROLE_FINANCE, ROLE_HR, ROLE_CITIZEN_APPEAL, ROLE_CLIENTS_DEPARTMENT, ROLE_MECHANIC, ROLE_TKO] }
+
         # Все остальные роуты SPA API требуют валидный JWT
         - { path: ^/spa/api, roles: ROLE_USER }
 
@@ -112,6 +130,14 @@ security:
 
         # Заявки на договор: роль по заявкам или общая роль по обращениям (и ROLE_ADMIN через иерархию)
         - { path: ^/contract-application, roles: [ROLE_CITIZEN_APPEAL, ROLE_CONTRACT_APPLICATION] }
+
+        # Кадры legacy (BE-05, SEC-09): резюме и отклики — только ROLE_HR; оба префикса явно
+        - { path: ^/hr_vacancies_applications, roles: ROLE_HR }
+        - { path: ^/hr_vacancies, roles: ROLE_HR }
+
+        # Легаси-дашборд аналитики (BE-09): те же роли, что у SPA-аналитики
+        # Легаси-агрегатор без скоупа по организации и разделу — только глобальным аналитикам (BE-08/09).
+        - { path: ^/analytics/dashboard, roles: [ROLE_ANALYTIC, ROLE_ADMIN] }
 
         # Все остальные роуты требуют аутентификации
         # Конкретные права доступа настраиваются через IsGranted в контроллерах

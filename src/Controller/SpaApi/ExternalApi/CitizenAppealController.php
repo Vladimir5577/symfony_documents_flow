@@ -6,6 +6,7 @@ namespace App\Controller\SpaApi\ExternalApi;
 
 use App\DTO\CitizenAppeal\CitizenAppealDto;
 use App\Service\ApiExternal\CitizenAppeal\CitizenAppealApiService;
+use App\Service\ApiExternal\ProxiedFileResponseFactory;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -19,6 +20,7 @@ final class CitizenAppealController extends AbstractController
 {
     public function __construct(
         private readonly CitizenAppealApiService $api,
+        private readonly ProxiedFileResponseFactory $files,
     ) {
     }
 
@@ -95,12 +97,14 @@ final class CitizenAppealController extends AbstractController
             return $this->json(['error' => $e->getMessage()], $e->getCode() ?: Response::HTTP_NOT_FOUND);
         }
 
-        $response = new Response($file['content'], Response::HTTP_OK, ['Content-Type' => $file['contentType']]);
-        if ($file['disposition'] !== null) {
-            $response->headers->set('Content-Disposition', $file['disposition']);
-        }
-
-        return $response;
+        // BE-13: тип и диспозиция — свои (белый список + магические байты), а не
+        // апстрима; сервис поле disposition больше не отдаёт.
+        return $this->files->create(
+            $file['content'],
+            $file['contentType'],
+            $request->query->getBoolean('download'),
+            'citizen-appeal-file-' . $id,
+        );
     }
 
     /** DTO → массив с готовыми лейблами; url файлов — на наш прокси, upstream-url наружу не отдаём. */

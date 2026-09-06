@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace App\Controller\SpaApi\DocumentsFlow;
 
 use App\Controller\SpaApi\SpaApiError;
+use App\Entity\Document\DocumentHistory;
 use App\Entity\User\User;
+use App\Enum\Document\DocumentStatus;
 use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\DocumentTypeRepository;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
 use App\Service\SpaApi\Documents\DocumentAttachmentService;
 use App\Service\SpaApi\Documents\DocumentCommentService;
+use App\Service\SpaApi\Documents\DocumentNotifier;
 use App\Service\SpaApi\Documents\DocumentPublishService;
+use App\Service\SpaApi\Documents\DocumentRecipientsException;
 use App\Service\SpaApi\Documents\DocumentRecipientsService;
 use App\Service\SpaApi\Documents\DocumentUpdateService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -38,6 +42,7 @@ final class DocumentOutgoingController extends AbstractController
         private readonly DocumentRecipientsService $recipientsService,
         private readonly DocumentAttachmentService $attachmentService,
         private readonly EntityManagerInterface $entityManager,
+        private readonly DocumentNotifier $documentNotifier,
     ) {
     }
 
@@ -186,12 +191,47 @@ final class DocumentOutgoingController extends AbstractController
             $recipientUserIds = [];
         }
 
-        $this->recipientsService->replaceRecipients(
-            $document,
-            $this->recipientsService->normalizeUserIds($executorUserIds),
-            $this->recipientsService->normalizeUserIds($recipientUserIds),
-        );
-        $this->entityManager->flush();
+        // Одна транзакция на diff состава, запись истории и постановку уведомлений
+        // в outbox — по образцу DocumentPublishService::publish (BE-12).
+        try {
+            $this->entityManager->wrapInTransaction(function () use ($document, $user, $executorUserIds, $recipientUserIds): void {
+            $diff = $this->recipientsService->replaceRecipients(
+                $document,
+                $this->recipientsService->normalizeUserIds($executorUserIds),
+                $this->recipientsService->normalizeUserIds($recipientUserIds),
+            );
+
+            if ($diff['added'] === [] && $diff['removed'] === []) {
+                return;
+            }
+
+            $history = new DocumentHistory();
+            $history->setDocument($document);
+            $history->setUser($user);
+            $history->setAction(sprintf(
+                'Изменён состав участников (добавлено: %d, снято: %d)',
+                count($diff['added']),
+                count($diff['removed']),
+            ));
+            $history->setOldStatus($document->getStatus() ?? DocumentStatus::NEW);
+            $history->setNewStatus($document->getStatus() ?? DocumentStatus::NEW);
+            $history->setCreatedAt(new \DateTimeImmutable());
+            $this->entityManager->persist($history);
+            $this->entityManager->flush();
+
+            // Добавленные в уже опубликованный документ раньше не узнавали о нём:
+            // notifyIncoming звался только при публикации.
+            if ($document->isPublished() && $diff['added'] !== []) {
+                $this->documentNotifier->notifyIncoming($document, $diff['added'], $user);
+            }
+            });
+        } catch (DocumentRecipientsException $e) {
+            // Транзакция откачена: состав не тронут. Сущность в UnitOfWork могла
+            // измениться до исключения — сбрасываем её к состоянию базы.
+            $this->entityManager->refresh($document);
+
+            return $this->json(['error' => $e->errorCode], Response::HTTP_BAD_REQUEST);
+        }
 
         $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
 

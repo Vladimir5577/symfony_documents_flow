@@ -62,6 +62,8 @@ final class SpaApiError
     public const DOCUMENT_INVALID_DEADLINE = 'document_invalid_deadline';
     public const DOCUMENT_CANNOT_PUBLISH_DRAFT = 'document_cannot_publish_draft';
     public const DOCUMENT_NO_RECIPIENTS = 'document_no_recipients';
+    /** Опубликованный документ через PATCH не отзывается — получатели уже уведомлены. */
+    public const DOCUMENT_CANNOT_UNPUBLISH = 'document_cannot_unpublish';
     public const DOCUMENT_VALIDATION_FAILED = 'document_validation_failed';
     public const ORGANIZATION_REQUIRED = 'organization_required';
     public const POST_NOT_FOUND = 'post_not_found';
@@ -74,6 +76,7 @@ final class SpaApiError
     public const POST_FILE_UPLOAD_ERROR = 'post_file_upload_error';
     public const POST_COMMENT_EMPTY = 'post_comment_empty';
     public const POST_FILE_NOT_FOUND = 'post_file_not_found';
+    public const POST_ACKNOWLEDGMENT_NOT_REQUIRED = 'post_acknowledgment_not_required';
     public const POST_FILE_NOT_FOUND_ON_DISK = 'post_file_not_found_on_disk';
     public const NOTIFICATION_NOT_FOUND = 'notification_not_found';
     public const FOLDER_NOT_FOUND = 'folder_not_found';
@@ -84,6 +87,8 @@ final class SpaApiError
     public const PURCHASE_COMMENT_REQUIRED = 'purchase_comment_required';
     public const PURCHASE_ITEMS_REQUIRED = 'purchase_items_required';
     public const PURCHASE_TITLE_REQUIRED = 'purchase_title_required';
+    /** Название длиннее 255 символов — колонка VARCHAR(255), раньше падало 500 на flush. */
+    public const PURCHASE_TITLE_TOO_LONG = 'purchase_title_too_long';
     public const PURCHASE_INVALID_PRIORITY = 'purchase_invalid_priority';
     public const PURCHASE_INVALID_ITEM = 'purchase_invalid_item';
     public const PURCHASE_INVALID_DUE_DATE = 'purchase_invalid_due_date';
@@ -106,6 +111,10 @@ final class SpaApiError
     public const PURCHASE_TASK_NOT_REVOKABLE = 'purchase_task_not_revokable';
     /** С этого этапа возвращать автору нельзя — например, товар уже оплачен. */
     public const PURCHASE_REJECT_NOT_ALLOWED = 'purchase_reject_not_allowed';
+    /** С этапа исполнения в отдел закупок не возвращают: отметка об оплате уже стоит. */
+    public const PURCHASE_RETURN_NOT_ALLOWED = 'purchase_return_not_allowed';
+    /** Автор не закрывает решающие этапы своей заявки — нужен другой носитель роли. */
+    public const PURCHASE_SELF_APPROVAL_FORBIDDEN = 'purchase_self_approval_forbidden';
     /** Админ выдаёт участнику роль, которой нет в PurchaseRoleCode. */
     public const PURCHASE_ROLE_NOT_FOUND = 'purchase_role_not_found';
     /** Разбирающий отмечает согласантом того, кто не входит в пул этапа. */

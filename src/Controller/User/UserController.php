@@ -14,6 +14,7 @@ use App\Service\User\LoginGeneratorService;
 use App\Service\User\UserAvatarStorageService;
 use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -238,7 +239,7 @@ final class UserController extends AbstractController
             $selectedOrganization = $organizationRepository->find($organizationId);
         }
 
-        $pagination = $userRepository->findPaginated($page, $limit, $search, $organizationId, $status);
+        $pagination = $userRepository->findPaginated($page, $limit, $search, $organizationId, $status, $this->isGranted('ROLE_MANAGER'));
 
         $statusChoices = WorkerStatus::getChoices();
 
@@ -273,12 +274,12 @@ final class UserController extends AbstractController
         }
         $limit = 10;
 
-        $pagination = $userRepository->findPaginated($page, $limit, $search, $organizationId, $status);
-
         // Та же граница, что в SPA-каталоге: логин и телефон коллег —
         // кадровые данные, а не справочник для выбора человека. Без этого
         // легаси-маршрут остаётся обходным путём к тому же набору.
         $canSeePersonnelData = $this->isGranted('ROLE_MANAGER');
+
+        $pagination = $userRepository->findPaginated($page, $limit, $search, $organizationId, $status, $canSeePersonnelData);
 
         $usersData = [];
         foreach ($pagination['users'] as $user) {
@@ -439,6 +440,12 @@ final class UserController extends AbstractController
             throw $this->createNotFoundException('Пользователь не найден');
         }
 
+        // Форму редактирования чужого профиля отдаём только администратору:
+        // рядовой сотрудник правит лишь себя (BE-01 / SEC-01).
+        if (!$currentUser instanceof User || (!$isAdmin && $currentUser->getId() !== $user->getId())) {
+            throw $this->createAccessDeniedException('Редактировать чужой профиль может только администратор.');
+        }
+
         // Получаем Worker для пользователя, если он существует
         $worker = $workerRepository->findOneBy(['user' => $user]);
 
@@ -473,6 +480,27 @@ final class UserController extends AbstractController
         ]);
     }
 
+    /**
+     * Кто может смотреть и менять фото профиля: сам человек, ROLE_ADMIN и
+     * ROLE_MANAGER — тот же предикат, что у просмотра профиля (viewUser), чтобы
+     * ссылка «изменить фото» на странице профиля не вела в 403.
+     */
+    private function assertCanManageProfile(User $target): void
+    {
+        $current = $this->getUser();
+        if (!$current instanceof User) {
+            throw $this->createAccessDeniedException('Необходимо войти в систему.');
+        }
+        if ($current->getId() === $target->getId()) {
+            return;
+        }
+        if ($this->isGranted('ROLE_ADMIN') || $this->isGranted('ROLE_MANAGER')) {
+            return;
+        }
+
+        throw $this->createAccessDeniedException('Недостаточно прав для изменения профиля.');
+    }
+
     #[Route('/user/{id}/edit-photo', name: 'app_edit_user_photo', methods: ['GET'], requirements: ['id' => '\d+'])]
     public function editUserPhoto(int $id, UserRepository $userRepository): Response
     {
@@ -480,6 +508,8 @@ final class UserController extends AbstractController
         if (!$user) {
             throw $this->createNotFoundException('Пользователь не найден');
         }
+        // BE-18 / SEC-12: форма с id-специфичным CSRF-токеном раньше отдавалась любому.
+        $this->assertCanManageProfile($user);
 
         $avatarPreviewUrl = null;
         if ($user->getAvatarName()) {
@@ -505,6 +535,8 @@ final class UserController extends AbstractController
         if (!$user) {
             throw $this->createNotFoundException('Пользователь не найден');
         }
+        // Сначала 404 на несуществующего, затем 403 на чужого — и только потом хранилище.
+        $this->assertCanManageProfile($user);
 
         /** @var UploadedFile|null $file */
         $file = $request->files->get('avatar_file');
@@ -540,6 +572,8 @@ final class UserController extends AbstractController
         if (!$user || !$user->getAvatarName()) {
             throw $this->createNotFoundException('Фото не найдено.');
         }
+        // Оригинал фото — та же политика, что у просмотра профиля.
+        $this->assertCanManageProfile($user);
 
         $storageKey = $user->getAvatarName();
         if (!$this->avatarStorageService->exists($storageKey)) {
@@ -573,23 +607,33 @@ final class UserController extends AbstractController
         OrganizationRepository $organizationRepository,
         RoleRepository $roleRepository,
         WorkerRepository $workerRepository,
-        UserPasswordHasherInterface $passwordHasher
+        UserPasswordHasherInterface $passwordHasher,
+        LoggerInterface $logger
     ): Response {
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
         $formData = $request->request->all();
-
-        // Валидация CSRF токена
-        if (!$this->isCsrfTokenValid('edit_user', $formData['_csrf_token'] ?? '')) {
-            $this->addFlash('error', 'Неверный CSRF токен.');
-            return $this->redirectToRoute('app_all_users');
-        }
 
         // Получаем ID пользователя из формы
         $userId = (int) ($formData['user_id'] ?? 0);
         if ($userId === 0) {
             $this->addFlash('error', 'Не указан ID пользователя.');
             return $this->redirectToRoute('app_all_users');
+        }
+
+        // CSRF-токен привязан к редактируемому пользователю (как у update-photo):
+        // общий токен 'edit_user' можно было снять с формы своего профиля и
+        // отправить с чужим user_id.
+        if (!$this->isCsrfTokenValid('edit_user_' . $userId, $formData['_csrf_token'] ?? '')) {
+            $this->addFlash('error', 'Неверный CSRF токен.');
+            return $this->redirectToRoute('app_all_users');
+        }
+
+        // BE-01 / SEC-01: чужой профиль правит только администратор. Раньше
+        // любой сотрудник по сессии менял логин и пароль кому угодно, включая
+        // администратора, и входил под ним.
+        if (!$currentUser instanceof User || (!$isAdmin && $currentUser->getId() !== $userId)) {
+            throw $this->createAccessDeniedException('Редактировать чужой профиль может только администратор.');
         }
 
         // Загружаем пользователя со всеми связанными данными
@@ -641,24 +685,39 @@ final class UserController extends AbstractController
             }
         }
 
-        $login = trim((string) ($formData['login'] ?? ''));
-        if ($login === '') {
-            $this->addFlash('error', 'Логин обязателен.');
-            return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
-        }
-        if ($user->getLogin() !== $login) {
-            $user->setLogin($login);
-        }
-
-        // Обновляем пароль, если он указан
-        $plainPassword = trim((string) ($formData['plain_password'] ?? ''));
-        $confirmPassword = trim((string) ($formData['confirm_password'] ?? ''));
-        if ($plainPassword !== '') {
-            if ($plainPassword !== $confirmPassword) {
-                $this->addFlash('error', 'Пароли не совпадают.');
+        // Учётные данные (логин, пароль) через легаси-форму меняет только
+        // администратор; сам сотрудник — через профиль SPA (/spa/api/me), где
+        // требуется подтверждение текущим паролем. Полей для неадмина в форме нет.
+        if ($isAdmin) {
+            $login = trim((string) ($formData['login'] ?? ''));
+            if ($login === '') {
+                $this->addFlash('error', 'Логин обязателен.');
                 return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
             }
-            $user->setPassword($passwordHasher->hashPassword($user, $plainPassword));
+            if ($user->getLogin() !== $login) {
+                $logger->warning('Смена логина пользователя администратором', [
+                    'target_user_id' => $user->getId(),
+                    'old_login' => $user->getLogin(),
+                    'new_login' => $login,
+                    'actor_user_id' => $currentUser->getId(),
+                ]);
+                $user->setLogin($login);
+            }
+
+            // Обновляем пароль, если он указан
+            $plainPassword = trim((string) ($formData['plain_password'] ?? ''));
+            $confirmPassword = trim((string) ($formData['confirm_password'] ?? ''));
+            if ($plainPassword !== '') {
+                if ($plainPassword !== $confirmPassword) {
+                    $this->addFlash('error', 'Пароли не совпадают.');
+                    return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
+                }
+                $logger->warning('Смена пароля пользователя администратором', [
+                    'target_user_id' => $user->getId(),
+                    'actor_user_id' => $currentUser->getId(),
+                ]);
+                $user->setPassword($passwordHasher->hashPassword($user, $plainPassword));
+            }
         }
 
         if ($isAdmin) {

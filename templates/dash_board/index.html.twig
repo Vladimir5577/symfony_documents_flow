@@ -701,7 +701,8 @@
 
     <script>
         window.__chatConfig = {
-            mercureUrl: '{{ mercure_public_url }}',
+            mercureUrl: '{{ mercure_public_url|e('js') }}',
+            mercureToken: '{{ mercure_subscriber_token|e('js') }}',
             currentUserId: {{ current_user_id }},
         };
     </script>

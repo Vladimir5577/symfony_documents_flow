@@ -62,7 +62,7 @@ final class CitizenAppealApiService
     }
 
     /**
-     * @return array{content: string, contentType: string, disposition: string|null}
+     * @return array{content: string, contentType: string}
      * @throws \RuntimeException
      */
     public function getFileContent(int $fileId, bool $download = false): array
@@ -84,10 +84,11 @@ final class CitizenAppealApiService
 
         $headers = $response->getHeaders();
 
+        // contentType — только подсказка для ProxiedFileResponseFactory: он сверяет
+        // её с белым списком и содержимым. Content-Disposition апстрима не отдаём вовсе.
         return [
             'content'     => $response->getContent(),
             'contentType' => $headers['content-type'][0] ?? 'application/octet-stream',
-            'disposition' => $headers['content-disposition'][0] ?? null,
         ];
     }
 

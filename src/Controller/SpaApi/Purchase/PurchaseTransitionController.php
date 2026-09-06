@@ -19,6 +19,7 @@ use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseApprovalWorkflow;
 use App\Service\Purchase\PurchaseTransitionException;
+use Doctrine\ORM\OptimisticLockException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -154,6 +155,10 @@ final class PurchaseTransitionController extends AbstractController
             $this->workflow->changeRoute($purchase, $task, $template, $user);
         } catch (PurchaseTransitionException $e) {
             return $this->json(['error' => $e->errorCode], Response::HTTP_CONFLICT);
+        } catch (OptimisticLockException) {
+            // Строитель маршрута делает flush до save(): конфликт версии заявки
+            // всплывает раньше обработчика в PurchaseRequestEditor (BE-29).
+            return $this->json(['error' => SpaApiError::PURCHASE_CONCURRENT_UPDATE], Response::HTTP_CONFLICT);
         }
 
         return $this->json($this->presenter->presentDetail($purchase));
@@ -201,11 +206,15 @@ final class PurchaseTransitionController extends AbstractController
                     if (is_string($assignments)) {
                         return $this->json(['error' => $assignments], Response::HTTP_BAD_REQUEST);
                     }
+                    $itemEdits = $this->collectItemEdits($payload['items'] ?? []);
+                    if (is_string($itemEdits)) {
+                        return $this->json(['error' => $itemEdits], Response::HTTP_BAD_REQUEST);
+                    }
                     $this->workflow->triage(
                         $purchase,
                         $task,
                         $user,
-                        $this->collectItemEdits($payload['items'] ?? []),
+                        $itemEdits,
                         $assignments,
                     );
                     break;
@@ -261,10 +270,16 @@ final class PurchaseTransitionController extends AbstractController
      * Правки состава из payload. Позиции, которых разбирающий не прислал,
      * остаются как есть.
      *
+     * Количество: ключ не прислан или null — «как просил автор»; прислано, но не
+     * число — 400, а не тихий сброс (FE-03: директор печатал «2,5» или очищал
+     * поле, сервер принимал это за null и согласовывал исходные 10 штук).
+     * Запятая как разделитель принимается. Снятые позиции (included=false) до
+     * количества не доходят — там валидировать нечего.
+     *
      * @param mixed $rows
-     * @return array<int, array{included: bool, quantity: string|null}>
+     * @return array<int, array{included: bool, quantity: string|null}>|string код ошибки
      */
-    private function collectItemEdits(mixed $rows): array
+    private function collectItemEdits(mixed $rows): array|string
     {
         if (!is_array($rows)) {
             return [];
@@ -276,10 +291,19 @@ final class PurchaseTransitionController extends AbstractController
                 continue;
             }
 
-            $quantity = $row['quantity'] ?? null;
+            $included = (bool) ($row['included'] ?? true);
+            $quantity = null;
+            if ($included && array_key_exists('quantity', $row) && $row['quantity'] !== null) {
+                $raw = str_replace(',', '.', trim((string) $row['quantity']));
+                if (!is_numeric($raw) || (float) $raw <= 0) {
+                    return SpaApiError::PURCHASE_INVALID_ITEM;
+                }
+                $quantity = $raw;
+            }
+
             $edits[(int) $row['id']] = [
-                'included' => (bool) ($row['included'] ?? true),
-                'quantity' => is_numeric($quantity) ? (string) $quantity : null,
+                'included' => $included,
+                'quantity' => $quantity,
             ];
         }
 
@@ -382,6 +406,12 @@ final class PurchaseTransitionController extends AbstractController
 
         if (!$this->access->canActOn($task, $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+        // Отдельный код, а не глухой ACCESS_DENIED: фронт должен сказать «эту
+        // заявку должен закрыть другой носитель роли», иначе автор-единственный
+        // носитель роли этапа увидит необъяснимый отказ.
+        if ($this->access->isSelfApproval($task, $user)) {
+            return $this->json(['error' => SpaApiError::PURCHASE_SELF_APPROVAL_FORBIDDEN], Response::HTTP_FORBIDDEN);
         }
 
         try {

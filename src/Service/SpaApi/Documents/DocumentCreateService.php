@@ -143,11 +143,13 @@ final class DocumentCreateService
             return DocumentStatus::DRAFT;
         }
 
-        try {
-            return DocumentStatus::from($statusStr);
-        } catch (\ValueError) {
+        // При создании допустимы только «Черновик» и «Новый» (BE-24): раньше
+        // POST /documents с status=APPROVED создавал сразу «утверждённый» документ.
+        if (!array_key_exists($statusStr, DocumentStatus::getCreationChoices())) {
             throw new BadRequestHttpException(SpaApiError::DOCUMENT_INVALID_STATUS);
         }
+
+        return DocumentStatus::from($statusStr);
     }
 
     private function notifyRecipients(Document $document): void

@@ -33,7 +33,7 @@
                         <div class="card-body">
 
                             <form action="{{ path('app_update_user') }}" method="post" class="form">
-                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_user') }}">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token('edit_user_' ~ user.id) }}">
                                 <input type="hidden" name="user_id" value="{{ user.id }}">
 
                                 {% for message in app.flashes('success') %}
@@ -124,6 +124,9 @@
                                         </div>
                                     </div>
                                     {% endif %}
+                                    {# Логин и пароль через эту форму меняет только администратор;
+                                       сотрудник меняет свои — в профиле SPA с подтверждением текущим паролем. #}
+                                    {% if is_admin %}
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="login-column">Логин <span class="text-danger">*</span></label>
@@ -142,6 +145,7 @@
                                             <input type="password" id="confirm-password-column" class="form-control" name="confirm_password" placeholder="Повторите пароль">
                                         </div>
                                     </div>
+                                    {% endif %}
                                     {% if is_admin %}
                                     <div class="col-12">
                                         <div class="form-group">

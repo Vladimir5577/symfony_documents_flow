@@ -70,8 +70,22 @@ final class PostController extends AbstractController
             }
         }
 
-        $posts = $this->postRepository->findActivePaginated($type, $page, $limit, $isActive, $author);
-        $total = $this->postRepository->countActive($type, $isActive, $author);
+        // unacknowledged_only=1 — только обязательные публикации без моей отметки.
+        // Раньше параметр молча игнорировался, и вкладка «Требуют ознакомления»
+        // показывала всю ленту.
+        $unacknowledgedFor = \in_array((string) $request->query->get('unacknowledged_only'), ['1', 'true'], true)
+            ? $user
+            : null;
+
+        $posts = $this->postRepository->findActivePaginated(
+            $type,
+            $page,
+            $limit,
+            $isActive,
+            $author,
+            $unacknowledgedFor,
+        );
+        $total = $this->postRepository->countActive($type, $isActive, $author, $unacknowledgedFor);
 
         $postIds = array_map(static fn (Post $p): ?int => $p->getId(), $posts);
         $commentCounts = $this->commentRepository->countGroupedByPosts($postIds);
@@ -90,6 +104,9 @@ final class PostController extends AbstractController
             'filters' => [
                 'typeChoices' => $this->formatter->formatTypeChoices(),
             ],
+            // По всей ленте, не по странице: на нём держатся бейдж категории и
+            // блок «К ознакомлению» на фронте.
+            'unacknowledgedCount' => $this->postRepository->countUnacknowledgedFor($user),
         ]);
     }
 
@@ -249,6 +266,13 @@ final class PostController extends AbstractController
         $post = $this->findVisiblePost($id, $user);
         if ($post === null) {
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        // Отметка «ознакомлен» — юридически значимая запись: по публикации без
+        // обязательного ознакомления её не создаём (промах кликом по устаревшей
+        // карточке на фронте, FE-16).
+        if (!$post->isRequiredAcknowledgment()) {
+            return $this->json(['error' => SpaApiError::POST_ACKNOWLEDGMENT_NOT_REQUIRED], Response::HTTP_CONFLICT);
         }
 
         $status = $this->statusRepository->findOneBy(['post' => $post, 'user' => $user]);

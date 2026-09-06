@@ -2,223 +2,85 @@
 
 namespace App\Controller\Document;
 
+use App\Entity\Document\Document;
+use App\Entity\User\User;
 use App\Repository\Document\DocumentRepository;
-use App\Service\Document\FileUploadService;
 use setasign\Fpdi\Tcpdf\Fpdi;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
+/**
+ * Штамп исполнителя на PDF документа (легаси-портал).
+ *
+ * Аудит 2026-09-05 (BE-07 / SEC-07): раньше /executors_signature принимал любой
+ * метод, любое тело и ставил штамп на PDF любого документа любым сотрудником по
+ * сессии. Теперь: только POST + JSON, id/page/x/y валидируются, подписывать
+ * может получатель документа (или ROLE_ADMIN), файл пишется атомарно под
+ * блокировкой — два одновременных подписания больше не портят PDF.
+ *
+ * Демо-маршруты (/document/sign, /sign_document, /convert_docx_to_pdf_document,
+ * /edit_pdf, /create_pdf_table_executors, /convert_img_to_pdf) удалены: они
+ * запускали LibreOffice по GET и писали в веб-корень public/files, а ни один
+ * шаблон на них не ссылался.
+ */
 final class DocumentSignController extends AbstractController
 {
+    private const STAMP_WIDTH_MM = 60;
+    private const STAMP_HEIGHT_MM = 18;
 
-    #[Route('/document/sign', name: 'app_document_sign')]
-    public function index(): Response
-    {
-        return $this->render('document_sign/index.html.twig', [
-            'controller_name' => 'DocumentSignController',
-        ]);
-    }
-
-
-    // @deprecated
-    #[Route('/sign_document', name: 'app_sign_document')]
-    public function signDocument(): Response
-    {
-        $projectDir = $this->getParameter('kernel.project_dir');
-        $filesDir = $projectDir . '/public/files';
-        $sourcePdf = $filesDir . '/dummy_1.pdf';      // исходный документ
-        $outputPdf = $filesDir . '/dummy_sign.pdf';   // файл с добавленной подписью
-
-        $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
-
-// ------------------------
-// 1. Импортируем все страницы исходного PDF
-// ------------------------
-        $pageCount = $pdf->setSourceFile($sourcePdf);
-        for ($i = 1; $i <= $pageCount; $i++) {
-            $tpl = $pdf->importPage($i);
-            $size = $pdf->getTemplateSize($tpl);
-
-            $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
-            $pdf->useTemplate($tpl);
-        }
-
-// ------------------------
-// 2. Добавляем прямоугольный штамп с текстом внутри
-// ------------------------
-        $pdf->AddPage();
-        $pdf->SetFont('dejavusans', '', 12);  // Используем шрифт для кириллицы
-
-// Прямоугольник для штампа
-        $x_base = 20; // координата X (слева)
-        $y_base = 50; // координата Y (сверху)
-
-        $stampWidth = 60; // ширина штампа
-        $stampHeight = 25; // высота штампа
-
-        $pdf->SetDrawColor(0, 0, 255);  // цвет рамки штампа (синий)
-        $pdf->SetTextColor(0, 0, 255);
-        $pdf->SetLineWidth(1.0);
-        $pdf->Rect($x_base, $y_base, $stampWidth, $stampHeight); // рисуем прямоугольник
-
-// Текст внутри штампа
-        $text = "Подпись Bob Ston Parker\n30.01.2026";
-        $pdf->SetXY($x_base + 5, $y_base + 5);  // отступаем от краёв прямоугольника
-        $pdf->MultiCell($stampWidth - 10, 7, $text, 0, 'C');  // текст по центру
-
-// ------------------------
-// 3. Сохраняем PDF
-// ------------------------
-        $pdf->Output($outputPdf, 'F');
-
-
-        return $this->render('document/history_outgoing_document.html.twig', [
-            'active_tab' => 'outgoing_documents',
-        ]);
-    }
-
-    #[Route('/convert_docx_to_pdf_document', name: 'app_convert_docx_to_pdf_documents')]
-    public function convertDocxToPdfDocument(DocumentRepository $documentRepository): Response
-    {
-        $projectDir = $this->getParameter('kernel.project_dir');
-        $outputDir = $projectDir . '/public/files'; // абсолютный путь
-        $docxFilePath = $outputDir . '/word.docx'; // файл который загружен
-
-// создаём временный профиль для LibreOffice
-        $tmpProfile = '/tmp/libreoffice_profile';
-        if (!is_dir($tmpProfile)) {
-            mkdir($tmpProfile, 0777, true);
-        }
-
-        // запуск LibreOffice для конвертации DOCX → PDF
-        $process = new \Symfony\Component\Process\Process([
-            '/usr/bin/soffice', // путь к бинарнику LibreOffice
-            '--headless',
-            '--convert-to', 'pdf',
-            $docxFilePath,
-            '--outdir', $outputDir,
-            '-env:UserInstallation=file://' . $tmpProfile
-        ]);
-
-        $process->run();
-
-// проверка на ошибки
-        if (!$process->isSuccessful()) {
-            throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
-        }
-
-// путь к PDF
-        $pdfFilePath = $outputDir . '/' . basename($docxFilePath, '.docx') . '.pdf';
-
-// проверка, что файл создан
-        if (!file_exists($pdfFilePath)) {
-            throw new \Exception("PDF не был создан");
-        }
-
-
-        return $this->render('document/history_outgoing_document.html.twig', [
-            'active_tab' => 'outgoing_documents',
-        ]);
-    }
-
-    #[Route('/edit_pdf', name: 'app_edit_pdf')]
-    public function editPdf(DocumentRepository $documentRepository): Response
-    {
-        return $this->render('document/test.html.twig', [
-        ]);
-    }
-
-    #[Route('/create_pdf_table_executors', name: 'app_create_pdf_table_executors')]
-    public function createPdfTableExecutors(DocumentRepository $documentRepository): Response
-    {
-
-        $projectDir = $this->getParameter('kernel.project_dir');
-        $filesDir = $projectDir . '/public/files';
-        $sourcePdf = $filesDir . '/dummy_1.pdf';
-        $outputPdf = $filesDir . '/dummy_with_table.pdf';
-
-// Список исполнителей
-        $executors = [
-            'Иван Иванов',
-            'Мария Петрова',
-            'Алексей Смирнов',
-        ];
-
-        $pdf = new Fpdi();
-
-// ------------------------
-// 1. Копируем все страницы оригинала
-// ------------------------
-        $pageCount = $pdf->setSourceFile($sourcePdf);
-        for ($i = 1; $i <= $pageCount; $i++) {
-            $tpl = $pdf->importPage($i);
-            $size = $pdf->getTemplateSize($tpl);
-
-            $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
-            $pdf->useTemplate($tpl);
-        }
-
-// ------------------------
-// 2. Добавляем последнюю страницу с таблицей
-// ------------------------
-        $pdf->AddPage();
-        $pdf->SetFont('dejavusans', '', 12); // шрифт для кириллицы
-
-// Определяем размеры таблицы
-        $leftX = 20;
-        $rightX = 110;
-        $startY = 30;
-        $rowHeight = 25;
-        $tableWidthLeft = 90; // 80
-        $tableWidthRight = 90;
-
-// Рисуем заголовки
-        $pdf->SetXY($leftX, $startY);
-        $pdf->Cell($tableWidthLeft, $rowHeight, 'Исполнитель', 1, 0, 'C');
-        $pdf->Cell($tableWidthRight, $rowHeight, 'Место для штампа', 1, 1, 'C');
-
-// Рисуем строки
-        $y = $startY + $rowHeight;
-        foreach ($executors as $executor) {
-            $pdf->SetXY($leftX, $y);
-            $pdf->Cell($tableWidthLeft, $rowHeight, $executor, 1, 0, 'L');
-
-            // Правая ячейка пустая (для штампа)
-            $pdf->Cell($tableWidthRight, $rowHeight, '', 1, 1, 'C');
-
-            $y += $rowHeight;
-        }
-
-// ------------------------
-// 3. Сохраняем финальный PDF
-// ------------------------
-        $pdf->Output($outputPdf, 'F');
-
-//        echo "PDF с таблицей сохранен: $outputPdf";
-
-
-        return $this->render('document/test.html.twig', [
-        ]);
-    }
-
-    #[Route('/executors_signature', name: 'app_executors_signature')]
+    #[Route('/executors_signature', name: 'app_executors_signature', methods: ['POST'])]
     public function executorsSignature(
         Request $request,
         DocumentRepository $documentRepository,
-        #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
         #[Autowire('%private_upload_dir_documents_updated%')] string $updatedDir,
-    ): Response
-    {
-        $data = json_decode($request->getContent(), true) ?? [];
-
+    ): JsonResponse {
         $currentUser = $this->getUser();
-        if (!$currentUser) {
+        if (!$currentUser instanceof User) {
             throw $this->createAccessDeniedException('Необходима авторизация.');
         }
+
+        // Только application/json: кросс-сайтовая форма с enctype=text/plain
+        // сюда не пройдёт без CORS-preflight.
+        if (!str_starts_with((string) $request->headers->get('Content-Type', ''), 'application/json')) {
+            return $this->json(['error' => 'Ожидается application/json'], Response::HTTP_UNSUPPORTED_MEDIA_TYPE);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        if (!is_array($data)) {
+            return $this->json(['error' => 'Некорректный JSON'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $documentId = filter_var($data['id'] ?? null, FILTER_VALIDATE_INT);
+        $stampPage = filter_var($data['page'] ?? null, FILTER_VALIDATE_INT);
+        $x = filter_var($data['x'] ?? null, FILTER_VALIDATE_FLOAT);
+        $y = filter_var($data['y'] ?? null, FILTER_VALIDATE_FLOAT);
+        if ($documentId === false || $documentId <= 0 || $stampPage === false || $stampPage < 1 || $x === false || $y === false) {
+            return $this->json(['error' => 'Некорректные параметры подписи'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $document = $documentRepository->findOneWithRelations($documentId);
+        if (!$document instanceof Document) {
+            return $this->json(['error' => 'Документ не найден'], Response::HTTP_NOT_FOUND);
+        }
+        if (!$this->canSign($document, $currentUser)) {
+            return $this->json(['error' => 'Подписывать документ может только его получатель'], Response::HTTP_FORBIDDEN);
+        }
+
+        // Guard и чтение — один и тот же файл (раньше проверялся original, а читался updated).
+        $updatedFile = $document->getUpdatedFile();
+        if ($updatedFile === null || $updatedFile === '') {
+            return $this->json(['error' => 'У документа нет PDF для подписания'], Response::HTTP_NOT_FOUND);
+        }
+        $sourcePdf = $updatedDir . '/' . basename($updatedFile);
+        if (!is_file($sourcePdf)) {
+            return $this->json(['error' => 'Файл документа не найден'], Response::HTTP_NOT_FOUND);
+        }
+
         $userName = trim(implode(' ', array_filter([
             $currentUser->getLastname(),
             $currentUser->getFirstname(),
@@ -226,132 +88,93 @@ final class DocumentSignController extends AbstractController
         ])));
         $signDate = (new \DateTime())->format('d.m.Y');
 
-        $document = $documentRepository->findOneWithRelations($data['id']);
-        if (!$document?->getOriginalFile()) {
-            throw $this->createNotFoundException('У документа нет файла для подписания.');
+        // координаты с фронта: x max = 150, y max = 267 (см. sign_document.html.twig)
+        $stampX = $x / 4;
+        $stampY = (840 - $y) / 3.15;
+
+        // Блокировка на файл: Fpdi читает и пишет один путь, параллельное подписание
+        // без неё могло испортить PDF.
+        $lockPath = $sourcePdf . '.lock';
+        $lock = fopen($lockPath, 'c');
+        if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+            if ($lock !== false) {
+                fclose($lock);
+            }
+
+            return $this->json(['error' => 'Документ сейчас подписывает другой пользователь, повторите позже'], Response::HTTP_CONFLICT);
         }
 
-        $sourcePdf = $updatedDir . '/' . $document->getUpdatedFile();      // исходный документ
-//        $outputPdf = $updatedDir . '/' . $document->getUpdatedAt();   // файл с добавленной подписью
-        $outputPdf = $sourcePdf;
+        try {
+            $pdf = new Fpdi();
+            $pageCount = $pdf->setSourceFile($sourcePdf);
+            if ($stampPage > $pageCount) {
+                return $this->json(['error' => sprintf('В документе %d стр.', $pageCount)], Response::HTTP_BAD_REQUEST);
+            }
 
-//        file_put_contents('./test.txt', $outputPdf);
+            for ($i = 1; $i <= $pageCount; $i++) {
+                $tpl = $pdf->importPage($i);
+                $size = $pdf->getTemplateSize($tpl);
 
-        // координаты с фронта
-        // x max = 150
-        // y max = 267
-        $stampPage = $data['page'];   // номер страницы (1-based!)
-        $stampX = $data['x'] / 4;    // X из JS
-        $stampY = (840 - $data['y']) / 3.15;    // Y из JS
+                $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
+                $pdf->useTemplate($tpl);
 
-        $pdf = new Fpdi();
-
-        $pageCount = $pdf->setSourceFile($sourcePdf);
-
-        for ($i = 1; $i <= $pageCount; $i++) {
-
-            $tpl = $pdf->importPage($i);
-            $size = $pdf->getTemplateSize($tpl);
-
-            $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
-            $pdf->useTemplate($tpl);
-
-            // 👇 ТОЛЬКО НА НУЖНОЙ СТРАНИЦЕ
-            if ($i === $stampPage) {
+                if ($i !== $stampPage) {
+                    continue;
+                }
 
                 $pdf->SetDrawColor(0, 0, 255);
                 $pdf->SetTextColor(0, 0, 255);
                 $pdf->SetLineWidth(1);
 
-                // размеры штампа
-                $stampWidth = 60;
-                $stampHeight = 18;
-
-                // Максимум x,y — размер страницы в мм (A4: 210×297). Чтобы штамп не вылезал:
-                // x: 0 .. (pageWidth - stampWidth),  y: 0 .. (pageHeight - stampHeight)
+                // Штамп не должен вылезать за страницу: x ∈ [0, W−w], y ∈ [0, H−h]
                 $pageW = (float) $size['width'];
                 $pageH = (float) $size['height'];
-                $stampX = max(0, min($stampX, $pageW - $stampWidth));
-                $stampY = max(0, min($stampY, $pageH - $stampHeight));
+                $sx = max(0, min($stampX, $pageW - self::STAMP_WIDTH_MM));
+                $sy = max(0, min($stampY, $pageH - self::STAMP_HEIGHT_MM));
 
-                // прямоугольный штамп
-                $pdf->Rect($stampX, $stampY, $stampWidth, $stampHeight);
-
-                // текст внутри
+                $pdf->Rect($sx, $sy, self::STAMP_WIDTH_MM, self::STAMP_HEIGHT_MM);
                 $pdf->SetFont('dejavusans', '', 10);
-                $pdf->SetXY($stampX + 3, $stampY + 2);
-                $pdf->MultiCell(
-                    $stampWidth - 6,
-                    5,
-                    "Подписано\n{$userName}\n{$signDate}",
-                    0,
-                    'C'
-                );
+                $pdf->SetXY($sx + 3, $sy + 2);
+                $pdf->MultiCell(self::STAMP_WIDTH_MM - 6, 5, "Подписано\n{$userName}\n{$signDate}", 0, 'C');
             }
+
+            // Атомарная запись: во временный файл рядом + rename, чтобы прерванная
+            // генерация не оставила документ битым.
+            $tmpPath = $sourcePdf . '.tmp-' . bin2hex(random_bytes(4));
+            $pdf->Output($tmpPath, 'F');
+            if (!@rename($tmpPath, $sourcePdf)) {
+                @unlink($tmpPath);
+
+                return $this->json(['error' => 'Не удалось сохранить подписанный файл'], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+        } finally {
+            // Lock-файл остаётся на диске намеренно: unlink после unlock открывал
+            // окно, когда второй писатель захватывал старый inode, а третий
+            // создавал новый файл и тоже получал замок — два процесса писали
+            // один PDF. Пустой .lock рядом с документом ничего не стоит.
+            flock($lock, LOCK_UN);
+            fclose($lock);
         }
 
-        $pdf->Output($outputPdf, 'F');
-
-        return $this->render('document/test.html.twig', [
-        ]);
+        return $this->json(['ok' => true]);
     }
 
-    #[Route('/convert_img_to_pdf', name: 'app_convert_img_to_pdf')]
-    public function convertImgToPdf(Request $request): Response
-    {
-        $projectDir = $this->getParameter('kernel.project_dir');
-        $filesDir   = $projectDir . '/public/files';
-
-        $imagePath = $filesDir . '/image.jpg';
-        $outputPdf = $filesDir . '/image_converted.pdf';
-
-// --------------------------
-// Создаём FPDI без первой страницы
-// --------------------------
-        $pdf = new Fpdi('P', 'mm', 'A4', true, 'UTF-8', false); // последний параметр false отключает авто AddPage
-
-// Явно добавляем страницу
-        $pdf->AddPage();
-
-// размеры картинки
-        list($imgWidth, $imgHeight) = getimagesize($imagePath);
-
-// размеры страницы PDF
-        $pageWidth  = $pdf->getPageWidth();
-        $pageHeight = $pdf->getPageHeight();
-
-// масштабирование
-        $scale = min($pageWidth / $imgWidth, $pageHeight / $imgHeight);
-
-        $newWidth  = $imgWidth * $scale;
-        $newHeight = $imgHeight * $scale;
-
-// центрируем
-        $x = ($pageWidth - $newWidth) / 2;
-        $y = ($pageHeight - $newHeight) / 2;
-
-// вставляем изображение
-        $pdf->Image($imagePath, $x, $y, $newWidth, $newHeight);
-
-// сохраняем PDF
-        $pdf->Output($outputPdf, 'F');
-
-
-
-        return $this->render('document/test.html.twig', [
-        ]);
-    }
-
-    #[Route('/sign_and_save_document/{id}', name: 'app_sign_and_save_document')]
+    #[Route('/sign_and_save_document/{id}', name: 'app_sign_and_save_document', requirements: ['id' => '\d+'])]
     public function signAndSaveDocument(
         int $id,
         DocumentRepository $documentRepository,
-        FileUploadService $fileUploadService,
-    ): Response
-    {
+    ): Response {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User) {
+            throw $this->createAccessDeniedException('Необходима авторизация.');
+        }
+
         $document = $documentRepository->findOneWithRelations($id);
         if (!$document?->getOriginalFile()) {
             throw $this->createNotFoundException('У документа нет файла для подписания.');
+        }
+        if (!$this->canSign($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Подписывать документ может только его получатель.');
         }
 
         // Показываем тот файл, который будет подписываться: updated (с таблицей исполнителей) или original
@@ -372,93 +195,23 @@ final class DocumentSignController extends AbstractController
             'id' => $document->getId(),
         ]);
     }
-}
 
-
-
-/*
-
-Round sign with text in last page
-
-$projectDir = $this->getParameter('kernel.project_dir');
-        $filesDir = $projectDir . '/public/files';
-        $sourcePdf = $filesDir . '/dummy_1.pdf';      // исходный документ
-        $outputPdf = $filesDir . '/dummy_sign.pdf';   // файл с добавленной подписью
-
-        $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
-
-// ------------------------
-// 1. Импортируем все страницы исходного PDF
-// ------------------------
-        $pageCount = $pdf->setSourceFile($sourcePdf);
-        for ($i = 1; $i <= $pageCount; $i++) {
-            $tpl = $pdf->importPage($i);
-            $size = $pdf->getTemplateSize($tpl);
-
-            $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
-            $pdf->useTemplate($tpl);
+    /** Подписывает получатель документа (исполнитель/адресат) или администратор. */
+    private function canSign(Document $document, User $user): bool
+    {
+        if ($this->isGranted('ROLE_ADMIN')) {
+            return true;
+        }
+        // Черновик подписывать нечего: получатель штампует только опубликованный документ.
+        if (!$document->isPublished()) {
+            return false;
+        }
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser()?->getId() === $user->getId()) {
+                return true;
+            }
         }
 
-// ------------------------
-// 2. Добавляем страницу подписи для текущего подписанта
-// ------------------------
-        $pdf->AddPage();
-        $pdf->SetFont('dejavusans', '', 12);
-
-// Текст подписи вверху страницы
-        $x_text = 20;
-        $y_text = 20;
-        $pdf->SetXY($x_text, $y_text);
-        $signerName = "Mike MilleanMol Parker";
-        $signerDate = "30.01.2026";
-        $signerId = "12345";
-
-        $pdf->MultiCell(0, 8,
-            "ДОКУМЕНТ ПОДПИСАН\n".
-            "простой электронной подписью\n\n".
-            "ФИО: {$signerName}\n".
-            "Дата и время: {$signerDate}\n".
-            "ID подписи: {$signerId}\n".
-            "Подпись сформирована в ИС «Документооборот»."
-        );
-
-// ------------------------
-// 2b. Штамп прямо под текстом, смещён вправо
-// ------------------------
-
-        $x_base = $x_text + 120;
-        $y_base = $pdf->GetY() + 50; // увеличил отступ с 10 до 20 мм, чтобы не накладывался на текст
-
-        $radius_outer = 25;
-        $radius_inner = 20;
-
-        $pdf->SetDrawColor(0, 0, 255);
-        $pdf->SetTextColor(0, 0, 255);
-
-// Внешний круг
-        $pdf->SetLineWidth(0.9);
-        $pdf->Circle($x_base, $y_base, $radius_outer);
-
-// Внутренний круг
-        $pdf->SetLineWidth(0.5);
-        $pdf->Circle($x_base, $y_base, $radius_inner);
-
-// Центрируем текст в штампе
-        $pdf->SetXY($x_base - $radius_inner, $y_base - ($radius_inner / 1.3)); // подвинул текст немного выше центра круга
-        $pdf->MultiCell(
-            $radius_inner * 2,
-            4,          // уменьшил высоту строки, чтобы текст компактнее
-            "Документ подписан\n{$signerName}\n{$signerDate}",
-            0,
-            'C'
-        );
-
-// ------------------------
-// 3. Сохраняем PDF
-// ------------------------
-        $pdf->Output($outputPdf, 'F');
-
-
-
-
-*/
+        return false;
+    }
+}

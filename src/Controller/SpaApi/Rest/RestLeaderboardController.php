@@ -6,6 +6,7 @@ namespace App\Controller\SpaApi\Rest;
 
 use App\Entity\Rest\RestGameScore;
 use App\Entity\User\User;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -19,6 +20,14 @@ final class RestLeaderboardController extends AbstractController
 {
     private const TOP = 10;
     private const DEFAULT_GAME = 'zuma';
+    /**
+     * Белый список игр (BE-26): произвольное имя давало 500 на varchar(50) и
+     * неограниченный рост таблицы; теперь строк не больше users × GAMES.
+     * Единственный клиент — analytics_platform/public/rest/index.js — шлёт 'zuma'.
+     */
+    private const GAMES = ['zuma'];
+    /** Реальный потолок очков игры; заодно отсекает «integer out of range» на INT-колонке. */
+    private const MAX_SCORE = 1_000_000;
 
     public function __construct(private readonly EntityManagerInterface $em)
     {
@@ -28,6 +37,9 @@ final class RestLeaderboardController extends AbstractController
     public function list(Request $request, #[CurrentUser] User $user): JsonResponse
     {
         $game = $this->resolveGame($request->query->getString('game'));
+        if ($game === null) {
+            return $this->json(['error' => 'invalid_game'], Response::HTTP_BAD_REQUEST);
+        }
 
         return $this->json(['items' => $this->topItems($game)]);
     }
@@ -40,8 +52,14 @@ final class RestLeaderboardController extends AbstractController
             return $this->json(['error' => 'invalid_score'], Response::HTTP_BAD_REQUEST);
         }
         $score = (int) $data['score'];
+        if ($score < 0 || $score > self::MAX_SCORE) {
+            return $this->json(['error' => 'invalid_score'], Response::HTTP_BAD_REQUEST);
+        }
 
         $game = $this->resolveGame(isset($data['game']) ? (string) $data['game'] : '');
+        if ($game === null) {
+            return $this->json(['error' => 'invalid_game'], Response::HTTP_BAD_REQUEST);
+        }
 
         $repo = $this->em->getRepository(RestGameScore::class);
         $row = $repo->findOneBy(['user' => $user, 'game' => $game]);
@@ -52,7 +70,13 @@ final class RestLeaderboardController extends AbstractController
             $row->setScore($score);
             $newRecord = true;
         }
-        $this->em->flush();
+        try {
+            $this->em->flush();
+        } catch (UniqueConstraintViolationException) {
+            // Два параллельных POST одного пользователя с новой игрой: второй
+            // упёрся в uniq_rest_game_score_user_game — это конфликт, а не 500.
+            return $this->json(['error' => 'conflict'], Response::HTTP_CONFLICT);
+        }
 
         return $this->json([
             'items' => $this->topItems($game),
@@ -78,10 +102,14 @@ final class RestLeaderboardController extends AbstractController
         }, $rows);
     }
 
-    private function resolveGame(string $game): string
+    /** null — игра не из белого списка. */
+    private function resolveGame(string $game): ?string
     {
         $game = trim($game);
+        if ($game === '') {
+            return self::DEFAULT_GAME;
+        }
 
-        return $game !== '' ? $game : self::DEFAULT_GAME;
+        return in_array($game, self::GAMES, true) ? $game : null;
     }
 }
