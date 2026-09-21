@@ -32,6 +32,7 @@ enum PurchaseHistoryAction: string
     case CLASSIFICATION_UPDATED = 'CLASSIFICATION_UPDATED';
     case STATUS_CHANGED = 'STATUS_CHANGED';
     case CANCELLED = 'CANCELLED';
+    /** Старые строки ленты: срочность сняли, писать новые нельзя. */
     case PRIORITY_CHANGED = 'PRIORITY_CHANGED';
     case FILE_UPLOADED = 'FILE_UPLOADED';
     case FILE_DELETED = 'FILE_DELETED';

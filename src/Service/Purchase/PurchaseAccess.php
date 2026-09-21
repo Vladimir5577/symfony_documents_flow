@@ -47,6 +47,10 @@ final class PurchaseAccess
 
     public function canView(PurchaseRequest $purchase, User $user): bool
     {
+        // ROLE_ADMIN чистит заявки целиком — ему нужна карточка, включая чужой черновик.
+        if ($this->roster->isAdmin($user)) {
+            return true;
+        }
         // Чужой черновик не видит никто: заявки ещё нет, есть замысел автора.
         if ($this->roster->can($user, PurchaseCapability::VIEW_ALL)
             && $purchase->getStatus() !== PurchaseStatus::DRAFT

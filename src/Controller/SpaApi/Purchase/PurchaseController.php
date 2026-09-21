@@ -226,25 +226,25 @@ final class PurchaseController extends AbstractController
     }
 
     /**
-     * Очередь разбора: заявки, ждущие решения этого человека, по порядку.
+     * Inbox: заявки, ждущие решения этого человека, по порядку.
      *
-     * Ролевого гейта нет — очередь сама и есть ответ: у того, к кому задачи
-     * разбора не адресованы, она пустая. Раньше гейт спрашивал «ты директор»,
-     * и второй разбирающий в маршруте потребовал бы правки контроллера.
+     * Ролевого гейта нет — очередь сама и есть ответ: пусто, если сейчас не
+     * твоя задача. Раньше это был только разбор директора; теперь любой этап,
+     * где указатель стоит на мне.
      *
      * Отдаётся карточками целиком, а не списком id: модалка показывает позиции
      * и обоснование, и догружать их по одной — лишний круг на каждую заявку.
      *
-     * Объявлен до /{id}: иначе «director-queue» уйдёт в маршрут карточки.
+     * Объявлен до /{id}: иначе «decision-required» уйдёт в маршрут карточки.
      */
-    #[Route('/director-queue', name: 'spa_api_purchases_director_queue', methods: ['GET'])]
-    public function directorQueue(#[CurrentUser] ?User $user): JsonResponse
+    #[Route('/decision-required', name: 'spa_api_purchases_decision_required', methods: ['GET'])]
+    public function decisionRequired(#[CurrentUser] ?User $user): JsonResponse
     {
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
 
-        $queue = $this->purchaseRepo->findTriageQueueFor($user, $this->roster->roleCodesOf($user));
+        $queue = $this->purchaseRepo->findDecisionRequiredFor($user, $this->roster->roleCodesOf($user));
 
         return $this->json([
             'items' => array_map(
@@ -405,12 +405,31 @@ final class PurchaseController extends AbstractController
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
-        // Строки вложений уедут сами (orphanRemoval), а объекты в бакете — нет:
-        // ключи хранятся только в этих строках, после удаления их не найти.
-        $this->fileStorage->deleteAllFor($purchase);
+        $this->wipePurchase($purchase);
 
-        $this->em->remove($purchase);
-        $this->em->flush();
+        return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    /**
+     * Полное удаление любой заявки. Только ROLE_ADMIN: авторский DELETE
+     * режет всё, кроме своего черновика.
+     */
+    #[Route('/{id}/purge', name: 'spa_api_purchases_purge', requirements: ['id' => '\d+'], methods: ['DELETE'])]
+    public function purge(int $id, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+        if (!$this->isGranted(UserRole::ROLE_ADMIN->value)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->wipePurchase($purchase);
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }
@@ -519,6 +538,9 @@ final class PurchaseController extends AbstractController
      */
     private function resolveScope(User $user): array
     {
+        if ($this->roster->isAdmin($user)) {
+            return [null, null];
+        }
         if ($this->access->can($user, PurchaseCapability::VIEW_ALL)) {
             return [null, PurchaseStatus::getNonDraft()];
         }
@@ -693,5 +715,16 @@ final class PurchaseController extends AbstractController
         $purchase->setCategory($category);
 
         return null;
+    }
+
+    /**
+     * Физически сносит заявку: файлы в бакете, потом строку.
+     * Дочерние этапы/задачи/комменты уедут каскадом.
+     */
+    private function wipePurchase(PurchaseRequest $purchase): void
+    {
+        $this->fileStorage->deleteAllFor($purchase);
+        $this->em->remove($purchase);
+        $this->em->flush();
     }
 }

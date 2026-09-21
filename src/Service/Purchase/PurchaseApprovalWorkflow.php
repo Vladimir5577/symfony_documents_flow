@@ -11,7 +11,6 @@ use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseHistoryAction;
-use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseStatus;
@@ -451,21 +450,6 @@ final class PurchaseApprovalWorkflow
         $this->save($request);
 
         $this->notifier->notifyCancelled($request, $actor, $comment);
-    }
-
-    /** Смена приоритета. */
-    public function setPriority(PurchaseRequest $request, User $actor, PurchasePriority $priority): void
-    {
-        if ($request->getStatus()->isFinal()) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
-        }
-        if ($request->getPriority() === $priority) {
-            return;
-        }
-
-        $request->setPriority($priority);
-        $this->history->log($request, $actor, PurchaseHistoryAction::PRIORITY_CHANGED, $priority->getLabel());
-        $this->save($request);
     }
 
     /**

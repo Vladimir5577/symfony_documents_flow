@@ -15,7 +15,6 @@ use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\Purchase\PurchaseRouteTemplateStage;
 use App\Entity\Purchase\PurchaseRouteTemplateTask;
 use App\Entity\User\User;
-use App\Enum\Purchase\PurchaseCapability;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
@@ -43,7 +42,6 @@ final class PurchaseApiPresenter
     public function presentListItem(PurchaseRequest $request): array
     {
         $status = $request->getStatus();
-        $priority = $request->getPriority();
         $law = $request->getLaw();
         $method = $request->getMethod();
 
@@ -51,7 +49,6 @@ final class PurchaseApiPresenter
             'id' => $request->getId(),
             'title' => $request->getTitle(),
             'status' => ['value' => $status->value, 'label' => $status->getLabel()],
-            'priority' => ['value' => $priority->value, 'label' => $priority->getLabel()],
             'organization' => [
                 'id' => $request->getOrganization()?->getId(),
                 'name' => $request->getOrganization()?->getName(),
@@ -411,8 +408,6 @@ final class PurchaseApiPresenter
             // Роль здесь не спрашиваем: задача моя — значит она мне и адресована.
             'canEditSourcing' => $stage?->getPurpose() === PurchaseStagePurpose::SOURCING,
             'canCancel' => $this->access->canCancel($request, $user),
-            'canSetPriority' => !$status->isFinal()
-                && $this->access->can($user, PurchaseCapability::SUPERVISE),
             'canComment' => $this->access->canView($request, $user),
         ];
     }

@@ -6,7 +6,6 @@ use App\Entity\Purchase\PurchaseApprovalStage;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseStageStatus;
-use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\Purchase\PurchaseTaskAssignment;
 use App\Enum\Purchase\PurchaseTaskDecision;
@@ -26,30 +25,29 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     }
 
     /**
-     * Очередь разбора: заявки, где этап разбора ждёт решения этого человека.
+     * Inbox: заявки, где сейчас очередь этого человека — любой этап, не только разбор.
      *
-     * Гейта «ты директор» здесь нет — очередь и есть ответ на вопрос «что ждёт
-     * меня»: пусто у того, к кому задачи разбора не адресованы.
-     *
-     * Прежде здесь стоял подзапрос «перед этим шагом не осталось незакрытых»:
-     * шагов разбора в маршруте было два, и «шаг не решён» не значило «заявка
-     * стоит на нём». Теперь разбор в маршруте один, а стоит ли на нём заявка,
-     * говорит статус этапа.
+     * Зеркало PurchaseAccess::findMyActiveTask: заявка в маршруте, этап ACTIVE,
+     * на нём нерешённая задача, адресованная лично, ролью или как автору.
+     * Гейта по роли модуля нет — пусто, если решать нечего.
      *
      * @param list<string> $roleCodes роли модуля, выданные пользователю
      * @return list<PurchaseRequest>
      */
-    public function findTriageQueueFor(User $user, array $roleCodes): array
+    public function findDecisionRequiredFor(User $user, array $roleCodes): array
     {
         $qb = $this->createQueryBuilder('p')
             ->innerJoin('p.stages', 's')
             ->innerJoin('s.tasks', 't')
-            ->andWhere('p.status = :onApproval')
-            ->andWhere('s.purpose = :triage')
+            ->andWhere('p.status IN (:inRoute)')
             ->andWhere('s.status = :active')
             ->andWhere('t.decision = :pending')
-            ->setParameter('onApproval', PurchaseStatus::ON_APPROVAL)
-            ->setParameter('triage', PurchaseStagePurpose::TRIAGE)
+            ->setParameter('inRoute', [
+                PurchaseStatus::ON_APPROVAL,
+                PurchaseStatus::APPROVED,
+                PurchaseStatus::INVOICE_PAID,
+                PurchaseStatus::DELIVERED,
+            ])
             ->setParameter('active', PurchaseStageStatus::ACTIVE)
             ->setParameter('pending', PurchaseTaskDecision::PENDING)
             ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
@@ -108,9 +106,7 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
 
         $items = $qb
-            ->addSelect("CASE WHEN pr.priority = 'URGENT' THEN 0 ELSE 1 END AS HIDDEN prioritySort")
-            ->orderBy('prioritySort', 'ASC')
-            ->addOrderBy('pr.createdAt', 'DESC')
+            ->orderBy('pr.createdAt', 'DESC')
             ->setFirstResult(($page - 1) * $pageSize)
             ->setMaxResults($pageSize)
             ->getQuery()

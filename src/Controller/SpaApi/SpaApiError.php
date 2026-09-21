@@ -87,7 +87,6 @@ final class SpaApiError
     public const PURCHASE_COMMENT_REQUIRED = 'purchase_comment_required';
     public const PURCHASE_ITEMS_REQUIRED = 'purchase_items_required';
     public const PURCHASE_TITLE_REQUIRED = 'purchase_title_required';
-    public const PURCHASE_INVALID_PRIORITY = 'purchase_invalid_priority';
     public const PURCHASE_INVALID_ITEM = 'purchase_invalid_item';
     public const PURCHASE_INVALID_DUE_DATE = 'purchase_invalid_due_date';
     public const PURCHASE_FILE_NOT_FOUND = 'purchase_file_not_found';
