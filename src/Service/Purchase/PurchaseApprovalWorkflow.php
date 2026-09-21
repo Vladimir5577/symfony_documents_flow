@@ -144,6 +144,11 @@ final class PurchaseApprovalWorkflow
 
         if (!$stage->isSatisfied()) {
             $this->save($request);
+            $this->notifier->notifyChanged(
+                $request,
+                $actor,
+                sprintf('Заявка на закупку «%s» продвинулась', $request->getTitle()),
+            );
 
             return;
         }
@@ -288,6 +293,12 @@ final class PurchaseApprovalWorkflow
         );
         $this->save($request);
 
+        $this->notifier->notifyChanged(
+            $request,
+            $actor,
+            sprintf('Согласование по закупке «%s» снято', $request->getTitle()),
+            'Согласование снято',
+        );
         $this->notifier->notifyStageActivated($request, $actor);
     }
 
@@ -604,7 +615,11 @@ final class PurchaseApprovalWorkflow
             PurchaseStatus::INVOICE_PAID => $this->notifier->notifyStatusChanged($request, $actor),
             PurchaseStatus::DELIVERED => $this->notifier->notifyDelivered($request, $actor),
             PurchaseStatus::DONE => $this->notifier->notifyConfirmed($request, $actor),
-            default => null,
+            default => $this->notifier->notifyChanged(
+                $request,
+                $actor,
+                sprintf('Заявка на закупку «%s» продвинулась', $request->getTitle()),
+            ),
         };
 
         if ($request->getCurrentStage() !== null) {

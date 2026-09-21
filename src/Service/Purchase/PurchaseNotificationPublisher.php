@@ -8,7 +8,7 @@ use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseCapability;
-use App\Enum\Purchase\PurchaseStagePurpose;
+use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\Purchase\PurchaseTaskAssignment;
 use App\Enum\User\UserRole;
 use App\Repository\User\UserRepository;
@@ -22,6 +22,10 @@ use App\Service\Notification\NotificationPublisher;
  * другом репозитории и на другом языке: добавить тип события значило править
  * и деплоить чужой сервис. Теперь текст живёт рядом с бизнес-логикой, которая
  * его и знает.
+ *
+ * Рассылка изменений — тем, кому заявка видна: автор, VIEW_ALL, маршрут и
+ * ROLE_ADMIN (карточку он видит всегда, в том числе чужой черновик).
+ * «Ждёт вашего решения» и «Вы ответственный» остаются адресными.
  */
 final class PurchaseNotificationPublisher
 {
@@ -29,18 +33,18 @@ final class PurchaseNotificationPublisher
 
     public function __construct(
         private readonly NotificationPublisher $publisher,
-        private readonly UserRepository $userRepository,
         private readonly PurchaseRoster $roster,
+        private readonly UserRepository $users,
     ) {}
 
-    /** Подана (или повторно подана) на рассмотрение — отделу закупок. */
+    /** Подана (или повторно подана) на рассмотрение — всем, кому она видна. */
     public function notifySubmitted(PurchaseRequest $request, User $actor, bool $resubmitted): void
     {
         $title = $resubmitted
             ? sprintf('Заявка на закупку «%s» подана повторно', $this->titleOf($request))
             : sprintf('Новая заявка на закупку «%s» на рассмотрении', $this->titleOf($request));
 
-        $this->publish('submitted', $request, $actor, $this->moduleStaff(), $title, 'Новая заявка на закупку');
+        $this->publish('submitted', $request, $actor, $this->viewersOf($request), $title, 'Новая заявка на закупку');
     }
 
     /**
@@ -96,96 +100,93 @@ final class PurchaseNotificationPublisher
         );
     }
 
-    /** Забракованы документы — тем, кто вёл ресёрч: переделывать им. */
+    /** Забракованы документы — всем, кому заявка видна. */
     public function notifyReturnedToDepartment(PurchaseRequest $request, User $actor, string $comment): void
     {
-        $recipients = $this->sourcingHolders($request);
-
         $this->publish(
-            'returned_to_department', $request, $actor, $recipients !== [] ? $recipients : $this->moduleStaff(),
+            'returned_to_department', $request, $actor, $this->viewersOf($request),
             sprintf('Закупка «%s» вернулась в отдел закупок', $this->titleOf($request)),
             'Возврат в отдел закупок',
             $comment !== '' ? $comment : null,
         );
     }
 
-    /** Согласована — менеджерам департамента и тем, кто её будет исполнять. */
+    /** Согласована — всем, кому заявка видна. */
     public function notifyApproved(PurchaseRequest $request, User $actor): void
     {
-        $recipients = array_merge($this->departmentManagers($request), $this->executionStaff());
-
         $this->publish(
-            'approved', $request, $actor, $recipients,
+            'approved', $request, $actor, $this->viewersOf($request),
             sprintf('Заявка на закупку «%s» согласована', $this->titleOf($request)),
             'Закупка согласована',
         );
     }
 
-    /** Возвращена на доработку — менеджерам департамента. */
+    /** Возвращена на доработку — всем, кому заявка видна. */
     public function notifyRejected(PurchaseRequest $request, User $actor, string $comment): void
     {
         $this->publish(
-            'rejected', $request, $actor, $this->departmentManagers($request),
+            'rejected', $request, $actor, $this->viewersOf($request),
             sprintf('Заявка на закупку «%s» возвращена на доработку', $this->titleOf($request)),
             'Возврат на доработку',
             $comment !== '' ? $comment : null,
         );
     }
 
-    /** Продвижение по конвейеру исполнения — менеджерам департамента. */
+    /** Продвижение по конвейеру — всем, кому заявка видна. */
     public function notifyStatusChanged(PurchaseRequest $request, User $actor): void
     {
         $this->publish(
-            'status_changed', $request, $actor, $this->departmentManagers($request),
+            'status_changed', $request, $actor, $this->viewersOf($request),
             sprintf('Заявка на закупку «%s»: %s', $this->titleOf($request), $request->getStatus()->getLabel()),
             'Статус закупки изменён',
         );
     }
 
-    /** Доставлено, пора принимать — менеджерам департамента. */
+    /**
+     * Сдвиг по маршруту без смены статуса (подпись, отзыв) — зрителям заявки.
+     * Адресное «ждёт вашего решения» шлёт notifyStageActivated отдельно.
+     */
+    public function notifyChanged(PurchaseRequest $request, User $actor, string $title, string $typeLabel = 'Заявка обновлена'): void
+    {
+        $this->publish('changed', $request, $actor, $this->viewersOf($request), $title, $typeLabel);
+    }
+
+    /** Доставлено — всем, кому заявка видна. */
     public function notifyDelivered(PurchaseRequest $request, User $actor): void
     {
         $this->publish(
-            'delivered', $request, $actor, $this->departmentManagers($request),
+            'delivered', $request, $actor, $this->viewersOf($request),
             sprintf('Закупка «%s» доставлена — подтвердите получение', $this->titleOf($request)),
             'Закупка доставлена',
         );
     }
 
-    /** Департамент подтвердил получение — исполнителю. */
+    /** Департамент подтвердил получение — всем, кому заявка видна. */
     public function notifyConfirmed(PurchaseRequest $request, User $actor): void
     {
         $this->publish(
-            'confirmed', $request, $actor, array_filter([$request->getExecutor()]),
+            'confirmed', $request, $actor, $this->viewersOf($request),
             sprintf('Получение закупки «%s» подтверждено', $this->titleOf($request)),
             'Получение подтверждено',
         );
     }
 
-    /** Отменена — всем участникам процесса. */
+    /** Отменена — всем, кому заявка видна. */
     public function notifyCancelled(PurchaseRequest $request, User $actor, ?string $comment): void
     {
-        $recipients = array_merge(
-            $this->departmentManagers($request),
-            $this->supervisors(),
-            array_filter([$request->getExecutor()]),
-        );
-
         $this->publish(
-            'cancelled', $request, $actor, $recipients,
+            'cancelled', $request, $actor, $this->viewersOf($request),
             sprintf('Заявка на закупку «%s» отменена', $this->titleOf($request)),
             'Заявка отменена',
             $comment !== null && $comment !== '' ? $comment : null,
         );
     }
 
-    /** Новый комментарий — автору заявки и исполнителю. */
+    /** Новый комментарий — всем, кому заявка видна. */
     public function notifyCommentAdded(PurchaseRequest $request, User $actor): void
     {
-        $recipients = array_filter([$request->getCreatedBy(), $request->getExecutor()]);
-
         $this->publish(
-            'comment_added', $request, $actor, $recipients,
+            'comment_added', $request, $actor, $this->viewersOf($request),
             sprintf('%s оставил(а) комментарий к закупке «%s»', $this->nameOf($actor), $this->titleOf($request)),
             'Комментарий к закупке',
         );
@@ -228,27 +229,46 @@ final class PurchaseNotificationPublisher
     }
 
     /**
-     * Кому уходят уведомления «модулю», а не шагу. Спрашиваем полномочие, а не
-     * роль: набор ролей ещё будет меняться, и зашивать здесь «Отдел закупок»
-     * значило бы, что переехавшая функция тихо перестанет получать письма.
+     * Кому видна заявка: автор, исполнитель, ROLE_ADMIN, VIEW_ALL и маршрут.
+     * Черновик: VIEW_ALL не видит, ROLE_ADMIN видит — и письмо ему уходит.
      *
      * @return list<User>
      */
-    private function moduleStaff(): array
+    private function viewersOf(PurchaseRequest $request): array
     {
-        return $this->roster->usersWith(PurchaseCapability::MANAGE_DICTIONARIES);
-    }
+        $recipients = [];
+        $add = static function (?User $user) use (&$recipients): void {
+            if ($user !== null && $user->getId() !== null) {
+                $recipients[$user->getId()] = $user;
+            }
+        };
 
-    /** @return list<User> */
-    private function supervisors(): array
-    {
-        return $this->roster->usersWith(PurchaseCapability::SUPERVISE);
-    }
+        $add($request->getCreatedBy());
+        $add($request->getExecutor());
+        foreach ($this->users->findByRoleName(UserRole::ROLE_ADMIN->value) as $user) {
+            $add($user);
+        }
 
-    /** @return list<User> */
-    private function executionStaff(): array
-    {
-        return $this->roster->usersWith(PurchaseCapability::RUN_EXECUTION);
+        if ($request->getStatus() === PurchaseStatus::DRAFT) {
+            return array_values($recipients);
+        }
+
+        foreach ($this->roster->usersWith(PurchaseCapability::VIEW_ALL) as $user) {
+            $add($user);
+        }
+
+        foreach ($request->getAllTasks() as $task) {
+            foreach ($this->addresseesOf($task, $request) as $user) {
+                $add($user);
+            }
+            // canView считает участником любого носителя роли задачи, даже если
+            // шаг уже адресован конкретному человеку.
+            foreach ($this->roster->usersOfRole($task->getRoleCode()) as $user) {
+                $add($user);
+            }
+        }
+
+        return array_values($recipients);
     }
 
     /**
@@ -271,40 +291,5 @@ final class PurchaseNotificationPublisher
         }
 
         return $this->roster->usersOfRole($task->getRoleCode());
-    }
-
-    /**
-     * Адресаты того этапа, где заявка делает ресёрч. Возврат документов
-     * адресуется им, а не «отделу закупок» вообще: в маршруте с двумя закупками
-     * переделывать будет тот, кто этот пакет и собирал.
-     *
-     * @return list<User>
-     */
-    private function sourcingHolders(PurchaseRequest $request): array
-    {
-        $stage = $request->findStageByPurpose(PurchaseStagePurpose::SOURCING);
-        if ($stage === null) {
-            return [];
-        }
-
-        $recipients = [];
-        foreach ($stage->getTasks() as $task) {
-            foreach ($this->addresseesOf($task, $request) as $user) {
-                $recipients[$user->getId()] = $user;
-            }
-        }
-
-        return array_values($recipients);
-    }
-
-    /** @return list<User> */
-    private function departmentManagers(PurchaseRequest $request): array
-    {
-        $organization = $request->getOrganization();
-        if ($organization === null) {
-            return [];
-        }
-
-        return $this->userRepository->findByRoleName(UserRole::ROLE_MANAGER->value, $organization);
     }
 }
