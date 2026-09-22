@@ -4,6 +4,7 @@ namespace App\Repository\Purchase;
 
 use App\Entity\Purchase\PurchaseApprovalStage;
 use App\Entity\Purchase\PurchaseRequest;
+use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseStatus;
@@ -22,6 +23,21 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, PurchaseRequest::class);
+    }
+
+    /**
+     * Заявки, которые ссылаются на заготовку: назначенный маршрут или уже собранный снимок.
+     *
+     * @return list<PurchaseRequest>
+     */
+    public function findUsingTemplate(PurchaseRouteTemplate $template): array
+    {
+        return $this->createQueryBuilder('p')
+            ->leftJoin('p.files', 'f')->addSelect('f')
+            ->andWhere('p.routeTemplate = :template OR p.appliedRouteTemplate = :template')
+            ->setParameter('template', $template)
+            ->getQuery()
+            ->getResult();
     }
 
     /**
@@ -83,25 +99,40 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         ?float $minAmount = null,
         array $approverRoleCodes = [],
     ): array {
-        $qb = $this->createFilteredQueryBuilder($createdById, $statuses, $search, $minAmount);
+        $ownerAndApprover = $createdById !== null && $approverUserId !== null;
+        $qb = $this->createFilteredQueryBuilder(
+            $ownerAndApprover ? null : $createdById,
+            $statuses,
+            $search,
+            $minAmount,
+        );
 
         // «Я согласант» — заявки, где человек есть в маршруте: лично, через роль
-        // или как автор задачи, адресованной заявителю.
+        // или как автор задачи, адресованной заявителю. Вместе с createdBy —
+        // свои ИЛИ назначенные: иначе зам видит заявку только в inbox.
         if ($approverUserId !== null) {
-            $qb->join(PurchaseApprovalStage::class, 'fs', 'WITH', 'fs.purchaseRequest = pr')
-                ->join('fs.tasks', 'ft')
+            $join = $ownerAndApprover ? 'leftJoin' : 'join';
+            $qb->$join(PurchaseApprovalStage::class, 'fs', 'WITH', 'fs.purchaseRequest = pr')
+                ->$join('fs.tasks', 'ft')
                 ->setParameter('user', $approverUserId)
                 ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
-                ->andWhere($this->addressedExpr($approverRoleCodes, 'ft', 'pr'))
                 ->distinct();
 
             if ($approverRoleCodes !== []) {
                 $qb->setParameter('roleCodes', $approverRoleCodes, ArrayParameterType::STRING);
             }
+
+            $addressed = $this->addressedExpr($approverRoleCodes, 'ft', 'pr');
+            if ($ownerAndApprover) {
+                $qb->andWhere('pr.createdBy = :createdById OR ' . $addressed)
+                    ->setParameter('createdById', $createdById);
+            } else {
+                $qb->andWhere($addressed);
+            }
         }
 
         $total = (int) (clone $qb)
-            ->select('COUNT(pr.id)')
+            ->select($approverUserId !== null ? 'COUNT(DISTINCT pr.id)' : 'COUNT(pr.id)')
             ->getQuery()
             ->getSingleScalarResult();
 

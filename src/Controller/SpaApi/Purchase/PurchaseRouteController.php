@@ -13,11 +13,13 @@ use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseTaskAssignment;
 use App\Enum\User\UserRole;
+use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Repository\Purchase\PurchaseRouteDefaultRepository;
 use App\Repository\Purchase\PurchaseRouteTemplateRepository;
 use App\Service\Purchase\ApprovalRouteBuilder;
 use App\Service\Purchase\ApprovalRouteEditor;
 use App\Service\Purchase\PurchaseApiPresenter;
+use App\Service\Purchase\PurchaseFileStorageService;
 use App\Service\Purchase\PurchaseRouteException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -43,6 +45,8 @@ final class PurchaseRouteController extends AbstractController
     public function __construct(
         private readonly PurchaseRouteTemplateRepository $templates,
         private readonly PurchaseRouteDefaultRepository $defaults,
+        private readonly PurchaseRequestRepository $requests,
+        private readonly PurchaseFileStorageService $files,
         private readonly ApprovalRouteEditor $editor,
         private readonly ApprovalRouteBuilder $builder,
         private readonly PurchaseApiPresenter $presenter,
@@ -188,11 +192,34 @@ final class PurchaseRouteController extends AbstractController
     }
 
     /**
-     * Включить или выключить заготовку: body {isActive}.
-     *
-     * Удаления нет намеренно: на заготовку ссылаются прошедшие заявки, и вопрос
-     * «по какому регламенту это согласовали» должен иметь ответ.
+     * Снести заготовку. Заявки, которые на неё ссылаются, удаляются первыми.
      */
+    #[Route('/{id}', name: 'spa_api_purchase_routes_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
+    public function delete(int $id, #[CurrentUser] ?User $user): JsonResponse
+    {
+        return $this->manage($user, function () use ($id): JsonResponse {
+            $template = $this->templates->find($id);
+            if ($template === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+            }
+
+            $requests = $this->requests->findUsingTemplate($template);
+            $storageKeys = [];
+            foreach ($requests as $request) {
+                foreach ($request->getFiles() as $file) {
+                    $storageKeys[] = $file->getStorageKey();
+                }
+            }
+            $this->editor->delete($template, $requests);
+            foreach ($storageKeys as $storageKey) {
+                $this->files->delete($storageKey);
+            }
+
+            return $this->json(null, Response::HTTP_NO_CONTENT);
+        });
+    }
+
+    /** Включить или выключить заготовку: body {isActive}. */
     #[Route('/{id}/active', name: 'spa_api_purchase_routes_active', requirements: ['id' => '\d+'], methods: ['PATCH'])]
     public function setActive(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {

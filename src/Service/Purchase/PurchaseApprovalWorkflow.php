@@ -614,7 +614,6 @@ final class PurchaseApprovalWorkflow
             PurchaseStatus::APPROVED => $this->notifier->notifyApproved($request, $actor),
             PurchaseStatus::INVOICE_PAID => $this->notifier->notifyStatusChanged($request, $actor),
             PurchaseStatus::DELIVERED => $this->notifier->notifyDelivered($request, $actor),
-            PurchaseStatus::DONE => $this->notifier->notifyConfirmed($request, $actor),
             default => $this->notifier->notifyChanged(
                 $request,
                 $actor,

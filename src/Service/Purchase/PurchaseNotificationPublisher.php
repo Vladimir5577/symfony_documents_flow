@@ -161,16 +161,6 @@ final class PurchaseNotificationPublisher
         );
     }
 
-    /** Департамент подтвердил получение — всем, кому заявка видна. */
-    public function notifyConfirmed(PurchaseRequest $request, User $actor): void
-    {
-        $this->publish(
-            'confirmed', $request, $actor, $this->viewersOf($request),
-            sprintf('Получение закупки «%s» подтверждено', $this->titleOf($request)),
-            'Получение подтверждено',
-        );
-    }
-
     /** Отменена — всем, кому заявка видна. */
     public function notifyCancelled(PurchaseRequest $request, User $actor, ?string $comment): void
     {

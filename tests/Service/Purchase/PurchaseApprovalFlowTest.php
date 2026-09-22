@@ -705,9 +705,9 @@ final class PurchaseApprovalFlowTest extends TestCase
 
     /**
      * Поставку принимает автор — так настроен маршрут, а не зашито в коде.
-     * Пройденное закрытие уводит заявку в архив.
+     * Закрытие статус не меняет: заявка остаётся доставленной.
      */
-    public function testFullRouteEndsInDone(): void
+    public function testFullRouteStaysDeliveredAfterClosing(): void
     {
         $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
         $author = $request->getCreatedBy();
@@ -728,7 +728,7 @@ final class PurchaseApprovalFlowTest extends TestCase
         $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_CLOSING), $closer);
         $this->assertPurchaseNotified($request, $closer);
 
-        self::assertSame(PurchaseStatus::DONE, $request->getStatus());
+        self::assertSame(PurchaseStatus::DELIVERED, $request->getStatus());
         self::assertTrue($request->isRouteComplete());
     }
 

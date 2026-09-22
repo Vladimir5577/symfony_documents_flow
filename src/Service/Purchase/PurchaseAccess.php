@@ -289,7 +289,7 @@ final class PurchaseAccess
         }
 
         return $this->roster->can($user, PurchaseCapability::RUN_EXECUTION)
-            && in_array($status, [PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED], true);
+            && $status === PurchaseStatus::INVOICE_PAID;
     }
 
     public function can(User $user, PurchaseCapability $capability): bool

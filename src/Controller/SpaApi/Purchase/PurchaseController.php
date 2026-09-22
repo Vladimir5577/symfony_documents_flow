@@ -75,6 +75,9 @@ final class PurchaseController extends AbstractController
         [$createdById, $visibleStatuses] = $asApprover
             ? [null, null]
             : $this->resolveScope($user);
+        // Без VIEW_ALL список = свои + те, где я в маршруте. Иначе зам видит
+        // назначенную заявку только в inbox, а в таблице её нет.
+        $asParticipant = $asApprover || $createdById !== null;
 
         $statuses = $visibleStatuses;
         // Мультивыбор чекбоксами: statuses=A,B,C. Приоритетнее одиночного status (вместе не шлются).
@@ -123,9 +126,9 @@ final class PurchaseController extends AbstractController
             $search !== '' ? $search : null,
             $page,
             $pageSize,
-            $asApprover ? (int) $user->getId() : null,
+            $asParticipant ? (int) $user->getId() : null,
             $minAmount,
-            $asApprover ? $this->roster->roleCodesOf($user) : [],
+            $asParticipant ? $this->roster->roleCodesOf($user) : [],
         );
 
         return $this->json([
@@ -164,9 +167,9 @@ final class PurchaseController extends AbstractController
         // и шагом не является. Общее правило — «следующее действие доступно мне».
         $actionRequired = $approverPending;
         if ($this->access->can($user, PurchaseCapability::RUN_EXECUTION)) {
-            // APPROVED — оплатить, DELIVERED — приложить УПД и убрать в архив
-            $actionRequired += ($byStatus[PurchaseStatus::APPROVED->value] ?? 0)
-                + ($byStatus[PurchaseStatus::DELIVERED->value] ?? 0);
+            // APPROVED — оплатить. Доставленное в счётчик не входит: это конец пути,
+            // а этап закрытия, если он ещё открыт, уже сидит в approverPending.
+            $actionRequired += ($byStatus[PurchaseStatus::APPROVED->value] ?? 0);
         }
         if ($createdById !== null) {
             // Счётчики автора: вернули на доработку и оплаченное — ждём
@@ -527,8 +530,8 @@ final class PurchaseController extends AbstractController
      * [createdById|null, visibleStatuses|null].
      *
      * Носитель VIEW_ALL видит весь путь заявки, кроме чужих черновиков;
-     * остальные — только свои, а заявки, где они участники маршрута, отдаёт
-     * режим as_approver.
+     * остальные — свои и те, где они в маршруте. as_approver сужает список
+     * только до приглашённых.
      *
      * Раньше здесь было два набора статусов — директору и отделу закупок, — и
      * различались они одним REJECTED. Разделять из-за него право надвое незачем:
