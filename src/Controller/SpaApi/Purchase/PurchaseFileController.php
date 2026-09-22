@@ -11,6 +11,7 @@ use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseStatus;
+use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
@@ -154,6 +155,50 @@ final class PurchaseFileController extends AbstractController
         return $response;
     }
 
+    #[Route('/{fileId}', name: 'spa_api_purchases_files_rename', requirements: ['fileId' => '\d+'], methods: ['PATCH'])]
+    public function rename(int $id, int $fileId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $fileEntity = $this->findFile($purchase->getFiles()->toArray(), $fileId);
+        if ($fileEntity === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        if (!$this->canRenameFile($purchase, $fileEntity, $user)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        $name = trim(str_replace(["\r", "\n"], '', (string) (is_array($payload) ? ($payload['originalName'] ?? '') : '')));
+        if ($name === '') {
+            return $this->json(['error' => SpaApiError::PURCHASE_FILE_NAME_REQUIRED], Response::HTTP_BAD_REQUEST);
+        }
+        // Колонка 255 — как при загрузке, длинное имя обрезаем, иначе UPDATE упадёт.
+        $name = mb_substr($name, 0, 255);
+        if ($name === $fileEntity->getOriginalName()) {
+            return $this->json($this->presenter->presentFile($fileEntity));
+        }
+
+        $previous = (string) $fileEntity->getOriginalName();
+        $fileEntity->setOriginalName($name);
+        $this->editor->log(
+            $purchase,
+            $user,
+            PurchaseHistoryAction::FILE_RENAMED,
+            sprintf('%s: %s → %s', $fileEntity->getType()->getLabel(), $previous, $name),
+        );
+
+        return $this->json($this->presenter->presentFile($fileEntity));
+    }
+
     #[Route('/{fileId}', name: 'spa_api_purchases_files_delete', requirements: ['fileId' => '\d+'], methods: ['DELETE'])]
     public function delete(int $id, int $fileId, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -171,14 +216,16 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        // Обязательное вложение после прохождения его стадии не удалить уже никому:
-        // иначе оплаченная заявка осталась бы без договора, а поданная — без записки.
-        if ($fileEntity->getType()->isLockedAt($purchase->getStatus())) {
+        $isAdmin = $this->isGranted(UserRole::ROLE_ADMIN->value);
+        // Обязательное вложение после прохождения его стадии не удалить уже никому,
+        // кроме админа: иначе оплаченная заявка осталась бы без договора.
+        if (!$isAdmin && $fileEntity->getType()->isLockedAt($purchase->getStatus())) {
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
         }
 
-        // Удалять может загрузивший или автор заявки, пока она редактируема
-        $canDelete = $fileEntity->getUploadedBy()?->getId() === $user->getId()
+        // Удалять может загрузивший, админ или автор заявки, пока она редактируема
+        $canDelete = $isAdmin
+            || $fileEntity->getUploadedBy()?->getId() === $user->getId()
             || ($this->isManagerOwner($purchase, $user) && $purchase->getStatus()->isEditable());
         if (!$canDelete) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
@@ -199,6 +246,17 @@ final class PurchaseFileController extends AbstractController
         $this->editor->log($purchase, $user, PurchaseHistoryAction::FILE_DELETED, $description);
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    /** Загрузивший, админ или автор заявки, пока она редактируема. Блокировка договора не мешает: имя — не содержимое. */
+    private function canRenameFile(PurchaseRequest $purchase, PurchaseRequestFile $file, User $user): bool
+    {
+        if ($this->isGranted(UserRole::ROLE_ADMIN->value)) {
+            return true;
+        }
+
+        return $file->getUploadedBy()?->getId() === $user->getId()
+            || ($this->isManagerOwner($purchase, $user) && $purchase->getStatus()->isEditable());
     }
 
     /** Автор заявки — роль не требуется: создавать может любой пользователь. */

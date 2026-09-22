@@ -441,10 +441,10 @@ final class PurchaseApprovalWorkflow
         });
     }
 
-    /** Отмена из любого нефинального статуса. */
+    /** Отмена. Кто и из какого статуса — решает PurchaseAccess::canCancel. */
     public function cancel(PurchaseRequest $request, User $actor, ?string $comment): void
     {
-        if ($request->getStatus()->isFinal()) {
+        if ($request->getStatus() === PurchaseStatus::CANCELLED) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
         }
 

@@ -267,29 +267,27 @@ final class PurchaseAccess
     }
 
     /**
-     * Отмена. Автор забирает заявку, пока её не начали исполнять; надзор — до
-     * финала; допущенный к деньгам — на отрезке, где они уже потрачены.
+     * Отмена. Автор — пока заявку не оплатили. Админ — из любого статуса,
+     * кроме уже отменённой.
      */
     public function canCancel(PurchaseRequest $purchase, User $user): bool
     {
-        $status = $purchase->getStatus();
-        if ($status->isFinal()) {
+        if ($purchase->getStatus() === PurchaseStatus::CANCELLED) {
             return false;
         }
-        if ($this->roster->can($user, PurchaseCapability::SUPERVISE)) {
+        if ($this->roster->isAdmin($user)) {
             return true;
         }
-        if ($this->isOwner($purchase, $user)) {
-            return in_array($status, [
-                PurchaseStatus::DRAFT,
-                PurchaseStatus::ON_APPROVAL,
-                PurchaseStatus::APPROVED,
-                PurchaseStatus::REJECTED,
-            ], true);
+        if (!$this->isOwner($purchase, $user)) {
+            return false;
         }
 
-        return $this->roster->can($user, PurchaseCapability::RUN_EXECUTION)
-            && $status === PurchaseStatus::INVOICE_PAID;
+        return in_array($purchase->getStatus(), [
+            PurchaseStatus::DRAFT,
+            PurchaseStatus::ON_APPROVAL,
+            PurchaseStatus::APPROVED,
+            PurchaseStatus::REJECTED,
+        ], true);
     }
 
     public function can(User $user, PurchaseCapability $capability): bool
