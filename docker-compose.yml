@@ -5,6 +5,7 @@ services:
       context: .
       dockerfile: ./docker_env/php/Dockerfile
     container_name: php_container
+    restart: unless-stopped
     # no need 9000 by default
 #    ports:
 #      - "9000:9000"   # Expose PHP-FPM port
@@ -35,6 +36,7 @@ services:
       context: .
       dockerfile: ./docker_env/nginx/Dockerfile
     container_name: nginx_web
+    restart: unless-stopped
     ports:
       - "${NGINX_PORT:-8080}:80"
     volumes:
@@ -47,6 +49,7 @@ services:
   postgres:
     container_name: postgres
     image: postgres:16.4
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_DATABASE}
       POSTGRES_USER: ${DB_USERNAME}
