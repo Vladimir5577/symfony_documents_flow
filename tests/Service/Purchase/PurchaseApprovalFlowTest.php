@@ -74,7 +74,6 @@ final class PurchaseApprovalFlowTest extends TestCase
     /** Хвост исполнения — только в полном маршруте. */
     private const STAGE_PAYMENT = 6;
     private const STAGE_DELIVERY = 7;
-    private const STAGE_CLOSING = 8;
 
     // Быстрый маршрут
 
@@ -705,9 +704,9 @@ final class PurchaseApprovalFlowTest extends TestCase
 
     /**
      * Поставку принимает автор — так настроен маршрут, а не зашито в коде.
-     * Закрытие статус не меняет: заявка остаётся доставленной.
+     * Подтверждённая поставка — конец пути: заявка доставлена, маршрут пройден.
      */
-    public function testFullRouteStaysDeliveredAfterClosing(): void
+    public function testFullRouteEndsDeliveredAfterDelivery(): void
     {
         $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
         $author = $request->getCreatedBy();
@@ -719,35 +718,28 @@ final class PurchaseApprovalFlowTest extends TestCase
         self::assertSame(PurchaseTaskAssignment::AUTHOR, $delivery->getAssignmentType());
         self::assertTrue($delivery->isAddressedTo($author));
 
+        $request->addFile($this->updFile());
         $this->workflow->approveTask($request, $delivery, $author);
         $this->assertPurchaseNotified($request, $author);
-        self::assertSame(PurchaseStatus::DELIVERED, $request->getStatus());
-
-        $request->addFile($this->updFile());
-        $closer = $this->user(3);
-        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_CLOSING), $closer);
-        $this->assertPurchaseNotified($request, $closer);
 
         self::assertSame(PurchaseStatus::DELIVERED, $request->getStatus());
         self::assertTrue($request->isRouteComplete());
     }
 
     /**
-     * Без УПД заявку не закрыть. Это требование файла на задаче закрытия, а не
+     * Без УПД поставку не подтвердить. Это требование файла на задаче, а не
      * условие перехода статуса: перенести его на другой этап — правка в админке.
      */
-    public function testClosingRequiresUpd(): void
+    public function testDeliveryRequiresUpd(): void
     {
         $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
         $author = $request->getCreatedBy();
         self::assertInstanceOf(User::class, $author);
 
         $this->approveThrough($request, self::STAGE_PAYMENT);
-        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_DELIVERY), $author);
-        $this->assertPurchaseNotified($request, $author);
 
         $this->expectTransitionError(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
-        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_CLOSING), $this->user(3));
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_DELIVERY), $author);
     }
 
     /**
@@ -924,8 +916,8 @@ final class PurchaseApprovalFlowTest extends TestCase
     }
 
     /**
-     * Тот же маршрут с хвостом исполнения: оплата, поставка и закрытие — такие же
-     * этапы, а не отдельная цепочка статусов.
+     * Тот же маршрут с хвостом исполнения: оплата и поставка — такие же этапы,
+     * а не отдельная цепочка статусов.
      */
     private function fullRoute(): PurchaseRouteTemplate
     {
@@ -938,16 +930,13 @@ final class PurchaseApprovalFlowTest extends TestCase
         $delivery = $this->stage(PurchaseStagePurpose::DELIVERY, [
             (new PurchaseRouteTemplateTask())
                 ->setPosition(1)
-                ->setAssignmentType(PurchaseTaskAssignment::AUTHOR),
-        ]);
-        $closing = $this->stage(PurchaseStagePurpose::CLOSING, [
-            $this->roleTask(PurchaseRoleCode::PURCHASE_DEPARTMENT)
+                ->setAssignmentType(PurchaseTaskAssignment::AUTHOR)
                 ->setRequiresFileType(PurchaseFileType::UPD),
         ]);
 
         // Вернуть автору с исполнения нельзя: деньги уже потрачены.
         $position = $template->getStages()->count();
-        foreach ([$payment, $delivery, $closing] as $stage) {
+        foreach ([$payment, $delivery] as $stage) {
             $template->addStage($stage->setPosition(++$position)->setAllowsReject(false));
         }
 

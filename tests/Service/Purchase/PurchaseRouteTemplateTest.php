@@ -539,17 +539,6 @@ final class PurchaseRouteTemplateTest extends TestCase
                     'requiresFileType' => null,
                 ]],
             ],
-            [
-                'purpose' => 'CLOSING',
-                'title' => null,
-                'allowsReject' => false,
-                'tasks' => [[
-                    'assignmentType' => 'ROLE',
-                    'roleCode' => 'PURCHASE_DEPARTMENT',
-                    'title' => null,
-                    'requiresFileType' => null,
-                ]],
-            ],
         ]), $this->user(1));
 
         $shape = [];
@@ -564,7 +553,6 @@ final class PurchaseRouteTemplateTest extends TestCase
             ['SIGN_OFF', 2],
             ['PAYMENT', 1],
             ['DELIVERY', 1],
-            ['CLOSING', 1],
         ], $shape);
     }
 
@@ -649,7 +637,7 @@ final class PurchaseRouteTemplateTest extends TestCase
     {
         $this->expectRouteError(SpaApiError::PURCHASE_ROUTE_TASK_INVALID);
         $this->editorUpdate([[
-            'purpose' => 'CLOSING',
+            'purpose' => 'DELIVERY',
             'tasks' => [['roleCode' => 'PURCHASE_DEPARTMENT', 'requiresFileType' => 'BLUEPRINT']],
         ]]);
     }
@@ -661,7 +649,7 @@ final class PurchaseRouteTemplateTest extends TestCase
 
         $this->editor($template)->update($template, $this->payload([
             [
-                'purpose' => 'CLOSING',
+                'purpose' => 'DELIVERY',
                 'tasks' => [['roleCode' => 'PURCHASE_DEPARTMENT', 'requiresFileType' => PurchaseFileType::UPD->value]],
             ],
         ]), $this->user(1));

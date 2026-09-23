@@ -25,9 +25,7 @@ final class PurchaseStatusTest extends TestCase
     public function testExecutionStagesProjectToStatuses(): void
     {
         self::assertSame(PurchaseStatus::INVOICE_PAID, PurchaseStatus::afterStage(PurchaseStagePurpose::PAYMENT));
-        self::assertSame(PurchaseStatus::DELIVERED, PurchaseStatus::afterStage(PurchaseStagePurpose::DELIVERY));
-        self::assertNull(PurchaseStatus::afterStage(PurchaseStagePurpose::CLOSING));
-    }
+        self::assertSame(PurchaseStatus::DELIVERED, PurchaseStatus::afterStage(PurchaseStagePurpose::DELIVERY));    }
 
     /**
      * Этапы согласования статус не двигают: согласование целиком идёт внутри

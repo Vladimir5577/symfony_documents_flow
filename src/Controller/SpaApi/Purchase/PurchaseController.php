@@ -168,7 +168,7 @@ final class PurchaseController extends AbstractController
         $actionRequired = $approverPending;
         if ($this->access->can($user, PurchaseCapability::RUN_EXECUTION)) {
             // APPROVED — оплатить. Доставленное в счётчик не входит: это конец пути,
-            // а этап закрытия, если он ещё открыт, уже сидит в approverPending.
+            // а этапы после поставки, если они ещё открыты, уже сидят в approverPending.
             $actionRequired += ($byStatus[PurchaseStatus::APPROVED->value] ?? 0);
         }
         if ($createdById !== null) {
