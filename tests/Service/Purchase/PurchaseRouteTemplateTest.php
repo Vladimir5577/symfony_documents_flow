@@ -22,7 +22,6 @@ use App\Enum\Purchase\PurchaseTaskAssignment;
 use App\Repository\Purchase\PurchaseApproverRoleRepository;
 use App\Repository\Purchase\PurchaseRouteDefaultRepository;
 use App\Repository\Purchase\PurchaseRouteTemplateRepository;
-use App\Repository\User\UserRepository;
 use App\Service\Notification\NotificationPublisher;
 use App\Service\Purchase\ApprovalRouteBuilder;
 use App\Service\Purchase\ApprovalRouteEditor;
@@ -38,8 +37,6 @@ use App\Service\Purchase\PurchaseTransitionException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Messenger\Envelope;
-use Symfony\Component\Messenger\MessageBusInterface;
 
 /**
  * Настраиваемые маршруты: выбор заготовки под заявку, сборка снимка и правила
@@ -55,6 +52,8 @@ use Symfony\Component\Messenger\MessageBusInterface;
  */
 final class PurchaseRouteTemplateTest extends TestCase
 {
+    use PurchaseNotificationAssertions;
+
     // Выбор заготовки под заявку
 
     /** Назначенный заявке маршрут сильнее дефолта: его выбрали для неё. */
@@ -172,6 +171,7 @@ final class PurchaseRouteTemplateTest extends TestCase
         $request = $this->request(PurchaseRequestKind::STANDARD, $author);
 
         $this->workflow($template)->submit($request, $author);
+        $this->assertPurchaseNotified($request, $author);
         $before = $this->shape($request);
 
         $this->editor($template)->update($template, $this->payload([
@@ -199,12 +199,18 @@ final class PurchaseRouteTemplateTest extends TestCase
         $buyer = $this->user(3);
 
         $workflow->submit($request, $author);
-        $workflow->approveTask($request, $this->taskAt($request, 1), $this->user(2));
+        $this->assertPurchaseNotified($request, $author);
+        $first = $this->user(2);
+        $workflow->approveTask($request, $this->taskAt($request, 1), $first);
+        $this->assertPurchaseNotified($request, $first);
         $workflow->approveTask($request, $this->taskAt($request, 2), $buyer);
+        $this->assertPurchaseNotified($request, $buyer);
 
         self::assertSame($buyer, $request->getExecutor(), 'исполнитель — закрывший ресёрч, кем бы он ни был');
 
-        $workflow->returnToSourcing($request, $this->taskAt($request, 3), $this->user(4), 'Нет счёта');
+        $lawyer = $this->user(4);
+        $workflow->returnToSourcing($request, $this->taskAt($request, 3), $lawyer, 'Нет счёта');
+        $this->assertPurchaseNotified($request, $lawyer);
 
         self::assertSame(2, $request->getCurrentStage()?->getPosition(), 'документы вернулись на ресёрч');
     }
@@ -228,8 +234,13 @@ final class PurchaseRouteTemplateTest extends TestCase
         $request = $this->request(PurchaseRequestKind::STANDARD, $author);
 
         $workflow->submit($request, $author);
-        $workflow->approveTask($request, $this->taskAt($request, 1), $this->user(3));
-        $workflow->approveTask($request, $this->taskAt($request, 2), $this->user(4));
+        $this->assertPurchaseNotified($request, $author);
+        $director = $this->user(3);
+        $workflow->approveTask($request, $this->taskAt($request, 1), $director);
+        $this->assertPurchaseNotified($request, $director);
+        $finance = $this->user(4);
+        $workflow->approveTask($request, $this->taskAt($request, 2), $finance);
+        $this->assertPurchaseNotified($request, $finance);
 
         self::assertSame(PurchaseStatus::APPROVED, $request->getStatus());
         self::assertNull($request->getExecutor(), 'исполнителя даёт ресёрч, а его в маршруте нет');
@@ -443,17 +454,6 @@ final class PurchaseRouteTemplateTest extends TestCase
                     'requiresFileType' => null,
                 ]],
             ],
-            [
-                'purpose' => 'CLOSING',
-                'title' => null,
-                'allowsReject' => false,
-                'tasks' => [[
-                    'assignmentType' => 'ROLE',
-                    'roleCode' => 'PURCHASE_DEPARTMENT',
-                    'title' => null,
-                    'requiresFileType' => null,
-                ]],
-            ],
         ]), $this->user(1));
 
         $shape = [];
@@ -468,7 +468,6 @@ final class PurchaseRouteTemplateTest extends TestCase
             ['SIGN_OFF', 2],
             ['PAYMENT', 1],
             ['DELIVERY', 1],
-            ['CLOSING', 1],
         ], $shape);
     }
 
@@ -553,7 +552,7 @@ final class PurchaseRouteTemplateTest extends TestCase
     {
         $this->expectRouteError(SpaApiError::PURCHASE_ROUTE_TASK_INVALID);
         $this->editorUpdate([[
-            'purpose' => 'CLOSING',
+            'purpose' => 'DELIVERY',
             'tasks' => [['roleCode' => 'PURCHASE_DEPARTMENT', 'requiresFileType' => 'BLUEPRINT']],
         ]]);
     }
@@ -565,7 +564,7 @@ final class PurchaseRouteTemplateTest extends TestCase
 
         $this->editor($template)->update($template, $this->payload([
             [
-                'purpose' => 'CLOSING',
+                'purpose' => 'DELIVERY',
                 'tasks' => [['roleCode' => 'PURCHASE_DEPARTMENT', 'requiresFileType' => PurchaseFileType::UPD->value]],
             ],
         ]), $this->user(1));
@@ -827,26 +826,14 @@ final class PurchaseRouteTemplateTest extends TestCase
     {
         $em = $this->em();
 
-        $bus = $this->createStub(MessageBusInterface::class);
-        $bus->method('dispatch')->willReturnCallback(
-            static fn (object $message, array $stamps = []): Envelope => new Envelope($message),
-        );
-
-        $users = $this->createStub(UserRepository::class);
-        $users->method('findByRoleName')->willReturn([]);
-
-        $approverRoles = $this->createStub(PurchaseApproverRoleRepository::class);
-        $approverRoles->method('findRoleCodesForUser')->willReturn([]);
-        $approverRoles->method('findUsersByRoleCodes')->willReturn([]);
-
         $history = new PurchaseHistoryLogger($em);
 
         return new PurchaseApprovalWorkflow(
             $em,
             new PurchaseNotificationPublisher(
-                new NotificationPublisher($bus),
-                $users,
-                new PurchaseRoster($approverRoles),
+                new NotificationPublisher($this->capturePurchaseBus()),
+                $this->purchaseRoster(),
+                $this->purchaseUsers(),
             ),
             $this->resolver($default),
             new ApprovalRouteBuilder($em),

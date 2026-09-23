@@ -9,8 +9,6 @@ use App\Entity\Purchase\PurchaseApprovalStage;
 use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
-use App\Enum\Purchase\PurchaseCapability;
-use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Repository\Purchase\PurchaseRouteTemplateRepository;
@@ -33,7 +31,7 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * самой задачи: кому она адресована, тот и решает. Поэтому ни новый согласующий,
  * ни перенос оплаты на другого человека не требуют правок здесь.
  *
- * Отдельных ручек под конвейер исполнения нет: оплата, поставка и закрытие — те
+ * Отдельных ручек под конвейер исполнения нет: оплата и поставка — те
  * же задачи маршрута, и закрываются той же кнопкой, что подпись бухгалтерии.
  */
 #[Route('/spa/api/purchases/{id}', requirements: ['id' => '\d+'])]
@@ -218,6 +216,9 @@ final class PurchaseTransitionController extends AbstractController
                     break;
 
                 case 'cancel':
+                    if (!$this->access->canCancel($purchase, $user)) {
+                        return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+                    }
                     $this->workflow->cancel($purchase, $user, $reason !== '' ? $reason : null);
                     break;
 
@@ -231,7 +232,7 @@ final class PurchaseTransitionController extends AbstractController
         return $this->json($this->presenter->presentDetail($purchase));
     }
 
-    /** Отмена: автор — до исполнения; допущенный к деньгам — на исполнении; надзор — всегда. */
+    /** Отмена: автор до «Оплачено»; админ — из любого статуса. */
     #[Route('/cancel', name: 'spa_api_purchases_cancel', methods: ['POST'])]
     public function cancel(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -240,21 +241,6 @@ final class PurchaseTransitionController extends AbstractController
         return $this->transition($id, $user,
             fn (PurchaseRequest $p, User $u) => $this->access->canCancel($p, $u),
             fn (PurchaseRequest $p, User $u) => $this->workflow->cancel($p, $u, $comment !== '' ? $comment : null));
-    }
-
-    /** Смена приоритета — полномочие надзора. */
-    #[Route('/priority', name: 'spa_api_purchases_priority', methods: ['POST'])]
-    public function priority(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        $payload = json_decode($request->getContent(), true) ?? [];
-        $priority = PurchasePriority::tryFrom((string) ($payload['priority'] ?? ''));
-        if ($priority === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_INVALID_PRIORITY], Response::HTTP_BAD_REQUEST);
-        }
-
-        return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->access->can($u, PurchaseCapability::SUPERVISE),
-            fn (PurchaseRequest $p, User $u) => $this->workflow->setPriority($p, $u, $priority));
     }
 
     /**

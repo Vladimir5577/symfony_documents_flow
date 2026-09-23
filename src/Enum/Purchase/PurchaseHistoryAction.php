@@ -32,8 +32,10 @@ enum PurchaseHistoryAction: string
     case CLASSIFICATION_UPDATED = 'CLASSIFICATION_UPDATED';
     case STATUS_CHANGED = 'STATUS_CHANGED';
     case CANCELLED = 'CANCELLED';
+    /** Старые строки ленты: срочность сняли, писать новые нельзя. */
     case PRIORITY_CHANGED = 'PRIORITY_CHANGED';
     case FILE_UPLOADED = 'FILE_UPLOADED';
+    case FILE_RENAMED = 'FILE_RENAMED';
     case FILE_DELETED = 'FILE_DELETED';
 
     public function getLabel(): string
@@ -54,6 +56,7 @@ enum PurchaseHistoryAction: string
             self::CANCELLED => 'Заявка отменена',
             self::PRIORITY_CHANGED => 'Приоритет изменён',
             self::FILE_UPLOADED => 'Загружен файл',
+            self::FILE_RENAMED => 'Имя файла изменено',
             self::FILE_DELETED => 'Удалён файл',
         };
     }

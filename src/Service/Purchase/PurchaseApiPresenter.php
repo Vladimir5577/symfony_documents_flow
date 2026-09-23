@@ -15,9 +15,9 @@ use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\Purchase\PurchaseRouteTemplateStage;
 use App\Entity\Purchase\PurchaseRouteTemplateTask;
 use App\Entity\User\User;
-use App\Enum\Purchase\PurchaseCapability;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
+use App\Enum\User\UserRole;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
 use Symfony\Bundle\SecurityBundle\Security;
 
@@ -43,7 +43,6 @@ final class PurchaseApiPresenter
     public function presentListItem(PurchaseRequest $request): array
     {
         $status = $request->getStatus();
-        $priority = $request->getPriority();
         $law = $request->getLaw();
         $method = $request->getMethod();
 
@@ -51,7 +50,6 @@ final class PurchaseApiPresenter
             'id' => $request->getId(),
             'title' => $request->getTitle(),
             'status' => ['value' => $status->value, 'label' => $status->getLabel()],
-            'priority' => ['value' => $priority->value, 'label' => $priority->getLabel()],
             'organization' => [
                 'id' => $request->getOrganization()?->getId(),
                 'name' => $request->getOrganization()?->getName(),
@@ -268,10 +266,13 @@ final class PurchaseApiPresenter
         return [
             'id' => $file->getId(),
             'originalName' => $file->getOriginalName(),
+            // Имя на экране можно сменить и убрать .pdf — тип остаётся у ключа в бакете.
+            'extension' => strtolower(pathinfo($file->getStorageKey(), PATHINFO_EXTENSION)),
             'type' => ['value' => $file->getType()->value, 'label' => $file->getType()->getLabel()],
             'uploadedBy' => $this->presentUser($file->getUploadedBy()),
             'createdAt' => $file->getCreatedAt()?->format('c'),
             'canDelete' => $this->canDeleteFile($file),
+            'canRename' => $this->canRenameFile($file),
             'downloadUrl' => sprintf(
                 '/spa/api/purchases/%d/files/%d/download',
                 $file->getPurchaseRequest()?->getId(),
@@ -322,8 +323,8 @@ final class PurchaseApiPresenter
         ];
     }
 
-    /** Зеркалит гейт PurchaseFileController::delete() — фронт по нему прячет корзину. */
-    private function canDeleteFile(PurchaseRequestFile $file): bool
+    /** Зеркалит гейт PurchaseFileController::rename() — фронт по нему прячет карандаш. */
+    private function canRenameFile(PurchaseRequestFile $file): bool
     {
         $request = $file->getPurchaseRequest();
         $user = $this->security->getUser();
@@ -331,13 +332,27 @@ final class PurchaseApiPresenter
             return false;
         }
 
-        $status = $request->getStatus();
-        if ($file->getType()->isLockedAt($status)) {
-            return false;
+        if ($this->security->isGranted(UserRole::ROLE_ADMIN->value)) {
+            return true;
         }
 
         return $file->getUploadedBy()?->getId() === $user->getId()
-            || ($request->getCreatedBy()?->getId() === $user->getId() && $status->isEditable());
+            || ($request->getCreatedBy()?->getId() === $user->getId() && $request->getStatus()->isEditable());
+    }
+
+    /** Зеркалит гейт PurchaseFileController::delete() — фронт по нему прячет корзину. */
+    private function canDeleteFile(PurchaseRequestFile $file): bool
+    {
+        $request = $file->getPurchaseRequest();
+        if ($request === null || !$this->canRenameFile($file)) {
+            return false;
+        }
+
+        if ($this->security->isGranted(UserRole::ROLE_ADMIN->value)) {
+            return true;
+        }
+
+        return !$file->getType()->isLockedAt($request->getStatus());
     }
 
     /**
@@ -411,8 +426,6 @@ final class PurchaseApiPresenter
             // Роль здесь не спрашиваем: задача моя — значит она мне и адресована.
             'canEditSourcing' => $stage?->getPurpose() === PurchaseStagePurpose::SOURCING,
             'canCancel' => $this->access->canCancel($request, $user),
-            'canSetPriority' => !$status->isFinal()
-                && $this->access->can($user, PurchaseCapability::SUPERVISE),
             'canComment' => $this->access->canView($request, $user),
         ];
     }

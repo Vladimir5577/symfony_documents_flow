@@ -8,7 +8,7 @@ namespace App\Enum\Purchase;
  * Статусы заявки на закупку.
  *
  * Статус — проекция маршрута, а не его движок. Весь путь заявки, включая оплату,
- * поставку и закрытие, идёт этапами (PurchaseApprovalStage); статус лишь отмечает,
+ * и поставку, идёт этапами (PurchaseApprovalStage); статус лишь отмечает,
  * какой отрезок пройден, чтобы списки, счётчики и фильтры не поднимали этапы
  * каждой строки. «У кого заявка» — данные этапа, а не статус, поэтому новый
  * согласующий не требует нового статуса.
@@ -19,7 +19,8 @@ namespace App\Enum\Purchase;
  * релиза. Теперь оба требования одного порядка и стоят одинаково.
  *
  * Проекция: этапы согласования → ON_APPROVAL, пройдены все → APPROVED,
- * пройден этап оплаты → INVOICE_PAID, поставки → DELIVERED, закрытия → DONE.
+ * пройден этап оплаты → INVOICE_PAID, поставки → DELIVERED. Отдельного
+ * «выполнено» нет: доставленная заявка и есть закрытая.
  * Маршрут из одних подписей заканчивается на APPROVED — это законная настройка,
  * а не зависшая заявка: согласование состоялось, исполнения в регламенте нет.
  *
@@ -33,7 +34,6 @@ enum PurchaseStatus: string
     case APPROVED = 'APPROVED';            // Согласование пройдено
     case INVOICE_PAID = 'INVOICE_PAID';    // Оплачено
     case DELIVERED = 'DELIVERED';          // Доставлено
-    case DONE = 'DONE';                    // Закрыто в архив
     case REJECTED = 'REJECTED';            // Возвращено на доработку
     case CANCELLED = 'CANCELLED';          // Отменено
 
@@ -45,7 +45,6 @@ enum PurchaseStatus: string
             self::APPROVED => 'Согласовано',
             self::INVOICE_PAID => 'Оплачено',
             self::DELIVERED => 'Доставлено',
-            self::DONE => 'Выполнено',
             self::REJECTED => 'Возвращено на доработку',
             self::CANCELLED => 'Отменено',
         };
@@ -62,16 +61,17 @@ enum PurchaseStatus: string
         return match ($purpose) {
             PurchaseStagePurpose::PAYMENT => self::INVOICE_PAID,
             PurchaseStagePurpose::DELIVERY => self::DELIVERED,
-            PurchaseStagePurpose::CLOSING => self::DONE,
             PurchaseStagePurpose::TRIAGE,
             PurchaseStagePurpose::SOURCING,
             PurchaseStagePurpose::SIGN_OFF => null,
         };
     }
 
+    /** Дальше заявку не двигают отменой. «Доставлено» при этом ещё в маршруте:
+     *  после поставки в заготовке могут стоять этапы, и isInRoute их не отрезает. */
     public function isFinal(): bool
     {
-        return $this === self::DONE || $this === self::CANCELLED;
+        return $this === self::DELIVERED || $this === self::CANCELLED;
     }
 
     /** Автор может редактировать заявку только в этих статусах. */
@@ -85,7 +85,7 @@ enum PurchaseStatus: string
     {
         return match ($this) {
             self::ON_APPROVAL, self::APPROVED, self::INVOICE_PAID, self::DELIVERED => true,
-            self::DRAFT, self::DONE, self::REJECTED, self::CANCELLED => false,
+            self::DRAFT, self::REJECTED, self::CANCELLED => false,
         };
     }
 

@@ -27,7 +27,6 @@ use App\Enum\Purchase\PurchaseTaskDecision;
 use App\Repository\Purchase\PurchaseApproverRoleRepository;
 use App\Repository\Purchase\PurchaseRouteDefaultRepository;
 use App\Repository\Purchase\PurchaseRouteTemplateRepository;
-use App\Repository\User\UserRepository;
 use App\Service\Notification\NotificationPublisher;
 use App\Service\Purchase\ApprovalRouteBuilder;
 use App\Service\Purchase\ApprovalRouteResolver;
@@ -40,8 +39,6 @@ use App\Service\Purchase\PurchaseRoster;
 use App\Service\Purchase\PurchaseTransitionException;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Messenger\Envelope;
-use Symfony\Component\Messenger\MessageBusInterface;
 
 /**
  * Сценарии согласования заявки на закупку — регламент целиком.
@@ -61,6 +58,8 @@ use Symfony\Component\Messenger\MessageBusInterface;
  */
 final class PurchaseApprovalFlowTest extends TestCase
 {
+    use PurchaseNotificationAssertions;
+
     /** Позиции этапов маршрутов из фикстур ниже. */
 
     /** У быстрой заявки отдел закупок первый и единственный. */
@@ -75,9 +74,43 @@ final class PurchaseApprovalFlowTest extends TestCase
     /** Хвост исполнения — только в полном маршруте. */
     private const STAGE_PAYMENT = 6;
     private const STAGE_DELIVERY = 7;
-    private const STAGE_CLOSING = 8;
 
     // Быстрый маршрут
+
+    /** Комментарий уходит зрителям заявки, не только автору и исполнителю. */
+    public function testCommentNotifiesEveryoneWhoCanSeeThePurchase(): void
+    {
+        $author = $this->user(1);
+        $deputy = $this->user(3);
+        $commenter = $this->user(4);
+
+        $request = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $request->setStatus(PurchaseStatus::ON_APPROVAL);
+
+        $task = (new PurchaseApprovalTask())
+            ->setPosition(1)
+            ->setAssignmentType(PurchaseTaskAssignment::USER)
+            ->setAssigneeUser($deputy);
+        $stage = (new PurchaseApprovalStage())
+            ->setPurpose(PurchaseStagePurpose::SIGN_OFF)
+            ->setPosition(1);
+        $stage->addTask($task);
+        $request->addStage($stage);
+
+        $publisher = new PurchaseNotificationPublisher(
+            new NotificationPublisher($this->capturePurchaseBus()),
+            $this->purchaseRoster(),
+            $this->purchaseUsers(),
+        );
+        $publisher->notifyCommentAdded($request, $commenter);
+
+        self::assertContains(3, $this->purchaseNotifications[0][0]->recipients, 'участник маршрута');
+        $this->assertPurchaseNotified($request, $commenter);
+
+        $draft = $this->request(PurchaseRequestKind::STANDARD, $author);
+        $publisher->notifyCommentAdded($draft, $author);
+        $this->assertPurchaseNotified($draft, $author);
+    }
 
     public function testFastRouteIsSingleSourcingStage(): void
     {
@@ -94,7 +127,9 @@ final class PurchaseApprovalFlowTest extends TestCase
     {
         $request = $this->submitted(PurchaseRequestKind::FAST);
 
-        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_FAST_SOURCING), $this->user(2));
+        $actor = $this->user(2);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_FAST_SOURCING), $actor);
+        $this->assertPurchaseNotified($request, $actor);
 
         self::assertSame(PurchaseStatus::APPROVED, $request->getStatus());
         self::assertNull($request->getCurrentStage());
@@ -108,6 +143,7 @@ final class PurchaseApprovalFlowTest extends TestCase
         $request = $this->request(PurchaseRequestKind::FAST, $author, ['1500000.00']);
 
         $this->workflow()->submit($request, $author);
+        $this->assertPurchaseNotified($request, $author);
 
         self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
     }
@@ -186,19 +222,23 @@ final class PurchaseApprovalFlowTest extends TestCase
         $request = $this->submitted(PurchaseRequestKind::STANDARD);
         $this->approveThrough($request, self::STAGE_SOURCING);
 
+        $accountant = $this->user(4);
         $this->workflow->approveTask(
             $request,
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
-            $this->user(4),
+            $accountant,
         );
+        $this->assertPurchaseNotified($request, $accountant);
 
         self::assertSame(self::STAGE_CHECKS, $request->getCurrentStage()?->getPosition());
 
+        $lawyer = $this->user(5);
         $this->workflow->approveTask(
             $request,
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::LEGAL),
-            $this->user(5),
+            $lawyer,
         );
+        $this->assertPurchaseNotified($request, $lawyer);
 
         // Этап согласантов пуст — разбирающий никого не выбрал, и указатель его
         // проезжает, а не встаёт ждать тех, кого не будет.
@@ -220,10 +260,12 @@ final class PurchaseApprovalFlowTest extends TestCase
         $buyer = $this->user(3);
 
         $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_TRIAGE), $director);
+        $this->assertPurchaseNotified($request, $director);
 
         self::assertNull($request->getExecutor(), 'подпись разбирающего исполнителя не назначает');
 
         $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_SOURCING), $buyer);
+        $this->assertPurchaseNotified($request, $buyer);
 
         self::assertSame($buyer, $request->getExecutor());
     }
@@ -265,13 +307,15 @@ final class PurchaseApprovalFlowTest extends TestCase
         $deputy = $this->user(7);
         $stage = $this->stageAt($request, self::STAGE_APPROVERS);
 
+        $director = $this->user(2);
         $this->workflow->triage(
             $request,
             $this->taskAt($request, self::STAGE_TRIAGE),
-            $this->user(2),
+            $director,
             [],
             [(int) $stage->getId() => [$deputy, $deputy, $author]],
         );
+        $this->assertPurchaseNotified($request, $director);
 
         self::assertCount(1, $stage->getTasks(), 'автор и дубликаты в согласанты не попадают');
         $assigned = $stage->getTasks()->first();
@@ -334,16 +378,18 @@ final class PurchaseApprovalFlowTest extends TestCase
     {
         $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00', '200.00']);
 
+        $director = $this->user(2);
         $this->workflow->triage(
             $request,
             $this->taskAt($request, self::STAGE_TRIAGE),
-            $this->user(2),
+            $director,
             [
                 1 => ['included' => true, 'quantity' => '3.000'],
                 2 => ['included' => false, 'quantity' => null],
             ],
             [],
         );
+        $this->assertPurchaseNotified($request, $director);
 
         self::assertSame(300.0, $request->getTotalAmount());
     }
@@ -374,18 +420,22 @@ final class PurchaseApprovalFlowTest extends TestCase
     {
         $request = $this->submitted(PurchaseRequestKind::STANDARD);
         $this->approveThrough($request, self::STAGE_SOURCING);
+        $accountant = $this->user(4);
         $this->workflow->approveTask(
             $request,
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
-            $this->user(4),
+            $accountant,
         );
+        $this->assertPurchaseNotified($request, $accountant);
 
+        $lawyer = $this->user(5);
         $this->workflow->returnToSourcing(
             $request,
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::LEGAL),
-            $this->user(5),
+            $lawyer,
             'Договор без реквизитов',
         );
+        $this->assertPurchaseNotified($request, $lawyer);
 
         self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
         self::assertSame(self::STAGE_SOURCING, $request->getCurrentStage()?->getPosition());
@@ -411,26 +461,34 @@ final class PurchaseApprovalFlowTest extends TestCase
         $deputy = $this->user(7);
         $stage = $this->stageAt($request, self::STAGE_APPROVERS);
 
+        $director = $this->user(2);
         $this->workflow->triage(
             $request,
             $this->taskAt($request, self::STAGE_TRIAGE),
-            $this->user(2),
+            $director,
             [],
             [(int) $stage->getId() => [$deputy]],
         );
-        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_SOURCING), $this->user(3));
+        $this->assertPurchaseNotified($request, $director);
+        $buyer = $this->user(3);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_SOURCING), $buyer);
+        $this->assertPurchaseNotified($request, $buyer);
+        $accountant = $this->user(4);
         $this->workflow->approveTask(
             $request,
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
-            $this->user(4),
+            $accountant,
         );
+        $this->assertPurchaseNotified($request, $accountant);
 
+        $lawyer = $this->user(5);
         $this->workflow->returnToSourcing(
             $request,
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::LEGAL),
-            $this->user(5),
+            $lawyer,
             'Счёт не тот',
         );
+        $this->assertPurchaseNotified($request, $lawyer);
 
         self::assertCount(1, $stage->getTasks(), 'назначенный согласант остаётся в маршруте');
         self::assertSame(PurchaseStageStatus::PENDING, $stage->getStatus());
@@ -471,7 +529,9 @@ final class PurchaseApprovalFlowTest extends TestCase
         $request = $this->submitted(PurchaseRequestKind::STANDARD);
         $task = $this->taskAt($request, self::STAGE_TRIAGE);
 
-        $this->workflow->rejectTask($request, $task, $this->user(2), 'Не сейчас');
+        $director = $this->user(2);
+        $this->workflow->rejectTask($request, $task, $director, 'Не сейчас');
+        $this->assertPurchaseNotified($request, $director);
 
         self::assertSame(PurchaseStatus::REJECTED, $request->getStatus());
         self::assertSame(PurchaseTaskDecision::REJECTED, $task->getDecision());
@@ -485,14 +545,17 @@ final class PurchaseApprovalFlowTest extends TestCase
         $author = $request->getCreatedBy();
         self::assertInstanceOf(User::class, $author);
 
+        $director = $this->user(2);
         $this->workflow->rejectTask(
             $request,
             $this->taskAt($request, self::STAGE_TRIAGE),
-            $this->user(2),
+            $director,
             'Доработать',
         );
+        $this->assertPurchaseNotified($request, $director);
         $this->workflow->submit($request, $author);
         $this->assignIds($request);
+        $this->assertPurchaseNotified($request, $author);
 
         self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
         self::assertCount(5, $request->getStages());
@@ -515,10 +578,12 @@ final class PurchaseApprovalFlowTest extends TestCase
         $financeTask = $this->taskAt($request, self::STAGE_FINANCE);
         $financeDirector = $this->user(6);
         $this->workflow->approveTask($request, $financeTask, $financeDirector);
+        $this->assertPurchaseNotified($request, $financeDirector);
 
         self::assertSame(PurchaseStatus::APPROVED, $request->getStatus());
 
         $this->workflow->revokeTask($request, $financeTask, $financeDirector);
+        $this->assertPurchaseNotified($request, $financeDirector);
 
         self::assertSame(PurchaseStatus::ON_APPROVAL, $request->getStatus());
         self::assertSame(self::STAGE_FINANCE, $request->getCurrentStage()?->getPosition());
@@ -542,9 +607,13 @@ final class PurchaseApprovalFlowTest extends TestCase
         $director = $this->user(2);
 
         $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_TRIAGE), $director);
-        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_SOURCING), $this->user(3));
+        $this->assertPurchaseNotified($request, $director);
+        $buyer = $this->user(3);
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_SOURCING), $buyer);
+        $this->assertPurchaseNotified($request, $buyer);
         $late = $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING);
         $this->workflow->approveTask($request, $late, $director);
+        $this->assertPurchaseNotified($request, $director);
 
         self::assertSame($late, $this->access()->findMyRevokableTask($request, $director));
     }
@@ -554,7 +623,9 @@ final class PurchaseApprovalFlowTest extends TestCase
     {
         $request = $this->submitted(PurchaseRequestKind::STANDARD);
         $task = $this->taskAt($request, self::STAGE_TRIAGE);
-        $this->workflow->approveTask($request, $task, $this->user(2));
+        $director = $this->user(2);
+        $this->workflow->approveTask($request, $task, $director);
+        $this->assertPurchaseNotified($request, $director);
 
         $this->expectTransitionError(SpaApiError::PURCHASE_TASK_NOT_REVOKABLE);
         $this->workflow->revokeTask($request, $task, $this->user(3));
@@ -574,12 +645,15 @@ final class PurchaseApprovalFlowTest extends TestCase
         $workflow->logCreated($request, $author);
         $workflow->submit($request, $author);
         $this->assignIds($request);
+        $this->assertPurchaseNotified($request, $author);
+        $buyer = $this->user(2);
         $workflow->approveTask(
             $request,
             $this->taskAt($request, self::STAGE_FAST_SOURCING),
-            $this->user(2),
+            $buyer,
             'Куплено',
         );
+        $this->assertPurchaseNotified($request, $buyer);
 
         self::assertSame([
             PurchaseHistoryAction::CREATED->value,
@@ -606,6 +680,7 @@ final class PurchaseApprovalFlowTest extends TestCase
             $this->user(2),
         );
         $this->assignIds($request);
+        $this->assertNoPurchaseNotifications();
 
         self::assertCount(8, $request->getStages(), 'снимок собран по новому маршруту');
         self::assertSame(self::STAGE_TRIAGE, $request->getCurrentStage()?->getPosition());
@@ -658,9 +733,9 @@ final class PurchaseApprovalFlowTest extends TestCase
 
     /**
      * Поставку принимает автор — так настроен маршрут, а не зашито в коде.
-     * Пройденное закрытие уводит заявку в архив.
+     * Подтверждённая поставка — конец пути: заявка доставлена, маршрут пройден.
      */
-    public function testFullRouteEndsInDone(): void
+    public function testFullRouteEndsDeliveredAfterDelivery(): void
     {
         $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
         $author = $request->getCreatedBy();
@@ -672,31 +747,28 @@ final class PurchaseApprovalFlowTest extends TestCase
         self::assertSame(PurchaseTaskAssignment::AUTHOR, $delivery->getAssignmentType());
         self::assertTrue($delivery->isAddressedTo($author));
 
-        $this->workflow->approveTask($request, $delivery, $author);
-        self::assertSame(PurchaseStatus::DELIVERED, $request->getStatus());
-
         $request->addFile($this->updFile());
-        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_CLOSING), $this->user(3));
+        $this->workflow->approveTask($request, $delivery, $author);
+        $this->assertPurchaseNotified($request, $author);
 
-        self::assertSame(PurchaseStatus::DONE, $request->getStatus());
+        self::assertSame(PurchaseStatus::DELIVERED, $request->getStatus());
         self::assertTrue($request->isRouteComplete());
     }
 
     /**
-     * Без УПД заявку не закрыть. Это требование файла на задаче закрытия, а не
+     * Без УПД поставку не подтвердить. Это требование файла на задаче, а не
      * условие перехода статуса: перенести его на другой этап — правка в админке.
      */
-    public function testClosingRequiresUpd(): void
+    public function testDeliveryRequiresUpd(): void
     {
         $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
         $author = $request->getCreatedBy();
         self::assertInstanceOf(User::class, $author);
 
         $this->approveThrough($request, self::STAGE_PAYMENT);
-        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_DELIVERY), $author);
 
         $this->expectTransitionError(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
-        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_CLOSING), $this->user(3));
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_DELIVERY), $author);
     }
 
     /**
@@ -726,6 +798,7 @@ final class PurchaseApprovalFlowTest extends TestCase
         $this->approveThrough($request, self::STAGE_FINANCE);
         $payment = $this->taskAt($request, self::STAGE_PAYMENT);
         $this->workflow->approveTask($request, $payment, $financeDirector);
+        $this->assertPurchaseNotified($request, $financeDirector);
 
         $this->expectTransitionError(SpaApiError::PURCHASE_INVALID_STATUS);
         $this->workflow->revokeTask($request, $payment, $financeDirector);
@@ -749,21 +822,8 @@ final class PurchaseApprovalFlowTest extends TestCase
             static fn (callable $work): mixed => $work($em),
         );
 
-        $bus = $this->createStub(MessageBusInterface::class);
-        $bus->method('dispatch')->willReturnCallback(
-            static fn (object $message, array $stamps = []): Envelope => new Envelope($message),
-        );
-
-        $users = $this->createStub(UserRepository::class);
-        $users->method('findByRoleName')->willReturn([]);
-
-        // Носителей ролей в сценариях нет: маршрут адресует задачи ролям, а
-        // закрывает кто угодно — воркфлоу проверяет указатель, а не права.
-        $approverRoles = $this->createStub(PurchaseApproverRoleRepository::class);
-        $approverRoles->method('findRoleCodesForUser')->willReturn([]);
-        $approverRoles->method('findUsersByRoleCodes')->willReturn([]);
-
-        $roster = new PurchaseRoster($approverRoles);
+        $bus = $this->capturePurchaseBus();
+        $roster = $this->purchaseRoster();
 
         $templates = $this->createStub(PurchaseRouteTemplateRepository::class);
         $templates->method('findActiveForKind')->willReturnCallback(
@@ -781,7 +841,7 @@ final class PurchaseApprovalFlowTest extends TestCase
 
         $this->workflow = new PurchaseApprovalWorkflow(
             $em,
-            new PurchaseNotificationPublisher(new NotificationPublisher($bus), $users, $roster),
+            new PurchaseNotificationPublisher(new NotificationPublisher($bus), $roster, $this->purchaseUsers()),
             new ApprovalRouteResolver($templates, $defaults),
             new ApprovalRouteBuilder($em),
             $history,
@@ -819,6 +879,7 @@ final class PurchaseApprovalFlowTest extends TestCase
 
         $this->workflow()->submit($request, $author);
         $this->assignIds($request);
+        $this->assertPurchaseNotified($request, $author);
 
         return $request;
     }
@@ -837,6 +898,7 @@ final class PurchaseApprovalFlowTest extends TestCase
                 self::assertInstanceOf(User::class, $actor);
 
                 $this->workflow->approveTask($request, $task, $actor);
+                $this->assertPurchaseNotified($request, $actor);
             }
         }
     }
@@ -883,8 +945,8 @@ final class PurchaseApprovalFlowTest extends TestCase
     }
 
     /**
-     * Тот же маршрут с хвостом исполнения: оплата, поставка и закрытие — такие же
-     * этапы, а не отдельная цепочка статусов.
+     * Тот же маршрут с хвостом исполнения: оплата и поставка — такие же этапы,
+     * а не отдельная цепочка статусов.
      */
     private function fullRoute(): PurchaseRouteTemplate
     {
@@ -897,16 +959,13 @@ final class PurchaseApprovalFlowTest extends TestCase
         $delivery = $this->stage(PurchaseStagePurpose::DELIVERY, [
             (new PurchaseRouteTemplateTask())
                 ->setPosition(1)
-                ->setAssignmentType(PurchaseTaskAssignment::AUTHOR),
-        ]);
-        $closing = $this->stage(PurchaseStagePurpose::CLOSING, [
-            $this->roleTask(PurchaseRoleCode::PURCHASE_DEPARTMENT)
+                ->setAssignmentType(PurchaseTaskAssignment::AUTHOR)
                 ->setRequiresFileType(PurchaseFileType::UPD),
         ]);
 
         // Вернуть автору с исполнения нельзя: деньги уже потрачены.
         $position = $template->getStages()->count();
-        foreach ([$payment, $delivery, $closing] as $stage) {
+        foreach ([$payment, $delivery] as $stage) {
             $template->addStage($stage->setPosition(++$position)->setAllowsReject(false));
         }
 

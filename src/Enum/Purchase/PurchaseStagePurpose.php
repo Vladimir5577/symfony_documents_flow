@@ -54,18 +54,14 @@ enum PurchaseStagePurpose: string
     /** Товар получен — обычно подтверждает заявитель, к нему он и приходит. */
     case DELIVERY = 'DELIVERY';
 
-    /** Закрытие в архив: закрывающие документы приложены. */
-    case CLOSING = 'CLOSING';
-
     public function getLabel(): string
     {
         return match ($this) {
             self::TRIAGE => 'Разбор заявки',
             self::SOURCING => 'Ресёрч и документы',
             self::SIGN_OFF => 'Согласование',
-            self::PAYMENT => 'Оплата',
+            self::PAYMENT => 'Отдел закупок',
             self::DELIVERY => 'Поставка',
-            self::CLOSING => 'Закрытие',
         };
     }
 
@@ -81,7 +77,7 @@ enum PurchaseStagePurpose: string
     public function isExecution(): bool
     {
         return match ($this) {
-            self::PAYMENT, self::DELIVERY, self::CLOSING => true,
+            self::PAYMENT, self::DELIVERY => true,
             self::TRIAGE, self::SOURCING, self::SIGN_OFF => false,
         };
     }

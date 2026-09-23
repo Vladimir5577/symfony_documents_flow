@@ -26,7 +26,7 @@ enum PurchaseCapability: string
     case MANAGE_DICTIONARIES = 'MANAGE_DICTIONARIES';
 
     /**
-     * Конвейер исполнения: оплата счёта, отметка доставки, закрытие в архив.
+     * Конвейер исполнения: оплата счёта и отметка доставки.
      * После APPROVED маршрут пройден, шагов больше нет — выразить это нечем.
      */
     case RUN_EXECUTION = 'RUN_EXECUTION';

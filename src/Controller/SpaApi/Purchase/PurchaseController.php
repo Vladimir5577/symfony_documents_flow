@@ -75,6 +75,9 @@ final class PurchaseController extends AbstractController
         [$createdById, $visibleStatuses] = $asApprover
             ? [null, null]
             : $this->resolveScope($user);
+        // Без VIEW_ALL список = свои + те, где я в маршруте. Иначе зам видит
+        // назначенную заявку только в inbox, а в таблице её нет.
+        $asParticipant = $asApprover || $createdById !== null;
 
         $statuses = $visibleStatuses;
         // Мультивыбор чекбоксами: statuses=A,B,C. Приоритетнее одиночного status (вместе не шлются).
@@ -123,9 +126,9 @@ final class PurchaseController extends AbstractController
             $search !== '' ? $search : null,
             $page,
             $pageSize,
-            $asApprover ? (int) $user->getId() : null,
+            $asParticipant ? (int) $user->getId() : null,
             $minAmount,
-            $asApprover ? $this->roster->roleCodesOf($user) : [],
+            $asParticipant ? $this->roster->roleCodesOf($user) : [],
         );
 
         return $this->json([
@@ -164,9 +167,9 @@ final class PurchaseController extends AbstractController
         // и шагом не является. Общее правило — «следующее действие доступно мне».
         $actionRequired = $approverPending;
         if ($this->access->can($user, PurchaseCapability::RUN_EXECUTION)) {
-            // APPROVED — оплатить, DELIVERED — приложить УПД и убрать в архив
-            $actionRequired += ($byStatus[PurchaseStatus::APPROVED->value] ?? 0)
-                + ($byStatus[PurchaseStatus::DELIVERED->value] ?? 0);
+            // APPROVED — оплатить. Доставленное в счётчик не входит: это конец пути,
+            // а этапы после поставки, если они ещё открыты, уже сидят в approverPending.
+            $actionRequired += ($byStatus[PurchaseStatus::APPROVED->value] ?? 0);
         }
         if ($createdById !== null) {
             // Счётчики автора: вернули на доработку и оплаченное — ждём
@@ -226,25 +229,25 @@ final class PurchaseController extends AbstractController
     }
 
     /**
-     * Очередь разбора: заявки, ждущие решения этого человека, по порядку.
+     * Inbox: заявки, ждущие решения этого человека, по порядку.
      *
-     * Ролевого гейта нет — очередь сама и есть ответ: у того, к кому задачи
-     * разбора не адресованы, она пустая. Раньше гейт спрашивал «ты директор»,
-     * и второй разбирающий в маршруте потребовал бы правки контроллера.
+     * Ролевого гейта нет — очередь сама и есть ответ: пусто, если сейчас не
+     * твоя задача. Раньше это был только разбор директора; теперь любой этап,
+     * где указатель стоит на мне.
      *
      * Отдаётся карточками целиком, а не списком id: модалка показывает позиции
      * и обоснование, и догружать их по одной — лишний круг на каждую заявку.
      *
-     * Объявлен до /{id}: иначе «director-queue» уйдёт в маршрут карточки.
+     * Объявлен до /{id}: иначе «decision-required» уйдёт в маршрут карточки.
      */
-    #[Route('/director-queue', name: 'spa_api_purchases_director_queue', methods: ['GET'])]
-    public function directorQueue(#[CurrentUser] ?User $user): JsonResponse
+    #[Route('/decision-required', name: 'spa_api_purchases_decision_required', methods: ['GET'])]
+    public function decisionRequired(#[CurrentUser] ?User $user): JsonResponse
     {
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
 
-        $queue = $this->purchaseRepo->findTriageQueueFor($user, $this->roster->roleCodesOf($user));
+        $queue = $this->purchaseRepo->findDecisionRequiredFor($user, $this->roster->roleCodesOf($user));
 
         return $this->json([
             'items' => array_map(
@@ -405,12 +408,31 @@ final class PurchaseController extends AbstractController
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
-        // Строки вложений уедут сами (orphanRemoval), а объекты в бакете — нет:
-        // ключи хранятся только в этих строках, после удаления их не найти.
-        $this->fileStorage->deleteAllFor($purchase);
+        $this->wipePurchase($purchase);
 
-        $this->em->remove($purchase);
-        $this->em->flush();
+        return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    /**
+     * Полное удаление любой заявки. Только ROLE_ADMIN: авторский DELETE
+     * режет всё, кроме своего черновика.
+     */
+    #[Route('/{id}/purge', name: 'spa_api_purchases_purge', requirements: ['id' => '\d+'], methods: ['DELETE'])]
+    public function purge(int $id, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+        if (!$this->isGranted(UserRole::ROLE_ADMIN->value)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->wipePurchase($purchase);
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }
@@ -508,8 +530,8 @@ final class PurchaseController extends AbstractController
      * [createdById|null, visibleStatuses|null].
      *
      * Носитель VIEW_ALL видит весь путь заявки, кроме чужих черновиков;
-     * остальные — только свои, а заявки, где они участники маршрута, отдаёт
-     * режим as_approver.
+     * остальные — свои и те, где они в маршруте. as_approver сужает список
+     * только до приглашённых.
      *
      * Раньше здесь было два набора статусов — директору и отделу закупок, — и
      * различались они одним REJECTED. Разделять из-за него право надвое незачем:
@@ -519,6 +541,9 @@ final class PurchaseController extends AbstractController
      */
     private function resolveScope(User $user): array
     {
+        if ($this->roster->isAdmin($user)) {
+            return [null, null];
+        }
         if ($this->access->can($user, PurchaseCapability::VIEW_ALL)) {
             return [null, PurchaseStatus::getNonDraft()];
         }
@@ -693,5 +718,16 @@ final class PurchaseController extends AbstractController
         $purchase->setCategory($category);
 
         return null;
+    }
+
+    /**
+     * Физически сносит заявку: файлы в бакете, потом строку.
+     * Дочерние этапы/задачи/комменты уедут каскадом.
+     */
+    private function wipePurchase(PurchaseRequest $purchase): void
+    {
+        $this->fileStorage->deleteAllFor($purchase);
+        $this->em->remove($purchase);
+        $this->em->flush();
     }
 }

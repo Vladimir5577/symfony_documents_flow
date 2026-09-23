@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Purchase;
 
 use App\Controller\SpaApi\SpaApiError;
+use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\Purchase\PurchaseRouteTemplateStage;
 use App\Entity\Purchase\PurchaseRouteTemplateTask;
@@ -185,6 +186,38 @@ final class ApprovalRouteEditor
             ->setUpdatedBy($actor)
             ->setUpdatedAt(new \DateTimeImmutable());
         $this->save();
+    }
+
+    /**
+     * Снести заготовку и заявки, которые на неё ссылаются.
+     *
+     * Ключи файлов вызывающий забирает до этого вызова и стирает бакет уже после
+     * успешной записи: иначе откат транзакции оставил бы заявки без вложений.
+     * Дефолт вида заявки снимается вместе с заготовкой — RESTRICT не дал бы
+     * удалить маршрут из-под него.
+     *
+     * @param list<PurchaseRequest> $requests
+     */
+    public function delete(PurchaseRouteTemplate $template, array $requests): void
+    {
+        try {
+            $this->em->wrapInTransaction(function () use ($template, $requests): void {
+                foreach ($requests as $request) {
+                    $this->em->remove($request);
+                }
+                foreach ($this->defaults->findBy(['template' => $template]) as $row) {
+                    $this->em->remove($row);
+                }
+                // Дефолт держит заготовку через RESTRICT, поэтому он и заявки
+                // уходят отдельной записью, до самой заготовки.
+                $this->em->flush();
+
+                $this->em->remove($template);
+                $this->em->flush();
+            });
+        } catch (OptimisticLockException) {
+            throw new PurchaseRouteException(SpaApiError::PURCHASE_CONCURRENT_UPDATE);
+        }
     }
 
     /**
