@@ -26,7 +26,7 @@ final class PurchaseStatusTest extends TestCase
     {
         self::assertSame(PurchaseStatus::INVOICE_PAID, PurchaseStatus::afterStage(PurchaseStagePurpose::PAYMENT));
         self::assertSame(PurchaseStatus::DELIVERED, PurchaseStatus::afterStage(PurchaseStagePurpose::DELIVERY));
-        self::assertSame(PurchaseStatus::DONE, PurchaseStatus::afterStage(PurchaseStagePurpose::CLOSING));
+        self::assertNull(PurchaseStatus::afterStage(PurchaseStagePurpose::CLOSING));
     }
 
     /**
@@ -43,7 +43,7 @@ final class PurchaseStatusTest extends TestCase
 
     /**
      * Решать по задачам можно и после APPROVED: маршрут на этом не кончается,
-     * дальше идут этапы исполнения. Кончается он на DONE.
+     * дальше идут этапы исполнения. Отдельного «выполнено» нет.
      */
     public function testRouteSpansApprovalAndExecution(): void
     {
@@ -51,10 +51,11 @@ final class PurchaseStatusTest extends TestCase
         self::assertTrue(PurchaseStatus::APPROVED->isInRoute());
         self::assertTrue(PurchaseStatus::INVOICE_PAID->isInRoute());
         self::assertTrue(PurchaseStatus::DELIVERED->isInRoute());
+        self::assertTrue(PurchaseStatus::DELIVERED->isFinal());
+        self::assertTrue(PurchaseStatus::CANCELLED->isFinal());
 
         self::assertFalse(PurchaseStatus::DRAFT->isInRoute());
         self::assertFalse(PurchaseStatus::REJECTED->isInRoute());
-        self::assertFalse(PurchaseStatus::DONE->isInRoute());
         self::assertFalse(PurchaseStatus::CANCELLED->isInRoute());
     }
 }

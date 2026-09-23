@@ -11,7 +11,6 @@ use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseHistoryAction;
-use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseStatus;
@@ -145,6 +144,11 @@ final class PurchaseApprovalWorkflow
 
         if (!$stage->isSatisfied()) {
             $this->save($request);
+            $this->notifier->notifyChanged(
+                $request,
+                $actor,
+                sprintf('Заявка на закупку «%s» продвинулась', $request->getTitle()),
+            );
 
             return;
         }
@@ -289,6 +293,12 @@ final class PurchaseApprovalWorkflow
         );
         $this->save($request);
 
+        $this->notifier->notifyChanged(
+            $request,
+            $actor,
+            sprintf('Согласование по закупке «%s» снято', $request->getTitle()),
+            'Согласование снято',
+        );
         $this->notifier->notifyStageActivated($request, $actor);
     }
 
@@ -431,10 +441,10 @@ final class PurchaseApprovalWorkflow
         });
     }
 
-    /** Отмена из любого нефинального статуса. */
+    /** Отмена. Кто и из какого статуса — решает PurchaseAccess::canCancel. */
     public function cancel(PurchaseRequest $request, User $actor, ?string $comment): void
     {
-        if ($request->getStatus()->isFinal()) {
+        if ($request->getStatus() === PurchaseStatus::CANCELLED) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
         }
 
@@ -451,21 +461,6 @@ final class PurchaseApprovalWorkflow
         $this->save($request);
 
         $this->notifier->notifyCancelled($request, $actor, $comment);
-    }
-
-    /** Смена приоритета. */
-    public function setPriority(PurchaseRequest $request, User $actor, PurchasePriority $priority): void
-    {
-        if ($request->getStatus()->isFinal()) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
-        }
-        if ($request->getPriority() === $priority) {
-            return;
-        }
-
-        $request->setPriority($priority);
-        $this->history->log($request, $actor, PurchaseHistoryAction::PRIORITY_CHANGED, $priority->getLabel());
-        $this->save($request);
     }
 
     /**
@@ -619,8 +614,11 @@ final class PurchaseApprovalWorkflow
             PurchaseStatus::APPROVED => $this->notifier->notifyApproved($request, $actor),
             PurchaseStatus::INVOICE_PAID => $this->notifier->notifyStatusChanged($request, $actor),
             PurchaseStatus::DELIVERED => $this->notifier->notifyDelivered($request, $actor),
-            PurchaseStatus::DONE => $this->notifier->notifyConfirmed($request, $actor),
-            default => null,
+            default => $this->notifier->notifyChanged(
+                $request,
+                $actor,
+                sprintf('Заявка на закупку «%s» продвинулась', $request->getTitle()),
+            ),
         };
 
         if ($request->getCurrentStage() !== null) {

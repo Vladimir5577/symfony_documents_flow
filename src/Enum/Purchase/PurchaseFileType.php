@@ -33,10 +33,9 @@ enum PurchaseFileType: string
             self::CONTRACT => in_array($status, [
                 PurchaseStatus::INVOICE_PAID,
                 PurchaseStatus::DELIVERED,
-                PurchaseStatus::DONE,
             ], true),
-            // УПД требуется, чтобы закрыть заявку.
-            self::UPD => $status === PurchaseStatus::DONE,
+            // УПД требует задача закрытия, не статус: отдельного «выполнено» нет.
+            self::UPD => false,
             // ТЗ и прочее ни на что не завязаны.
             self::TECHNICAL_SPEC, self::OTHER => false,
         };

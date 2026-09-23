@@ -25,18 +25,12 @@ final class PurchaseFileTypeTest extends TestCase
         // Оплатили — договор зафиксирован
         self::assertTrue($contract->isLockedAt(PurchaseStatus::INVOICE_PAID));
         self::assertTrue($contract->isLockedAt(PurchaseStatus::DELIVERED));
-        self::assertTrue($contract->isLockedAt(PurchaseStatus::DONE));
     }
 
-    public function testUpdLockedOnceRequestClosed(): void
+    public function testUpdIsNotLockedByStatus(): void
     {
-        $upd = PurchaseFileType::UPD;
-
-        // До закрытия УПД можно перезалить: заявку без него всё равно не закрыть
-        self::assertFalse($upd->isLockedAt(PurchaseStatus::DELIVERED));
-
-        // Закрыли в архив — единственное подтверждение закупки трогать нельзя
-        self::assertTrue($upd->isLockedAt(PurchaseStatus::DONE));
+        // УПД держит задача закрытия, не статус.
+        self::assertFalse(PurchaseFileType::UPD->isLockedAt(PurchaseStatus::DELIVERED));
     }
 
     public function testOptionalFilesNeverLocked(): void

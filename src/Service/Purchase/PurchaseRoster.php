@@ -118,7 +118,7 @@ final class PurchaseRoster
      * Проверяем по самому пользователю, а не через Security: roster нужен и в
      * консоли, и в обработчике сообщений, где текущего токена нет.
      */
-    private function isAdmin(User $user): bool
+    public function isAdmin(User $user): bool
     {
         return in_array(UserRole::ROLE_ADMIN->value, $user->getRoles(), true);
     }

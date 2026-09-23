@@ -7,7 +7,6 @@ use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseLaw;
 use App\Enum\Purchase\PurchaseMethod;
-use App\Enum\Purchase\PurchasePriority;
 use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
@@ -83,9 +82,6 @@ class PurchaseRequest
     // при редактировании и проверка потолка быстрой заявки при подаче.
     #[ORM\Column(name: 'created_as', type: Types::STRING, length: 20, enumType: PurchaseRequestKind::class, options: ['default' => 'STANDARD'])]
     private PurchaseRequestKind $createdAs = PurchaseRequestKind::STANDARD;
-
-    #[ORM\Column(type: Types::STRING, length: 20, enumType: PurchasePriority::class, options: ['default' => 'NORMAL'])]
-    private PurchasePriority $priority = PurchasePriority::NORMAL;
 
     /**
      * Какой заготовкой пустить заявку. NULL — возьмётся дефолт для createdAs.
@@ -306,18 +302,6 @@ class PurchaseRequest
     public function setStatus(PurchaseStatus $status): static
     {
         $this->status = $status;
-
-        return $this;
-    }
-
-    public function getPriority(): PurchasePriority
-    {
-        return $this->priority;
-    }
-
-    public function setPriority(PurchasePriority $priority): static
-    {
-        $this->priority = $priority;
 
         return $this;
     }

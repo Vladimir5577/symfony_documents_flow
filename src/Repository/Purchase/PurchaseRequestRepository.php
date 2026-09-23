@@ -4,9 +4,9 @@ namespace App\Repository\Purchase;
 
 use App\Entity\Purchase\PurchaseApprovalStage;
 use App\Entity\Purchase\PurchaseRequest;
+use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseStageStatus;
-use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\Purchase\PurchaseTaskAssignment;
 use App\Enum\Purchase\PurchaseTaskDecision;
@@ -26,30 +26,44 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     }
 
     /**
-     * Очередь разбора: заявки, где этап разбора ждёт решения этого человека.
+     * Заявки, которые ссылаются на заготовку: назначенный маршрут или уже собранный снимок.
      *
-     * Гейта «ты директор» здесь нет — очередь и есть ответ на вопрос «что ждёт
-     * меня»: пусто у того, к кому задачи разбора не адресованы.
+     * @return list<PurchaseRequest>
+     */
+    public function findUsingTemplate(PurchaseRouteTemplate $template): array
+    {
+        return $this->createQueryBuilder('p')
+            ->leftJoin('p.files', 'f')->addSelect('f')
+            ->andWhere('p.routeTemplate = :template OR p.appliedRouteTemplate = :template')
+            ->setParameter('template', $template)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Inbox: заявки, где сейчас очередь этого человека — любой этап, не только разбор.
      *
-     * Прежде здесь стоял подзапрос «перед этим шагом не осталось незакрытых»:
-     * шагов разбора в маршруте было два, и «шаг не решён» не значило «заявка
-     * стоит на нём». Теперь разбор в маршруте один, а стоит ли на нём заявка,
-     * говорит статус этапа.
+     * Зеркало PurchaseAccess::findMyActiveTask: заявка в маршруте, этап ACTIVE,
+     * на нём нерешённая задача, адресованная лично, ролью или как автору.
+     * Гейта по роли модуля нет — пусто, если решать нечего.
      *
      * @param list<string> $roleCodes роли модуля, выданные пользователю
      * @return list<PurchaseRequest>
      */
-    public function findTriageQueueFor(User $user, array $roleCodes): array
+    public function findDecisionRequiredFor(User $user, array $roleCodes): array
     {
         $qb = $this->createQueryBuilder('p')
             ->innerJoin('p.stages', 's')
             ->innerJoin('s.tasks', 't')
-            ->andWhere('p.status = :onApproval')
-            ->andWhere('s.purpose = :triage')
+            ->andWhere('p.status IN (:inRoute)')
             ->andWhere('s.status = :active')
             ->andWhere('t.decision = :pending')
-            ->setParameter('onApproval', PurchaseStatus::ON_APPROVAL)
-            ->setParameter('triage', PurchaseStagePurpose::TRIAGE)
+            ->setParameter('inRoute', [
+                PurchaseStatus::ON_APPROVAL,
+                PurchaseStatus::APPROVED,
+                PurchaseStatus::INVOICE_PAID,
+                PurchaseStatus::DELIVERED,
+            ])
             ->setParameter('active', PurchaseStageStatus::ACTIVE)
             ->setParameter('pending', PurchaseTaskDecision::PENDING)
             ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
@@ -85,32 +99,45 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         ?float $minAmount = null,
         array $approverRoleCodes = [],
     ): array {
-        $qb = $this->createFilteredQueryBuilder($createdById, $statuses, $search, $minAmount);
+        $ownerAndApprover = $createdById !== null && $approverUserId !== null;
+        $qb = $this->createFilteredQueryBuilder(
+            $ownerAndApprover ? null : $createdById,
+            $statuses,
+            $search,
+            $minAmount,
+        );
 
         // «Я согласант» — заявки, где человек есть в маршруте: лично, через роль
-        // или как автор задачи, адресованной заявителю.
+        // или как автор задачи, адресованной заявителю. Вместе с createdBy —
+        // свои ИЛИ назначенные: иначе зам видит заявку только в inbox.
         if ($approverUserId !== null) {
-            $qb->join(PurchaseApprovalStage::class, 'fs', 'WITH', 'fs.purchaseRequest = pr')
-                ->join('fs.tasks', 'ft')
+            $join = $ownerAndApprover ? 'leftJoin' : 'join';
+            $qb->$join(PurchaseApprovalStage::class, 'fs', 'WITH', 'fs.purchaseRequest = pr')
+                ->$join('fs.tasks', 'ft')
                 ->setParameter('user', $approverUserId)
                 ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
-                ->andWhere($this->addressedExpr($approverRoleCodes, 'ft', 'pr'))
                 ->distinct();
 
             if ($approverRoleCodes !== []) {
                 $qb->setParameter('roleCodes', $approverRoleCodes, ArrayParameterType::STRING);
             }
+
+            $addressed = $this->addressedExpr($approverRoleCodes, 'ft', 'pr');
+            if ($ownerAndApprover) {
+                $qb->andWhere('pr.createdBy = :createdById OR ' . $addressed)
+                    ->setParameter('createdById', $createdById);
+            } else {
+                $qb->andWhere($addressed);
+            }
         }
 
         $total = (int) (clone $qb)
-            ->select('COUNT(pr.id)')
+            ->select($approverUserId !== null ? 'COUNT(DISTINCT pr.id)' : 'COUNT(pr.id)')
             ->getQuery()
             ->getSingleScalarResult();
 
         $items = $qb
-            ->addSelect("CASE WHEN pr.priority = 'URGENT' THEN 0 ELSE 1 END AS HIDDEN prioritySort")
-            ->orderBy('prioritySort', 'ASC')
-            ->addOrderBy('pr.createdAt', 'DESC')
+            ->orderBy('pr.createdAt', 'DESC')
             ->setFirstResult(($page - 1) * $pageSize)
             ->setMaxResults($pageSize)
             ->getQuery()
