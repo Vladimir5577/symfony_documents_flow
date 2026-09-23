@@ -34,7 +34,7 @@ enum PurchaseFileType: string
                 PurchaseStatus::INVOICE_PAID,
                 PurchaseStatus::DELIVERED,
             ], true),
-            // УПД требует задача закрытия, не статус: отдельного «выполнено» нет.
+            // УПД требует задача маршрута (обычно поставки), не статус: отдельного «выполнено» нет.
             self::UPD => false,
             // ТЗ и прочее ни на что не завязаны.
             self::TECHNICAL_SPEC, self::OTHER => false,
