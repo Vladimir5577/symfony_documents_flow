@@ -281,6 +281,35 @@ final class PurchaseApprovalFlowTest extends TestCase
         self::assertSame(self::STAGE_SOURCING, $request->getCurrentStage()?->getPosition());
     }
 
+    /** Требование документа с динамической задачи заготовки доезжает до назначенного зама. */
+    public function testAssignedDeputyKeepsRequiredFile(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD);
+        $template = $request->getAppliedRouteTemplate();
+        self::assertInstanceOf(PurchaseRouteTemplate::class, $template);
+        foreach ($template->getStages() as $templateStage) {
+            if ($templateStage->getPosition() !== self::STAGE_APPROVERS) {
+                continue;
+            }
+            foreach ($templateStage->getTasks() as $templateTask) {
+                $templateTask->setRequiresFileType(PurchaseFileType::TECHNICAL_SPEC);
+            }
+        }
+
+        $stage = $this->stageAt($request, self::STAGE_APPROVERS);
+        $this->workflow->triage(
+            $request,
+            $this->taskAt($request, self::STAGE_TRIAGE),
+            $this->user(2),
+            [],
+            [(int) $stage->getId() => [$this->user(7)]],
+        );
+
+        $assigned = $stage->getTasks()->first();
+        self::assertInstanceOf(PurchaseApprovalTask::class, $assigned);
+        self::assertSame(PurchaseFileType::TECHNICAL_SPEC, $assigned->getRequiresFileType());
+    }
+
     /**
      * Назначить согласантов можно только пока активен разбор: дальше выбирать их
      * некому, а указатель поехал бы назад.

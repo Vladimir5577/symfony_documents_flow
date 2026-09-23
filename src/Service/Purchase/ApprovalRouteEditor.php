@@ -217,7 +217,6 @@ final class ApprovalRouteEditor
     private function fill(PurchaseRouteTemplate $template, array $payload, User $actor): PurchaseRouteTemplate
     {
         $stages = $this->parseStages($payload['stages'] ?? []);
-        $this->assertRulesHold($stages);
 
         $template->setName($this->parseName($payload['name'] ?? $template->getName()))
             ->setDescription(is_string($payload['description'] ?? null) ? $payload['description'] : null)
@@ -289,79 +288,6 @@ final class ApprovalRouteEditor
     }
 
     /**
-     * Правила заготовки:
-     *
-     *   маршрут без этапов не сохраняем — по нему заявка не пойдёт никуда, а
-     *   «убрать маршрут» это не правка регламента, а его отмена;
-     *
-     *   разбор в маршруте не больше одного — с него правят состав, выбирают
-     *   согласантов и меняют маршрут, и два разбора означали бы два места с этими
-     *   правами. У быстрого маршрута разбора нет вовсе, поэтому «не больше», а не
-     *   «ровно один»;
-     *
-     *   динамический этап только позже разбора — иначе выбирать на него людей
-     *   некому, и заявка встала бы, ожидая тех, кого никто не назначит;
-     *
-     *   исполнение только после согласования — маршрут, где оплата стоит перед
-     *   подписью финдиректора, это ошибка настройки, а не редкий регламент;
-     *
-     *   задачу заявителю только на исполнении — на согласовании это значило бы,
-     *   что автор согласует собственную заявку.
-     *
-     * Этап ресёрча не требуется и по количеству не ограничен: маршрут из одних
-     * подписей законен. Модуль это переживает — исполнителя у заявки не будет,
-     * поставщика и цены править негде, а кнопка возврата документов в закупки не
-     * появится, потому что возвращать некуда.
-     *
-     * @param list<PurchaseRouteTemplateStage> $stages
-     * @throws PurchaseRouteException
-     */
-    private function assertRulesHold(array $stages): void
-    {
-        if ($stages === []) {
-            throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_EMPTY);
-        }
-
-        $triagePosition = null;
-        $triages = 0;
-        $firstExecution = null;
-        $lastApproval = null;
-
-        foreach ($stages as $stage) {
-            $purpose = $stage->getPurpose();
-
-            if ($purpose === PurchaseStagePurpose::TRIAGE) {
-                ++$triages;
-                $triagePosition = $stage->getPosition();
-            }
-            if ($purpose->isExecution()) {
-                $firstExecution ??= $stage->getPosition();
-            } else {
-                $lastApproval = $stage->getPosition();
-            }
-            if ($stage->hasAuthorTask() && !$purpose->isExecution()) {
-                throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_TASK_INVALID);
-            }
-        }
-
-        if ($triages > 1) {
-            throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_STAGE_ORDER_INVALID);
-        }
-        if ($firstExecution !== null && $lastApproval !== null && $firstExecution < $lastApproval) {
-            throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_STAGE_ORDER_INVALID);
-        }
-
-        foreach ($stages as $stage) {
-            if (!$stage->isDynamic()) {
-                continue;
-            }
-            if ($triagePosition === null || $triagePosition >= $stage->getPosition()) {
-                throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_STAGE_ORDER_INVALID);
-            }
-        }
-    }
-
-    /**
      * Разобрать дерево этапов. Позиции нумеруются по порядку присланного списка:
      * фронт присылает структуру, номера считает бэк.
      *
@@ -399,20 +325,6 @@ final class ApprovalRouteEditor
 
             foreach ($this->parseTasks($row['tasks'] ?? []) as $task) {
                 $stage->addTask($task);
-            }
-
-            // Пустой этап — дырка в маршруте: заявка встанет на нём и никого не
-            // будет ждать. Динамический этап пуст только в снимке заявки, до
-            // выбора людей; в заготовке в нём стоит задача-место.
-            if ($stage->getTasks()->isEmpty()) {
-                throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_STAGE_INVALID);
-            }
-            // Динамический этап заполняется целиком выбором разбирающего, поэтому
-            // ролевых задач рядом быть не может: они бы остались ждать вместе с
-            // теми, кого ещё не выбрали, и этап нельзя было бы ни закрыть, ни
-            // показать как «ожидает назначения».
-            if ($stage->isDynamic() && $stage->getTasks()->count() > 1) {
-                throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_STAGE_INVALID);
             }
 
             $stages[] = $stage;

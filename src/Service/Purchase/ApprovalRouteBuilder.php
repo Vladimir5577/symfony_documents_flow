@@ -10,6 +10,7 @@ use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\Purchase\PurchaseRouteTemplateStage;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseTaskAssignment;
 use Doctrine\ORM\EntityManagerInterface;
@@ -122,7 +123,8 @@ final class ApprovalRouteBuilder
                 ->setPosition(++$position)
                 ->setAssignmentType(PurchaseTaskAssignment::USER)
                 ->setAssigneeUser($user)
-                ->setCreatedBy($actor);
+                ->setCreatedBy($actor)
+                ->setRequiresFileType($this->requiredFileType($stage));
 
             $stage->addTask($task);
             $this->em->persist($task);
@@ -157,6 +159,28 @@ final class ApprovalRouteBuilder
         }
 
         return $preview;
+    }
+
+    /**
+     * Динамическая задача в снимок при подаче не попадает — людей ещё нет.
+     * Требование документа остаётся на задаче заготовки и переносится сюда,
+     * когда разбирающий назначает людей.
+     */
+    private function requiredFileType(PurchaseApprovalStage $stage): ?PurchaseFileType
+    {
+        $position = $stage->getPosition();
+        foreach ($stage->getPurchaseRequest()?->getAppliedRouteTemplate()?->getStages() ?? [] as $templateStage) {
+            if ($templateStage->getPosition() !== $position) {
+                continue;
+            }
+            foreach ($templateStage->getTasks() as $templateTask) {
+                if ($templateTask->isDynamic()) {
+                    return $templateTask->getRequiresFileType();
+                }
+            }
+        }
+
+        return null;
     }
 
     private function copyStage(PurchaseRouteTemplateStage $templateStage): PurchaseApprovalStage
