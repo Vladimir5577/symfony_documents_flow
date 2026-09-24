@@ -92,6 +92,7 @@ final class SpaApiError
     public const PURCHASE_FILE_NAME_REQUIRED = 'purchase_file_name_required';
     public const PURCHASE_FILE_NOT_FOUND = 'purchase_file_not_found';
     public const PURCHASE_FILE_LOCKED = 'purchase_file_locked';
+    public const PURCHASE_FILE_EDITOR_FAILED = 'purchase_file_editor_failed';
     public const PURCHASE_CATEGORY_NOT_FOUND = 'purchase_category_not_found';
     public const PURCHASE_CATEGORY_IN_USE = 'purchase_category_in_use';
     public const PURCHASE_CATEGORY_NAME_REQUIRED = 'purchase_category_name_required';

@@ -113,6 +113,17 @@ final class PurchaseFileStorageService
      * Объекта может уже не быть — например, бакет чистили руками. Это не повод
      * отказываться удалять строку: иначе она останется навсегда неудаляемой.
      */
+    /** Перезапись того же ключа: id, имя и тип вложения не меняются. */
+    public function replace(string $storageKey, string $body): void
+    {
+        $this->s3->putObject([
+            'Bucket' => $this->bucket,
+            'Key' => $storageKey,
+            'Body' => $body,
+            'ContentType' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ]);
+    }
+
     public function delete(?string $storageKey): void
     {
         // Пустой ключ — это «картинки не было»: удалять нечего, и запрос в MinIO лишний.

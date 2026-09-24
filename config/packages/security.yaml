@@ -99,6 +99,8 @@ security:
         # Публичные роуты (доступны всем, включая неаутентифицированных)
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/save_docx, roles: PUBLIC_ACCESS }
+        # OnlyOffice скачивает docx и шлёт callback без JWT. Доступ — токен сессии в query.
+        - { path: ^/purchase_file_editor, roles: PUBLIC_ACCESS }
         - { path: ^/$, roles: PUBLIC_ACCESS } # корневой путь - редирект на /login
 
         # SPA API: выдача и обновление JWT — публичные эндпоинты
