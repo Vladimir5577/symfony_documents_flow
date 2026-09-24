@@ -82,6 +82,21 @@ final class PurchaseApiPresenter
             ],
             // «У кого заявка» — данные этапа, а не статус
             'currentStage' => $this->presentCurrentStageSummary($request),
+            // Полоса прогресса в списке: по сегменту на этап. Задачи не нужны,
+            // маршрут уже прогрет ради currentStage.
+            'stages' => array_values(array_map(
+                static function (PurchaseApprovalStage $stage): array {
+                    $status = $stage->getStatus();
+
+                    return [
+                        'id' => $stage->getId(),
+                        'title' => $stage->resolveTitle(),
+                        'status' => ['value' => $status->value, 'label' => $status->getLabel()],
+                        'isActive' => $stage->isActive(),
+                    ];
+                },
+                $request->getStages()->toArray(),
+            )),
             // Моя подпись на этой заявке, если её ещё можно снять. Нужна строке
             // списка: без неё тоггл в таблице не знает, что откатывать.
             // Маршрут здесь и так уже загружен ради currentStage.

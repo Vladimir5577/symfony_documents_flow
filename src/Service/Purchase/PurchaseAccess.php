@@ -35,8 +35,8 @@ use App\Enum\Purchase\PurchaseTaskDecision;
  * нельзя было настроить, не меняя код.
  *
  * Видимость и право действовать — разные вещи: видеть заявку может носитель
- * VIEW_ALL, автор и любой участник маршрута, а закрыть задачу — только её адресат,
- * и только когда на её этапе стоит указатель.
+ * VIEW_ALL, автор и любой участник маршрута, а закрыть задачу — её адресат или
+ * ROLE_ADMIN, и только когда на её этапе стоит указатель.
  */
 final class PurchaseAccess
 {
@@ -85,13 +85,14 @@ final class PurchaseAccess
 
     /**
      * Задача адресована этому человеку: лично, через роль модуля или как автору.
+     * ROLE_ADMIN закрывает её за адресата — в пул согласантов это его не кладёт.
      *
      * Очерёдность здесь не проверяется: адресат задачи и указатель маршрута —
      * разные вещи, вторым занимается PurchaseApprovalWorkflow.
      */
     public function canActOn(PurchaseApprovalTask $task, User $user): bool
     {
-        if ($task->isAddressedTo($user)) {
+        if ($this->roster->isAdmin($user) || $task->isAddressedTo($user)) {
             return true;
         }
 
