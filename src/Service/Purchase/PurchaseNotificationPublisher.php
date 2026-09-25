@@ -142,6 +142,29 @@ final class PurchaseNotificationPublisher
         );
     }
 
+    /**
+     * Текст договора поменялся после согласования — тем, кто его уже согласовал.
+     *
+     * Адресно, а не всем зрителям: согласие дано на прежний текст, и
+     * перечитать новый нужно именно им. Подпись при этом не сгорает — решение,
+     * согласны ли они с правкой, остаётся за ними.
+     *
+     * @param list<User> $approvers
+     */
+    public function notifyContractChanged(PurchaseRequest $request, User $actor, array $approvers, string $fileName): void
+    {
+        if ($approvers === []) {
+            return;
+        }
+
+        $this->publish(
+            'contract_changed', $request, $actor, $approvers,
+            sprintf('Договор по закупке «%s» изменён после вашего согласования', $this->titleOf($request)),
+            'Договор изменён',
+            $fileName !== '' ? $fileName : null,
+        );
+    }
+
     /** Новый комментарий — всем, кому заявка видна. */
     public function notifyCommentAdded(PurchaseRequest $request, User $actor): void
     {

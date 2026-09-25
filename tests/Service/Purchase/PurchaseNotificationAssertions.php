@@ -112,7 +112,7 @@ trait PurchaseNotificationAssertions
             self::assertSame('/purchases/' . $request->getId(), $message->link, $event);
             self::assertNotContains($actor->getId(), $message->recipients, $event . ': актор в получателях');
 
-            if (in_array($event, ['stage_activated', 'approvers_assigned'], true)) {
+            if (in_array($event, ['stage_activated', 'approvers_assigned', 'contract_changed'], true)) {
                 continue;
             }
 

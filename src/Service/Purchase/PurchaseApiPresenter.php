@@ -278,16 +278,21 @@ final class PurchaseApiPresenter
      */
     public function presentFile(PurchaseRequestFile $file): array
     {
+        $extension = strtolower(pathinfo($file->getStorageKey(), PATHINFO_EXTENSION));
+        $request = $file->getPurchaseRequest();
+
         return [
             'id' => $file->getId(),
             'originalName' => $file->getOriginalName(),
             // Имя на экране можно сменить и убрать .pdf — тип остаётся у ключа в бакете.
-            'extension' => strtolower(pathinfo($file->getStorageKey(), PATHINFO_EXTENSION)),
+            'extension' => $extension,
             'type' => ['value' => $file->getType()->value, 'label' => $file->getType()->getLabel()],
             'uploadedBy' => $this->presentUser($file->getUploadedBy()),
             'createdAt' => $file->getCreatedAt()?->format('c'),
             'canDelete' => $this->canDeleteFile($file),
             'canRename' => $this->canRenameFile($file),
+            // Зеркалит режим PurchaseFileEditorController::open(): правит тот, чей сейчас этап.
+            'canEdit' => $extension === 'docx' && $request !== null && $this->findMyActiveTask($request) !== null,
             'downloadUrl' => sprintf(
                 '/spa/api/purchases/%d/files/%d/download',
                 $file->getPurchaseRequest()?->getId(),
