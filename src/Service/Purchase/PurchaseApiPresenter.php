@@ -311,6 +311,8 @@ final class PurchaseApiPresenter
             'description' => $template->getDescription(),
             'isActive' => $template->isActive(),
             'sortOrder' => $template->getSortOrder(),
+            // «Сумма до, ₽»: заявки дешевле идут этим маршрутом сами; null — без порога.
+            'maxAmount' => $template->getMaxAmountKopecks() === null ? null : $template->getMaxAmountKopecks() / 100,
             // Форма правки обязана вернуть эту версию обратно: по ней видно, что
             // админ правил тот маршрут, который открывал.
             'version' => $template->getVersion(),

@@ -113,6 +113,7 @@ final class ApprovalRouteEditor
             ->setDescription($source->getDescription())
             ->setAllowedKinds($source->getAllowedKinds())
             ->setSortOrder($source->getSortOrder())
+            ->setMaxAmountKopecks($source->getMaxAmountKopecks())
             // Копия выключена: маршрут, появившийся в списке выбора готовым к
             // работе, — это регламент, который никто не просматривал.
             ->setActive(false)
@@ -255,6 +256,7 @@ final class ApprovalRouteEditor
             ->setDescription(is_string($payload['description'] ?? null) ? $payload['description'] : null)
             ->setAllowedKinds($this->parseKinds($payload['allowedKinds'] ?? null))
             ->setSortOrder((int) ($payload['sortOrder'] ?? $template->getSortOrder()))
+            ->setMaxAmountKopecks($this->parseMaxAmount($payload['maxAmount'] ?? null))
             ->setUpdatedBy($actor)
             ->setUpdatedAt(new \DateTimeImmutable());
 
@@ -453,6 +455,23 @@ final class ApprovalRouteEditor
         }
 
         return $kinds;
+    }
+
+    /**
+     * «Сумма до, ₽» → копейки; пусто — маршрут без порога суммы.
+     *
+     * @throws PurchaseRouteException
+     */
+    private function parseMaxAmount(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (!is_numeric($value) || (float) $value <= 0 || (float) $value >= 1e12) {
+            throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_META_INVALID);
+        }
+
+        return (int) round((float) $value * 100);
     }
 
     /** @throws PurchaseRouteException */

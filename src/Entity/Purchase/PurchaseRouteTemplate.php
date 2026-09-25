@@ -77,6 +77,18 @@ class PurchaseRouteTemplate
     #[ORM\Column(name: 'sort_order', type: Types::SMALLINT, options: ['default' => 0])]
     private int $sortOrder = 0;
 
+    /**
+     * «Сумма до» в копейках: маршрут для заявок дешевле порога — ускоренная
+     * процедура (канцелярия, вода, картриджи). NULL — без ограничения суммы.
+     *
+     * Заявка дешевле порога уходит на такой маршрут сама, при подаче
+     * (ApprovalRouteResolver). И наоборот, дорогую заявку на него не пустить:
+     * иначе ускоренный маршрут, поставленный по умолчанию, увёл бы её мимо
+     * генерального директора.
+     */
+    #[ORM\Column(name: 'max_amount_kopecks', type: Types::BIGINT, nullable: true)]
+    private ?string $maxAmountKopecks = null;
+
     /** @var Collection<int, PurchaseRouteTemplateStage> */
     #[ORM\OneToMany(
         mappedBy: 'template',
@@ -187,6 +199,26 @@ class PurchaseRouteTemplate
     public function allowsKind(PurchaseRequestKind $kind): bool
     {
         return in_array($kind->value, $this->allowedKinds, true);
+    }
+
+    public function getMaxAmountKopecks(): ?int
+    {
+        return $this->maxAmountKopecks === null ? null : (int) $this->maxAmountKopecks;
+    }
+
+    public function setMaxAmountKopecks(?int $kopecks): static
+    {
+        $this->maxAmountKopecks = $kopecks === null ? null : (string) $kopecks;
+
+        return $this;
+    }
+
+    /** Заявка на такую сумму может идти этим маршрутом: порога нет или она дешевле. */
+    public function fitsAmount(int $totalKopecks): bool
+    {
+        $limit = $this->getMaxAmountKopecks();
+
+        return $limit === null || $totalKopecks < $limit;
     }
 
     public function isActive(): bool

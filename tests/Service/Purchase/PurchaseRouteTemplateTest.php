@@ -622,6 +622,24 @@ final class PurchaseRouteTemplateTest extends TestCase
         self::assertSame('NEW_ROUTE', $created->getCode());
     }
 
+    /** «Сумма до, ₽» ускоренной процедуры хранится в копейках; пусто — без порога. */
+    public function testEditorKeepsAmountThreshold(): void
+    {
+        $editor = $this->editorWith($this->createStub(PurchaseRouteTemplateRepository::class));
+        $base = [
+            'code' => 'FAST_TRACK',
+            'name' => 'Ускоренная закупка',
+            'allowedKinds' => [PurchaseRequestKind::STANDARD->value, PurchaseRequestKind::FAST->value],
+            'stages' => [['purpose' => 'PAYMENT', 'allowsReject' => true, 'tasks' => [['roleCode' => 'FINANCE_DIRECTOR']]]],
+        ];
+
+        self::assertSame(1_500_000, $editor->create($base + ['maxAmount' => 15000], $this->user(1))->getMaxAmountKopecks());
+        self::assertNull($editor->create(['code' => 'NO_LIMIT'] + $base + ['maxAmount' => ''], $this->user(1))->getMaxAmountKopecks());
+
+        $this->expectException(PurchaseRouteException::class);
+        $editor->create(['code' => 'BAD_LIMIT'] + $base + ['maxAmount' => -5], $this->user(1));
+    }
+
     /**
      * Копия маршрута приходит выключенной: маршрут, появившийся в списке выбора
      * готовым к работе, — это регламент, который никто не просматривал.
