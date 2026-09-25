@@ -143,6 +143,26 @@ final class PurchaseNotificationPublisher
     }
 
     /**
+     * Этап оплаты закрыт — автору: деньги ушли, дальше ждать товар или услугу.
+     *
+     * Адресно: остальным хватает общего «заявка продвинулась», а автору важен
+     * именно этот момент — с него он ждёт поставку.
+     */
+    public function notifyPaymentConfirmed(PurchaseRequest $request, User $actor): void
+    {
+        $author = $request->getCreatedBy();
+        if ($author === null) {
+            return;
+        }
+
+        $this->publish(
+            'payment_confirmed', $request, $actor, [$author],
+            sprintf('Оплата по вашей закупке «%s» подтверждена — ожидайте товар или услугу', $this->titleOf($request)),
+            'Оплата подтверждена',
+        );
+    }
+
+    /**
      * Текст договора поменялся после согласования — тем, кто его уже согласовал.
      *
      * Адресно, а не всем зрителям: согласие дано на прежний текст, и

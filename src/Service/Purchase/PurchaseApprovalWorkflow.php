@@ -171,6 +171,10 @@ final class PurchaseApprovalWorkflow
         $this->closeStage($request, $stage, $actor);
         $this->save($request);
         $this->announce($request, $actor, $stage);
+
+        if ($stage->getPurpose() === PurchaseStagePurpose::PAYMENT) {
+            $this->notifier->notifyPaymentConfirmed($request, $actor);
+        }
     }
 
     /**

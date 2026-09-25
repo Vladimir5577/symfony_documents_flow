@@ -789,6 +789,25 @@ final class PurchaseApprovalFlowTest extends TestCase
         );
     }
 
+    /** Оплата прошла — автору адресно: «оплата подтверждена, ожидайте товар или услугу». */
+    public function testAuthorIsToldPaymentIsConfirmed(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::STANDARD, ['100.00'], full: true);
+        $this->approveThrough($request, self::STAGE_FINANCE);
+        $this->purchaseNotifications = [];
+
+        $this->workflow->approveTask($request, $this->taskAt($request, self::STAGE_PAYMENT), $this->user(6));
+
+        $paid = array_values(array_filter(
+            $this->purchaseNotifications,
+            static fn (array $sent): bool => $sent[1] === 'payment_confirmed',
+        ));
+        self::assertCount(1, $paid);
+        self::assertSame([$request->getCreatedBy()?->getId()], $paid[0][0]->recipients);
+        self::assertStringContainsString('подтверждена — ожидайте товар или услугу', $paid[0][0]->title);
+        $this->assertPurchaseNotified($request, $this->user(6));
+    }
+
     /** Подпись об оплате не отзывается: деньги уже ушли. */
     public function testExecutionSignatureCannotBeRevoked(): void
     {
