@@ -95,6 +95,37 @@ final class PurchaseFileCoEditingTest extends TestCase
         self::assertSame($this->coEditing()->documentKey($file), $config['document']['key']);
     }
 
+    public function testDeputyAndDirectorEditWithTheirColours(): void
+    {
+        [$purchase] = $this->negotiation();
+        $file = $this->contract($purchase);
+
+        // Замов выбирает разбирающий: задача адресована человеку, роль — у пула этапа.
+        $deputyTask = (new PurchaseApprovalTask())
+            ->setPosition(1)
+            ->setAssignmentType(PurchaseTaskAssignment::USER)
+            ->setAssigneeUser($this->user(140));
+        (new PurchaseApprovalStage())
+            ->setPurpose(PurchaseStagePurpose::SIGN_OFF)
+            ->setCandidateRoleCode(PurchaseRoleCode::PROFILE_DEPUTY)
+            ->addTask($deputyTask);
+        $deputy = $this->coEditing()->editorConfig($file, $this->user(140), $deputyTask, 'http://content', 'http://callback');
+
+        self::assertSame('Профильный зам', $deputy['editorConfig']['user']['group']);
+        self::assertSame(
+            [PurchaseFileCoEditing::HIGHLIGHT_PLUGIN => ['department' => 'PROFILE_DEPUTY']],
+            $deputy['editorConfig']['plugins']['options'],
+        );
+
+        $director = $this->coEditing()->editorConfig($file, $this->user(101), $this->roleTask(PurchaseRoleCode::DIRECTOR), 'http://content', 'http://callback');
+
+        self::assertSame('Директор', $director['editorConfig']['user']['group']);
+        self::assertSame(
+            [PurchaseFileCoEditing::HIGHLIGHT_PLUGIN => ['department' => 'DIRECTOR']],
+            $director['editorConfig']['plugins']['options'],
+        );
+    }
+
     public function testViewerJoinsTheSameSessionWithoutReviewOrHighlighting(): void
     {
         [$purchase] = $this->negotiation();

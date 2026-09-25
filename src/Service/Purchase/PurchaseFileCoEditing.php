@@ -78,7 +78,8 @@ final class PurchaseFileCoEditing
         ?string $callbackUrl,
     ): array {
         $edit = $myTask !== null;
-        $role = $myTask?->getRoleCode();
+        // Задача замов адресована человеку, а не роли: отдел — пул их этапа.
+        $role = $myTask?->getRoleCode() ?? $myTask?->getStage()?->getCandidateRoleCode();
 
         $person = ['id' => (string) $user->getId(), 'name' => PurchaseHistoryLogger::nameOf($user)];
         if ($edit && $role !== null) {
