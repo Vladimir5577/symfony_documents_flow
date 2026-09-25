@@ -60,11 +60,13 @@ final class PurchaseTransitionController extends AbstractController
     #[Route('/tasks/{taskId}/approve', name: 'spa_api_purchases_task_approve', requirements: ['taskId' => '\d+'], methods: ['POST'])]
     public function approveTask(int $id, int $taskId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
-        $comment = $this->comment($request);
+        $payload = json_decode($request->getContent(), true);
+        $comment = is_array($payload) ? trim((string) ($payload['comment'] ?? '')) : '';
+        $items = $this->collectItemEdits(is_array($payload) ? ($payload['items'] ?? []) : []);
 
         return $this->taskAction($id, $taskId, $user,
             fn (PurchaseRequest $p, PurchaseApprovalTask $t, User $u) => $this->workflow
-                ->approveTask($p, $t, $u, $comment !== '' ? $comment : null));
+                ->approveTask($p, $t, $u, $comment !== '' ? $comment : null, $items));
     }
 
     /** Вернуть автору со своей задачи. Комментарий обязателен. */
@@ -248,7 +250,7 @@ final class PurchaseTransitionController extends AbstractController
      * остаются как есть.
      *
      * @param mixed $rows
-     * @return array<int, array{included: bool, quantity: string|null}>
+     * @return array<int, array{included: bool, quantity: string|null, price: string|null}>
      */
     private function collectItemEdits(mixed $rows): array
     {
@@ -263,9 +265,11 @@ final class PurchaseTransitionController extends AbstractController
             }
 
             $quantity = $row['quantity'] ?? null;
+            $price = $row['estimatedPrice'] ?? null;
             $edits[(int) $row['id']] = [
                 'included' => (bool) ($row['included'] ?? true),
                 'quantity' => is_numeric($quantity) ? (string) $quantity : null,
+                'price' => is_numeric($price) ? (string) $price : null,
             ];
         }
 

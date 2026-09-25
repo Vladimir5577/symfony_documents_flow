@@ -40,7 +40,7 @@ final class PurchaseRequestEditor
      * урезанным составом, но без решения — у согласанта оказалось бы не то, что
      * разбирающий согласовал.
      *
-     * @param array<int, array{included: bool, quantity: string|null}> $itemEdits ключ — id позиции
+     * @param array<int, array{included: bool, quantity: string|null, price?: string|null}> $itemEdits ключ — id позиции
      * @return list<string> человекочитаемый дифф для истории
      * @throws PurchaseTransitionException
      */
@@ -65,19 +65,36 @@ final class PurchaseRequestEditor
             $quantity = $edit['quantity'];
             if ($quantity === null || (float) $quantity === (float) $item->getQuantity()) {
                 $item->setApprovedQuantity(null);
-                continue;
-            }
-            if ((float) $quantity <= 0) {
+            } elseif ((float) $quantity <= 0) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
+            } else {
+                $item->setApprovedQuantity($quantity);
+                $changes[] = sprintf(
+                    'количество «%s»: %s → %s',
+                    (string) $item->getName(),
+                    rtrim(rtrim((string) $item->getQuantity(), '0'), '.'),
+                    rtrim(rtrim($quantity, '0'), '.'),
+                );
             }
 
-            $item->setApprovedQuantity($quantity);
+            $price = $edit['price'] ?? null;
+            if ($price === null || $price === '') {
+                continue;
+            }
+            if (!is_numeric($price) || (float) $price < 0) {
+                throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
+            }
+            $priceValue = number_format((float) $price, 2, '.', '');
+            if ((float) $priceValue === (float) $item->getEstimatedPrice()) {
+                continue;
+            }
             $changes[] = sprintf(
-                'количество «%s»: %s → %s',
+                'цена «%s»: %s → %s',
                 (string) $item->getName(),
-                rtrim(rtrim((string) $item->getQuantity(), '0'), '.'),
-                rtrim(rtrim($quantity, '0'), '.'),
+                (string) $item->getEstimatedPrice(),
+                $priceValue,
             );
+            $item->setEstimatedPrice($priceValue);
         }
 
         $hasIncluded = false;

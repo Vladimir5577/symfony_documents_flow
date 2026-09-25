@@ -111,16 +111,6 @@ final class PurchaseNotificationPublisher
         );
     }
 
-    /** Согласована — всем, кому заявка видна. */
-    public function notifyApproved(PurchaseRequest $request, User $actor): void
-    {
-        $this->publish(
-            'approved', $request, $actor, $this->viewersOf($request),
-            sprintf('Заявка на закупку «%s» согласована', $this->titleOf($request)),
-            'Закупка согласована',
-        );
-    }
-
     /** Возвращена на доработку — всем, кому заявка видна. */
     public function notifyRejected(PurchaseRequest $request, User $actor, string $comment): void
     {
@@ -132,33 +122,13 @@ final class PurchaseNotificationPublisher
         );
     }
 
-    /** Продвижение по конвейеру — всем, кому заявка видна. */
-    public function notifyStatusChanged(PurchaseRequest $request, User $actor): void
-    {
-        $this->publish(
-            'status_changed', $request, $actor, $this->viewersOf($request),
-            sprintf('Заявка на закупку «%s»: %s', $this->titleOf($request), $request->getStatus()->getLabel()),
-            'Статус закупки изменён',
-        );
-    }
-
     /**
-     * Сдвиг по маршруту без смены статуса (подпись, отзыв) — зрителям заявки.
+     * Сдвиг по маршруту (подпись, отзыв) — зрителям заявки.
      * Адресное «ждёт вашего решения» шлёт notifyStageActivated отдельно.
      */
     public function notifyChanged(PurchaseRequest $request, User $actor, string $title, string $typeLabel = 'Заявка обновлена'): void
     {
         $this->publish('changed', $request, $actor, $this->viewersOf($request), $title, $typeLabel);
-    }
-
-    /** Доставлено — всем, кому заявка видна. */
-    public function notifyDelivered(PurchaseRequest $request, User $actor): void
-    {
-        $this->publish(
-            'delivered', $request, $actor, $this->viewersOf($request),
-            sprintf('Закупка «%s» доставлена — подтвердите получение', $this->titleOf($request)),
-            'Закупка доставлена',
-        );
     }
 
     /** Отменена — всем, кому заявка видна. */

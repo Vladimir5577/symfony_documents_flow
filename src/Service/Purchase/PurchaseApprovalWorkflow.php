@@ -11,6 +11,7 @@ use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseHistoryAction;
+use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseStatus;
@@ -110,13 +111,31 @@ final class PurchaseApprovalWorkflow
      * Пока в этапе остались незакрытые задачи, указатель не двигается: параллельные
      * подписи ложатся в любом порядке, этап уходит, когда закрыты все.
      */
+    /**
+     * @param array<int, array{included: bool, quantity: string|null, price?: string|null}> $itemEdits
+     */
     public function approveTask(
         PurchaseRequest $request,
         PurchaseApprovalTask $task,
         User $actor,
         ?string $comment = null,
+        array $itemEdits = [],
     ): void {
         $stage = $this->assertActiveTask($request, $task);
+
+        // Те же правки состава, что у директора на разборе. Цена — только у отдела
+        // закупок: оплата у финансового директора состав не меняет.
+        if ($itemEdits !== [] && $task->getRoleCode() === PurchaseRoleCode::PURCHASE_DEPARTMENT) {
+            $changes = $this->editor->applyItemEdits($request, $itemEdits);
+            if ($changes !== []) {
+                $this->history->log(
+                    $request,
+                    $actor,
+                    PurchaseHistoryAction::ITEMS_EDITED,
+                    implode('; ', $changes),
+                );
+            }
+        }
 
         // Требование файла живёт на задаче, а не в конвейере: у быстрого маршрута
         // задачи «договор» нет, и требовать с него договор не за что. Так же и УПД
@@ -144,18 +163,14 @@ final class PurchaseApprovalWorkflow
 
         if (!$stage->isSatisfied()) {
             $this->save($request);
-            $this->notifier->notifyChanged(
-                $request,
-                $actor,
-                sprintf('Заявка на закупку «%s» продвинулась', $request->getTitle()),
-            );
+            $this->notifier->notifyChanged($request, $actor, $this->advancedTitle($stage));
 
             return;
         }
 
         $this->closeStage($request, $stage, $actor);
         $this->save($request);
-        $this->announce($request, $actor);
+        $this->announce($request, $actor, $stage);
     }
 
     /**
@@ -388,7 +403,7 @@ final class PurchaseApprovalWorkflow
         if ($assigned !== []) {
             $this->notifier->notifyApproversAssigned($request, $actor, $assigned);
         }
-        $this->announce($request, $actor);
+        $this->announce($request, $actor, $stage);
     }
 
     /**
@@ -608,22 +623,19 @@ final class PurchaseApprovalWorkflow
     }
 
     /** Кому сообщить после того, как указатель сдвинулся. */
-    private function announce(PurchaseRequest $request, User $actor): void
+    private function announce(PurchaseRequest $request, User $actor, PurchaseApprovalStage $stage): void
     {
-        match ($request->getStatus()) {
-            PurchaseStatus::APPROVED => $this->notifier->notifyApproved($request, $actor),
-            PurchaseStatus::INVOICE_PAID => $this->notifier->notifyStatusChanged($request, $actor),
-            PurchaseStatus::DELIVERED => $this->notifier->notifyDelivered($request, $actor),
-            default => $this->notifier->notifyChanged(
-                $request,
-                $actor,
-                sprintf('Заявка на закупку «%s» продвинулась', $request->getTitle()),
-            ),
-        };
+        $this->notifier->notifyChanged($request, $actor, $this->advancedTitle($stage));
 
         if ($request->getCurrentStage() !== null) {
             $this->notifier->notifyStageActivated($request, $actor);
         }
+    }
+
+    /** «Заявка продвинулась: Разбор заявки». Своё название этапа, иначе — назначение. */
+    private function advancedTitle(PurchaseApprovalStage $stage): string
+    {
+        return 'Заявка продвинулась: ' . ($stage->getTitle() ?? $stage->getPurpose()->getLabel());
     }
 
     /**

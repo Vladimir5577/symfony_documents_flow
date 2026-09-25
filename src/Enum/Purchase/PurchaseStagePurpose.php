@@ -60,7 +60,7 @@ enum PurchaseStagePurpose: string
             self::TRIAGE => 'Разбор заявки',
             self::SOURCING => 'Ресёрч и документы',
             self::SIGN_OFF => 'Согласование',
-            self::PAYMENT => 'Отдел закупок',
+            self::PAYMENT => 'Оплата',
             self::DELIVERY => 'Поставка',
         };
     }
