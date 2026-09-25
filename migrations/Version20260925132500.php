@@ -20,8 +20,9 @@ final class Version20260925132500 extends AbstractMigration
 
     public function up(Schema $schema): void
     {
-        $this->addSql('DROP TABLE purchase_approval_step');
-        $this->addSql('DROP TABLE purchase_setting');
+        // IF EXISTS: на стенде этих таблиц уже не было, и миграция падала.
+        $this->addSql('DROP TABLE IF EXISTS purchase_approval_step');
+        $this->addSql('DROP TABLE IF EXISTS purchase_setting');
     }
 
     public function down(Schema $schema): void
