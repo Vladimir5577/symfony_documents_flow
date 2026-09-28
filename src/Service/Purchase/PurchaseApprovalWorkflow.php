@@ -145,6 +145,10 @@ final class PurchaseApprovalWorkflow
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         }
 
+        if ($task->getContractReview() !== null && !$task->isContractReviewPassed()) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONTRACT_REVIEW_REQUIRED);
+        }
+
         $task->decide(PurchaseTaskDecision::APPROVED, $actor, $comment);
 
         // Исполнитель — тот, кто закрыл ресёрч: он искал поставщика и готовил
@@ -175,6 +179,18 @@ final class PurchaseApprovalWorkflow
         if ($stage->getPurpose() === PurchaseStagePurpose::PAYMENT) {
             $this->notifier->notifyPaymentConfirmed($request, $actor);
         }
+    }
+
+    /** Отметка из редактора: рецензия пройдена или рецензии утверждены. */
+    public function passContractReview(PurchaseRequest $request, PurchaseApprovalTask $task): void
+    {
+        $this->assertActiveTask($request, $task);
+        if ($task->getContractReview() === null) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONTRACT_REVIEW_REQUIRED);
+        }
+
+        $task->passContractReview();
+        $this->save($request);
     }
 
     /**

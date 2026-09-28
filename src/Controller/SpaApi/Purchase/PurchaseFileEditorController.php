@@ -8,6 +8,7 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseFileType;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
 use App\Service\Purchase\PurchaseAccess;
@@ -104,6 +105,10 @@ final class PurchaseFileEditorController extends AbstractController
         return $this->json([
             'mode' => $mode,
             'token' => $this->sign((int) $purchase->getId(), (int) $file->getId(), (int) $user->getId(), $key, $mode),
+            'taskId' => $task?->getId(),
+            'contractReview' => $file->getType() === PurchaseFileType::CONTRACT
+                ? $task?->getContractReview()?->value
+                : null,
             'documentServerUrl' => rtrim($this->onlyofficeDocumentServerUrl, '/'),
             'config' => $config,
         ]);
@@ -305,6 +310,8 @@ final class PurchaseFileEditorController extends AbstractController
     {
         $ids = $committerId > 0 ? [$committerId] : [];
         foreach ((array) ($data['users'] ?? []) as $raw) {
+            // Рецензент в сессии — код роли (LEGAL), не человек. Числовой id — только
+            // из userdata «Сохранить»; у роли ведущих цифр нет, в актёры она не попадёт.
             // Document Server может дописать к id номер подключения — берём ведущие цифры.
             if (preg_match('/^\d+/', (string) $raw, $m) === 1) {
                 $ids[] = (int) $m[0];

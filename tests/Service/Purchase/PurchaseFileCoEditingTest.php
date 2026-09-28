@@ -9,6 +9,7 @@ use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseRoleCode;
@@ -86,8 +87,9 @@ final class PurchaseFileCoEditingTest extends TestCase
         self::assertSame(['edit' => false, 'review' => true, 'comment' => true], $config['document']['permissions']);
         self::assertSame(['mode' => 'fast', 'change' => false], $config['editorConfig']['coEditing']);
         self::assertTrue($config['editorConfig']['customization']['review']['trackChanges']);
-        self::assertSame('Юристы', $config['editorConfig']['user']['group']);
-        self::assertSame((string) self::LAWYER, $config['editorConfig']['user']['id']);
+        self::assertSame('Юристы', $config['editorConfig']['user']['name']);
+        self::assertSame('LEGAL', $config['editorConfig']['user']['id']);
+        self::assertArrayNotHasKey('group', $config['editorConfig']['user']);
         self::assertSame(
             [PurchaseFileCoEditing::HIGHLIGHT_PLUGIN => ['department' => 'LEGAL']],
             $config['editorConfig']['plugins']['options'],
@@ -111,7 +113,8 @@ final class PurchaseFileCoEditingTest extends TestCase
             ->addTask($deputyTask);
         $deputy = $this->coEditing()->editorConfig($file, $this->user(140), $deputyTask, 'http://content', 'http://callback');
 
-        self::assertSame('Профильный зам', $deputy['editorConfig']['user']['group']);
+        self::assertSame('Профильный зам', $deputy['editorConfig']['user']['name']);
+        self::assertSame('PROFILE_DEPUTY', $deputy['editorConfig']['user']['id']);
         self::assertSame(
             [PurchaseFileCoEditing::HIGHLIGHT_PLUGIN => ['department' => 'PROFILE_DEPUTY']],
             $deputy['editorConfig']['plugins']['options'],
@@ -119,11 +122,34 @@ final class PurchaseFileCoEditingTest extends TestCase
 
         $director = $this->coEditing()->editorConfig($file, $this->user(101), $this->roleTask(PurchaseRoleCode::DIRECTOR), 'http://content', 'http://callback');
 
-        self::assertSame('Директор', $director['editorConfig']['user']['group']);
+        self::assertSame('Директор', $director['editorConfig']['user']['name']);
+        self::assertSame('DIRECTOR', $director['editorConfig']['user']['id']);
         self::assertSame(
             [PurchaseFileCoEditing::HIGHLIGHT_PLUGIN => ['department' => 'DIRECTOR']],
             $director['editorConfig']['plugins']['options'],
         );
+    }
+
+    public function testDeputyWithAcceptMarkCanResolveOthersChanges(): void
+    {
+        [$purchase] = $this->negotiation();
+        $file = $this->contract($purchase);
+        $deputyTask = (new PurchaseApprovalTask())
+            ->setAssignmentType(PurchaseTaskAssignment::USER)
+            ->setAssigneeUser($this->user(140))
+            ->setContractReview(PurchaseContractReview::ACCEPT);
+        (new PurchaseApprovalStage())
+            ->setCandidateRoleCode(PurchaseRoleCode::PROFILE_DEPUTY)
+            ->addTask($deputyTask);
+
+        $config = $this->coEditing()->editorConfig($file, $this->user(140), $deputyTask, 'http://content', 'http://callback');
+
+        self::assertSame(
+            ['edit' => true, 'review' => true, 'comment' => true],
+            $config['document']['permissions'],
+        );
+        self::assertFalse($config['editorConfig']['customization']['review']['trackChanges']);
+        self::assertArrayNotHasKey('plugins', $config['editorConfig']);
     }
 
     public function testViewerJoinsTheSameSessionWithoutReviewOrHighlighting(): void
@@ -183,6 +209,66 @@ final class PurchaseFileCoEditingTest extends TestCase
         self::assertSame(2, $file->getEditorRevision());
         self::assertSame([PurchaseHistoryAction::FILE_EDITED], $this->actions($purchase));
         self::assertSame([], $this->purchaseNotifications, 'после согласования текст не менялся');
+    }
+
+    public function testAcceptedContractDropsDepartmentHighlight(): void
+    {
+        [$purchase] = $this->negotiation();
+        $file = $this->contract($purchase);
+        $this->stored = self::docx('было');
+        $accepted = self::docxXml(
+            '<w:document><w:body><w:p><w:r><w:rPr><w:shd w:val="clear" w:fill="E0D2F2"/></w:rPr><w:t>текст</w:t></w:r></w:p></w:body></w:document>',
+        );
+
+        $this->coEditing()->commit($purchase, $file, $accepted, false, [$this->user(self::LAWYER)]);
+
+        self::assertStringNotContainsString('E0D2F2', self::documentXmlOf((string) $this->s3Calls[1]['Body']));
+    }
+
+    public function testOpenReviewKeepsDepartmentHighlight(): void
+    {
+        [$purchase] = $this->negotiation();
+        $file = $this->contract($purchase);
+        $this->stored = self::docx('было');
+        $pending = self::docxXml(
+            '<w:document><w:body><w:p><w:ins w:id="1"><w:r><w:rPr><w:shd w:val="clear" w:fill="C9E7CA"/></w:rPr><w:t>текст</w:t></w:r></w:ins></w:p></w:body></w:document>',
+        );
+
+        $this->coEditing()->commit($purchase, $file, $pending, false, [$this->user(self::LAWYER)]);
+
+        self::assertStringContainsString('C9E7CA', self::documentXmlOf((string) $this->s3Calls[1]['Body']));
+    }
+
+    public function testAcceptedCopyShowsFinalTextWithoutDepartmentHighlight(): void
+    {
+        $source = <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:r><w:t xml:space="preserve">Цена </w:t></w:r>
+      <w:del w:id="1" w:author="Юристы" w:date="2026-09-28T10:00:00Z"><w:r><w:delText>100</w:delText></w:r></w:del>
+      <w:ins w:id="2" w:author="Юристы" w:date="2026-09-28T10:00:00Z"><w:r><w:rPr><w:shd w:val="clear" w:color="auto" w:fill="E0D2F2"/></w:rPr><w:t>120</w:t></w:r></w:ins>
+    </w:p>
+    <w:p>
+      <w:pPr><w:rPr><w:del w:id="3" w:author="Юристы" w:date="2026-09-28T10:00:00Z"/></w:rPr></w:pPr>
+      <w:del w:id="4" w:author="Юристы" w:date="2026-09-28T10:00:00Z"><w:r><w:delText>старый пункт</w:delText></w:r></w:del>
+    </w:p>
+    <w:p><w:r><w:t>следующий</w:t></w:r></w:p>
+  </w:body>
+</w:document>
+XML;
+
+        $clean = self::documentXmlOf(PurchaseFileCoEditing::acceptedCopy(self::docxXml($source)));
+
+        self::assertStringContainsString('Цена', $clean);
+        self::assertStringContainsString('>120<', $clean);
+        self::assertStringContainsString('следующий', $clean);
+        self::assertStringNotContainsString('100', $clean);
+        self::assertStringNotContainsString('старый пункт', $clean);
+        self::assertStringNotContainsString('E0D2F2', $clean);
+        self::assertStringNotContainsString('<w:ins', $clean);
+        self::assertStringNotContainsString('<w:del', $clean);
     }
 
     public function testSaveInTheMiddleOfTheSessionKeepsTheKey(): void
@@ -343,6 +429,32 @@ final class PurchaseFileCoEditingTest extends TestCase
         unlink($path);
 
         return $bytes;
+    }
+
+    private static function docxXml(string $xml): string
+    {
+        $path = (string) tempnam(sys_get_temp_dir(), 'docx');
+        $zip = new \ZipArchive();
+        $zip->open($path, \ZipArchive::OVERWRITE);
+        $zip->addFromString('word/document.xml', $xml);
+        $zip->close();
+        $bytes = (string) file_get_contents($path);
+        unlink($path);
+
+        return $bytes;
+    }
+
+    private static function documentXmlOf(string $docx): string
+    {
+        $path = (string) tempnam(sys_get_temp_dir(), 'docx');
+        file_put_contents($path, $docx);
+        $zip = new \ZipArchive();
+        $zip->open($path);
+        $xml = $zip->getFromName('word/document.xml');
+        $zip->close();
+        unlink($path);
+
+        return $xml === false ? '' : $xml;
     }
 
     /** @return list<PurchaseHistoryAction|null> */

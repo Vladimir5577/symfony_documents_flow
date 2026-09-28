@@ -56,6 +56,14 @@ final class PurchaseTransitionController extends AbstractController
             fn (PurchaseRequest $p, User $u) => $this->workflow->submit($p, $u));
     }
 
+    /** Кнопка редактора: рецензия пройдена или рецензии утверждены. */
+    #[Route('/tasks/{taskId}/contract-review', name: 'spa_api_purchases_task_contract_review', requirements: ['taskId' => '\d+'], methods: ['POST'])]
+    public function passContractReview(int $id, int $taskId, #[CurrentUser] ?User $user): JsonResponse
+    {
+        return $this->taskAction($id, $taskId, $user,
+            fn (PurchaseRequest $p, PurchaseApprovalTask $t) => $this->workflow->passContractReview($p, $t));
+    }
+
     /** Закрыть свою задачу согласием. */
     #[Route('/tasks/{taskId}/approve', name: 'spa_api_purchases_task_approve', requirements: ['taskId' => '\d+'], methods: ['POST'])]
     public function approveTask(int $id, int $taskId, Request $request, #[CurrentUser] ?User $user): JsonResponse

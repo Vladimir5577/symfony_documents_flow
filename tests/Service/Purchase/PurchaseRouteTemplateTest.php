@@ -13,6 +13,7 @@ use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\Purchase\PurchaseRouteTemplateStage;
 use App\Entity\Purchase\PurchaseRouteTemplateTask;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseRoleCode;
@@ -574,6 +575,42 @@ final class PurchaseRouteTemplateTest extends TestCase
         $task = $stage->getTasks()->first();
         self::assertInstanceOf(PurchaseRouteTemplateTask::class, $task);
         self::assertSame(PurchaseFileType::UPD, $task->getRequiresFileType());
+    }
+
+    public function testEditorKeepsContractReviewOnTask(): void
+    {
+        $template = $this->template('DRAFT', []);
+
+        $this->editor($template)->update($template, $this->payload([
+            [
+                'purpose' => 'SIGN_OFF',
+                'tasks' => [[
+                    'roleCode' => 'LEGAL',
+                    'contractReview' => PurchaseContractReview::REVIEW->value,
+                ]],
+            ],
+            [
+                'purpose' => 'SIGN_OFF',
+                'tasks' => [[
+                    'assignmentType' => 'DYNAMIC_USERS',
+                    'candidateRoleCode' => 'PROFILE_DEPUTY',
+                    'contractReview' => PurchaseContractReview::ACCEPT->value,
+                ]],
+            ],
+        ]), $this->user(1));
+
+        $stages = $template->getStages()->toArray();
+        self::assertSame(PurchaseContractReview::REVIEW, $stages[0]->getTasks()->first()->getContractReview());
+        self::assertSame(PurchaseContractReview::ACCEPT, $stages[1]->getTasks()->first()->getContractReview());
+    }
+
+    public function testEditorRejectsUnknownContractReview(): void
+    {
+        $this->expectRouteError(SpaApiError::PURCHASE_ROUTE_TASK_INVALID);
+        $this->editorUpdate([[
+            'purpose' => 'SIGN_OFF',
+            'tasks' => [['roleCode' => 'LEGAL', 'contractReview' => 'SIGN']],
+        ]]);
     }
 
     // Редактор: жизненный цикл заготовки

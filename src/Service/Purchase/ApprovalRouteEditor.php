@@ -10,6 +10,7 @@ use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\Purchase\PurchaseRouteTemplateStage;
 use App\Entity\Purchase\PurchaseRouteTemplateTask;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseRoleCode;
@@ -135,7 +136,8 @@ final class ApprovalRouteEditor
                     ->setRoleCode($sourceTask->getRoleCode())
                     ->setCandidateRoleCode($sourceTask->getCandidateRoleCode())
                     ->setTitle($sourceTask->getTitle())
-                    ->setRequiresFileType($sourceTask->getRequiresFileType());
+                    ->setRequiresFileType($sourceTask->getRequiresFileType())
+                    ->setContractReview($sourceTask->getContractReview());
                 $stage->addTask($task);
                 $this->em->persist($task);
             }
@@ -398,7 +400,8 @@ final class ApprovalRouteEditor
                 ->setPosition(++$position)
                 ->setAssignmentType($type)
                 ->setTitle($this->parseTitle($row['title'] ?? null))
-                ->setRequiresFileType($this->parseFileType($row['requiresFileType'] ?? null));
+                ->setRequiresFileType($this->parseFileType($row['requiresFileType'] ?? null))
+                ->setContractReview($this->parseContractReview($row['contractReview'] ?? null));
 
             // Ролью зама задача не адресуется: её закрыл бы любой зам, а замов
             // подбирают под заявку поимённо — для этого этап делают динамическим,
@@ -506,5 +509,20 @@ final class ApprovalRouteEditor
         }
 
         return $type;
+    }
+
+    /** @throws PurchaseRouteException */
+    private function parseContractReview(mixed $value): ?PurchaseContractReview
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $review = PurchaseContractReview::tryFrom((string) $value);
+        if ($review === null) {
+            throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_TASK_INVALID);
+        }
+
+        return $review;
     }
 }

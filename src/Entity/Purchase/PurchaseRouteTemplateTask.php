@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity\Purchase;
 
+use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseTaskAssignment;
@@ -61,6 +62,10 @@ class PurchaseRouteTemplateTask
     /** Без этого файла задачу не закрыть. */
     #[ORM\Column(name: 'requires_file_type', type: Types::STRING, length: 30, nullable: true, enumType: PurchaseFileType::class)]
     private ?PurchaseFileType $requiresFileType = null;
+
+    /** Рецензирование договора или утверждение чужих рецензий. null — не про договор. */
+    #[ORM\Column(name: 'contract_review', type: Types::STRING, length: 20, nullable: true, enumType: PurchaseContractReview::class)]
+    private ?PurchaseContractReview $contractReview = null;
 
     public function getId(): ?int
     {
@@ -148,6 +153,18 @@ class PurchaseRouteTemplateTask
     public function setRequiresFileType(?PurchaseFileType $requiresFileType): static
     {
         $this->requiresFileType = $requiresFileType;
+
+        return $this;
+    }
+
+    public function getContractReview(): ?PurchaseContractReview
+    {
+        return $this->contractReview;
+    }
+
+    public function setContractReview(?PurchaseContractReview $contractReview): static
+    {
+        $this->contractReview = $contractReview;
 
         return $this;
     }

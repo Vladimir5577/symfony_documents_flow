@@ -8,6 +8,7 @@ use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseStagePurpose;
@@ -22,10 +23,9 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * стоит на этапе, и правки видны сразу у всех.
  *
  * Правят в режиме рецензирования, выключить который нельзя: каждая вставка и
- * удаление остаются правкой с автором. Отдел автора едет в user.group — так
- * он попадает и в автора правки внутри docx («Юристы Иванов»), — а плагин
- * подсветки (docker_env/onlyoffice/plugins/dept-highlighter) красит свои правки
- * каждого участника фоном цвета его отдела.
+ * удаление остаются правкой с автором. Автор — роль текущей задачи, не ФИО:
+ * один человек с двух отделов оставляет две правки. Плагин подсветки
+ * (docker_env/onlyoffice/plugins/dept-highlighter) красит их цветом отдела.
  *
  * Права — те же, что у шага: правит тот, у кого задача на этапе, где заявка
  * стоит сейчас. На параллельном этапе «закупки + бухгалтерия + юристы» это
@@ -78,13 +78,17 @@ final class PurchaseFileCoEditing
         ?string $callbackUrl,
     ): array {
         $edit = $myTask !== null;
+        // Утверждение рецензий — принять или отклонить чужие правки. В режиме
+        // «только рецензирование» OnlyOffice пускает закрыть лишь свои.
+        $acceptsReviews = $myTask?->getContractReview() === PurchaseContractReview::ACCEPT;
         // Задача замов адресована человеку, а не роли: отдел — пул их этапа.
         $role = $myTask?->getRoleCode() ?? $myTask?->getStage()?->getCandidateRoleCode();
 
-        $person = ['id' => (string) $user->getId(), 'name' => PurchaseHistoryLogger::nameOf($user)];
-        if ($edit && $role !== null) {
-            $person['group'] = $role->getLabel();
-        }
+        // group не ставим: OnlyOffice дописывает его к имени автора («Юристы Иванов»).
+        // Зритель правок не создаёт, ему хватает своего id.
+        $person = $edit && $role !== null
+            ? ['id' => $role->value, 'name' => $role->getLabel()]
+            : ['id' => (string) $user->getId(), 'name' => PurchaseHistoryLogger::nameOf($user)];
 
         $editorConfig = [
             'lang' => 'ru',
@@ -95,13 +99,17 @@ final class PurchaseFileCoEditing
             'coEditing' => ['mode' => 'fast', 'change' => false],
             'customization' => [
                 'forcesave' => $edit,
-                'review' => ['trackChanges' => true, 'reviewDisplay' => 'markup', 'hoverMode' => false],
+                'review' => [
+                    'trackChanges' => $edit && !$acceptsReviews,
+                    'reviewDisplay' => 'markup',
+                    'hoverMode' => false,
+                ],
             ],
         ];
         if ($edit && $callbackUrl !== null) {
             $editorConfig['callbackUrl'] = $callbackUrl;
         }
-        if ($edit && $role !== null) {
+        if ($edit && $role !== null && !$acceptsReviews) {
             $editorConfig['plugins'] = [
                 'autostart' => [self::HIGHLIGHT_PLUGIN],
                 'options' => [self::HIGHLIGHT_PLUGIN => ['department' => $role->value]],
@@ -118,11 +126,12 @@ final class PurchaseFileCoEditing
                 'key' => $this->documentKey($file),
                 'title' => $file->getOriginalName() ?: 'document.docx',
                 'url' => $contentUrl,
-                // Только рецензирование: выключить отслеживание правок нельзя,
-                // иначе правка останется без автора и без цвета отдела.
-                'permissions' => $edit
-                    ? ['edit' => false, 'review' => true, 'comment' => true]
-                    : ['edit' => false, 'review' => false, 'comment' => false],
+                // Рецензирование: чужие правки принять нельзя. Утверждение — можно.
+                'permissions' => match (true) {
+                    $acceptsReviews => ['edit' => true, 'review' => true, 'comment' => true],
+                    $edit => ['edit' => false, 'review' => true, 'comment' => true],
+                    default => ['edit' => false, 'review' => false, 'comment' => false],
+                },
             ],
             'editorConfig' => $editorConfig,
         ];
@@ -143,6 +152,9 @@ final class PurchaseFileCoEditing
         array $editors,
     ): void {
         $isContract = $file->getType() === PurchaseFileType::CONTRACT;
+        // Подсветка отдела — заливка в самом файле, не правка. «Принять» её не
+        // снимает: когда непринятых правок не осталось, заливку отделов убираем.
+        $content = self::withoutApprovedHighlight($content);
         // Сравнить надо до записи: status 2 после «Сохранить» приносит тот же
         // текст, и «изменён после вашего согласования» было бы неправдой.
         $textChanged = $isContract && $this->textChanged($file, $content);
@@ -258,6 +270,225 @@ final class PurchaseFileCoEditing
         $before = self::documentXml($stored);
 
         return $before === null || $before !== self::documentXml($content);
+    }
+
+    /**
+     * Цвета подсветки отделов — те же, что красит плагин dept-highlighter.
+     * После принятия правки в файле остаётся w:shd, сам текст уже не правка.
+     */
+    private const HIGHLIGHT_FILLS = 'C9E7CA|B8EAE6|E0D2F2|FFF1A6|F9C6C6';
+
+    private const WML = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+    /**
+     * Копия для скачивания и печати: правки приняты, заливка отделов снята.
+     * В хранилище документ не меняется — в редакторе рецензии остаются.
+     *
+     * ponytail: правки в теле, колонтитулах и сносках. Обтекание в mc:AlternateContent
+     * и правки внутри контент-контролов не разбираем — такой договор отдать как есть.
+     */
+    public static function acceptedCopy(string $docx): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'pfdocx');
+        if ($path === false) {
+            return $docx;
+        }
+        try {
+            file_put_contents($path, $docx);
+            $zip = new \ZipArchive();
+            if ($zip->open($path) !== true) {
+                return $docx;
+            }
+            $names = [];
+            for ($i = 0; $i < $zip->numFiles; ++$i) {
+                $name = $zip->getNameIndex($i);
+                if (is_string($name) && preg_match('#^word/(document|footnotes|endnotes|header\d+|footer\d+)\.xml$#', $name) === 1) {
+                    $names[] = $name;
+                }
+            }
+            $changed = false;
+            foreach ($names as $name) {
+                $xml = $zip->getFromName($name);
+                if (!is_string($xml)) {
+                    continue;
+                }
+                $clean = self::acceptRevisionsXml($xml);
+                if ($clean === $xml) {
+                    continue;
+                }
+                $zip->deleteName($name);
+                $zip->addFromString($name, $clean);
+                $changed = true;
+            }
+            $zip->close();
+            if (!$changed) {
+                return $docx;
+            }
+            $bytes = file_get_contents($path);
+
+            return $bytes === false ? $docx : $bytes;
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    /** Пока в договоре есть правки, подсветка нужна. Когда их приняли — нет. */
+    private static function withoutApprovedHighlight(string $docx): string
+    {
+        $xml = self::documentXml($docx);
+        if ($xml === null || preg_match('/<w:(?:ins|del)\b/', $xml) === 1) {
+            return $docx;
+        }
+
+        $cleaned = preg_replace(
+            '/<w:shd\b[^>]*\bw:fill="(?:' . self::HIGHLIGHT_FILLS . ')"[^>]*\/>/i',
+            '',
+            $xml,
+        );
+        if (!is_string($cleaned) || $cleaned === $xml) {
+            return $docx;
+        }
+
+        return self::replaceDocumentXml($docx, $cleaned) ?? $docx;
+    }
+
+    /** Принять правки: вставки остаются, удаления и подсветка отделов уходят. */
+    private static function acceptRevisionsXml(string $xml): string
+    {
+        if (preg_match('/<w:(?:ins|del|moveFrom|moveTo|shd)\b/', $xml) !== 1) {
+            return $xml;
+        }
+        $dom = new \DOMDocument();
+        $dom->preserveWhiteSpace = true;
+        $dom->formatOutput = false;
+        if (!$dom->loadXML($xml, LIBXML_NONET)) {
+            return $xml;
+        }
+        $xp = new \DOMXPath($dom);
+        $xp->registerNamespace('w', self::WML);
+
+        self::mergeDeletedParagraphs($xp);
+        self::removeNodes($xp, '//w:tr[w:trPr/w:del]');
+        self::removeNodes($xp, '//w:del|//w:moveFrom');
+        self::unwrapNodes($xp, '//w:ins|//w:moveTo');
+        self::removeNodes($xp, '//w:rPrChange|//w:pPrChange|//w:sectPrChange|//w:tblPrChange|//w:tblGridChange|//w:trPrChange|//w:tcPrChange');
+        self::stripDepartmentHighlight($xp);
+
+        $out = $dom->saveXML();
+
+        return is_string($out) ? $out : $xml;
+    }
+
+    /** Удалённый абзац склеивается со следующим, иначе на печати останется пустая строка. */
+    private static function mergeDeletedParagraphs(\DOMXPath $xp): void
+    {
+        $paras = [];
+        foreach ($xp->query('//w:p[w:pPr/w:rPr/w:del]') ?: [] as $node) {
+            $paras[] = $node;
+        }
+        foreach ($paras as $paragraph) {
+            if (!$paragraph instanceof \DOMElement || $paragraph->parentNode === null) {
+                continue;
+            }
+            $next = $paragraph->nextSibling;
+            while ($next !== null && !($next instanceof \DOMElement && $next->localName === 'p')) {
+                $next = $next->nextSibling;
+            }
+            if (!$next instanceof \DOMElement) {
+                continue;
+            }
+            foreach (iterator_to_array($paragraph->childNodes) as $child) {
+                if ($child instanceof \DOMElement && $child->localName === 'pPr') {
+                    continue;
+                }
+                $next->appendChild($child);
+            }
+            $paragraph->parentNode->removeChild($paragraph);
+        }
+    }
+
+    private static function removeNodes(\DOMXPath $xp, string $query): void
+    {
+        $nodes = [];
+        foreach ($xp->query($query) ?: [] as $node) {
+            $nodes[] = $node;
+        }
+        foreach ($nodes as $node) {
+            $node->parentNode?->removeChild($node);
+        }
+    }
+
+    private static function unwrapNodes(\DOMXPath $xp, string $query): void
+    {
+        $nodes = [];
+        foreach ($xp->query($query) ?: [] as $node) {
+            $nodes[] = $node;
+        }
+        usort($nodes, static function (\DOMNode $a, \DOMNode $b): int {
+            return self::depth($b) <=> self::depth($a);
+        });
+        foreach ($nodes as $node) {
+            $parent = $node->parentNode;
+            if ($parent === null) {
+                continue;
+            }
+            while ($node->firstChild !== null) {
+                $parent->insertBefore($node->firstChild, $node);
+            }
+            $parent->removeChild($node);
+        }
+    }
+
+    private static function depth(\DOMNode $node): int
+    {
+        $depth = 0;
+        while ($node->parentNode !== null) {
+            $node = $node->parentNode;
+            ++$depth;
+        }
+
+        return $depth;
+    }
+
+    private static function stripDepartmentHighlight(\DOMXPath $xp): void
+    {
+        $fills = explode('|', self::HIGHLIGHT_FILLS);
+        $nodes = [];
+        foreach ($xp->query('//w:shd') ?: [] as $node) {
+            if (!$node instanceof \DOMElement) {
+                continue;
+            }
+            $fill = strtoupper($node->getAttribute('w:fill'));
+            if (in_array($fill, $fills, true)) {
+                $nodes[] = $node;
+            }
+        }
+        foreach ($nodes as $node) {
+            $node->parentNode?->removeChild($node);
+        }
+    }
+
+    private static function replaceDocumentXml(string $docx, string $xml): ?string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'pfdocx');
+        if ($path === false) {
+            return null;
+        }
+        try {
+            file_put_contents($path, $docx);
+            $zip = new \ZipArchive();
+            if ($zip->open($path) !== true) {
+                return null;
+            }
+            $zip->deleteName('word/document.xml');
+            $zip->addFromString('word/document.xml', $xml);
+            $zip->close();
+            $bytes = file_get_contents($path);
+
+            return $bytes === false ? null : $bytes;
+        } finally {
+            @unlink($path);
+        }
     }
 
     private static function documentXml(string $docx): ?string

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Entity\Purchase;
 
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseTaskAssignment;
@@ -69,6 +70,14 @@ class PurchaseApprovalTask
 
     #[ORM\Column(name: 'requires_file_type', type: Types::STRING, length: 30, nullable: true, enumType: PurchaseFileType::class)]
     private ?PurchaseFileType $requiresFileType = null;
+
+    /** Снимок отметки заготовки: рецензирование или утверждение рецензий. */
+    #[ORM\Column(name: 'contract_review', type: Types::STRING, length: 20, nullable: true, enumType: PurchaseContractReview::class)]
+    private ?PurchaseContractReview $contractReview = null;
+
+    /** Кнопка в редакторе: рецензия пройдена или рецензии утверждены. */
+    #[ORM\Column(name: 'contract_review_passed', type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $contractReviewPassed = false;
 
     #[ORM\Column(type: Types::STRING, length: 20, enumType: PurchaseTaskDecision::class, options: ['default' => 'PENDING'])]
     private PurchaseTaskDecision $decision = PurchaseTaskDecision::PENDING;
@@ -189,6 +198,30 @@ class PurchaseApprovalTask
     public function setRequiresFileType(?PurchaseFileType $requiresFileType): static
     {
         $this->requiresFileType = $requiresFileType;
+
+        return $this;
+    }
+
+    public function getContractReview(): ?PurchaseContractReview
+    {
+        return $this->contractReview;
+    }
+
+    public function setContractReview(?PurchaseContractReview $contractReview): static
+    {
+        $this->contractReview = $contractReview;
+
+        return $this;
+    }
+
+    public function isContractReviewPassed(): bool
+    {
+        return $this->contractReviewPassed;
+    }
+
+    public function passContractReview(): static
+    {
+        $this->contractReviewPassed = true;
 
         return $this;
     }

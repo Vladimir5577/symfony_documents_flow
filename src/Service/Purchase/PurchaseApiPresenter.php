@@ -238,6 +238,8 @@ final class PurchaseApiPresenter
                 : null,
             'approverUser' => $this->presentUser($task->getAssigneeUser()),
             'requiresFileType' => $task->getRequiresFileType()?->value,
+            'contractReview' => $task->getContractReview()?->value,
+            'contractReviewPassed' => $task->isContractReviewPassed(),
             'decision' => [
                 'value' => $task->getDecision()->value,
                 'label' => $task->getDecision()->getLabel(),
@@ -334,6 +336,7 @@ final class PurchaseApiPresenter
                             'candidateRoleCode' => $task->getCandidateRoleCode()?->value,
                             'title' => $task->getTitle(),
                             'requiresFileType' => $task->getRequiresFileType()?->value,
+                            'contractReview' => $task->getContractReview()?->value,
                         ],
                         $stage->getTasks()->toArray(),
                     )),

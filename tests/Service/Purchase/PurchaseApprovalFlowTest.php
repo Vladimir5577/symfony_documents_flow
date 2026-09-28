@@ -15,6 +15,7 @@ use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\Purchase\PurchaseRouteTemplateStage;
 use App\Entity\Purchase\PurchaseRouteTemplateTask;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseRequestKind;
@@ -290,6 +291,29 @@ final class PurchaseApprovalFlowTest extends TestCase
 
         $this->expectTransitionError(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         $this->workflow->approveTask($request, $task, $this->user(2));
+    }
+
+    public function testApprovalWaitsUntilContractReviewIsPassed(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::FAST);
+        $task = $this->taskAt($request, self::STAGE_FAST_SOURCING);
+        $task->setContractReview(PurchaseContractReview::REVIEW);
+
+        $this->expectTransitionError(SpaApiError::PURCHASE_CONTRACT_REVIEW_REQUIRED);
+        $this->workflow->approveTask($request, $task, $this->user(2));
+    }
+
+    public function testPassedContractReviewLetsTheTaskClose(): void
+    {
+        $request = $this->submitted(PurchaseRequestKind::FAST);
+        $task = $this->taskAt($request, self::STAGE_FAST_SOURCING);
+        $task->setContractReview(PurchaseContractReview::ACCEPT);
+        $buyer = $this->user(2);
+
+        $this->workflow->passContractReview($request, $task);
+        $this->workflow->approveTask($request, $task, $buyer);
+
+        self::assertSame(PurchaseTaskDecision::APPROVED, $task->getDecision());
     }
 
     // Разбор
