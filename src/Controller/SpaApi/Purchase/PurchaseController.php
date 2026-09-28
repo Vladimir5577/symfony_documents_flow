@@ -21,8 +21,9 @@ use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseApprovalTaskRepository;
 use App\Repository\Purchase\PurchaseCategoryRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
+use App\Repository\Purchase\PurchaseRouteDefaultRepository;
+use App\Repository\Purchase\PurchaseRouteTemplateRepository;
 use App\Service\Purchase\ApprovalRouteBuilder;
-use App\Service\Purchase\ApprovalRouteResolver;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseFileStorageService;
@@ -57,7 +58,8 @@ final class PurchaseController extends AbstractController
         private readonly PurchaseAccess $access,
         private readonly PurchaseRoster $roster,
         private readonly ApprovalRouteBuilder $routeBuilder,
-        private readonly ApprovalRouteResolver $routeResolver,
+        private readonly PurchaseRouteDefaultRepository $routeDefaults,
+        private readonly PurchaseRouteTemplateRepository $templateRepo,
     ) {
     }
 
@@ -275,36 +277,21 @@ final class PurchaseController extends AbstractController
         $kind = PurchaseRequestKind::tryFrom((string) $request->query->get('kind', ''))
             ?? PurchaseRequestKind::STANDARD;
 
-        // Выбор — тем же резолвером, что при подаче: маршрут зависит и от суммы
-        // (ускоренная процедура дешевле порога), и форма должна показать тот,
-        // по которому заявка на самом деле пойдёт.
-        $probe = (new PurchaseRequest())->setCreatedAs($kind);
-        $amount = $request->query->get('amount');
-        if (is_numeric($amount) && (float) $amount > 0) {
-            $probe->addItem((new PurchaseRequestItem())
-                ->setName('—')
-                ->setUnit('—')
-                ->setQuantity('1.000')
-                ->setEstimatedPrice(number_format((float) $amount, 2, '.', '')));
-        }
-        try {
-            $template = $this->routeResolver->resolve($probe);
-        } catch (PurchaseTransitionException) {
-            $template = null;
-        }
+        $template = $this->routeDefaults->findByKind($kind)?->getTemplate();
+        $usable = $template !== null && $template->isActive() && !$template->isEmpty();
 
         return $this->json([
             'kind' => $kind->value,
             // Маршрут не настроен — форма обязана сказать это прямо, а не
             // показать пустую цепочку, будто согласований не будет.
-            'isConfigured' => $template !== null,
-            'route' => $template !== null
+            'isConfigured' => $usable,
+            'route' => $usable
                 ? ['id' => $template->getId(), 'name' => $template->getName()]
                 : null,
-            'stages' => $template !== null ? $this->routeBuilder->preview($template) : [],
+            'stages' => $usable ? $this->routeBuilder->preview($template) : [],
             'options' => array_map(
                 static fn ($t): array => ['id' => $t->getId(), 'name' => $t->getName()],
-                $this->routeResolver->options($probe),
+                $this->templateRepo->findActiveForKind($kind),
             ),
         ]);
     }

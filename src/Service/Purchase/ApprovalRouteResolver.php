@@ -14,8 +14,8 @@ use App\Repository\Purchase\PurchaseRouteTemplateRepository;
  * Единственный ответ на вопрос «по какой заготовке пойдёт эта заявка».
  *
  * Один вход намеренно. Правило выбора будет меняться — сегодня это «назначенный
- * маршрут, иначе маршрут с порогом суммы, под который заявка подходит, иначе
- * дефолт по виду заявки», завтра спросят про категорию или филиал. Пока выбор спрашивают у резолвера, а не выводят на месте, такое правило
+ * маршрут, иначе дефолт по виду заявки», завтра спросят про сумму, категорию или
+ * филиал. Пока выбор спрашивают у резолвера, а не выводят на месте, такое правило
  * добавляется здесь и нигде больше: ни подача, ни контроллеры о нём не знают.
  *
  * Резолвер принимает заявку, а не вид заявки, по той же причине: измерения
@@ -49,12 +49,6 @@ final class ApprovalRouteResolver
             return $assigned;
         }
 
-        // Ускоренная процедура: заявка дешевле порога маршрута идёт им сама.
-        $byAmount = $this->byAmount($request);
-        if ($byAmount !== null) {
-            return $byAmount;
-        }
-
         $default = $this->defaults->findByKind($request->getCreatedAs())?->getTemplate();
         if ($default === null) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_ROUTE_NOT_CONFIGURED);
@@ -75,46 +69,15 @@ final class ApprovalRouteResolver
      */
     public function options(PurchaseRequest $request): array
     {
-        $total = $request->getTotalAmountKopecks();
-
-        return array_values(array_filter(
-            $this->templates->findActiveForKind($request->getCreatedAs()),
-            static fn (PurchaseRouteTemplate $template): bool => $template->fitsAmount($total),
-        ));
+        return $this->templates->findActiveForKind($request->getCreatedAs());
     }
 
-    /**
-     * Заготовку можно применить к этой заявке.
-     *
-     * Порог суммы — тоже условие: дорогую заявку ускоренным маршрутом не пустить
-     * ни дефолтом, ни назначением на разборе, иначе она прошла бы мимо директора.
-     */
+    /** Заготовку можно применить к этой заявке. */
     public function isUsable(PurchaseRouteTemplate $template, PurchaseRequest $request): bool
     {
         return $template->isActive()
             && !$template->isEmpty()
-            && $template->allowsKind($request->getCreatedAs())
-            && $template->fitsAmount($request->getTotalAmountKopecks());
-    }
-
-    /**
-     * Маршрут с порогом суммы, под который заявка подходит; из нескольких —
-     * с самым низким порогом: он и есть самая короткая процедура для этой суммы.
-     */
-    private function byAmount(PurchaseRequest $request): ?PurchaseRouteTemplate
-    {
-        $best = null;
-        foreach ($this->templates->findActiveForKind($request->getCreatedAs()) as $template) {
-            $limit = $template->getMaxAmountKopecks();
-            if ($limit === null || !$this->isUsable($template, $request)) {
-                continue;
-            }
-            if ($best === null || $limit < (int) $best->getMaxAmountKopecks()) {
-                $best = $template;
-            }
-        }
-
-        return $best;
+            && $template->allowsKind($request->getCreatedAs());
     }
 
     /** @throws PurchaseTransitionException */

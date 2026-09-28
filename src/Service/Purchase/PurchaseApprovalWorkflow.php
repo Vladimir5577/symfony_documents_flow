@@ -137,16 +137,6 @@ final class PurchaseApprovalWorkflow
             }
         }
 
-        // Ускоренная процедура — только для заявок дешевле порога её маршрута. Цены
-        // часто появляются после подачи (быструю заявку оценивают закупки), и если
-        // сумма доросла до порога, заявка уходит обычным маршрутом — через
-        // генерального директора, с уже проставленными ценами.
-        if ($this->exceedsRouteLimit($request)) {
-            $this->rerouteByAmount($request, $actor);
-
-            return;
-        }
-
         // Требование файла живёт на задаче, а не в конвейере: у быстрого маршрута
         // задачи «договор» нет, и требовать с него договор не за что. Так же и УПД
         // при поставке — это файл задачи поставки, а не условие перехода.
@@ -490,56 +480,6 @@ final class PurchaseApprovalWorkflow
         $this->save($request);
 
         $this->notifier->notifyCancelled($request, $actor, $comment);
-    }
-
-    /** Заявка идёт маршрутом с порогом суммы, а сумма уже не меньше порога. */
-    private function exceedsRouteLimit(PurchaseRequest $request): bool
-    {
-        $limit = $request->getAppliedRouteTemplate()?->getMaxAmountKopecks();
-
-        return $limit !== null && $request->getTotalAmountKopecks() >= $limit;
-    }
-
-    /**
-     * Перевести заявку с ускоренного маршрута на тот, что положен ей по сумме.
-     *
-     * Так же, как подача: снимок собирается заново, решения ускоренного маршрута
-     * сгорают (они были о другой сумме), указатель встаёт на первый этап нового
-     * маршрута. Правки цен, из-за которых сумма выросла, остаются.
-     */
-    private function rerouteByAmount(PurchaseRequest $request, User $actor): void
-    {
-        $was = $request->getAppliedRouteTemplateName();
-
-        $this->em->wrapInTransaction(function () use ($request, $actor, $was): void {
-            // Назначенный ускоренный маршрут этой сумме больше не годится.
-            $request->setRouteTemplate(null);
-            $template = $this->resolver->resolve($request);
-            $this->builder->build($request, $template);
-            $request->setStatus(PurchaseStatus::ON_APPROVAL);
-            $this->advance($request, $actor);
-
-            $this->history->log(
-                $request,
-                $actor,
-                PurchaseHistoryAction::ROUTE_CHANGED,
-                sprintf(
-                    'Сумма %s ₽ не меньше порога ускоренной процедуры: %s → %s',
-                    number_format($request->getTotalAmountKopecks() / 100, 2, ',', ' '),
-                    $was ?? 'ускоренный маршрут',
-                    (string) $template->getName(),
-                ),
-            );
-            $this->save($request);
-        });
-
-        $this->notifier->notifyChanged(
-            $request,
-            $actor,
-            sprintf('Закупка «%s» переведена на обычный маршрут: сумма не меньше порога ускоренной процедуры', $request->getTitle()),
-            'Маршрут изменён',
-        );
-        $this->notifier->notifyStageActivated($request, $actor);
     }
 
     /**
