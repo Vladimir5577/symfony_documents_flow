@@ -15,6 +15,7 @@ use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
+use App\Service\Purchase\PurchaseFileCoEditing;
 use App\Service\Purchase\PurchaseFileStorageService;
 use App\Service\Purchase\PurchaseRequestEditor;
 use Aws\S3\Exception\S3Exception;
@@ -80,6 +81,11 @@ final class PurchaseFileController extends AbstractController
             }
         }
 
+        // Договор на заявке один: по нему рецензируют и утверждают правки.
+        if ($type === PurchaseFileType::CONTRACT && $purchase->hasFileOfType(PurchaseFileType::CONTRACT)) {
+            return $this->json(['error' => SpaApiError::PURCHASE_CONTRACT_EXISTS], Response::HTTP_CONFLICT);
+        }
+
         $fileEntity = new PurchaseRequestFile();
         $fileEntity->setType($type);
         $fileEntity->setUploadedBy($user);
@@ -131,18 +137,25 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $stream = $object['Body'];
-        $response = new StreamedResponse(static function () use ($stream): void {
-            while (!$stream->eof()) {
-                echo $stream->read(8192);
+        // Договор скачивают и печатают уже без рецензий. В редактор по-прежнему
+        // уходит файл с правками — его отдаёт другой адрес.
+        if ($fileEntity->getType() === PurchaseFileType::CONTRACT) {
+            $body = PurchaseFileCoEditing::acceptedCopy((string) $object['Body']);
+            $response = new Response($body);
+            $response->headers->set('Content-Length', (string) strlen($body));
+        } else {
+            $stream = $object['Body'];
+            $response = new StreamedResponse(static function () use ($stream): void {
+                while (!$stream->eof()) {
+                    echo $stream->read(8192);
+                }
+            });
+            if ($object['ContentLength'] !== null) {
+                $response->headers->set('Content-Length', (string) $object['ContentLength']);
             }
-        });
+        }
 
         $response->headers->set('Content-Type', (string) ($object['ContentType'] ?? 'application/octet-stream'));
-        // Длину MinIO отдаёт всегда, но пустой заголовок сломал бы скачивание молча.
-        if ($object['ContentLength'] !== null) {
-            $response->headers->set('Content-Length', (string) $object['ContentLength']);
-        }
         // Имя файла обычно кириллическое, а makeDisposition() требует ASCII-запасной
         // вариант и иначе бросает исключение. BinaryFileResponse делал это за нас.
         $response->headers->set('Content-Disposition', HeaderUtils::makeDisposition(

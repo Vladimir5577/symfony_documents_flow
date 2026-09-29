@@ -369,20 +369,44 @@ class PurchaseRequest
     }
 
     /**
-     * Сумма заявки: считается из позиций, отдельно не хранится.
+     * Сумма заявки в рублях: считается из позиций, отдельно не хранится.
+     *
+     * Наружу — числом с копейками: точное значение с двумя знаками JSON отдаёт
+     * как есть. Считается же оно в целых копейках (getTotalAmountKopecks).
      */
     public function getTotalAmount(): float
     {
-        $total = 0.0;
+        return $this->getTotalAmountKopecks() / 100;
+    }
+
+    /**
+     * Сумма заявки в копейках, без float: цена и количество лежат в базе точными
+     * DECIMAL, а умножение и сложение во float копили бы ошибку (0,1 × 3 ≠ 0,3).
+     * Позиция — до ~92 трлн ₽, дальше переполнится int.
+     */
+    public function getTotalAmountKopecks(): int
+    {
+        $total = 0;
         foreach ($this->items as $item) {
             // Снятые директором позиции в сумму не идут, количество — утверждённое
             if ($item->isExcluded()) {
                 continue;
             }
-            $total += (float) $item->getEffectiveQuantity() * (float) $item->getEstimatedPrice();
+            $kopecks = self::decimalToInt((string) $item->getEstimatedPrice(), 2);
+            $thousandths = self::decimalToInt($item->getEffectiveQuantity(), 3);
+            // Копейки × тысячные доли штуки → копейки, половина копейки вверх.
+            $total += intdiv($kopecks * $thousandths + 500, 1000);
         }
 
-        return round($total, 2);
+        return $total;
+    }
+
+    /** Десятичная строка → целое в единицах 10^-$scale («12.5», 2 → 1250). */
+    private static function decimalToInt(string $decimal, int $scale): int
+    {
+        [$whole, $fraction] = array_pad(explode('.', trim($decimal), 2), 2, '');
+
+        return (int) ($whole . substr(str_pad($fraction, $scale, '0'), 0, $scale));
     }
 
     /**

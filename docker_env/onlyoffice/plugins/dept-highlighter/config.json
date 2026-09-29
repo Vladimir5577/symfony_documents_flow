@@ -1,0 +1,23 @@
+{
+  "name": "Department highlighter",
+  "guid": "asc.{3F6C2B8E-7D14-4C5A-9E21-6B0D8F4A2C71}",
+  "version": "1.0.0",
+  "minVersion": "9.2.0",
+  "variations": [
+    {
+      "description": "Paints the user's own tracked changes in the department colour",
+      "url": "index.html",
+      "icons": [],
+      "isViewer": false,
+      "EditorsSupport": ["word"],
+      "type": "system",
+      "isVisual": false,
+      "isModal": false,
+      "isInsideMode": false,
+      "initDataType": "none",
+      "initData": "",
+      "buttons": [],
+      "events": ["onParagraphText", "onKeyDown"]
+    }
+  ]
+}

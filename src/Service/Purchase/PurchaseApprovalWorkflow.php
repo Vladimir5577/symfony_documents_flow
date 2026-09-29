@@ -145,6 +145,10 @@ final class PurchaseApprovalWorkflow
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         }
 
+        if ($task->getContractReview() !== null && !$task->isContractReviewPassed()) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONTRACT_REVIEW_REQUIRED);
+        }
+
         $task->decide(PurchaseTaskDecision::APPROVED, $actor, $comment);
 
         // Исполнитель — тот, кто закрыл ресёрч: он искал поставщика и готовил
@@ -161,9 +165,10 @@ final class PurchaseApprovalWorkflow
             $this->history->taskComment($task, $comment),
         );
 
+        // Параллельные подписи закрывают этап вместе. Пока ждём вторую, заявка
+        // стоит на месте — «продвинулась» уйдёт один раз, из announce().
         if (!$stage->isSatisfied()) {
             $this->save($request);
-            $this->notifier->notifyChanged($request, $actor, $this->advancedTitle($stage));
 
             return;
         }
@@ -171,6 +176,22 @@ final class PurchaseApprovalWorkflow
         $this->closeStage($request, $stage, $actor);
         $this->save($request);
         $this->announce($request, $actor, $stage);
+
+        if ($stage->getPurpose() === PurchaseStagePurpose::PAYMENT) {
+            $this->notifier->notifyPaymentConfirmed($request, $actor);
+        }
+    }
+
+    /** Отметка из редактора: рецензия пройдена или рецензии утверждены. */
+    public function passContractReview(PurchaseRequest $request, PurchaseApprovalTask $task): void
+    {
+        $this->assertActiveTask($request, $task);
+        if ($task->getContractReview() === null) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONTRACT_REVIEW_REQUIRED);
+        }
+
+        $task->passContractReview();
+        $this->save($request);
     }
 
     /**
@@ -632,10 +653,10 @@ final class PurchaseApprovalWorkflow
         }
     }
 
-    /** «Заявка продвинулась: Разбор заявки». Своё название этапа, иначе — назначение. */
+    /** «Заявка продвинулась: Согласование, Бухгалтерия, Юристы» — как этап называется в карточке. */
     private function advancedTitle(PurchaseApprovalStage $stage): string
     {
-        return 'Заявка продвинулась: ' . ($stage->getTitle() ?? $stage->getPurpose()->getLabel());
+        return 'Заявка продвинулась: ' . $stage->resolveTitle();
     }
 
     /**

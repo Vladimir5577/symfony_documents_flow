@@ -268,27 +268,12 @@ final class PurchaseAccess
     }
 
     /**
-     * Отмена. Автор — пока заявку не оплатили. Админ — из любого статуса,
-     * кроме уже отменённой.
+     * Отмена. Только тот, кто сейчас разбирает заявку: кнопка «Отказ» в модалке.
+     * Автор черновик удаляет, а не отменяет.
      */
     public function canCancel(PurchaseRequest $purchase, User $user): bool
     {
-        if ($purchase->getStatus() === PurchaseStatus::CANCELLED) {
-            return false;
-        }
-        if ($this->roster->isAdmin($user)) {
-            return true;
-        }
-        if (!$this->isOwner($purchase, $user)) {
-            return false;
-        }
-
-        return in_array($purchase->getStatus(), [
-            PurchaseStatus::DRAFT,
-            PurchaseStatus::ON_APPROVAL,
-            PurchaseStatus::APPROVED,
-            PurchaseStatus::REJECTED,
-        ], true);
+        return $this->findMyActiveTask($purchase, $user, PurchaseStagePurpose::TRIAGE) !== null;
     }
 
     public function can(User $user, PurchaseCapability $capability): bool

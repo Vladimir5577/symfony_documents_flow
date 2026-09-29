@@ -25,6 +25,8 @@ parameters:
 
     # onlyoffice url
     onlyoffice_document_server_url: '%env(resolve:ONLYOFFICE_DOCUMENT_SERVER_URL)%'
+    # JWT_SECRET сервера документов; пусто — подписи нет (JWT_ENABLED=false)
+    onlyoffice_jwt_secret: '%env(default::ONLYOFFICE_JWT_SECRET)%'
 
     # don snab api
     don_snab_api_url: '%env(resolve:DON_SNAB_API_URL)%'

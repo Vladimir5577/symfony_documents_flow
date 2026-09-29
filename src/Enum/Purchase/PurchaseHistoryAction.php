@@ -37,8 +37,10 @@ enum PurchaseHistoryAction: string
     case FILE_UPLOADED = 'FILE_UPLOADED';
     case FILE_RENAMED = 'FILE_RENAMED';
     case FILE_DELETED = 'FILE_DELETED';
-    /** Содержимое docx перезаписано из OnlyOffice. Одна строка на сессию редактора. */
+    /** Содержимое docx перезаписано из OnlyOffice. Одна строка на сохранение. */
     case FILE_EDITED = 'FILE_EDITED';
+    /** Текст договора поменялся, когда его уже согласовали, — согласовавшим ушло уведомление. */
+    case CONTRACT_CHANGED = 'CONTRACT_CHANGED';
 
     public function getLabel(): string
     {
@@ -61,6 +63,7 @@ enum PurchaseHistoryAction: string
             self::FILE_RENAMED => 'Имя файла изменено',
             self::FILE_DELETED => 'Удалён файл',
             self::FILE_EDITED => 'Файл изменён',
+            self::CONTRACT_CHANGED => 'Договор изменён после согласования',
         };
     }
 }

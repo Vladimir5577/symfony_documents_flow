@@ -41,6 +41,17 @@ class PurchaseRequestFile
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
 
+    /**
+     * Редакция для OnlyOffice — часть ключа документа.
+     *
+     * Все, кто открыл файл, должны получить один ключ, иначе каждый правит свою
+     * копию. Но когда сессия закрылась и её итог лёг в хранилище, следующая
+     * обязана открыться под новым ключом: по старому Document Server отдал бы
+     * закэшированный прошлый документ, а не файл из хранилища.
+     */
+    #[ORM\Column(name: 'editor_revision', type: Types::INTEGER, options: ['default' => 1])]
+    private int $editorRevision = 1;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -109,5 +120,17 @@ class PurchaseRequestFile
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;
+    }
+
+    public function getEditorRevision(): int
+    {
+        return $this->editorRevision;
+    }
+
+    public function nextEditorRevision(): static
+    {
+        ++$this->editorRevision;
+
+        return $this;
     }
 }

@@ -27,7 +27,7 @@ class KanbanBoard
     #[ORM\Column(type: 'float', options: ['default' => 0])]
     private float $position = 0.0;
 
-    #[ORM\ManyToOne(targetEntity: KanbanProject::class)]
+    #[ORM\ManyToOne(targetEntity: KanbanProject::class, inversedBy: 'boards')]
     #[ORM\JoinColumn(name: 'kanban_project_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     private ?KanbanProject $project = null;
 

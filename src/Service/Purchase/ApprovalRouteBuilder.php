@@ -9,8 +9,8 @@ use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\Purchase\PurchaseRouteTemplateStage;
+use App\Entity\Purchase\PurchaseRouteTemplateTask;
 use App\Entity\User\User;
-use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseTaskAssignment;
 use Doctrine\ORM\EntityManagerInterface;
@@ -80,7 +80,8 @@ final class ApprovalRouteBuilder
                     ->setAssignmentType($templateTask->getAssignmentType())
                     ->setRoleCode($templateTask->getRoleCode())
                     ->setTitle($templateTask->getTitle())
-                    ->setRequiresFileType($templateTask->getRequiresFileType());
+                    ->setRequiresFileType($templateTask->getRequiresFileType())
+                    ->setContractReview($templateTask->getContractReview());
 
                 $stage->addTask($task);
                 $this->em->persist($task);
@@ -119,12 +120,14 @@ final class ApprovalRouteBuilder
             }
             $seen[$userId] = true;
 
+            $templateTask = $this->dynamicTemplateTask($stage);
             $task = (new PurchaseApprovalTask())
                 ->setPosition(++$position)
                 ->setAssignmentType(PurchaseTaskAssignment::USER)
                 ->setAssigneeUser($user)
                 ->setCreatedBy($actor)
-                ->setRequiresFileType($this->requiredFileType($stage));
+                ->setRequiresFileType($templateTask?->getRequiresFileType())
+                ->setContractReview($templateTask?->getContractReview());
 
             $stage->addTask($task);
             $this->em->persist($task);
@@ -163,10 +166,10 @@ final class ApprovalRouteBuilder
 
     /**
      * Динамическая задача в снимок при подаче не попадает — людей ещё нет.
-     * Требование документа остаётся на задаче заготовки и переносится сюда,
-     * когда разбирающий назначает людей.
+     * Требование документа и отметка договора остаются на задаче заготовки
+     * и переносятся сюда, когда разбирающий назначает людей.
      */
-    private function requiredFileType(PurchaseApprovalStage $stage): ?PurchaseFileType
+    private function dynamicTemplateTask(PurchaseApprovalStage $stage): ?PurchaseRouteTemplateTask
     {
         $position = $stage->getPosition();
         foreach ($stage->getPurchaseRequest()?->getAppliedRouteTemplate()?->getStages() ?? [] as $templateStage) {
@@ -175,7 +178,7 @@ final class ApprovalRouteBuilder
             }
             foreach ($templateStage->getTasks() as $templateTask) {
                 if ($templateTask->isDynamic()) {
-                    return $templateTask->getRequiresFileType();
+                    return $templateTask;
                 }
             }
         }
