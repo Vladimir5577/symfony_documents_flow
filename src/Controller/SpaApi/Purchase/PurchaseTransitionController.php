@@ -242,7 +242,7 @@ final class PurchaseTransitionController extends AbstractController
         return $this->json($this->presenter->presentDetail($purchase));
     }
 
-    /** Отмена: автор до «Оплачено»; админ — из любого статуса. */
+    /** Отмена: только директор на разборе. */
     #[Route('/cancel', name: 'spa_api_purchases_cancel', methods: ['POST'])]
     public function cancel(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {

@@ -307,21 +307,26 @@ class PurchaseApprovalStage
         return false;
     }
 
-    /** Заголовок для карточки: свой, иначе — из адресатов задач. */
+    /** Заголовок этапа. Несколько подписей: «Согласование, Бухгалтерия, Юристы». */
     public function resolveTitle(): string
     {
-        if ($this->title !== null) {
-            return $this->title;
-        }
-
         $titles = [];
         foreach ($this->tasks as $task) {
             $titles[] = $task->resolveTitle();
         }
-        if ($titles === []) {
-            return $this->candidateRoleCode?->getLabel() ?? $this->purpose->getLabel();
+        $titles = array_values(array_unique(array_filter(
+            $titles,
+            static fn (string $title): bool => $title !== '',
+        )));
+
+        if (count($titles) > 1) {
+            return $this->purpose->getLabel().', '.implode(', ', $titles);
         }
 
-        return implode(' и ', $titles);
+        if ($this->title !== null && $this->title !== '') {
+            return $this->title;
+        }
+
+        return $titles[0] ?? $this->candidateRoleCode?->getLabel() ?? $this->purpose->getLabel();
     }
 }
