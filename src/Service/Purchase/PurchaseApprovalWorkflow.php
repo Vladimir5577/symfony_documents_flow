@@ -165,9 +165,10 @@ final class PurchaseApprovalWorkflow
             $this->history->taskComment($task, $comment),
         );
 
+        // Параллельные подписи закрывают этап вместе. Пока ждём вторую, заявка
+        // стоит на месте — «продвинулась» уйдёт один раз, из announce().
         if (!$stage->isSatisfied()) {
             $this->save($request);
-            $this->notifier->notifyChanged($request, $actor, $this->advancedTitle($stage));
 
             return;
         }
@@ -652,10 +653,10 @@ final class PurchaseApprovalWorkflow
         }
     }
 
-    /** «Заявка продвинулась: Разбор заявки». Своё название этапа, иначе — назначение. */
+    /** «Заявка продвинулась: Согласование, Бухгалтерия, Юристы» — как этап называется в карточке. */
     private function advancedTitle(PurchaseApprovalStage $stage): string
     {
-        return 'Заявка продвинулась: ' . ($stage->getTitle() ?? $stage->getPurpose()->getLabel());
+        return 'Заявка продвинулась: ' . $stage->resolveTitle();
     }
 
     /**

@@ -229,7 +229,7 @@ final class PurchaseApprovalFlowTest extends TestCase
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
             $accountant,
         );
-        $this->assertPurchaseNotified($request, $accountant);
+        $this->assertNoPurchaseNotifications();
 
         self::assertSame(self::STAGE_CHECKS, $request->getCurrentStage()?->getPosition());
 
@@ -238,6 +238,10 @@ final class PurchaseApprovalFlowTest extends TestCase
             $request,
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::LEGAL),
             $lawyer,
+        );
+        self::assertContains(
+            'Заявка продвинулась: Согласование, Бухгалтерия, Юристы',
+            array_map(static fn (array $row): string => $row[0]->title, $this->purchaseNotifications),
         );
         $this->assertPurchaseNotified($request, $lawyer);
 
@@ -450,7 +454,7 @@ final class PurchaseApprovalFlowTest extends TestCase
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
             $accountant,
         );
-        $this->assertPurchaseNotified($request, $accountant);
+        $this->assertNoPurchaseNotifications();
 
         $lawyer = $this->user(5);
         $this->workflow->returnToSourcing(
@@ -503,7 +507,7 @@ final class PurchaseApprovalFlowTest extends TestCase
             $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING),
             $accountant,
         );
-        $this->assertPurchaseNotified($request, $accountant);
+        $this->assertNoPurchaseNotifications();
 
         $lawyer = $this->user(5);
         $this->workflow->returnToSourcing(
@@ -637,7 +641,7 @@ final class PurchaseApprovalFlowTest extends TestCase
         $this->assertPurchaseNotified($request, $buyer);
         $late = $this->taskAt($request, self::STAGE_CHECKS, PurchaseRoleCode::ACCOUNTING);
         $this->workflow->approveTask($request, $late, $director);
-        $this->assertPurchaseNotified($request, $director);
+        $this->assertNoPurchaseNotifications();
 
         self::assertSame($late, $this->access()->findMyRevokableTask($request, $director));
     }
@@ -941,7 +945,11 @@ final class PurchaseApprovalFlowTest extends TestCase
                 self::assertInstanceOf(User::class, $actor);
 
                 $this->workflow->approveTask($request, $task, $actor);
-                $this->assertPurchaseNotified($request, $actor);
+                if ($stage->isSatisfied()) {
+                    $this->assertPurchaseNotified($request, $actor);
+                } else {
+                    $this->assertNoPurchaseNotifications();
+                }
             }
         }
     }
