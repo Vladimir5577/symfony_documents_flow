@@ -115,7 +115,7 @@ Document Server), плагин `docker_env/onlyoffice/plugins/dept-highlighter`,
    проксирует `/onlyoffice/` в контейнер `onlyoffice`; у Symfony
    `ONLYOFFICE_DOCUMENT_SERVER_URL=<адрес фронта>/onlyoffice` (например,
    `http://31.133.49.124:8075/onlyoffice`). Отдельный порт наружу не нужен.
-3. **Миграция** `Version20260925190000` — колонка `purchase_request_file.editor_revision`.
+3. **Миграция** `Version20260925132500` — колонка `purchase_request_file.editor_revision`.
 4. **JWT (рекомендуется).** Без подписи любой, кому договор открыт на просмотр,
    может поправить конфиг в браузере и войти в сессию правщиком под чужим
    отделом. Чтобы включить — в `.env` symfony_documents_flow (его читают и
