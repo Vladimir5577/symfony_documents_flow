@@ -33,7 +33,6 @@ final class PurchaseApiPresenter
     public function __construct(
         private readonly Security $security,
         private readonly PurchaseAccess $access,
-        private readonly ApprovalRouteResolver $resolver,
         private readonly DocumentApiPresenter $documentPresenter,
     ) {}
 
@@ -432,19 +431,6 @@ final class PurchaseApiPresenter
                 $assignableStages,
             ),
             'canAssignApprovers' => $assignableStages !== [],
-            // Сменить маршрут можно только на разборе: дальше в маршруте уже
-            // лежат чужие решения, и пересборка сожгла бы их.
-            'canChangeRoute' => $this->access->canChangeRoute($request, $user),
-            'routeOptions' => $this->access->canChangeRoute($request, $user)
-                ? array_map(
-                    static fn (PurchaseRouteTemplate $t): array => [
-                        'id' => $t->getId(),
-                        'code' => $t->getCode(),
-                        'name' => $t->getName(),
-                    ],
-                    $this->resolver->options($request),
-                )
-                : [],
             // Поставщик и цены — работа этапа ресёрча, и только пока он активен.
             // Роль здесь не спрашиваем: задача моя — значит она мне и адресована.
             'canEditSourcing' => $stage?->getPurpose() === PurchaseStagePurpose::SOURCING,

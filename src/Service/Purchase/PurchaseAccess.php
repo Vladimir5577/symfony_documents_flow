@@ -217,18 +217,6 @@ final class PurchaseAccess
     }
 
     /**
-     * Сменить маршрут заявки: я стою на её разборе.
-     *
-     * Дальше разбора нельзя — в маршруте уже лежат чужие решения, и пересборка
-     * сожгла бы их. Зеркало проверки в воркфлоу, и она остаётся главной; здесь то
-     * же условие для кнопки.
-     */
-    public function canChangeRoute(PurchaseRequest $purchase, User $user): bool
-    {
-        return $this->findMyActiveTask($purchase, $user, PurchaseStagePurpose::TRIAGE) !== null;
-    }
-
-    /**
      * Вернуть заявку в отдел закупок со своей задачи: этап ресёрча в маршруте
      * есть и он раньше моего.
      *

@@ -118,8 +118,6 @@ final class SpaApiError
     public const PURCHASE_APPROVER_NOT_DEPUTY = 'purchase_approver_not_deputy';
     /** Подача заявки, маршрут которой не назначен или больше не годится. */
     public const PURCHASE_ROUTE_NOT_CONFIGURED = 'purchase_route_not_configured';
-    /** Маршрут заявки нельзя сменить: разбор не активен или дальше уже есть решения. */
-    public const PURCHASE_ROUTE_NOT_CHANGEABLE = 'purchase_route_not_changeable';
     /** Двое изменили заявку одновременно — повторить с актуальными данными. */
     public const PURCHASE_CONCURRENT_UPDATE = 'purchase_concurrent_update';
     // Заготовка маршрута в админке
