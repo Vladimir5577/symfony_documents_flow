@@ -10,7 +10,6 @@ use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseTaskAssignment;
 use App\Enum\Purchase\PurchaseTaskDecision;
-use App\Repository\Purchase\PurchaseApprovalTaskRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
@@ -27,7 +26,7 @@ use Gedmo\Mapping\Annotation as Gedmo;
  * назначает админ в участниках модуля, и маршрут не должен зависеть от того, что
  * записано в security.yaml.
  */
-#[ORM\Entity(repositoryClass: PurchaseApprovalTaskRepository::class)]
+#[ORM\Entity]
 #[ORM\Table(name: 'purchase_approval_task')]
 #[ORM\Index(columns: ['stage_id', 'position'])]
 #[ORM\Index(columns: ['assignee_user_id', 'decision'])]

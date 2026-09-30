@@ -202,27 +202,6 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     }
 
     /**
-     * Количество заявок по каждому статусу (для счётчиков-бейджей).
-     *
-     * @param int|null $createdById
-     * @return array<string, int> [status value => count]
-     */
-    public function countByStatuses(?int $createdById): array
-    {
-        $qb = $this->createFilteredQueryBuilder($createdById, null, null)
-            ->select('pr.status AS status, COUNT(pr.id) AS cnt')
-            ->groupBy('pr.status');
-
-        $counts = [];
-        foreach ($qb->getQuery()->getArrayResult() as $row) {
-            $status = $row['status'] instanceof PurchaseStatus ? $row['status']->value : (string) $row['status'];
-            $counts[$status] = (int) $row['cnt'];
-        }
-
-        return $counts;
-    }
-
-    /**
      * @param int|null                  $createdById
      * @param list<PurchaseStatus>|null $statuses
      */
