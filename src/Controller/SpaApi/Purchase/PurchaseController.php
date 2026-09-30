@@ -163,14 +163,7 @@ final class PurchaseController extends AbstractController
         [$createdById] = $this->resolveScope($user);
         $byStatus = $this->purchaseRepo->countByStatuses($createdById);
 
-        // Шагами маршрута счётчик не исчерпывается: часть работы живёт в конвейере
-        // и шагом не является. Общее правило — «следующее действие доступно мне».
         $actionRequired = $approverPending;
-        if ($this->access->can($user, PurchaseCapability::RUN_EXECUTION)) {
-            // APPROVED — оплатить. Доставленное в счётчик не входит: это конец пути,
-            // а этапы после поставки, если они ещё открыты, уже сидят в approverPending.
-            $actionRequired += ($byStatus[PurchaseStatus::APPROVED->value] ?? 0);
-        }
         if ($createdById !== null) {
             // Счётчики автора: вернули на доработку и оплаченное — ждём
             // подтверждения доставки. Проверка роли здесь не нужна: у автора

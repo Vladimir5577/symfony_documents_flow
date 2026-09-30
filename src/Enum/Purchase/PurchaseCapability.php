@@ -25,22 +25,11 @@ enum PurchaseCapability: string
     /** Категории, настройки модуля и классификация заявки (закон, способ закупки). */
     case MANAGE_DICTIONARIES = 'MANAGE_DICTIONARIES';
 
-    /**
-     * Конвейер исполнения: оплата счёта и отметка доставки.
-     * После APPROVED маршрут пройден, шагов больше нет — выразить это нечем.
-     */
-    case RUN_EXECUTION = 'RUN_EXECUTION';
-
-    /** Приоритет и отмена любой заявки до финала — вмешательство помимо маршрута. */
-    case SUPERVISE = 'SUPERVISE';
-
     public function getLabel(): string
     {
         return match ($this) {
             self::VIEW_ALL => 'Видеть все заявки',
             self::MANAGE_DICTIONARIES => 'Справочники и классификация',
-            self::RUN_EXECUTION => 'Конвейер исполнения',
-            self::SUPERVISE => 'Приоритет и отмена заявок',
         };
     }
 }

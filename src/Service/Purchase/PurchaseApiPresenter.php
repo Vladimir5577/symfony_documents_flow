@@ -430,11 +430,9 @@ final class PurchaseApiPresenter
                 ],
                 $assignableStages,
             ),
-            'canAssignApprovers' => $assignableStages !== [],
             // Поставщик и цены — работа этапа ресёрча, и только пока он активен.
             // Роль здесь не спрашиваем: задача моя — значит она мне и адресована.
             'canEditSourcing' => $stage?->getPurpose() === PurchaseStagePurpose::SOURCING,
-            'canCancel' => $this->access->canCancel($request, $user),
             'canComment' => $this->access->canView($request, $user),
         ];
     }

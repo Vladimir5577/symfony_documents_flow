@@ -426,7 +426,7 @@ final class PurchaseApprovalWorkflow
         $this->announce($request, $actor, $stage);
     }
 
-    /** Отмена. Кто и из какого статуса — решает PurchaseAccess::canCancel. */
+    /** Отмена с разбора. Кто может — решает ручка triage: активная задача разбора. */
     public function cancel(PurchaseRequest $request, User $actor, ?string $comment): void
     {
         if ($request->getStatus() === PurchaseStatus::CANCELLED) {

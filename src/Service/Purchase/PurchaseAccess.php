@@ -28,12 +28,6 @@ use App\Enum\Purchase\PurchaseTaskDecision;
  *   полномочие      — что можно делать вне маршрута (PurchaseCapability),
  *   авторство       — своя заявка, роль для этого не нужна.
  *
- * Исполнение стало частью маршрута, и полномочия RUN_EXECUTION больше не хватает,
- * чтобы оплатить или закрыть заявку: нужна задача. Полномочие отвечает на вопрос
- * «допущен ли человек к деньгам вообще», задача — «его ли это заявка сейчас».
- * Прежде первое отвечало на оба, и «доставку принимает склад, а не заявитель»
- * нельзя было настроить, не меняя код.
- *
  * Видимость и право действовать — разные вещи: видеть заявку может носитель
  * VIEW_ALL, автор и любой участник маршрута, а закрыть задачу — её адресат или
  * ROLE_ADMIN, и только когда на её этапе стоит указатель.
@@ -253,15 +247,6 @@ final class PurchaseAccess
 
         return $this->roster->can($user, PurchaseCapability::MANAGE_DICTIONARIES)
             || $this->findMyActiveTask($purchase, $user, PurchaseStagePurpose::SOURCING) !== null;
-    }
-
-    /**
-     * Отмена. Только тот, кто сейчас разбирает заявку: кнопка «Отказ» в модалке.
-     * Автор черновик удаляет, а не отменяет.
-     */
-    public function canCancel(PurchaseRequest $purchase, User $user): bool
-    {
-        return $this->findMyActiveTask($purchase, $user, PurchaseStagePurpose::TRIAGE) !== null;
     }
 
     public function can(User $user, PurchaseCapability $capability): bool

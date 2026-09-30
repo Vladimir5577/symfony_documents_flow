@@ -180,9 +180,6 @@ final class PurchaseTransitionController extends AbstractController
                     break;
 
                 case 'cancel':
-                    if (!$this->access->canCancel($purchase, $user)) {
-                        return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-                    }
                     $this->workflow->cancel($purchase, $user, $reason !== '' ? $reason : null);
                     break;
 
@@ -194,17 +191,6 @@ final class PurchaseTransitionController extends AbstractController
         }
 
         return $this->json($this->presenter->presentDetail($purchase));
-    }
-
-    /** Отмена: только директор на разборе. */
-    #[Route('/cancel', name: 'spa_api_purchases_cancel', methods: ['POST'])]
-    public function cancel(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        $comment = $this->comment($request);
-
-        return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->access->canCancel($p, $u),
-            fn (PurchaseRequest $p, User $u) => $this->workflow->cancel($p, $u, $comment !== '' ? $comment : null));
     }
 
     /**
