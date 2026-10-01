@@ -18,7 +18,6 @@ use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\User\UserRole;
-use App\Repository\Purchase\PurchaseApprovalTaskRepository;
 use App\Repository\Purchase\PurchaseCategoryRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Repository\Purchase\PurchaseRouteDefaultRepository;
@@ -49,7 +48,6 @@ final class PurchaseController extends AbstractController
     public function __construct(
         private readonly PurchaseRequestRepository $purchaseRepo,
         private readonly PurchaseCategoryRepository $categoryRepo,
-        private readonly PurchaseApprovalTaskRepository $taskRepo,
         private readonly PurchaseApiPresenter $presenter,
         private readonly PurchaseApprovalWorkflow $workflow,
         private readonly PurchaseRequestEditor $editor,
@@ -142,47 +140,6 @@ final class PurchaseController extends AbstractController
                 'total_items' => $result['total'],
                 'total_pages' => (int) ceil($result['total'] / $pageSize),
             ],
-        ]);
-    }
-
-    /**
-     * Счётчики для бейджей: сколько заявок требует действия текущей роли.
-     */
-    #[Route('/counters', name: 'spa_api_purchases_counters', methods: ['GET'])]
-    public function counters(#[CurrentUser] ?User $user): JsonResponse
-    {
-        if (!$user instanceof User) {
-            throw $this->createAccessDeniedException();
-        }
-
-        // Согласование — активные шаги, ждущие лично меня или мою роль.
-        // Именно активные: будущие шаги мне ещё недоступны, и бейдж показал бы
-        // работу, которую сделать нельзя.
-        $approverPending = $this->taskRepo->countActiveForUser($user, $this->roster->roleCodesOf($user));
-
-        [$createdById] = $this->resolveScope($user);
-        $byStatus = $this->purchaseRepo->countByStatuses($createdById);
-
-        // Шагами маршрута счётчик не исчерпывается: часть работы живёт в конвейере
-        // и шагом не является. Общее правило — «следующее действие доступно мне».
-        $actionRequired = $approverPending;
-        if ($this->access->can($user, PurchaseCapability::RUN_EXECUTION)) {
-            // APPROVED — оплатить. Доставленное в счётчик не входит: это конец пути,
-            // а этапы после поставки, если они ещё открыты, уже сидят в approverPending.
-            $actionRequired += ($byStatus[PurchaseStatus::APPROVED->value] ?? 0);
-        }
-        if ($createdById !== null) {
-            // Счётчики автора: вернули на доработку и оплаченное — ждём
-            // подтверждения доставки. Проверка роли здесь не нужна: у автора
-            // область видимости и так сужена до собственных заявок.
-            $actionRequired += ($byStatus[PurchaseStatus::REJECTED->value] ?? 0)
-                + ($byStatus[PurchaseStatus::INVOICE_PAID->value] ?? 0);
-        }
-
-        return $this->json([
-            'byStatus' => $byStatus === [] ? new \stdClass() : $byStatus,
-            'actionRequired' => $actionRequired,
-            'approverPending' => $approverPending,
         ]);
     }
 

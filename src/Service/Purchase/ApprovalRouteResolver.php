@@ -62,16 +62,6 @@ final class ApprovalRouteResolver
         return $default;
     }
 
-    /**
-     * Из чего разбирающий выбирает маршрут для этой заявки.
-     *
-     * @return list<PurchaseRouteTemplate>
-     */
-    public function options(PurchaseRequest $request): array
-    {
-        return $this->templates->findActiveForKind($request->getCreatedAs());
-    }
-
     /** Заготовку можно применить к этой заявке. */
     public function isUsable(PurchaseRouteTemplate $template, PurchaseRequest $request): bool
     {

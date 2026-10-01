@@ -11,7 +11,6 @@ use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Repository\Purchase\PurchaseRequestRepository;
-use App\Repository\Purchase\PurchaseRouteTemplateRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
@@ -39,7 +38,6 @@ final class PurchaseTransitionController extends AbstractController
 {
     public function __construct(
         private readonly PurchaseRequestRepository $purchaseRepo,
-        private readonly PurchaseRouteTemplateRepository $templateRepo,
         private readonly UserRepository $userRepo,
         private readonly PurchaseApprovalWorkflow $workflow,
         private readonly PurchaseApiPresenter $presenter,
@@ -124,50 +122,6 @@ final class PurchaseTransitionController extends AbstractController
     }
 
     /**
-     * Сменить маршрут заявки, пока она на разборе.
-     *
-     * Заявку это не двигает: разбирающий остаётся на разборе нового маршрута и
-     * отправляет её дальше обычной кнопкой.
-     */
-    #[Route('/route', name: 'spa_api_purchases_route_change', methods: ['PATCH'])]
-    public function changeRoute(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        if (!$user instanceof User) {
-            throw $this->createAccessDeniedException();
-        }
-
-        $purchase = $this->purchaseRepo->find($id);
-        if ($purchase === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
-        }
-
-        // Гейта «ты директор» нет: право даёт сама задача разбора, адресованная
-        // этому человеку. Кто разбирает заявки, решает маршрут, а не контроллер.
-        $task = $this->access->findMyActiveTask($purchase, $user, PurchaseStagePurpose::TRIAGE);
-        if ($task === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_CHANGEABLE], Response::HTTP_CONFLICT);
-        }
-
-        $payload = json_decode($request->getContent(), true);
-        if (!is_array($payload)) {
-            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
-        }
-
-        $template = $this->templateRepo->findWithStages((int) ($payload['templateId'] ?? 0));
-        if ($template === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_ROUTE_NOT_FOUND], Response::HTTP_NOT_FOUND);
-        }
-
-        try {
-            $this->workflow->changeRoute($purchase, $task, $template, $user);
-        } catch (PurchaseTransitionException $e) {
-            return $this->json(['error' => $e->errorCode], Response::HTTP_CONFLICT);
-        }
-
-        return $this->json($this->presenter->presentDetail($purchase));
-    }
-
-    /**
      * Решение разбирающего — одно на все кнопки модалки разбора.
      *
      * body: {action, items?: [{id, included, quantity}], assignments?: {stageId: [userId]},
@@ -226,9 +180,6 @@ final class PurchaseTransitionController extends AbstractController
                     break;
 
                 case 'cancel':
-                    if (!$this->access->canCancel($purchase, $user)) {
-                        return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-                    }
                     $this->workflow->cancel($purchase, $user, $reason !== '' ? $reason : null);
                     break;
 
@@ -240,17 +191,6 @@ final class PurchaseTransitionController extends AbstractController
         }
 
         return $this->json($this->presenter->presentDetail($purchase));
-    }
-
-    /** Отмена: только директор на разборе. */
-    #[Route('/cancel', name: 'spa_api_purchases_cancel', methods: ['POST'])]
-    public function cancel(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
-    {
-        $comment = $this->comment($request);
-
-        return $this->transition($id, $user,
-            fn (PurchaseRequest $p, User $u) => $this->access->canCancel($p, $u),
-            fn (PurchaseRequest $p, User $u) => $this->workflow->cancel($p, $u, $comment !== '' ? $comment : null));
     }
 
     /**

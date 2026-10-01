@@ -8,7 +8,6 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseApprovalStage;
 use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
-use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseRoleCode;
@@ -427,57 +426,7 @@ final class PurchaseApprovalWorkflow
         $this->announce($request, $actor, $stage);
     }
 
-    /**
-     * Сменить маршрут заявки и собрать снимок заново.
-     *
-     * Только пока активен разбор: дальше в маршруте уже лежат чужие решения, и
-     * пересборка сожгла бы их — согласанты подписывали бы не тот маршрут, по
-     * которому заявка поедет.
-     *
-     * Заявку это не двигает: после смены разбирающий остаётся на разборе нового
-     * маршрута и отправляет её обычной кнопкой. Иначе «сменить маршрут» тихо
-     * делало бы два дела вместо одного, и отменить второе было бы нечем.
-     */
-    public function changeRoute(
-        PurchaseRequest $request,
-        PurchaseApprovalTask $task,
-        PurchaseRouteTemplate $template,
-        User $actor,
-    ): void {
-        $stage = $this->assertActiveTask($request, $task);
-
-        if ($stage->getPurpose() !== PurchaseStagePurpose::TRIAGE) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_ROUTE_NOT_CHANGEABLE);
-        }
-        if (!$this->resolver->isUsable($template, $request)) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_ROUTE_NOT_CONFIGURED);
-        }
-        // Новый маршрут без разбора оставил бы разбирающего без задачи посреди
-        // его же действия: заявка повисла бы между «разобрал» и «отправил».
-        if ($template->findTriageStage() === null) {
-            throw new PurchaseTransitionException(SpaApiError::PURCHASE_ROUTE_NOT_CHANGEABLE);
-        }
-
-        $was = $request->getAppliedRouteTemplateName();
-
-        // Транзакция по той же причине, что и в submit(): снос старого снимка и
-        // запись нового — две записи, и отказ на второй оставит заявку без маршрута.
-        $this->em->wrapInTransaction(function () use ($request, $template, $actor, $was): void {
-            $request->setRouteTemplate($template);
-            $this->builder->build($request, $template);
-            $this->advance($request, $actor);
-
-            $this->history->log(
-                $request,
-                $actor,
-                PurchaseHistoryAction::ROUTE_CHANGED,
-                sprintf('%s → %s', $was ?? 'маршрут по умолчанию', (string) $template->getName()),
-            );
-            $this->save($request);
-        });
-    }
-
-    /** Отмена. Кто и из какого статуса — решает PurchaseAccess::canCancel. */
+    /** Отмена с разбора. Кто может — решает ручка triage: активная задача разбора. */
     public function cancel(PurchaseRequest $request, User $actor, ?string $comment): void
     {
         if ($request->getStatus() === PurchaseStatus::CANCELLED) {

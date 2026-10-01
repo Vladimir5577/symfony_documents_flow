@@ -9,7 +9,7 @@ namespace App\Enum\Purchase;
  *
  * В историю попадают не только смены статуса. Согласование целиком идёт внутри
  * одного ON_APPROVAL, а решения лежат на задачах и исчезают вместе с ними при
- * повторной подаче, возврате в закупки и смене маршрута. Поэтому каждое действие
+ * повторной подаче и возврате в закупки. Поэтому каждое действие
  * пишется отдельной строкой: след того, что подпись была и сгорела, должен
  * пережить сами задачи.
  *
@@ -25,8 +25,6 @@ enum PurchaseHistoryAction: string
     case TASK_REVOKED = 'TASK_REVOKED';
     case RETURNED_TO_DEPARTMENT = 'RETURNED_TO_DEPARTMENT';
     case APPROVERS_ASSIGNED = 'APPROVERS_ASSIGNED';
-    /** Маршрут заявки сменили на разборе — снимок собран заново. */
-    case ROUTE_CHANGED = 'ROUTE_CHANGED';
     case ITEMS_EDITED = 'ITEMS_EDITED';
     case SOURCING_UPDATED = 'SOURCING_UPDATED';
     case CLASSIFICATION_UPDATED = 'CLASSIFICATION_UPDATED';
@@ -52,7 +50,6 @@ enum PurchaseHistoryAction: string
             self::TASK_REVOKED => 'Подпись снята',
             self::RETURNED_TO_DEPARTMENT => 'Возвращена в отдел закупок',
             self::APPROVERS_ASSIGNED => 'Назначены согласанты',
-            self::ROUTE_CHANGED => 'Маршрут изменён',
             self::ITEMS_EDITED => 'Состав заявки изменён',
             self::SOURCING_UPDATED => 'Поставщик и цены обновлены',
             self::CLASSIFICATION_UPDATED => 'Классификация изменена',

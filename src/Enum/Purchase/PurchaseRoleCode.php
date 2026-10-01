@@ -66,16 +66,13 @@ enum PurchaseRoleCode: string
         return match ($this) {
             self::DIRECTOR => [
                 PurchaseCapability::VIEW_ALL,
-                PurchaseCapability::SUPERVISE,
             ],
             self::PURCHASE_DEPARTMENT => [
                 PurchaseCapability::VIEW_ALL,
                 PurchaseCapability::MANAGE_DICTIONARIES,
-                PurchaseCapability::RUN_EXECUTION,
             ],
             self::FINANCE_DIRECTOR => [
                 PurchaseCapability::VIEW_ALL,
-                PurchaseCapability::RUN_EXECUTION,
             ],
             self::ACCOUNTING, self::LEGAL, self::PROFILE_DEPUTY => [],
         };
