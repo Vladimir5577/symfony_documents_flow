@@ -52,7 +52,32 @@ class PurchaseRequestRepository extends ServiceEntityRepository
      */
     public function findDecisionRequiredFor(User $user, array $roleCodes): array
     {
-        $qb = $this->createQueryBuilder('p')
+        $qb = $this->decisionRequiredQuery()
+            ->andWhere($this->addressedExpr($roleCodes, 't', 'p'))
+            ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
+            ->setParameter('user', $user);
+
+        if ($roleCodes !== []) {
+            $qb->setParameter('roleCodes', $roleCodes, ArrayParameterType::STRING);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
+
+    /**
+     * Все заявки, которые сейчас стоят в чьей-то очереди: активный этап и
+     * нерешённая задача, без фильтра «адресована мне». Для ROLE_ADMIN.
+     *
+     * @return list<PurchaseRequest>
+     */
+    public function findAllDecisionRequired(): array
+    {
+        return $this->decisionRequiredQuery()->getQuery()->getResult();
+    }
+
+    private function decisionRequiredQuery(): QueryBuilder
+    {
+        return $this->createQueryBuilder('p')
             ->innerJoin('p.stages', 's')
             ->innerJoin('s.tasks', 't')
             ->andWhere('p.status IN (:inRoute)')
@@ -66,17 +91,8 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             ])
             ->setParameter('active', PurchaseStageStatus::ACTIVE)
             ->setParameter('pending', PurchaseTaskDecision::PENDING)
-            ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
-            ->setParameter('user', $user)
             ->distinct()
             ->addOrderBy('p.createdAt', 'ASC');
-
-        $qb->andWhere($this->addressedExpr($roleCodes, 't', 'p'));
-        if ($roleCodes !== []) {
-            $qb->setParameter('roleCodes', $roleCodes, ArrayParameterType::STRING);
-        }
-
-        return $qb->getQuery()->getResult();
     }
 
     /**
