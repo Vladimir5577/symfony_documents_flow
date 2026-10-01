@@ -190,7 +190,8 @@ final class PurchaseController extends AbstractController
      *
      * Ролевого гейта нет — очередь сама и есть ответ: пусто, если сейчас не
      * твоя задача. Раньше это был только разбор директора; теперь любой этап,
-     * где указатель стоит на мне.
+     * где указатель стоит на мне. ROLE_ADMIN видит все такие заявки, не только
+     * адресованные ему: он закрывает задачу за адресата.
      *
      * Отдаётся карточками целиком, а не списком id: модалка показывает позиции
      * и обоснование, и догружать их по одной — лишний круг на каждую заявку.
@@ -204,7 +205,9 @@ final class PurchaseController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $queue = $this->purchaseRepo->findDecisionRequiredFor($user, $this->roster->roleCodesOf($user));
+        $queue = $this->roster->isAdmin($user)
+            ? $this->purchaseRepo->findAllDecisionRequired()
+            : $this->purchaseRepo->findDecisionRequiredFor($user, $this->roster->roleCodesOf($user));
 
         return $this->json([
             'items' => array_map(
