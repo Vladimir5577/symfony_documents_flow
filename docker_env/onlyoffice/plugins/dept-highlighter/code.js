@@ -13,6 +13,9 @@
 //
 // Отдел приходит из editorConfig.plugins.options (PurchaseFileCoEditing).
 // Цвета — те же, что в легенде редактора на фронте (PurchaseFileEditor.tsx).
+//
+// Утверждающему (clearAccepted) плагин наоборот снимает эту заливку с текста,
+// который уже не вставка: «Принять» убирает правку, а цвет отдела оставался.
 (function (window) {
   var COLORS = {
     PURCHASE_DEPARTMENT: [201, 231, 202],
@@ -31,6 +34,14 @@
 
   var rgb = null;
   var me = null;
+  var clearMode = false;
+  var DEPT_COLORS = [
+    [201, 231, 202],
+    [184, 234, 230],
+    [224, 210, 242],
+    [255, 241, 166],
+    [249, 198, 198],
+  ];
   var pending = {};
   var deferred = {};
   var busy = false;
@@ -61,7 +72,8 @@
     var options = info.options || {};
     rgb = COLORS[options.department] || null;
     me = info.userId;
-    if (!rgb || info.isViewMode) {
+    clearMode = !!options.clearAccepted;
+    if (info.isViewMode || (!clearMode && !rgb)) {
       return;
     }
 
@@ -108,20 +120,37 @@
     Asc.scope.pid = pid;
     Asc.scope.me = me;
     Asc.scope.rgb = rgb;
+    Asc.scope.clearAccepted = clearMode;
+    Asc.scope.colors = DEPT_COLORS;
 
     window.Asc.plugin.callCommand(function () {
       var para = Api.GetByInternalId(Asc.scope.pid);
       if (!para || !para.GetElementsCount) {
         return 0;
       }
+      var clear = !!Asc.scope.clearAccepted;
       var want = Asc.scope.rgb;
+      var colors = Asc.scope.colors || [];
       var todo = [];
 
-      function hasWantedFill(json) {
+      function fillRgb(json) {
         var shd = json.rPr && json.rPr.shd;
         var fill = shd && (shd.fill || shd.color);
-        var c = fill && (fill.rgb || fill);
-        return !!c && c.r === want[0] && c.g === want[1] && c.b === want[2];
+        return fill && (fill.rgb || fill);
+      }
+
+      function same(c, rgb) {
+        return !!c && !!rgb && c.r === rgb[0] && c.g === rgb[1] && c.b === rgb[2];
+      }
+
+      function isDeptFill(json) {
+        var c = fillRgb(json);
+        for (var i = 0; i < colors.length; i++) {
+          if (same(c, colors[i])) {
+            return true;
+          }
+        }
+        return false;
       }
 
       function visit(el) {
@@ -133,10 +162,17 @@
           } catch (e) {
             return;
           }
+          if (clear) {
+            // Принятая вставка уже не reviewType add, заливка на ней лишняя.
+            if (json.reviewType !== 'add' && isDeptFill(json)) {
+              todo.push(el);
+            }
+            return;
+          }
           var review = json.reviewInfo || {};
           if (json.reviewType === 'add'
             && (review.userId || review.UserId) === Asc.scope.me
-            && !hasWantedFill(json)) {
+            && !same(fillRgb(json), want)) {
             todo.push(el);
           }
           return;
@@ -156,7 +192,11 @@
         var track = Api.asc_GetLocalTrackRevisions();
         Api.asc_SetLocalTrackRevisions(false);
         todo.forEach(function (run) {
-          run.SetShd('clear', want[0], want[1], want[2]);
+          if (clear) {
+            run.SetShd('nil');
+          } else {
+            run.SetShd('clear', want[0], want[1], want[2]);
+          }
         });
         Api.asc_SetLocalTrackRevisions(track);
       }

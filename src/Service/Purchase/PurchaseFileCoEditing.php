@@ -98,7 +98,9 @@ final class PurchaseFileCoEditing
             // человек переключит себе строгий режим, и выбор запомнит браузер.
             'coEditing' => ['mode' => 'fast', 'change' => false],
             'customization' => [
-                'forcesave' => $edit,
+                // false: при true OnlyOffice шлёт файл в хранилище на каждом
+                // автосохранении. Пишут только кнопки — командой forcesave.
+                'forcesave' => false,
                 'review' => [
                     'trackChanges' => $edit && !$acceptsReviews,
                     'reviewDisplay' => 'markup',
@@ -113,6 +115,12 @@ final class PurchaseFileCoEditing
             $editorConfig['plugins'] = [
                 'autostart' => [self::HIGHLIGHT_PLUGIN],
                 'options' => [self::HIGHLIGHT_PLUGIN => ['department' => $role->value]],
+            ];
+        } elseif ($edit && $acceptsReviews) {
+            // Принятие правки снимает w:ins, заливка отдела остаётся. Плагин её убирает.
+            $editorConfig['plugins'] = [
+                'autostart' => [self::HIGHLIGHT_PLUGIN],
+                'options' => [self::HIGHLIGHT_PLUGIN => ['clearAccepted' => true]],
             ];
         }
 
@@ -135,6 +143,16 @@ final class PurchaseFileCoEditing
             ],
             'editorConfig' => $editorConfig,
         ];
+    }
+
+    /**
+     * Сессия закрыта без «Сохранить». Файл не трогаем, ключ сменяем:
+     * иначе следующий заход получит кэш Document Server с теми правками.
+     */
+    public function dropSession(PurchaseRequestFile $file): void
+    {
+        $file->nextEditorRevision();
+        $this->em->flush();
     }
 
     /**
@@ -274,7 +292,7 @@ final class PurchaseFileCoEditing
 
     /**
      * Цвета подсветки отделов — те же, что красит плагин dept-highlighter.
-     * После принятия правки в файле остаётся w:shd, сам текст уже не правка.
+     * Принятие правки снимает w:ins и оставляет w:shd на уже обычном тексте.
      */
     private const HIGHLIGHT_FILLS = 'C9E7CA|B8EAE6|E0D2F2|FFF1A6|F9C6C6';
 
@@ -332,30 +350,72 @@ final class PurchaseFileCoEditing
         }
     }
 
-    /** Пока в договоре есть правки, подсветка нужна. Когда их приняли — нет. */
+    /**
+     * Заливка отдела только на непринятой вставке. Принятый фрагмент её теряет,
+     * даже если в договоре ещё есть другие правки.
+     */
     private static function withoutApprovedHighlight(string $docx): string
     {
         $xml = self::documentXml($docx);
-        if ($xml === null || preg_match('/<w:(?:ins|del)\b/', $xml) === 1) {
+        // highlight none Word рисует чёрным, поэтому его тоже снимаем.
+        if ($xml === null
+            || (preg_match('/w:fill="(?:' . self::HIGHLIGHT_FILLS . ')"/i', $xml) !== 1
+                && preg_match('/<w:highlight\b[^>]*\bw:val="none"/i', $xml) !== 1)
+        ) {
             return $docx;
         }
-
-        $cleaned = preg_replace(
-            '/<w:shd\b[^>]*\bw:fill="(?:' . self::HIGHLIGHT_FILLS . ')"[^>]*\/>/i',
-            '',
-            $xml,
-        );
-        if (!is_string($cleaned) || $cleaned === $xml) {
+        $dom = new \DOMDocument();
+        $dom->preserveWhiteSpace = true;
+        $dom->formatOutput = false;
+        if (!$dom->loadXML($xml, LIBXML_NONET)) {
             return $docx;
         }
+        $xp = new \DOMXPath($dom);
+        $xp->registerNamespace('w', self::WML);
+        $fills = array_flip(explode('|', self::HIGHLIGHT_FILLS));
+        $nodes = [];
+        foreach ($xp->query('//w:shd') ?: [] as $node) {
+            if (!$node instanceof \DOMElement) {
+                continue;
+            }
+            $fill = strtoupper($node->getAttribute('w:fill'));
+            if (!isset($fills[$fill]) || self::insideRevision($node)) {
+                continue;
+            }
+            $nodes[] = $node;
+        }
+        foreach ($nodes as $node) {
+            $node->parentNode?->removeChild($node);
+        }
+        $strippedNone = self::stripNoneHighlight($xp);
+        if ($nodes === [] && !$strippedNone) {
+            return $docx;
+        }
+        $out = $dom->saveXML();
 
-        return self::replaceDocumentXml($docx, $cleaned) ?? $docx;
+        return is_string($out) ? (self::replaceDocumentXml($docx, $out) ?? $docx) : $docx;
+    }
+
+    /** Заливка внутри непринятой правки. Снаружи — уже принятый текст. */
+    private static function insideRevision(\DOMNode $node): bool
+    {
+        $parent = $node->parentNode;
+        while ($parent instanceof \DOMElement) {
+            if ($parent->namespaceURI === self::WML
+                && in_array($parent->localName, ['ins', 'del', 'moveFrom', 'moveTo'], true)
+            ) {
+                return true;
+            }
+            $parent = $parent->parentNode;
+        }
+
+        return false;
     }
 
     /** Принять правки: вставки остаются, удаления и подсветка отделов уходят. */
     private static function acceptRevisionsXml(string $xml): string
     {
-        if (preg_match('/<w:(?:ins|del|moveFrom|moveTo|shd)\b/', $xml) !== 1) {
+        if (preg_match('/<w:(?:ins|del|moveFrom|moveTo|shd|highlight)\b/', $xml) !== 1) {
             return $xml;
         }
         $dom = new \DOMDocument();
@@ -466,6 +526,23 @@ final class PurchaseFileCoEditing
         foreach ($nodes as $node) {
             $node->parentNode?->removeChild($node);
         }
+        // Word показывает w:highlight w:val="none" чёрной заливкой. Снятие цвета — убрать тег.
+        self::stripNoneHighlight($xp);
+    }
+
+    private static function stripNoneHighlight(\DOMXPath $xp): bool
+    {
+        $nodes = [];
+        foreach ($xp->query('//w:highlight') ?: [] as $node) {
+            if ($node instanceof \DOMElement && strcasecmp($node->getAttribute('w:val'), 'none') === 0) {
+                $nodes[] = $node;
+            }
+        }
+        foreach ($nodes as $node) {
+            $node->parentNode?->removeChild($node);
+        }
+
+        return $nodes !== [];
     }
 
     private static function replaceDocumentXml(string $docx, string $xml): ?string

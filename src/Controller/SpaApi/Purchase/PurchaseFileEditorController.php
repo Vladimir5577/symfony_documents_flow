@@ -8,6 +8,7 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
@@ -34,9 +35,11 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * тот, у кого задача на текущем этапе (лично, по роли или админ), остальные
  * смотрят. Правка идёт рецензированием с цветом отдела — см. PurchaseFileCoEditing.
  *
- * В хранилище итог попадает двумя путями: кнопкой «Сохранить» (forcesave,
- * status 6 — сессия продолжается) и когда вышел последний (status 2 — после
- * него файл открывается под новым ключом).
+ * В хранилище файл попадает только по «Сохранить», «Рецензия пройдена» и
+ * «Утвердить рецензии»: команда forcesave, status 6 с userdata commit.*.
+ * Утверждение дописывает .accept: перед записью все правки принимаются,
+ * заливка отделов снимается, ключ сессии сменяется.
+ * Когда вышел последний (status 2), сессия закрывается без записи.
  *
  * Браузер ходит в /spa/api с JWT. Document Server скачивает файл и шлёт
  * callback без JWT пользователя, поэтому их адреса подписаны HMAC по ключу
@@ -138,14 +141,25 @@ final class PurchaseFileEditorController extends AbstractController
         if ($session === null || $session['mode'] !== 'edit' || !$user instanceof User) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
+        [$purchase, $file] = $found;
+        // Флаг с клиента сам по себе не принимает правки: только задача «утвердить».
+        $accept = $this->acceptRequested($request)
+            && $this->access->findMyActiveTask($purchase, $user)?->getContractReview() === PurchaseContractReview::ACCEPT;
 
         $saveId = bin2hex(random_bytes(8));
         // Кто нажал «Сохранить» — в userdata: callback придёт на адрес того
         // участника, которого выберет Document Server, а не обязательно этого.
-        $result = $this->command($session['key'], 'forcesave', sprintf('commit.%s.%d', $saveId, $user->getId()));
+        $result = $this->command(
+            $session['key'],
+            'forcesave',
+            sprintf('commit.%s.%d%s', $saveId, $user->getId(), $accept ? '.accept' : ''),
+        );
         $error = (int) ($result['error'] ?? 1);
         // 4 — документ не менялся с прошлого сохранения, callback не придёт.
         if ($error === 4) {
+            if ($accept && !$this->acceptStored($purchase, $file, $user)) {
+                return $this->json(['error' => SpaApiError::PURCHASE_FILE_EDITOR_FAILED], Response::HTTP_BAD_GATEWAY);
+            }
             $this->markAck($fileId, $saveId);
 
             return $this->json(['saveId' => $saveId, 'saveAck' => true]);
@@ -200,12 +214,19 @@ final class PurchaseFileEditorController extends AbstractController
         }
 
         $status = (int) ($data['status'] ?? 0);
-        // 2 — все вышли, итог собран; 6 — «Сохранить» посреди сессии.
-        if ($status !== 2 && $status !== 6) {
+        // 2 — все вышли. Автосохранение и закрытие файл не пишут.
+        if ($status === 2) {
+            $this->dropUnsavedSession($id, $fileId, $key);
+
             return $this->json(['error' => 0]);
         }
-        [$saveId, $committerId] = self::parseUserdata((string) ($data['userdata'] ?? ''));
-        if ($saveId !== '' && $this->isAcked($fileId, $saveId)) {
+        // 6 — только наша команда: userdata commit.{saveId}.{userId}.
+        // Таймер и кнопка самого OnlyOffice приходят без неё.
+        if ($status !== 6) {
+            return $this->json(['error' => 0]);
+        }
+        [$saveId, $committerId, $accept] = self::parseUserdata((string) ($data['userdata'] ?? ''));
+        if ($saveId === '' || $this->isAcked($fileId, $saveId)) {
             return $this->json(['error' => 0]);
         }
 
@@ -223,13 +244,28 @@ final class PurchaseFileEditorController extends AbstractController
         if ($downloaded === false || $downloaded === '') {
             return $this->json(['error' => 1]);
         }
+        if ($accept) {
+            $downloaded = PurchaseFileCoEditing::acceptedCopy($downloaded);
+        }
 
-        $this->coEditing->commit($purchase, $file, $downloaded, $status === 2, $this->editorsOf($data, $committerId));
+        // Утверждение закрывает сессию: иначе чужое «Сохранить» затрёт уже принятый текст.
+        $this->coEditing->commit($purchase, $file, $downloaded, $accept, $this->editorsOf($data, $committerId));
         if ($saveId !== '') {
             $this->markAck($fileId, $saveId);
         }
 
         return $this->json(['error' => 0]);
+    }
+
+    /** Все вышли без «Сохранить»: файл остаётся как был, ключ сессии сменяется. */
+    private function dropUnsavedSession(int $id, int $fileId, string $key): void
+    {
+        $purchase = $this->purchases->find($id);
+        $file = $this->findFile($purchase, $fileId);
+        if ($file === null || !$purchase instanceof PurchaseRequest || $this->coEditing->documentKey($file) !== $key) {
+            return;
+        }
+        $this->coEditing->dropSession($file);
     }
 
     /**
@@ -329,14 +365,40 @@ final class PurchaseFileEditorController extends AbstractController
         return $editors;
     }
 
-    /** @return array{0: string, 1: int} saveId и id нажавшего «Сохранить» */
+    /** @return array{0: string, 1: int, 2: bool} saveId, id нажавшего и «принять все правки» */
     private static function parseUserdata(string $userdata): array
     {
-        if (preg_match('/^commit\.([a-f0-9]{16})\.(\d+)$/', $userdata, $m) !== 1) {
-            return ['', 0];
+        if (preg_match('/^commit\.([a-f0-9]{16})\.(\d+)(\.accept)?$/', $userdata, $m) !== 1) {
+            return ['', 0, false];
         }
 
-        return [$m[1], (int) $m[2]];
+        return [$m[1], (int) $m[2], ($m[3] ?? '') === '.accept'];
+    }
+
+    private function acceptRequested(Request $request): bool
+    {
+        $data = json_decode($request->getContent(), true);
+
+        return is_array($data) && ($data['acceptRevisions'] ?? false) === true;
+    }
+
+    /**
+     * Сессия не прислала новый файл. Принять правки в том, что уже лежит в хранилище.
+     * false — файл не прочитался, кнопку утверждения повторяют.
+     */
+    private function acceptStored(PurchaseRequest $purchase, PurchaseRequestFile $file, User $user): bool
+    {
+        try {
+            $stored = (string) $this->storage->getObject($file->getStorageKey())['Body'];
+        } catch (S3Exception) {
+            return false;
+        }
+        $accepted = PurchaseFileCoEditing::acceptedCopy($stored);
+        if ($accepted !== $stored) {
+            $this->coEditing->commit($purchase, $file, $accepted, true, [$user]);
+        }
+
+        return true;
     }
 
     /**
