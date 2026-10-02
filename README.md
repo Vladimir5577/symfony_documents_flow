@@ -71,7 +71,7 @@ $ chown -R www-data:www-data /uploads
 $ chmod -R 775 /uploads
 ```
 
-Permissions to media cache (LiipImagine: avatars, kanban attachment previews, etc.)
+Permissions to media cache (LiipImagine: avatars, etc.)
 ```bash
 $ mkdir -p public/media/cache
 $ chown -R www-data:www-data public/media/
@@ -161,6 +161,34 @@ Console commands
 $ php bin/console app:import-workers-from-excel
 
 // ====================================
+
+    Check sizes of log lifes
+    ------------------------
+for id in $(sudo docker ps -aq --no-trunc); do
+name=$(sudo docker inspect --format '{{.Name}}' "$id" | sed 's#^/##')
+size=$(sudo du -sh "/var/lib/docker/containers/$id/$id-json.log" 2>/dev/null | cut -f1)
+echo "$size	$name"
+done | sort -rh
+
+// ====================================
+
+    Login
+    -----
+
+POST /spa/api/login_check
+{
+  "login": "user_login",
+  "password": "user_password"
+}
+
+curl -X POST 'localhost:8080/spa/api/login_check' \
+  -H 'Content-Type: application/json' \
+  -d '{
+      "login": "user_login",
+      "password": "user_password"
+  }'
+
+// =======================================
 
     GRPC
     ----

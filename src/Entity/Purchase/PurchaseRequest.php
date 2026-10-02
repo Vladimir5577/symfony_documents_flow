@@ -83,6 +83,11 @@ class PurchaseRequest
     #[ORM\Column(name: 'created_as', type: Types::STRING, length: 20, enumType: PurchaseRequestKind::class, options: ['default' => 'STANDARD'])]
     private PurchaseRequestKind $createdAs = PurchaseRequestKind::STANDARD;
 
+    // Приоритет убран из логики в a8ca1c8, колонка в БД осталась.
+    // Маппинг только для того, чтобы migrations:diff её не дропал.
+    #[ORM\Column(type: Types::STRING, length: 20, options: ['default' => 'NORMAL'])]
+    private string $priority = 'NORMAL';
+
     /**
      * Какой заготовкой пустить заявку. NULL — возьмётся дефолт для createdAs.
      *

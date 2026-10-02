@@ -10,7 +10,6 @@ use Liip\ImagineBundle\Imagine\Cache\CacheManager;
 
 /**
  * Генерация URL превью (400×400) для изображений постов через LiipImagine.
- * Аналог App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator.
  *
  * storageKey — путь относительно data_root лоадера post_uploads
  * (%private_upload_dir_posts%), т.е. {postId}/{имя файла}.

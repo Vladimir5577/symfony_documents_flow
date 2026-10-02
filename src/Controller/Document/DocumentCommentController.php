@@ -9,7 +9,6 @@ use App\Entity\User\User;
 use App\Repository\Document\DocumentCommentFileRepository;
 use App\Repository\Document\DocumentCommentRepository;
 use App\Repository\Document\DocumentRepository;
-use App\Service\Notification\NotificationService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -26,7 +25,6 @@ final class DocumentCommentController extends AbstractController
     public function __construct(
         #[Autowire('%private_upload_dir_documents_comments%')]
         private readonly string $commentsUploadDir,
-        private readonly NotificationService $notificationService,
     ) {
     }
 
@@ -94,8 +92,6 @@ final class DocumentCommentController extends AbstractController
 
         $entityManager->persist($comment);
         $entityManager->flush();
-
-        $this->sendCommentNotifications($document, $currentUser);
 
         $this->addFlash('success', 'Комментарий добавлен.');
         return $this->redirectDocumentView($document, $currentUser, anchor: 'document-comments');
@@ -253,42 +249,6 @@ final class DocumentCommentController extends AbstractController
             }
         }
         return false;
-    }
-
-    private function sendCommentNotifications(Document $document, User $commentAuthor): void
-    {
-        $recipients = [];
-
-        $creator = $document->getCreatedBy();
-        if ($creator instanceof User) {
-            $recipients[$creator->getId()] = $creator;
-        }
-
-        foreach ($document->getUserRecipients() as $userRecipient) {
-            $user = $userRecipient->getUser();
-            if ($user instanceof User) {
-                $recipients[$user->getId()] = $user;
-            }
-        }
-
-        unset($recipients[$commentAuthor->getId()]);
-
-        if ($recipients === []) {
-            return;
-        }
-
-        $authorName = trim($commentAuthor->getLastname() . ' ' . $commentAuthor->getFirstname()) ?: $commentAuthor->getLogin();
-        $documentTitle = $document->getName() ?? '';
-        $anchor = '#document-comments';
-        $creatorId = $creator?->getId();
-
-        $outgoingLink = $this->generateUrl('app_view_outgoing_document', ['id' => $document->getId()]) . $anchor;
-        $incomingLink = $this->generateUrl('app_view_incoming_document', ['id' => $document->getId()]) . $anchor;
-
-        foreach ($recipients as $recipient) {
-            $link = ($creatorId !== null && $recipient->getId() === $creatorId) ? $outgoingLink : $incomingLink;
-            $this->notificationService->notifyDocumentCommentAdded($recipient, $authorName, $documentTitle, $link);
-        }
     }
 
     private function redirectDocumentView(Document $document, User $user, ?string $anchor = null): Response

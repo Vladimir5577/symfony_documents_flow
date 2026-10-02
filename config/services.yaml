@@ -10,9 +10,6 @@ parameters:
     # directories
     private_upload_dir: '%env(resolve:PRIVATE_UPLOAD_DIR)%'
 
-    # kanban uploads (legacy — для миграции; новые файлы идут в MinIO)
-    private_upload_kanban_dir: '%env(resolve:PRIVATE_UPLOAD_KANBAN_DIR)%'
-
     # documents
     private_upload_dir_documents_originals: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_ORIGINALS)%'
     private_upload_dir_documents_updated: '%env(resolve:PRIVATE_UPLOAD_DIR_DOCUMENTS_UPDATED)%'
@@ -60,16 +57,6 @@ services:
                 credentials:
                     key: '%env(MINIO_ACCESS_KEY)%'
                     secret: '%env(MINIO_SECRET_KEY)%'
-
-    App\Service\Kanban\KanbanAttachmentService:
-        arguments:
-            $s3: '@Aws\S3\S3Client'
-            $bucket: '%env(MINIO_KANBAN_BUCKET)%'
-
-    App\Service\Kanban\KanbanAttachmentPreviewUrlGenerator:
-        arguments:
-            $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
-            $minioBucket: '%env(MINIO_KANBAN_BUCKET)%'
 
     App\Service\Inventory\UpdFileService:
         arguments:
