@@ -78,7 +78,8 @@ final class PurchaseRequestEditor
             }
 
             $price = $edit['price'] ?? null;
-            if ($price === null || $price === '') {
+            // Позиция со склада показана с нулевой ценой: не даём этому нулю затереть настоящую.
+            if ($price === null || $price === '' || $item->isInStock()) {
                 continue;
             }
             if (!is_numeric($price) || (float) $price < 0) {
@@ -143,7 +144,7 @@ final class PurchaseRequestEditor
 
         foreach ($request->getItems() as $item) {
             $price = $priceEdits[(int) $item->getId()] ?? null;
-            if ($price === null) {
+            if ($price === null || $item->isInStock()) {
                 continue;
             }
             if (!is_numeric($price) || (float) $price < 0) {

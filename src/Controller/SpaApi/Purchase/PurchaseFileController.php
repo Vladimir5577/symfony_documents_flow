@@ -15,11 +15,15 @@ use App\Enum\User\UserRole;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
+use App\Service\Purchase\PurchaseContractConverter;
+use App\Service\Purchase\PurchaseDocumentBinding;
 use App\Service\Purchase\PurchaseFileCoEditing;
 use App\Service\Purchase\PurchaseFileStorageService;
 use App\Service\Purchase\PurchaseRequestEditor;
+use App\Service\Purchase\PurchaseTransitionException;
 use Aws\S3\Exception\S3Exception;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\OptimisticLockException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -42,6 +46,8 @@ final class PurchaseFileController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly PurchaseAccess $access,
         private readonly PurchaseRequestEditor $editor,
+        private readonly PurchaseContractConverter $converter,
+        private readonly PurchaseDocumentBinding $binding,
     ) {
     }
 
@@ -81,9 +87,20 @@ final class PurchaseFileController extends AbstractController
             }
         }
 
-        // Договор на заявке один: по нему рецензируют и утверждают правки.
-        if ($type === PurchaseFileType::CONTRACT && $purchase->hasFileOfType(PurchaseFileType::CONTRACT)) {
-            return $this->json(['error' => SpaApiError::PURCHASE_CONTRACT_EXISTS], Response::HTTP_CONFLICT);
+        // Договор правят и рецензируют только как docx — старый .doc переводим сразу.
+        $converted = null;
+        if ($type === PurchaseFileType::CONTRACT && PurchaseContractConverter::isLegacyDoc($uploaded)) {
+            $converted = $this->converter->toDocx($uploaded);
+            if ($converted === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_CONTRACT_CONVERT_FAILED], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+            $uploaded = $converted;
+        }
+
+        // Первый счёт сам ложится на все позиции: чужой файл не должен решать,
+        // по какому счёту платят. Счета прикладывает отдел закупок на своём шаге.
+        if ($type === PurchaseFileType::INVOICE && !$this->access->canBindDocuments($purchase, $user)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
         $fileEntity = new PurchaseRequestFile();
@@ -91,8 +108,15 @@ final class PurchaseFileController extends AbstractController
         $fileEntity->setUploadedBy($user);
         // Имя приходит от пользователя, а колонка 255 — длинное обрезаем, иначе вставка упадёт.
         $fileEntity->setOriginalName(mb_substr($uploaded->getClientOriginalName(), 0, 255));
-        $fileEntity->setStorageKey($this->storage->upload($purchase, $uploaded));
+        try {
+            $fileEntity->setStorageKey($this->storage->upload($purchase, $uploaded));
+        } finally {
+            if ($converted !== null) {
+                @unlink($converted->getPathname());
+            }
+        }
         $purchase->addFile($fileEntity);
+        $this->binding->onFileAdded($purchase, $fileEntity);
 
         $this->em->persist($fileEntity);
         $this->editor->log(
@@ -168,6 +192,48 @@ final class PurchaseFileController extends AbstractController
         return $response;
     }
 
+    /**
+     * Раскладка позиций по счетам и договорам, цвета счетов.
+     *
+     * body: {items?: [{id, contractFileId?, invoiceFileId?, inStock?}], files?: [{id, color}]}
+     * Сохраняется сразу, по одной правке: раскладка большой заявки — долгая
+     * работа, и закрытая модалка не должна её терять. В историю пишется итог,
+     * когда шаг закрывают.
+     */
+    #[Route('/bindings', name: 'spa_api_purchases_files_bindings', methods: ['PATCH'])]
+    public function bind(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+        if (!$this->access->canBindDocuments($purchase, $user)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $payload = json_decode($request->getContent(), true);
+        if (!is_array($payload)) {
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+        }
+        $rows = static fn (mixed $list): array => is_array($list) ? array_values(array_filter($list, 'is_array')) : [];
+
+        try {
+            $this->binding->apply($purchase, $rows($payload['items'] ?? null), $rows($payload['files'] ?? null));
+            $purchase->touch();
+            $this->em->flush();
+        } catch (PurchaseTransitionException $e) {
+            return $this->json(['error' => $e->errorCode], Response::HTTP_BAD_REQUEST);
+        } catch (OptimisticLockException) {
+            return $this->json(['error' => SpaApiError::PURCHASE_CONCURRENT_UPDATE], Response::HTTP_CONFLICT);
+        }
+
+        return $this->json($this->presenter->presentDetail($purchase));
+    }
+
     #[Route('/{fileId}', name: 'spa_api_purchases_files_rename', requirements: ['fileId' => '\d+'], methods: ['PATCH'])]
     public function rename(int $id, int $fileId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -237,7 +303,9 @@ final class PurchaseFileController extends AbstractController
         }
 
         // Удалять может загрузивший, админ или автор заявки, пока она редактируема
+        // Счёт коллеги по отделу тоже: шаг адресован роли, а не человеку.
         $canDelete = $isAdmin
+            || ($fileEntity->getType() === PurchaseFileType::INVOICE && $this->access->canBindDocuments($purchase, $user))
             || $fileEntity->getUploadedBy()?->getId() === $user->getId()
             || ($this->isManagerOwner($purchase, $user) && $purchase->getStatus()->isEditable());
         if (!$canDelete) {
@@ -254,6 +322,7 @@ final class PurchaseFileController extends AbstractController
             (string) $fileEntity->getOriginalName(),
         );
 
+        $this->binding->onFileRemoved($purchase, $fileEntity);
         $purchase->removeFile($fileEntity);
         $this->em->remove($fileEntity);
         $this->editor->log($purchase, $user, PurchaseHistoryAction::FILE_DELETED, $description);

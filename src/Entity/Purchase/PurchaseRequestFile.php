@@ -37,6 +37,10 @@ class PurchaseRequestFile
     #[ORM\Column(type: Types::STRING, length: 30, enumType: PurchaseFileType::class, options: ['default' => 'OTHER'])]
     private PurchaseFileType $type = PurchaseFileType::OTHER;
 
+    /** Цвет счёта (#RRGGBB): им помечены позиции, которые по нему оплачивают. */
+    #[ORM\Column(length: 7, nullable: true)]
+    private ?string $color = null;
+
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
@@ -113,6 +117,18 @@ class PurchaseRequestFile
     public function setType(PurchaseFileType $type): static
     {
         $this->type = $type;
+
+        return $this;
+    }
+
+    public function getColor(): ?string
+    {
+        return $this->color;
+    }
+
+    public function setColor(?string $color): static
+    {
+        $this->color = $color;
 
         return $this;
     }

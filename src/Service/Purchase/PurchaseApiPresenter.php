@@ -15,6 +15,7 @@ use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\Purchase\PurchaseRouteTemplateStage;
 use App\Entity\Purchase\PurchaseRouteTemplateTask;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\User\UserRole;
@@ -129,13 +130,18 @@ final class PurchaseApiPresenter
                 'description' => $item->getDescription(),
                 'quantity' => $item->getQuantity(),
                 'unit' => $item->getUnit(),
-                'estimatedPrice' => $item->getEstimatedPrice(),
+                // У позиции со склада — ноль: её не покупают.
+                'estimatedPrice' => $item->getPayablePrice(),
                 'position' => $item->getPosition(),
                 // Решение разбирающего по позиции: снял галочку и/или урезал количество.
                 // Заявленное автором остаётся в quantity — модалка показывает обе цифры.
                 'excluded' => $item->isExcluded(),
                 'approvedQuantity' => $item->getApprovedQuantity(),
                 'categoryItemId' => $item->getCategoryItem()?->getId(),
+                // Раскладка по документам: по какому договору и счёту идёт позиция.
+                'contractFileId' => $item->getContractFile()?->getId(),
+                'invoiceFileId' => $item->getInvoiceFile()?->getId(),
+                'inStock' => $item->isInStock(),
             ],
             $request->getItems()->toArray(),
         ));
@@ -288,6 +294,8 @@ final class PurchaseApiPresenter
             // Имя на экране можно сменить и убрать .pdf — тип остаётся у ключа в бакете.
             'extension' => $extension,
             'type' => ['value' => $file->getType()->value, 'label' => $file->getType()->getLabel()],
+            // Цвет счёта: им помечены позиции, которые по нему оплачивают.
+            'color' => $file->getColor(),
             'uploadedBy' => $this->presentUser($file->getUploadedBy()),
             'createdAt' => $file->getCreatedAt()?->format('c'),
             'canDelete' => $this->canDeleteFile($file),
@@ -366,12 +374,17 @@ final class PurchaseApiPresenter
     private function canDeleteFile(PurchaseRequestFile $file): bool
     {
         $request = $file->getPurchaseRequest();
-        if ($request === null || !$this->canRenameFile($file)) {
+        $user = $this->security->getUser();
+        if ($request === null || !$user instanceof User) {
             return false;
         }
-
         if ($this->security->isGranted(UserRole::ROLE_ADMIN->value)) {
             return true;
+        }
+        $ownInvoiceStep = $file->getType() === PurchaseFileType::INVOICE
+            && $this->access->canBindDocuments($request, $user);
+        if (!$ownInvoiceStep && !$this->canRenameFile($file)) {
+            return false;
         }
 
         return !$file->getType()->isLockedAt($request->getStatus());
@@ -434,6 +447,8 @@ final class PurchaseApiPresenter
             // Роль здесь не спрашиваем: задача моя — значит она мне и адресована.
             'canEditSourcing' => $stage?->getPurpose() === PurchaseStagePurpose::SOURCING,
             'canComment' => $this->access->canView($request, $user),
+            // Счета, цвета и раскладка позиций — отдел закупок на своём шаге.
+            'canBindDocuments' => $this->access->canBindDocuments($request, $user),
         ];
     }
 

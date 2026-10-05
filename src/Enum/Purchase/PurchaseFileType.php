@@ -8,6 +8,7 @@ enum PurchaseFileType: string
 {
     case TECHNICAL_SPEC = 'TECHNICAL_SPEC';  // Техническое задание
     case CONTRACT = 'CONTRACT';              // Договор
+    case INVOICE = 'INVOICE';                // Счёт поставщика
     case UPD = 'UPD';                        // Универсальный передаточный документ
     case OTHER = 'OTHER';                    // Прочее
 
@@ -16,6 +17,7 @@ enum PurchaseFileType: string
         return match ($this) {
             self::TECHNICAL_SPEC => 'Техническое задание',
             self::CONTRACT => 'Договор',
+            self::INVOICE => 'Счёт',
             self::UPD => 'УПД',
             self::OTHER => 'Прочее',
         };
@@ -29,8 +31,8 @@ enum PurchaseFileType: string
     public function isLockedAt(PurchaseStatus $status): bool
     {
         return match ($this) {
-            // Договор требуется, чтобы уйти на оплату.
-            self::CONTRACT => in_array($status, [
+            // Договор и счёт требуются, чтобы уйти на оплату.
+            self::CONTRACT, self::INVOICE => in_array($status, [
                 PurchaseStatus::INVOICE_PAID,
                 PurchaseStatus::DELIVERED,
             ], true),
