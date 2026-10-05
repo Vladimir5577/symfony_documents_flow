@@ -56,10 +56,14 @@ final class PurchaseTransitionController extends AbstractController
 
     /** Кнопка редактора: рецензия пройдена или рецензии утверждены. */
     #[Route('/tasks/{taskId}/contract-review', name: 'spa_api_purchases_task_contract_review', requirements: ['taskId' => '\d+'], methods: ['POST'])]
-    public function passContractReview(int $id, int $taskId, #[CurrentUser] ?User $user): JsonResponse
+    public function passContractReview(int $id, int $taskId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
+        // body: {fileId} — какой договор. Без него — единственный договор заявки.
+        $payload = json_decode($request->getContent(), true);
+        $fileId = is_array($payload) && is_int($payload['fileId'] ?? null) ? $payload['fileId'] : null;
+
         return $this->taskAction($id, $taskId, $user,
-            fn (PurchaseRequest $p, PurchaseApprovalTask $t) => $this->workflow->passContractReview($p, $t));
+            fn (PurchaseRequest $p, PurchaseApprovalTask $t) => $this->workflow->passContractReview($p, $t, $fileId));
     }
 
     /** Закрыть свою задачу согласием. */

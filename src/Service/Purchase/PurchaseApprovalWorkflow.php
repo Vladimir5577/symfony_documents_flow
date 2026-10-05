@@ -193,15 +193,32 @@ final class PurchaseApprovalWorkflow
         }
     }
 
-    /** Отметка из редактора: рецензия пройдена или рецензии утверждены. */
-    public function passContractReview(PurchaseRequest $request, PurchaseApprovalTask $task): void
+    /**
+     * Отметка из редактора по одному договору: рецензия пройдена или рецензии утверждены.
+     *
+     * @param int|null $fileId какой договор; null — единственный на заявке
+     */
+    public function passContractReview(PurchaseRequest $request, PurchaseApprovalTask $task, ?int $fileId = null): void
     {
         $this->assertActiveTask($request, $task);
         if ($task->getContractReview() === null) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONTRACT_REVIEW_REQUIRED);
         }
 
-        $task->passContractReview();
+        $contracts = [];
+        foreach ($request->getFiles() as $file) {
+            if ($file->getType() === PurchaseFileType::CONTRACT) {
+                $contracts[(int) $file->getId()] = true;
+            }
+        }
+        if ($fileId === null && count($contracts) === 1) {
+            $fileId = array_key_first($contracts);
+        }
+        if ($fileId === null || !isset($contracts[$fileId])) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_FILE_NOT_FOUND);
+        }
+
+        $task->passContractReview($fileId);
         $this->save($request);
     }
 

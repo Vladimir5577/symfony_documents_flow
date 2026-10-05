@@ -245,6 +245,8 @@ final class PurchaseApiPresenter
             'requiresFileType' => $task->getRequiresFileType()?->value,
             'contractReview' => $task->getContractReview()?->value,
             'contractReviewPassed' => $task->isContractReviewPassed(),
+            // По каким договорам отметка уже стоит: у каждого договора своя кнопка.
+            'contractReviewedFileIds' => $task->getContractReviewedFileIds(),
             'decision' => [
                 'value' => $task->getDecision()->value,
                 'label' => $task->getDecision()->getLabel(),
