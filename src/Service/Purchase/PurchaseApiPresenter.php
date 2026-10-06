@@ -383,7 +383,7 @@ final class PurchaseApiPresenter
         if ($this->security->isGranted(UserRole::ROLE_ADMIN->value)) {
             return true;
         }
-        $ownInvoiceStep = $file->getType() === PurchaseFileType::INVOICE
+        $ownInvoiceStep = ($file->getType() === PurchaseFileType::INVOICE || $file->getType() === PurchaseFileType::SIGNED_CONTRACT)
             && $this->access->canBindDocuments($request, $user);
         if (!$ownInvoiceStep && !$this->canRenameFile($file)) {
             return false;

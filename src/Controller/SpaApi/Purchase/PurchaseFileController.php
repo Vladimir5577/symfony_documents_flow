@@ -97,9 +97,12 @@ final class PurchaseFileController extends AbstractController
             $uploaded = $converted;
         }
 
-        // Первый счёт сам ложится на все позиции: чужой файл не должен решать,
-        // по какому счёту платят. Счета прикладывает отдел закупок на своём шаге.
-        if ($type === PurchaseFileType::INVOICE && !$this->access->canBindDocuments($purchase, $user)) {
+        // Счёт и подписанный договор прикладывает отдел закупок на своём шаге.
+        // Чужой счёт не должен решать, по какому счёту платят.
+        if (
+            ($type === PurchaseFileType::INVOICE || $type === PurchaseFileType::SIGNED_CONTRACT)
+            && !$this->access->canBindDocuments($purchase, $user)
+        ) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -305,7 +308,10 @@ final class PurchaseFileController extends AbstractController
         // Удалять может загрузивший, админ или автор заявки, пока она редактируема
         // Счёт коллеги по отделу тоже: шаг адресован роли, а не человеку.
         $canDelete = $isAdmin
-            || ($fileEntity->getType() === PurchaseFileType::INVOICE && $this->access->canBindDocuments($purchase, $user))
+            || (
+                ($fileEntity->getType() === PurchaseFileType::INVOICE || $fileEntity->getType() === PurchaseFileType::SIGNED_CONTRACT)
+                && $this->access->canBindDocuments($purchase, $user)
+            )
             || $fileEntity->getUploadedBy()?->getId() === $user->getId()
             || ($this->isManagerOwner($purchase, $user) && $purchase->getStatus()->isEditable());
         if (!$canDelete) {

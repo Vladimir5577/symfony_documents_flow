@@ -111,9 +111,10 @@ final class PurchaseDocumentBinding
 
     /**
      * Шаг «счета» можно закрыть: каждая закупаемая позиция оплачивается по
-     * счёту, а если договоры есть — относится к одному из них.
+     * счёту, а если договоры есть — относится к одному из них. И приложен
+     * подписанный договор: без него шаг не закрывается.
      *
-     * Всё на складе — счёт не нужен вовсе: покупать нечего.
+     * Всё на складе — ни счёта, ни подписанного договора: покупать нечего.
      *
      * @throws PurchaseTransitionException
      */
@@ -140,6 +141,9 @@ final class PurchaseDocumentBinding
             if ($hasContract && $item->getContractFile() === null) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_CONTRACT_REQUIRED);
             }
+        }
+        if (!$request->hasFileOfType(PurchaseFileType::SIGNED_CONTRACT)) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         }
     }
 

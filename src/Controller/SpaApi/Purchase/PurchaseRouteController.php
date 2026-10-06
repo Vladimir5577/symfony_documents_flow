@@ -89,7 +89,11 @@ final class PurchaseRouteController extends AbstractController
             'taskRoles' => $this->choices(PurchaseRoleCode::taskRoles()),
             'purposes' => $this->choices(PurchaseStagePurpose::cases()),
             'assignmentTypes' => $this->choices(PurchaseTaskAssignment::templateAssignments()),
-            'fileTypes' => $this->choices(PurchaseFileType::cases()),
+            // Подписанный договор маршрутом не отмечают: его требует шаг со счетами.
+            'fileTypes' => $this->choices(array_values(array_filter(
+                PurchaseFileType::cases(),
+                static fn (PurchaseFileType $type): bool => $type !== PurchaseFileType::SIGNED_CONTRACT,
+            ))),
             'canManage' => $this->canManage(),
         ]);
     }
