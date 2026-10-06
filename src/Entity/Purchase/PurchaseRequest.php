@@ -397,7 +397,7 @@ class PurchaseRequest
             if ($item->isExcluded()) {
                 continue;
             }
-            $kopecks = self::decimalToInt((string) $item->getEstimatedPrice(), 2);
+            $kopecks = self::decimalToInt($item->getPayablePrice(), 2);
             $thousandths = self::decimalToInt($item->getEffectiveQuantity(), 3);
             // Копейки × тысячные доли штуки → копейки, половина копейки вверх.
             $total += intdiv($kopecks * $thousandths + 500, 1000);

@@ -54,6 +54,7 @@ final class SpaApiError
     public const PURCHASE_FILE_NOT_FOUND = 'purchase_file_not_found';
     public const PURCHASE_FILE_LOCKED = 'purchase_file_locked';
     public const PURCHASE_CONTRACT_EXISTS = 'purchase_contract_exists';
+    public const PURCHASE_CONTRACT_CONVERT_FAILED = 'purchase_contract_convert_failed';
     public const PURCHASE_FILE_EDITOR_FAILED = 'purchase_file_editor_failed';
     public const PURCHASE_CATEGORY_NOT_FOUND = 'purchase_category_not_found';
     public const PURCHASE_CATEGORY_IN_USE = 'purchase_category_in_use';
@@ -70,6 +71,9 @@ final class SpaApiError
     public const PURCHASE_TASK_NOT_ACTIVE = 'purchase_task_not_active';
     public const PURCHASE_CONTRACT_REVIEW_REQUIRED = 'purchase_contract_review_required';
     public const PURCHASE_TASK_FILE_REQUIRED = 'purchase_task_file_required';
+    public const PURCHASE_ITEMS_INVOICE_REQUIRED = 'purchase_items_invoice_required';
+    public const PURCHASE_ITEMS_CONTRACT_REQUIRED = 'purchase_items_contract_required';
+    public const PURCHASE_BINDING_INVALID = 'purchase_binding_invalid';
     public const PURCHASE_TASK_NOT_REVOKABLE = 'purchase_task_not_revokable';
     /** С этого этапа возвращать автору нельзя — например, товар уже оплачен. */
     public const PURCHASE_REJECT_NOT_ALLOWED = 'purchase_reject_not_allowed';

@@ -249,6 +249,15 @@ final class PurchaseAccess
             || $this->findMyActiveTask($purchase, $user, PurchaseStagePurpose::SOURCING) !== null;
     }
 
+    /**
+     * Раскладывать позиции по счетам и договорам: работа отдела закупок, и
+     * только пока заявка стоит на его шаге.
+     */
+    public function canBindDocuments(PurchaseRequest $purchase, User $user): bool
+    {
+        return $this->findMyActiveTask($purchase, $user)?->getRoleCode() === PurchaseRoleCode::PURCHASE_DEPARTMENT;
+    }
+
     public function can(User $user, PurchaseCapability $capability): bool
     {
         return $this->roster->can($user, $capability);

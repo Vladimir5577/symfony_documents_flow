@@ -63,6 +63,20 @@ class PurchaseRequestItem
     #[ORM\JoinColumn(name: 'category_item_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?PurchaseCategoryItem $categoryItem = null;
 
+    /** По какому договору закупают позицию. Один договор на заявке — он и есть. */
+    #[ORM\ManyToOne(targetEntity: PurchaseRequestFile::class)]
+    #[ORM\JoinColumn(name: 'contract_file_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseRequestFile $contractFile = null;
+
+    /** По какому счёту позицию оплачивают. */
+    #[ORM\ManyToOne(targetEntity: PurchaseRequestFile::class)]
+    #[ORM\JoinColumn(name: 'invoice_file_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseRequestFile $invoiceFile = null;
+
+    /** Позиция есть на складе: её не покупают, счёт и договор ей не нужны. */
+    #[ORM\Column(name: 'in_stock', type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $inStock = false;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -152,6 +166,15 @@ class PurchaseRequestItem
         return $this;
     }
 
+    /**
+     * Цена к оплате: позиция со склада не покупается и стоит ноль. Цена автора
+     * остаётся в строке и вернётся, если отметку «на складе» снимут.
+     */
+    public function getPayablePrice(): string
+    {
+        return $this->inStock ? '0.00' : (string) $this->estimatedPrice;
+    }
+
     public function isExcluded(): bool
     {
         return $this->excluded;
@@ -180,6 +203,42 @@ class PurchaseRequestItem
     public function getEffectiveQuantity(): string
     {
         return $this->approvedQuantity ?? (string) $this->quantity;
+    }
+
+    public function getContractFile(): ?PurchaseRequestFile
+    {
+        return $this->contractFile;
+    }
+
+    public function setContractFile(?PurchaseRequestFile $contractFile): static
+    {
+        $this->contractFile = $contractFile;
+
+        return $this;
+    }
+
+    public function getInvoiceFile(): ?PurchaseRequestFile
+    {
+        return $this->invoiceFile;
+    }
+
+    public function setInvoiceFile(?PurchaseRequestFile $invoiceFile): static
+    {
+        $this->invoiceFile = $invoiceFile;
+
+        return $this;
+    }
+
+    public function isInStock(): bool
+    {
+        return $this->inStock;
+    }
+
+    public function setInStock(bool $inStock): static
+    {
+        $this->inStock = $inStock;
+
+        return $this;
     }
 
     public function getPosition(): int

@@ -207,6 +207,10 @@ final class PurchaseNotificationPublisher
         string $typeLabel,
         ?string $message = null,
     ): void {
+        // TODO: временная заглушка, чтобы прогон на проде не спамил колокольчик.
+        // TODO: Снять return — и события закупок снова уходят получателям.
+        return;
+
         $this->publisher->publish(
             module: self::MODULE,
             event: $event,

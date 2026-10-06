@@ -9,6 +9,7 @@ use App\Entity\Purchase\PurchaseApprovalStage;
 use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseStagePurpose;
@@ -47,6 +48,7 @@ final class PurchaseApprovalWorkflow
         private readonly ApprovalRouteBuilder $builder,
         private readonly PurchaseHistoryLogger $history,
         private readonly PurchaseRequestEditor $editor,
+        private readonly PurchaseDocumentBinding $binding,
     ) {
     }
 
@@ -85,6 +87,8 @@ final class PurchaseApprovalWorkflow
         // откат никого не оповестил о подаче, которой не было.
         $this->em->wrapInTransaction(function () use ($request, $actor, $from): void {
             $this->builder->build($request, $this->resolver->resolve($request));
+            // Перед повторной подачей автор мог пересоздать позиции — без привязок.
+            $this->binding->refresh($request);
 
             $request->setStatus(PurchaseStatus::ON_APPROVAL);
             $this->history->logTransition(
@@ -140,7 +144,15 @@ final class PurchaseApprovalWorkflow
         // задачи «договор» нет, и требовать с него договор не за что. Так же и УПД
         // при поставке — это файл задачи поставки, а не условие перехода.
         $requiredFile = $task->getRequiresFileType();
-        if ($requiredFile !== null && !$request->hasFileOfType($requiredFile)) {
+        if ($requiredFile === PurchaseFileType::INVOICE) {
+            // Счёт мало приложить: позиции надо разложить по счетам. А когда всё
+            // нашлось на складе, счёт не нужен вовсе.
+            $this->binding->assertComplete($request);
+            $bound = $this->binding->summary($request);
+            if ($bound !== '') {
+                $this->history->log($request, $actor, PurchaseHistoryAction::DOCUMENTS_BOUND, $bound);
+            }
+        } elseif ($requiredFile !== null && !$request->hasFileOfType($requiredFile)) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         }
 
@@ -181,15 +193,32 @@ final class PurchaseApprovalWorkflow
         }
     }
 
-    /** Отметка из редактора: рецензия пройдена или рецензии утверждены. */
-    public function passContractReview(PurchaseRequest $request, PurchaseApprovalTask $task): void
+    /**
+     * Отметка из редактора по одному договору: рецензия пройдена или рецензии утверждены.
+     *
+     * @param int|null $fileId какой договор; null — единственный на заявке
+     */
+    public function passContractReview(PurchaseRequest $request, PurchaseApprovalTask $task, ?int $fileId = null): void
     {
         $this->assertActiveTask($request, $task);
         if ($task->getContractReview() === null) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONTRACT_REVIEW_REQUIRED);
         }
 
-        $task->passContractReview();
+        $contracts = [];
+        foreach ($request->getFiles() as $file) {
+            if ($file->getType() === PurchaseFileType::CONTRACT) {
+                $contracts[(int) $file->getId()] = true;
+            }
+        }
+        if ($fileId === null && count($contracts) === 1) {
+            $fileId = array_key_first($contracts);
+        }
+        if ($fileId === null || !isset($contracts[$fileId])) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_FILE_NOT_FOUND);
+        }
+
+        $task->passContractReview($fileId);
         $this->save($request);
     }
 

@@ -74,9 +74,15 @@ class PurchaseApprovalTask
     #[ORM\Column(name: 'contract_review', type: Types::STRING, length: 20, nullable: true, enumType: PurchaseContractReview::class)]
     private ?PurchaseContractReview $contractReview = null;
 
-    /** Кнопка в редакторе: рецензия пройдена или рецензии утверждены. */
-    #[ORM\Column(name: 'contract_review_passed', type: Types::BOOLEAN, options: ['default' => false])]
-    private bool $contractReviewPassed = false;
+    /**
+     * Договоры, по которым в редакторе нажата кнопка «рецензия пройдена» или
+     * «рецензии утверждены». Отметка на каждый договор своя: их на заявке может
+     * быть несколько, и новый договор обязан пройти рецензию отдельно.
+     *
+     * @var list<int> id вложений
+     */
+    #[ORM\Column(name: 'contract_reviewed_file_ids', type: Types::JSON, options: ['default' => '[]'])]
+    private array $contractReviewedFileIds = [];
 
     #[ORM\Column(type: Types::STRING, length: 20, enumType: PurchaseTaskDecision::class, options: ['default' => 'PENDING'])]
     private PurchaseTaskDecision $decision = PurchaseTaskDecision::PENDING;
@@ -213,14 +219,34 @@ class PurchaseApprovalTask
         return $this;
     }
 
-    public function isContractReviewPassed(): bool
+    /** @return list<int> */
+    public function getContractReviewedFileIds(): array
     {
-        return $this->contractReviewPassed;
+        return array_values(array_map('intval', $this->contractReviewedFileIds));
     }
 
-    public function passContractReview(): static
+    /** Рецензия пройдена по всем договорам заявки; без договора проходить нечего. */
+    public function isContractReviewPassed(): bool
     {
-        $this->contractReviewPassed = true;
+        $contracts = 0;
+        foreach ($this->stage?->getPurchaseRequest()?->getFiles() ?? [] as $file) {
+            if ($file->getType() !== PurchaseFileType::CONTRACT) {
+                continue;
+            }
+            if (!in_array($file->getId(), $this->getContractReviewedFileIds(), true)) {
+                return false;
+            }
+            ++$contracts;
+        }
+
+        return $contracts > 0;
+    }
+
+    public function passContractReview(int $fileId): static
+    {
+        if (!in_array($fileId, $this->getContractReviewedFileIds(), true)) {
+            $this->contractReviewedFileIds = [...$this->getContractReviewedFileIds(), $fileId];
+        }
 
         return $this;
     }

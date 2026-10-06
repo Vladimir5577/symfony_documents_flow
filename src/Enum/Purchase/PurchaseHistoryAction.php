@@ -39,6 +39,8 @@ enum PurchaseHistoryAction: string
     case FILE_EDITED = 'FILE_EDITED';
     /** Текст договора поменялся, когда его уже согласовали, — согласовавшим ушло уведомление. */
     case CONTRACT_CHANGED = 'CONTRACT_CHANGED';
+    /** Итог раскладки позиций по счетам и договорам — одной строкой при закрытии шага. */
+    case DOCUMENTS_BOUND = 'DOCUMENTS_BOUND';
 
     public function getLabel(): string
     {
@@ -61,6 +63,7 @@ enum PurchaseHistoryAction: string
             self::FILE_DELETED => 'Удалён файл',
             self::FILE_EDITED => 'Файл изменён',
             self::CONTRACT_CHANGED => 'Договор изменён после согласования',
+            self::DOCUMENTS_BOUND => 'Позиции разложены по счетам',
         };
     }
 }
