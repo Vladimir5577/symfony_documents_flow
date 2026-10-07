@@ -6,6 +6,7 @@ use App\Entity\Purchase\PurchaseApprovalStage;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
+use App\Enum\Purchase\PurchaseProgressStatus;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\Purchase\PurchaseTaskAssignment;
@@ -103,6 +104,7 @@ class PurchaseRequestRepository extends ServiceEntityRepository
      * @param int|null                  $approverUserId    только заявки, где пользователь есть в маршруте
      * @param list<string>              $approverRoleCodes его роли модуля — для ролевых задач маршрута
      * @param float|null                $minAmount         скрыть заявки дешевле порога (сумма считается из позиций)
+     * @param bool                      $overdue           только заявки с открытым просроченным этапом
      * @return array{items: list<PurchaseRequest>, total: int}
      */
     public function findByFilters(
@@ -114,6 +116,8 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         ?int $approverUserId = null,
         ?float $minAmount = null,
         array $approverRoleCodes = [],
+        bool $overdue = false,
+        ?string $progress = null,
     ): array {
         $ownerAndApprover = $createdById !== null && $approverUserId !== null;
         $qb = $this->createFilteredQueryBuilder(
@@ -121,6 +125,8 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             $statuses,
             $search,
             $minAmount,
+            $overdue,
+            $progress,
         );
 
         // «Я согласант» — заявки, где человек есть в маршруте: лично, через роль
@@ -226,6 +232,8 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         ?array $statuses,
         ?string $search,
         ?float $minAmount = null,
+        bool $overdue = false,
+        ?string $progress = null,
     ): QueryBuilder {
         $qb = $this->createQueryBuilder('pr');
 
@@ -242,6 +250,23 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         if ($createdById !== null) {
             $qb->andWhere('pr.createdBy = :createdById')
                 ->setParameter('createdById', $createdById);
+        }
+
+        if ($overdue) {
+            $qb->andWhere('EXISTS (
+                SELECT 1 FROM App\Entity\Purchase\PurchaseApprovalStage overdueStage
+                WHERE overdueStage.purchaseRequest = pr
+                  AND overdueStage.status = :overdueStatus
+                  AND overdueStage.dueAt IS NOT NULL
+                  AND overdueStage.dueAt < :overdueNow
+            )')
+                ->setParameter('overdueStatus', PurchaseStageStatus::ACTIVE)
+                ->setParameter('overdueNow', new \DateTimeImmutable());
+        }
+
+        if ($progress === 'new' || $progress === 'progress' || $progress === 'done') {
+            $qb->andWhere('pr.progressStatus = :progressStatus')
+                ->setParameter('progressStatus', PurchaseProgressStatus::from($progress));
         }
 
         if ($statuses !== null) {

@@ -46,6 +46,7 @@ final class SpaApiError
     public const PURCHASE_NOT_FOUND = 'purchase_not_found';
     public const PURCHASE_INVALID_STATUS = 'purchase_invalid_status';
     public const PURCHASE_COMMENT_REQUIRED = 'purchase_comment_required';
+    public const PURCHASE_HISTORY_NOT_FOUND = 'purchase_history_not_found';
     public const PURCHASE_ITEMS_REQUIRED = 'purchase_items_required';
     public const PURCHASE_TITLE_REQUIRED = 'purchase_title_required';
     public const PURCHASE_INVALID_ITEM = 'purchase_invalid_item';
@@ -54,6 +55,7 @@ final class SpaApiError
     public const PURCHASE_FILE_NOT_FOUND = 'purchase_file_not_found';
     public const PURCHASE_FILE_LOCKED = 'purchase_file_locked';
     public const PURCHASE_CONTRACT_EXISTS = 'purchase_contract_exists';
+    public const PURCHASE_CONTRACT_UNAVAILABLE = 'purchase_contract_unavailable';
     public const PURCHASE_CONTRACT_CONVERT_FAILED = 'purchase_contract_convert_failed';
     public const PURCHASE_FILE_EDITOR_FAILED = 'purchase_file_editor_failed';
     public const PURCHASE_CATEGORY_NOT_FOUND = 'purchase_category_not_found';
@@ -101,6 +103,8 @@ final class SpaApiError
     public const PURCHASE_ROUTE_META_INVALID = 'purchase_route_meta_invalid';
     /** В этапе нет задач, назначения или значения нет в справочнике. */
     public const PURCHASE_ROUTE_STAGE_INVALID = 'purchase_route_stage_invalid';
+    /** Минуты на этап — целое от 1 до 525600, либо поле пустое. */
+    public const PURCHASE_ROUTE_REVIEW_MINUTES_INVALID = 'purchase_route_review_minutes_invalid';
     /** В задаче нет роли, пула или назначение недопустимо в заготовке. */
     public const PURCHASE_ROUTE_TASK_INVALID = 'purchase_route_task_invalid';
     /** Разборов в маршруте больше одного, либо динамический этап стоит раньше разбора. */

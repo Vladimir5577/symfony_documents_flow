@@ -56,6 +56,26 @@ final class PurchaseFileStorageService
         return $storageKey;
     }
 
+    /** Файл справочника договоров: заявки нет, ключ не начинается с её id. */
+    public function uploadDetached(UploadedFile $file): string
+    {
+        $extension = strtolower($file->getClientOriginalExtension());
+        $storageKey = sprintf(
+            'contracts/%s%s',
+            bin2hex(random_bytes(16)),
+            $extension === '' ? '' : '.'.$extension,
+        );
+
+        $this->s3->putObject([
+            'Bucket' => $this->bucket,
+            'Key' => $storageKey,
+            'SourceFile' => $file->getPathname(),
+            'ContentType' => $file->getClientMimeType() ?: 'application/octet-stream',
+        ]);
+
+        return $storageKey;
+    }
+
     /** Тип берём из содержимого, а не из заголовка запроса: клиент врёт. */
     public function isAllowedImage(UploadedFile $file): bool
     {

@@ -18,7 +18,7 @@ class PurchaseRequestFile
     private ?int $id = null;
 
     #[ORM\ManyToOne(targetEntity: PurchaseRequest::class, inversedBy: 'files')]
-    #[ORM\JoinColumn(name: 'purchase_request_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
+    #[ORM\JoinColumn(name: 'purchase_request_id', referencedColumnName: 'id', nullable: true, onDelete: 'CASCADE')]
     private ?PurchaseRequest $purchaseRequest = null;
 
     #[ORM\ManyToOne(targetEntity: User::class)]
@@ -40,6 +40,23 @@ class PurchaseRequestFile
     /** Цвет счёта (#RRGGBB): им помечены позиции, которые по нему оплачивают. */
     #[ORM\Column(length: 7, nullable: true)]
     private ?string $color = null;
+
+    /** Подписанный договор указывает на договор, который он подписывает. */
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(name: 'contract_file_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseRequestFile $contractFile = null;
+
+    /** Старые копии. Новое прикрепление эту колонку не заполняет. */
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(name: 'source_file_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseRequestFile $sourceFile = null;
+
+    /**
+     * Договор справочника. Файл с заявки смотрит сюда; файл, заведённый в справочнике, заявки не имеет.
+     */
+    #[ORM\ManyToOne(targetEntity: PurchaseContract::class, inversedBy: 'files')]
+    #[ORM\JoinColumn(name: 'purchase_contract_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseContract $contract = null;
 
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
@@ -129,6 +146,42 @@ class PurchaseRequestFile
     public function setColor(?string $color): static
     {
         $this->color = $color;
+
+        return $this;
+    }
+
+    public function getContractFile(): ?PurchaseRequestFile
+    {
+        return $this->contractFile;
+    }
+
+    public function setContractFile(?PurchaseRequestFile $contractFile): static
+    {
+        $this->contractFile = $contractFile;
+
+        return $this;
+    }
+
+    public function getSourceFile(): ?PurchaseRequestFile
+    {
+        return $this->sourceFile;
+    }
+
+    public function setSourceFile(?PurchaseRequestFile $sourceFile): static
+    {
+        $this->sourceFile = $sourceFile;
+
+        return $this;
+    }
+
+    public function getContract(): ?PurchaseContract
+    {
+        return $this->contract;
+    }
+
+    public function setContract(?PurchaseContract $contract): static
+    {
+        $this->contract = $contract;
 
         return $this;
     }

@@ -8,6 +8,8 @@ use App\Entity\Purchase\PurchaseApprovalStage;
 use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestComment;
+use App\Entity\Purchase\PurchaseRequestContract;
+use App\Entity\Purchase\PurchaseContract;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\Purchase\PurchaseRequestHistory;
 use App\Entity\Purchase\PurchaseRequestItem;
@@ -19,6 +21,7 @@ use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\User\UserRole;
+use App\Repository\Purchase\PurchaseRequestFileRepository;
 use App\Service\SpaApi\Documents\DocumentApiPresenter;
 use Symfony\Bundle\SecurityBundle\Security;
 
@@ -35,6 +38,7 @@ final class PurchaseApiPresenter
         private readonly Security $security,
         private readonly PurchaseAccess $access,
         private readonly DocumentApiPresenter $documentPresenter,
+        private readonly PurchaseRequestFileRepository $files,
     ) {}
 
     /**
@@ -93,6 +97,7 @@ final class PurchaseApiPresenter
                         'title' => $stage->resolveTitle(),
                         'status' => ['value' => $status->value, 'label' => $status->getLabel()],
                         'isActive' => $stage->isActive(),
+                        'overdue' => $stage->isOverdue(),
                     ];
                 },
                 $request->getStages()->toArray(),
@@ -108,7 +113,8 @@ final class PurchaseApiPresenter
     }
 
     /**
-     * Карточка: список + позиции, комментарии, история, файлы и доступные действия.
+     * Карточка: список + позиции, файлы и доступные действия.
+     * Комментарии и история — отдельные эндпоинты с пагинацией.
      *
      * @return array<string, mixed>
      */
@@ -145,42 +151,54 @@ final class PurchaseApiPresenter
             ],
             $request->getItems()->toArray(),
         ));
-        $data['comments'] = array_values(array_map(
-            fn (PurchaseRequestComment $comment): array => [
-                'id' => $comment->getId(),
-                'author' => $this->presentUser($comment->getAuthor()),
-                'text' => $comment->getText(),
-                'createdAt' => $comment->getCreatedAt()?->format('c'),
-            ],
-            $request->getComments()->toArray(),
-        ));
-        $data['history'] = array_values(array_map(
-            fn (PurchaseRequestHistory $entry): array => [
-                'id' => $entry->getId(),
-                'user' => $this->presentUser($entry->getUser()),
-                // Код события: лента строится по нему, а не разбором комментария
-                'action' => $entry->getAction() !== null
-                    ? ['value' => $entry->getAction()->value, 'label' => $entry->getAction()->getLabel()]
-                    : null,
-                'fromStatus' => $entry->getFromStatus() !== null
-                    ? ['value' => $entry->getFromStatus()->value, 'label' => $entry->getFromStatus()->getLabel()]
-                    : null,
-                'toStatus' => [
-                    'value' => $entry->getToStatus()->value,
-                    'label' => $entry->getToStatus()->getLabel(),
-                ],
-                'comment' => $entry->getComment(),
-                'createdAt' => $entry->getCreatedAt()?->format('c'),
-            ],
-            $request->getHistory()->toArray(),
-        ));
+        $data['rejectComment'] = $this->findRejectComment($request);
         $data['files'] = array_values(array_map(
             fn (PurchaseRequestFile $file): array => $this->presentFile($file),
             $request->getFiles()->toArray(),
         ));
+        $data['contracts'] = array_values(array_map(
+            fn (PurchaseRequestContract $link): array => $this->presentLinkedContract($link->getContract()),
+            $request->getContractLinks()->toArray(),
+        ));
         $data['actions'] = $this->presentActions($request);
 
         return $data;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function presentComment(PurchaseRequestComment $comment): array
+    {
+        return [
+            'id' => $comment->getId(),
+            'author' => $this->presentUser($comment->getAuthor()),
+            'text' => $comment->getText(),
+            'createdAt' => $comment->getCreatedAt()?->format('c'),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function presentHistoryEntry(PurchaseRequestHistory $entry): array
+    {
+        return [
+            'id' => $entry->getId(),
+            'user' => $this->presentUser($entry->getUser()),
+            'action' => $entry->getAction() !== null
+                ? ['value' => $entry->getAction()->value, 'label' => $entry->getAction()->getLabel()]
+                : null,
+            'fromStatus' => $entry->getFromStatus() !== null
+                ? ['value' => $entry->getFromStatus()->value, 'label' => $entry->getFromStatus()->getLabel()]
+                : null,
+            'toStatus' => [
+                'value' => $entry->getToStatus()->value,
+                'label' => $entry->getToStatus()->getLabel(),
+            ],
+            'comment' => $entry->getComment(),
+            'createdAt' => $entry->getCreatedAt()?->format('c'),
+        ];
     }
 
     /**
@@ -214,6 +232,8 @@ final class PurchaseApiPresenter
                 : null,
             'startedAt' => $stage->getStartedAt()?->format('c'),
             'completedAt' => $stage->getCompletedAt()?->format('c'),
+            'overdue' => $stage->isOverdue(),
+            'minutesLeft' => $stage->minutesLeft(),
             'tasks' => array_values(array_map(
                 fn (PurchaseApprovalTask $task): array => $this->presentTask($task, $stage),
                 $stage->getTasks()->toArray(),
@@ -298,17 +318,48 @@ final class PurchaseApiPresenter
             'type' => ['value' => $file->getType()->value, 'label' => $file->getType()->getLabel()],
             // Цвет счёта: им помечены позиции, которые по нему оплачивают.
             'color' => $file->getColor(),
+            'contractFileId' => $file->getContractFile()?->getId(),
             'uploadedBy' => $this->presentUser($file->getUploadedBy()),
             'createdAt' => $file->getCreatedAt()?->format('c'),
-            'canDelete' => $this->canDeleteFile($file),
-            'canRename' => $this->canRenameFile($file),
+            'canDelete' => $file->getContract() === null && $this->canDeleteFile($file),
+            'canRename' => $file->getContract() === null && $this->canRenameFile($file),
             // Зеркалит режим PurchaseFileEditorController::open(): правит тот, чей сейчас этап.
-            'canEdit' => $extension === 'docx' && $request !== null && $this->findMyActiveTask($request) !== null,
-            'downloadUrl' => sprintf(
-                '/spa/api/purchases/%d/files/%d/download',
-                $file->getPurchaseRequest()?->getId(),
-                $file->getId(),
-            ),
+            'canEdit' => $extension === 'docx'
+                && $file->getSourceFile() === null
+                && $file->getContract() === null
+                && ($file->getType() !== PurchaseFileType::CONTRACT || !$this->files->isConfirmed((int) $file->getId()))
+                && $request !== null
+                && $this->findMyActiveTask($request) !== null,
+            'downloadUrl' => $this->fileDownloadUrl($file),
+            'purchaseId' => $file->getPurchaseRequest()?->getId(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function presentLinkedContract(PurchaseContract $contract): array
+    {
+        $file = null;
+        $signed = [];
+        foreach ($contract->getFiles() as $item) {
+            if ($item->getType() === PurchaseFileType::CONTRACT && $file === null) {
+                $file = $item;
+            }
+            if ($item->getType() === PurchaseFileType::SIGNED_CONTRACT) {
+                $signed[] = $this->presentFile($item);
+            }
+        }
+
+        return [
+            'id' => $contract->getId(),
+            'name' => $contract->getName(),
+            'status' => [
+                'value' => $contract->getStatus()->value,
+                'label' => $contract->getStatus()->getLabel(),
+            ],
+            'file' => $file !== null ? $this->presentFile($file) : null,
+            'signed' => $signed,
         ];
     }
 
@@ -337,6 +388,7 @@ final class PurchaseApiPresenter
                     'title' => $stage->getTitle(),
                     'purpose' => $stage->getPurpose()->value,
                     'allowsReject' => $stage->allowsReject(),
+                    'reviewMinutes' => $stage->getReviewMinutes(),
                     'tasks' => array_values(array_map(
                         static fn (PurchaseRouteTemplateTask $task): array => [
                             'position' => $task->getPosition(),
@@ -353,6 +405,20 @@ final class PurchaseApiPresenter
                 $template->getStages()->toArray(),
             )),
         ];
+    }
+
+    private function fileDownloadUrl(PurchaseRequestFile $file): string
+    {
+        $purchaseId = $file->getPurchaseRequest()?->getId();
+        if ($purchaseId !== null) {
+            return sprintf('/spa/api/purchases/%d/files/%d/download', $purchaseId, $file->getId());
+        }
+
+        return sprintf(
+            '/spa/api/purchases/approved-contracts/%d/files/%d/download',
+            (int) $file->getContract()?->getId(),
+            $file->getId(),
+        );
     }
 
     /** Зеркалит гейт PurchaseFileController::rename() — фронт по нему прячет карандаш. */
@@ -383,8 +449,13 @@ final class PurchaseApiPresenter
         if ($this->security->isGranted(UserRole::ROLE_ADMIN->value)) {
             return true;
         }
-        $ownInvoiceStep = ($file->getType() === PurchaseFileType::INVOICE || $file->getType() === PurchaseFileType::SIGNED_CONTRACT)
-            && $this->access->canBindDocuments($request, $user);
+        // Новый договор тоже: на шаге счетов его файл и скан ещё не в справочнике.
+        // Утверждённый договор сюда не доходит — у его файла уже есть запись справочника.
+        $ownInvoiceStep = in_array($file->getType(), [
+            PurchaseFileType::INVOICE,
+            PurchaseFileType::SIGNED_CONTRACT,
+            PurchaseFileType::CONTRACT,
+        ], true) && $this->access->canBindDocuments($request, $user);
         if (!$ownInvoiceStep && !$this->canRenameFile($file)) {
             return false;
         }
@@ -483,6 +554,24 @@ final class PurchaseApiPresenter
         $user = $this->security->getUser();
 
         return $user instanceof User && $this->access->canActOn($task, $user);
+    }
+
+    /** Последний комментарий перехода в REJECTED — только пока заявка в этом статусе. */
+    private function findRejectComment(PurchaseRequest $request): ?string
+    {
+        if ($request->getStatus() !== PurchaseStatus::REJECTED) {
+            return null;
+        }
+
+        $entries = $request->getHistory()->toArray();
+        for ($i = count($entries) - 1; $i >= 0; --$i) {
+            $entry = $entries[$i];
+            if ($entry->getToStatus() === PurchaseStatus::REJECTED && $entry->getComment() !== null) {
+                return $entry->getComment();
+            }
+        }
+
+        return null;
     }
 
     /**

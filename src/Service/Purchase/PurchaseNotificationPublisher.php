@@ -7,11 +7,8 @@ namespace App\Service\Purchase;
 use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
-use App\Enum\Purchase\PurchaseCapability;
-use App\Enum\Purchase\PurchaseStatus;
+use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseTaskAssignment;
-use App\Enum\User\UserRole;
-use App\Repository\User\UserRepository;
 use App\Service\Notification\NotificationPublisher;
 
 /**
@@ -23,9 +20,10 @@ use App\Service\Notification\NotificationPublisher;
  * и деплоить чужой сервис. Теперь текст живёт рядом с бизнес-логикой, которая
  * его и знает.
  *
- * Рассылка изменений — тем, кому заявка видна: автор, VIEW_ALL, маршрут и
- * ROLE_ADMIN (карточку он видит всегда, в том числе чужой черновик).
- * «Ждёт вашего решения» и «Вы ответственный» остаются адресными.
+ * Все события заявки — автору и назначенному профильному заму.
+ * Бухгалтерия, юристы, директор, финдиректор и отдел закупок слышат только
+ * «ждёт вашего решения», когда активна их задача. Админ — только если он
+ * сам в одной из этих ролей.
  */
 final class PurchaseNotificationPublisher
 {
@@ -34,7 +32,6 @@ final class PurchaseNotificationPublisher
     public function __construct(
         private readonly NotificationPublisher $publisher,
         private readonly PurchaseRoster $roster,
-        private readonly UserRepository $users,
     ) {}
 
     /** Подана (или повторно подана) на рассмотрение — всем, кому она видна. */
@@ -143,31 +140,20 @@ final class PurchaseNotificationPublisher
     }
 
     /**
-     * Этап оплаты закрыт — автору: деньги ушли, дальше ждать товар или услугу.
-     *
-     * Адресно: остальным хватает общего «заявка продвинулась», а автору важен
-     * именно этот момент — с него он ждёт поставку.
+     * Этап оплаты закрыт — автору и профильному заму: деньги ушли, дальше ждать поставку.
      */
     public function notifyPaymentConfirmed(PurchaseRequest $request, User $actor): void
     {
-        $author = $request->getCreatedBy();
-        if ($author === null) {
-            return;
-        }
-
         $this->publish(
-            'payment_confirmed', $request, $actor, [$author],
+            'payment_confirmed', $request, $actor, $this->viewersOf($request),
             sprintf('Оплата по вашей закупке «%s» подтверждена — ожидайте товар или услугу', $this->titleOf($request)),
             'Оплата подтверждена',
         );
     }
 
     /**
-     * Текст договора поменялся после согласования — тем, кто его уже согласовал.
-     *
-     * Адресно, а не всем зрителям: согласие дано на прежний текст, и
-     * перечитать новый нужно именно им. Подпись при этом не сгорает — решение,
-     * согласны ли они с правкой, остаётся за ними.
+     * Текст договора поменялся после согласования — автору и профильному заму.
+     * Согласовавшие роли отдельным письмом не зовутся: действия от них нет.
      *
      * @param list<User> $approvers
      */
@@ -178,7 +164,7 @@ final class PurchaseNotificationPublisher
         }
 
         $this->publish(
-            'contract_changed', $request, $actor, $approvers,
+            'contract_changed', $request, $actor, $this->viewersOf($request),
             sprintf('Договор по закупке «%s» изменён после вашего согласования', $this->titleOf($request)),
             'Договор изменён',
             $fileName !== '' ? $fileName : null,
@@ -207,10 +193,6 @@ final class PurchaseNotificationPublisher
         string $typeLabel,
         ?string $message = null,
     ): void {
-        // TODO: временная заглушка, чтобы прогон на проде не спамил колокольчик.
-        // TODO: Снять return — и события закупок снова уходят получателям.
-        return;
-
         $this->publisher->publish(
             module: self::MODULE,
             event: $event,
@@ -236,8 +218,7 @@ final class PurchaseNotificationPublisher
     }
 
     /**
-     * Кому видна заявка: автор, исполнитель, ROLE_ADMIN, VIEW_ALL и маршрут.
-     * Черновик: VIEW_ALL не видит, ROLE_ADMIN видит — и письмо ему уходит.
+     * Автор и назначенные на эту заявку профильные замы.
      *
      * @return list<User>
      */
@@ -251,27 +232,13 @@ final class PurchaseNotificationPublisher
         };
 
         $add($request->getCreatedBy());
-        $add($request->getExecutor());
-        foreach ($this->users->findByRoleName(UserRole::ROLE_ADMIN->value) as $user) {
-            $add($user);
-        }
 
-        if ($request->getStatus() === PurchaseStatus::DRAFT) {
-            return array_values($recipients);
-        }
-
-        foreach ($this->roster->usersWith(PurchaseCapability::VIEW_ALL) as $user) {
-            $add($user);
-        }
-
-        foreach ($request->getAllTasks() as $task) {
-            foreach ($this->addresseesOf($task, $request) as $user) {
-                $add($user);
+        foreach ($request->getStages() as $stage) {
+            if ($stage->getCandidateRoleCode() !== PurchaseRoleCode::PROFILE_DEPUTY) {
+                continue;
             }
-            // canView считает участником любого носителя роли задачи, даже если
-            // шаг уже адресован конкретному человеку.
-            foreach ($this->roster->usersOfRole($task->getRoleCode()) as $user) {
-                $add($user);
+            foreach ($stage->getTasks() as $task) {
+                $add($task->getAssigneeUser());
             }
         }
 

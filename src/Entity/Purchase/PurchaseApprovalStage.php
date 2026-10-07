@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Entity\Purchase;
 
 use App\Enum\Purchase\PurchaseRoleCode;
+use App\Service\Purchase\WorkingMinutes;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseTaskAssignment;
@@ -56,6 +57,14 @@ class PurchaseApprovalStage
 
     #[ORM\Column(name: 'allows_reject', type: Types::BOOLEAN, options: ['default' => true])]
     private bool $allowsReject = true;
+
+    /** Минуты из заготовки. Пусто — этап не просрочивается. */
+    #[ORM\Column(name: 'review_minutes', type: Types::INTEGER, nullable: true)]
+    private ?int $reviewMinutes = null;
+
+    /** Момент, после которого открытый этап считается просроченным. Ставится при старте. */
+    #[ORM\Column(name: 'due_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $dueAt = null;
 
     #[ORM\Column(type: Types::STRING, length: 30, enumType: PurchaseStageStatus::class, options: ['default' => 'PENDING'])]
     private PurchaseStageStatus $status = PurchaseStageStatus::PENDING;
@@ -158,6 +167,23 @@ class PurchaseApprovalStage
         return $this;
     }
 
+    public function getReviewMinutes(): ?int
+    {
+        return $this->reviewMinutes;
+    }
+
+    public function setReviewMinutes(?int $reviewMinutes): static
+    {
+        $this->reviewMinutes = $reviewMinutes;
+
+        return $this;
+    }
+
+    public function getDueAt(): ?\DateTimeImmutable
+    {
+        return $this->dueAt;
+    }
+
     public function getStatus(): PurchaseStageStatus
     {
         return $this->status;
@@ -166,10 +192,15 @@ class PurchaseApprovalStage
     public function setStatus(PurchaseStageStatus $status): static
     {
         $this->status = $status;
-        $this->startedAt = $status === PurchaseStageStatus::ACTIVE && $this->startedAt === null
-            ? new \DateTimeImmutable()
-            : $this->startedAt;
-        $this->completedAt = $status->isClosed() ? new \DateTimeImmutable() : null;
+        $now = WorkingMinutes::now();
+        if ($status === PurchaseStageStatus::ACTIVE && $this->startedAt === null) {
+            $this->startedAt = $now;
+            // Минуты из маршрута тратятся только в рабочее время, в колонку кладётся абсолютный срок.
+            if ($this->reviewMinutes !== null && $this->dueAt === null) {
+                $this->dueAt = WorkingMinutes::add($now, $this->reviewMinutes);
+            }
+        }
+        $this->completedAt = $status->isClosed() ? $now : null;
 
         return $this;
     }
@@ -227,6 +258,31 @@ class PurchaseApprovalStage
     public function isActive(): bool
     {
         return $this->status === PurchaseStageStatus::ACTIVE;
+    }
+
+    /** Этап всё ещё открыт, а сохранённый срок уже прошёл. */
+    public function isOverdue(?\DateTimeImmutable $now = null): bool
+    {
+        return $this->isActive()
+            && $this->dueAt !== null
+            && $this->dueAt < ($now ?? new \DateTimeImmutable());
+    }
+
+    /**
+     * Целых минут до сохранённого срока. null — срока нет или этап ещё не открыт.
+     * Неполная минута считается за минуту. Просрочка — отрицательное число.
+     */
+    public function minutesLeft(?\DateTimeImmutable $now = null): ?int
+    {
+        if (!$this->isActive() || $this->dueAt === null) {
+            return null;
+        }
+
+        $seconds = $this->dueAt->getTimestamp() - ($now ?? new \DateTimeImmutable())->getTimestamp();
+
+        return $seconds >= 0
+            ? (int) ceil($seconds / 60)
+            : (int) floor($seconds / 60);
     }
 
     public function isClosed(): bool

@@ -57,6 +57,13 @@ class PurchaseRouteTemplateStage
     #[ORM\Column(name: 'allows_reject', type: Types::BOOLEAN, options: ['default' => true])]
     private bool $allowsReject = true;
 
+    /**
+     * Сколько минут этап может оставаться открытым. Пусто — срока нет.
+     * В заявку копируется при подаче и дальше живёт в снимке.
+     */
+    #[ORM\Column(name: 'review_minutes', type: Types::INTEGER, nullable: true)]
+    private ?int $reviewMinutes = null;
+
     /** @var Collection<int, PurchaseRouteTemplateTask> */
     #[ORM\OneToMany(
         mappedBy: 'stage',
@@ -134,6 +141,18 @@ class PurchaseRouteTemplateStage
     public function setAllowsReject(bool $allowsReject): static
     {
         $this->allowsReject = $allowsReject;
+
+        return $this;
+    }
+
+    public function getReviewMinutes(): ?int
+    {
+        return $this->reviewMinutes;
+    }
+
+    public function setReviewMinutes(?int $reviewMinutes): static
+    {
+        $this->reviewMinutes = $reviewMinutes;
 
         return $this;
     }

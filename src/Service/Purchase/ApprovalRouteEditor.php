@@ -125,7 +125,8 @@ final class ApprovalRouteEditor
                 ->setPosition($sourceStage->getPosition())
                 ->setTitle($sourceStage->getTitle())
                 ->setPurpose($sourceStage->getPurpose())
-                ->setAllowsReject($sourceStage->allowsReject());
+                ->setAllowsReject($sourceStage->allowsReject())
+                ->setReviewMinutes($sourceStage->getReviewMinutes());
             $copy->addStage($stage);
             $this->em->persist($stage);
 
@@ -356,7 +357,8 @@ final class ApprovalRouteEditor
                 ->setTitle($this->parseTitle($row['title'] ?? null))
                 ->setPurpose($purpose)
                 // Отказ на исполнении не имеет смысла: деньги уже потрачены.
-                ->setAllowsReject((bool) ($row['allowsReject'] ?? !$purpose->isExecution()));
+                ->setAllowsReject((bool) ($row['allowsReject'] ?? !$purpose->isExecution()))
+                ->setReviewMinutes($this->parseReviewMinutes($row['reviewMinutes'] ?? null));
 
             foreach ($this->parseTasks($row['tasks'] ?? []) as $task) {
                 $stage->addTask($task);
@@ -420,6 +422,25 @@ final class ApprovalRouteEditor
         }
 
         return $tasks;
+    }
+
+    /**
+     * Сколько минут этап может оставаться открытым. Пусто — срока нет.
+     *
+     * @throws PurchaseRouteException
+     */
+    private function parseReviewMinutes(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $minutes = is_int($value) ? $value : (is_string($value) && ctype_digit($value) ? (int) $value : 0);
+        if ($minutes < 1 || $minutes > 525600) {
+            throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_REVIEW_MINUTES_INVALID);
+        }
+
+        return $minutes;
     }
 
     /**

@@ -199,7 +199,7 @@ final class PurchaseFileCoEditing
                     $purchase,
                     $actor,
                     PurchaseHistoryAction::CONTRACT_CHANGED,
-                    'Уведомлены согласовавшие: ' . self::names($approvers),
+                    'Согласовали ранее: ' . self::names($approvers),
                 );
             }
         }

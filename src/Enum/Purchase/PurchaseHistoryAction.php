@@ -41,6 +41,10 @@ enum PurchaseHistoryAction: string
     case CONTRACT_CHANGED = 'CONTRACT_CHANGED';
     /** Итог раскладки позиций по счетам и договорам — одной строкой при закрытии шага. */
     case DOCUMENTS_BOUND = 'DOCUMENTS_BOUND';
+    /** Заявка взяла договор из справочника, без копии файла. */
+    case CONTRACT_ATTACHED = 'CONTRACT_ATTACHED';
+    /** Ссылка на договор снята, пока шаг «нужен договор» ещё не закрыт. */
+    case CONTRACT_DETACHED = 'CONTRACT_DETACHED';
 
     public function getLabel(): string
     {
@@ -64,6 +68,8 @@ enum PurchaseHistoryAction: string
             self::FILE_EDITED => 'Файл изменён',
             self::CONTRACT_CHANGED => 'Договор изменён после согласования',
             self::DOCUMENTS_BOUND => 'Позиции разложены по счетам',
+            self::CONTRACT_ATTACHED => 'Прикреплён договор',
+            self::CONTRACT_DETACHED => 'Договор откреплён',
         };
     }
 }

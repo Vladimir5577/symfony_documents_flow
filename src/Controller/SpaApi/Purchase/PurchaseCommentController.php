@@ -9,8 +9,11 @@ use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestComment;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseStatus;
+use App\Enum\User\UserRole;
+use App\Repository\Purchase\PurchaseRequestCommentRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\Purchase\PurchaseAccess;
+use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseNotificationPublisher;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -24,13 +27,50 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
 final class PurchaseCommentController extends AbstractController
 {
     private const MAX_COMMENT_LENGTH = 10000;
+    private const DEFAULT_PAGE_SIZE = 10;
+    private const MAX_PAGE_SIZE = 50;
 
     public function __construct(
         private readonly PurchaseRequestRepository $purchaseRepo,
+        private readonly PurchaseRequestCommentRepository $commentRepo,
+        private readonly PurchaseApiPresenter $presenter,
         private readonly EntityManagerInterface $em,
         private readonly PurchaseNotificationPublisher $notifier,
         private readonly PurchaseAccess $access,
     ) {
+    }
+
+    #[Route('', name: 'spa_api_purchases_comments_list', methods: ['GET'])]
+    public function list(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+        if (!$this->canView($purchase, $user)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $page = max(1, $request->query->getInt('page', 1));
+        $pageSize = min(self::MAX_PAGE_SIZE, max(1, $request->query->getInt('page_size', self::DEFAULT_PAGE_SIZE)));
+        $result = $this->commentRepo->findPageByPurchase($id, $page, $pageSize);
+
+        return $this->json([
+            'items' => array_map(
+                $this->presenter->presentComment(...),
+                $result['items'],
+            ),
+            'pagination' => [
+                'current_page' => $page,
+                'items_per_page' => $pageSize,
+                'total_items' => $result['total'],
+                'total_pages' => (int) ceil($result['total'] / $pageSize),
+            ],
+        ]);
     }
 
     #[Route('', name: 'spa_api_purchases_comments_create', methods: ['POST'])]
@@ -69,14 +109,39 @@ final class PurchaseCommentController extends AbstractController
 
         $this->notifier->notifyCommentAdded($purchase, $user);
 
-        $authorName = trim(($user->getLastname() ?? '') . ' ' . ($user->getFirstname() ?? '')) ?: (string) $user->getLogin();
+        return $this->json($this->presenter->presentComment($comment), Response::HTTP_CREATED);
+    }
 
-        return $this->json([
-            'id' => $comment->getId(),
-            'author' => ['id' => $user->getId(), 'name' => $authorName],
-            'text' => $comment->getText(),
-            'createdAt' => $comment->getCreatedAt()?->format('c'),
-        ], Response::HTTP_CREATED);
+    #[Route('/{commentId}', name: 'spa_api_purchases_comments_delete', requirements: ['commentId' => '\d+'], methods: ['DELETE'])]
+    public function delete(int $id, int $commentId, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+        if (!$this->isGranted(UserRole::ROLE_ADMIN->value)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $comment = null;
+        foreach ($purchase->getComments() as $row) {
+            if ($row->getId() === $commentId) {
+                $comment = $row;
+                break;
+            }
+        }
+        if ($comment === null) {
+            return $this->json(['error' => SpaApiError::COMMENT_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->em->remove($comment);
+        $this->em->flush();
+
+        return $this->json(null, Response::HTTP_NO_CONTENT);
     }
 
     /** Автор заявки — роль не требуется: создавать может любой пользователь. */

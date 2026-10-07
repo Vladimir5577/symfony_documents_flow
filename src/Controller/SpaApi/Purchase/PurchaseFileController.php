@@ -12,6 +12,7 @@ use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\User\UserRole;
+use App\Enum\Purchase\PurchaseCapability;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
@@ -106,8 +107,24 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
+        $contract = null;
+        if ($type === PurchaseFileType::SIGNED_CONTRACT) {
+            $contractId = (int) $request->request->get('contractFileId', 0);
+            if ($contractId > 0) {
+                $contract = $purchase->findContractFile($contractId);
+                if ($contract === null) {
+                    return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_BAD_REQUEST);
+                }
+            }
+        }
+
         $fileEntity = new PurchaseRequestFile();
         $fileEntity->setType($type);
+        $fileEntity->setContractFile($contract);
+        // К утверждённому договору файлы не добавляют: скан у него уже есть.
+        if ($contract?->getContract() !== null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
+        }
         $fileEntity->setUploadedBy($user);
         // Имя приходит от пользователя, а колонка 255 — длинное обрезаем, иначе вставка упадёт.
         $fileEntity->setOriginalName(mb_substr($uploaded->getClientOriginalName(), 0, 255));
@@ -144,13 +161,13 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        if (!$this->canView($purchase, $user)) {
-            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-        }
-
         $fileEntity = $this->findFile($purchase->getFiles()->toArray(), $fileId);
         if ($fileEntity === null) {
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        if (!$this->canView($purchase, $user) && !$this->canReadSharedContract($fileEntity, $user)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
         $disposition = $request->query->getBoolean('inline')
@@ -254,6 +271,10 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
+        if ($fileEntity->getContract() !== null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
+        }
+
         if (!$this->canRenameFile($purchase, $fileEntity, $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
@@ -298,6 +319,10 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
+        if ($fileEntity->getContract() !== null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
+        }
+
         $isAdmin = $this->isGranted(UserRole::ROLE_ADMIN->value);
         // Обязательное вложение после прохождения его стадии не удалить уже никому,
         // кроме админа: иначе оплаченная заявка осталась бы без договора.
@@ -309,7 +334,11 @@ final class PurchaseFileController extends AbstractController
         // Счёт коллеги по отделу тоже: шаг адресован роли, а не человеку.
         $canDelete = $isAdmin
             || (
-                ($fileEntity->getType() === PurchaseFileType::INVOICE || $fileEntity->getType() === PurchaseFileType::SIGNED_CONTRACT)
+                in_array($fileEntity->getType(), [
+                    PurchaseFileType::INVOICE,
+                    PurchaseFileType::SIGNED_CONTRACT,
+                    PurchaseFileType::CONTRACT,
+                ], true)
                 && $this->access->canBindDocuments($purchase, $user)
             )
             || $fileEntity->getUploadedBy()?->getId() === $user->getId()
@@ -357,6 +386,26 @@ final class PurchaseFileController extends AbstractController
     private function canView(PurchaseRequest $purchase, User $user): bool
     {
         return $this->access->canView($purchase, $user);
+    }
+
+    /** Файл договора справочника: его скачивает отдел закупок и любая заявка, которая на него ссылается. */
+    private function canReadSharedContract(PurchaseRequestFile $file, User $user): bool
+    {
+        $contract = $file->getContract();
+        if ($contract === null) {
+            return false;
+        }
+        if ($this->access->can($user, PurchaseCapability::MANAGE_DICTIONARIES)) {
+            return true;
+        }
+        foreach ($contract->getLinks() as $link) {
+            $linked = $link->getPurchaseRequest();
+            if ($linked !== null && $this->access->canView($linked, $user)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
