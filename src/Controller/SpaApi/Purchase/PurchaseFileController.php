@@ -22,6 +22,7 @@ use App\Service\Purchase\PurchaseFileStorageService;
 use App\Service\Purchase\PurchaseRequestEditor;
 use App\Service\Purchase\PurchaseTransitionException;
 use Aws\S3\Exception\S3Exception;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -293,47 +294,60 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $fileEntity = $this->findFile($purchase->getFiles()->toArray(), $fileId);
-        if ($fileEntity === null) {
-            return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        $storageKey = null;
+        $response = $this->em->wrapInTransaction(function () use ($purchase, $fileId, $user, &$storageKey): JsonResponse {
+            $this->em->refresh($purchase, LockMode::PESSIMISTIC_WRITE);
+
+            $fileEntity = $this->findFile($purchase->getFiles()->toArray(), $fileId);
+            if ($fileEntity === null) {
+                return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+            }
+
+            $this->em->refresh($fileEntity);
+
+            $isAdmin = $this->isGranted(UserRole::ROLE_ADMIN->value);
+            // Обязательное вложение после прохождения его стадии не удалить уже никому,
+            // кроме админа: иначе оплаченная заявка осталась бы без договора.
+            if (!$isAdmin && $fileEntity->getType()->isLockedAt($purchase->getStatus())) {
+                return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
+            }
+
+            // Удалять может загрузивший, админ или автор заявки, пока она редактируема
+            // Счёт коллеги по отделу тоже: шаг адресован роли, а не человеку.
+            $canDelete = $isAdmin
+                || (
+                    ($fileEntity->getType() === PurchaseFileType::INVOICE || $fileEntity->getType() === PurchaseFileType::SIGNED_CONTRACT)
+                    && $this->access->canBindDocuments($purchase, $user)
+                )
+                || $fileEntity->getUploadedBy()?->getId() === $user->getId()
+                || ($this->isManagerOwner($purchase, $user) && $purchase->getStatus()->isEditable());
+            if (!$canDelete) {
+                return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+            }
+
+            $description = sprintf(
+                '%s: %s',
+                $fileEntity->getType()->getLabel(),
+                (string) $fileEntity->getOriginalName(),
+            );
+
+            $storageKey = $fileEntity->getStorageKey();
+            $this->binding->onFileRemoved($purchase, $fileEntity);
+            $purchase->removeFile($fileEntity);
+            $this->em->remove($fileEntity);
+            $purchase->touch();
+            $this->editor->log($purchase, $user, PurchaseHistoryAction::FILE_DELETED, $description);
+
+            return $this->json(null, Response::HTTP_NO_CONTENT);
+        });
+
+        // Внешнее хранилище меняем только после успешного commit: откат БД
+        // не должен оставлять действующую заявку без содержимого вложения.
+        if ($response->getStatusCode() === Response::HTTP_NO_CONTENT) {
+            $this->storage->delete($storageKey);
         }
 
-        $isAdmin = $this->isGranted(UserRole::ROLE_ADMIN->value);
-        // Обязательное вложение после прохождения его стадии не удалить уже никому,
-        // кроме админа: иначе оплаченная заявка осталась бы без договора.
-        if (!$isAdmin && $fileEntity->getType()->isLockedAt($purchase->getStatus())) {
-            return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
-        }
-
-        // Удалять может загрузивший, админ или автор заявки, пока она редактируема
-        // Счёт коллеги по отделу тоже: шаг адресован роли, а не человеку.
-        $canDelete = $isAdmin
-            || (
-                ($fileEntity->getType() === PurchaseFileType::INVOICE || $fileEntity->getType() === PurchaseFileType::SIGNED_CONTRACT)
-                && $this->access->canBindDocuments($purchase, $user)
-            )
-            || $fileEntity->getUploadedBy()?->getId() === $user->getId()
-            || ($this->isManagerOwner($purchase, $user) && $purchase->getStatus()->isEditable());
-        if (!$canDelete) {
-            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
-        }
-
-        // Содержимое сносим до строки: ключ хранится только в ней, и без него
-        // объект уже никак не найти — останется висеть в бакете навсегда.
-        $this->storage->delete($fileEntity->getStorageKey());
-
-        $description = sprintf(
-            '%s: %s',
-            $fileEntity->getType()->getLabel(),
-            (string) $fileEntity->getOriginalName(),
-        );
-
-        $this->binding->onFileRemoved($purchase, $fileEntity);
-        $purchase->removeFile($fileEntity);
-        $this->em->remove($fileEntity);
-        $this->editor->log($purchase, $user, PurchaseHistoryAction::FILE_DELETED, $description);
-
-        return $this->json(null, Response::HTTP_NO_CONTENT);
+        return $response;
     }
 
     /** Загрузивший, админ или автор заявки, пока она редактируема. Блокировка договора не мешает: имя — не содержимое. */

@@ -298,9 +298,12 @@
                             var li = document.createElement('li');
                             li.className = 'list-group-item d-flex align-items-center gap-2';
                             li.innerHTML = '<span class="flex-shrink-0 text-muted"><i class="bi bi-file-earmark"></i></span>' +
-                                '<span class="flex-grow-1 text-truncate" title="' + (file.name || '').replace(/"/g, '&quot;') + '">' + (file.name || '—') + '</span>' +
+                                '<span class="flex-grow-1 text-truncate"></span>' +
                                 '<span class="flex-shrink-0 text-muted small">' + formatSize(file.size) + '</span>' +
                                 '<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" data-index="' + idx + '" aria-label="Удалить">×</button>';
+                            var filename = li.querySelector('.text-truncate');
+                            filename.textContent = file.name || '—';
+                            filename.title = file.name || '';
                             li.querySelector('button').addEventListener('click', function () {
                                 var dt = new DataTransfer();
                                 for (var j = 0; j < files.length; j++) { if (j !== idx) dt.items.add(files[j]); }

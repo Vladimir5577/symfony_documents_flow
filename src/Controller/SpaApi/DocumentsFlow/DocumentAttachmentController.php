@@ -85,7 +85,11 @@ final class DocumentAttachmentController extends AbstractController
         }
 
         $response = new BinaryFileResponse($absolutePath);
-        $disposition = $request->query->getBoolean('inline')
+        $mime = mime_content_type($absolutePath) ?: 'application/octet-stream';
+        $safePreview = in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'], true);
+        $response->headers->set('Content-Type', $safePreview ? $mime : 'application/octet-stream');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $disposition = $request->query->getBoolean('inline') && $safePreview
             ? ResponseHeaderBag::DISPOSITION_INLINE
             : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
         $response->setContentDisposition(

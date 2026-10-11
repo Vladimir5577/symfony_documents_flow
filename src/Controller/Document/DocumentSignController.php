@@ -229,7 +229,7 @@ final class DocumentSignController extends AbstractController
         ]);
     }
 
-    #[Route('/executors_signature', name: 'app_executors_signature')]
+    #[Route('/executors_signature', name: 'app_executors_signature', methods: ['POST'])]
     public function executorsSignature(
         Request $request,
         DocumentRepository $documentRepository,
@@ -253,6 +253,9 @@ final class DocumentSignController extends AbstractController
         $document = $documentRepository->findOneWithRelations($data['id']);
         if ($document) {
             $this->denyUnlessCanSign($document);
+        }
+        if (!$this->isCsrfTokenValid('executors_signature', $data['_token'] ?? null)) {
+            throw $this->createAccessDeniedException();
         }
         if (!$document?->getOriginalFile()) {
             throw $this->createNotFoundException('У документа нет файла для подписания.');

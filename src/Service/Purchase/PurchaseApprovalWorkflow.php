@@ -16,6 +16,7 @@ use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\Purchase\PurchaseTaskDecision;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
 
@@ -124,6 +125,30 @@ final class PurchaseApprovalWorkflow
         ?string $comment = null,
         array $itemEdits = [],
     ): void {
+        $stage = $this->em->wrapInTransaction(function () use ($request, $task, $actor, $comment, $itemEdits): ?PurchaseApprovalStage {
+            $this->lockAndRefreshRoute($request);
+
+            return $this->approveLockedTask($request, $task, $actor, $comment, $itemEdits);
+        });
+
+        if ($stage === null) {
+            return;
+        }
+
+        $this->announce($request, $actor, $stage);
+        if ($stage->getPurpose() === PurchaseStagePurpose::PAYMENT) {
+            $this->notifier->notifyPaymentConfirmed($request, $actor);
+        }
+    }
+
+    /** @param array<int, array{included: bool, quantity: string|null, price?: string|null}> $itemEdits */
+    private function approveLockedTask(
+        PurchaseRequest $request,
+        PurchaseApprovalTask $task,
+        User $actor,
+        ?string $comment,
+        array $itemEdits,
+    ): ?PurchaseApprovalStage {
         $stage = $this->assertActiveTask($request, $task);
 
         // Те же правки состава, что у директора на разборе. Цена — только у отдела
@@ -181,16 +206,13 @@ final class PurchaseApprovalWorkflow
         if (!$stage->isSatisfied()) {
             $this->save($request);
 
-            return;
+            return null;
         }
 
         $this->closeStage($request, $stage, $actor);
         $this->save($request);
-        $this->announce($request, $actor, $stage);
 
-        if ($stage->getPurpose() === PurchaseStagePurpose::PAYMENT) {
-            $this->notifier->notifyPaymentConfirmed($request, $actor);
-        }
+        return $stage;
     }
 
     /**
@@ -278,6 +300,20 @@ final class PurchaseApprovalWorkflow
         User $actor,
         string $comment,
     ): void {
+        $this->em->wrapInTransaction(function () use ($request, $task, $actor, $comment): void {
+            $this->lockAndRefreshRoute($request);
+            $this->returnLockedToSourcing($request, $task, $actor, $comment);
+        });
+
+        $this->notifier->notifyReturnedToDepartment($request, $actor, $comment);
+    }
+
+    private function returnLockedToSourcing(
+        PurchaseRequest $request,
+        PurchaseApprovalTask $task,
+        User $actor,
+        string $comment,
+    ): void {
         $stage = $this->assertActiveTask($request, $task);
 
         if (trim($comment) === '') {
@@ -299,8 +335,6 @@ final class PurchaseApprovalWorkflow
                 . ($burned === [] ? '' : '. Сброшены согласования: ' . implode(', ', $burned)),
         );
         $this->save($request);
-
-        $this->notifier->notifyReturnedToDepartment($request, $actor, $comment);
     }
 
     /**
@@ -582,6 +616,19 @@ final class PurchaseApprovalWorkflow
         PurchaseApprovalStage $target,
         ?PurchaseApprovalTask $exclude = null,
     ): array {
+        // Факт исполнения нельзя стереть возвратом согласований, даже если
+        // параллельная задача оплаты ещё не закрыла весь этап.
+        foreach ($request->getStages() as $stage) {
+            if ($stage->getPosition() < $target->getPosition() || !$stage->getPurpose()->isExecution()) {
+                continue;
+            }
+            foreach ($stage->getTasks() as $task) {
+                if ($task->getDecision() === PurchaseTaskDecision::APPROVED) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+                }
+            }
+        }
+
         $burned = [];
 
         foreach ($request->getStages() as $stage) {
@@ -656,6 +703,21 @@ final class PurchaseApprovalWorkflow
         }
 
         return $stage;
+    }
+
+    /** Та же строка блокируется при удалении вложения; перечитываем уже загруженный снимок. */
+    private function lockAndRefreshRoute(PurchaseRequest $request): void
+    {
+        $this->em->refresh($request, LockMode::PESSIMISTIC_WRITE);
+        foreach ($request->getStages() as $stage) {
+            $this->em->refresh($stage);
+            foreach ($stage->getTasks() as $task) {
+                $this->em->refresh($task);
+            }
+        }
+        foreach ($request->getItems() as $item) {
+            $this->em->refresh($item);
+        }
     }
 
     /**

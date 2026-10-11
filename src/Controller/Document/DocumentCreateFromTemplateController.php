@@ -7,6 +7,9 @@ use App\Repository\Document\DocumentRepository;
 use App\Service\Document\Convertor\DocxToPdfConvertorService;
 use App\Service\Document\FileUploadService;
 use App\Service\SpaApi\Documents\DocumentAccessService;
+use App\Service\OnlyOffice\LegacyEditorSession;
+use App\Service\OnlyOffice\OnlyOfficeCallback;
+use App\Service\OnlyOffice\OnlyOfficeJwt;
 use Doctrine\ORM\EntityManagerInterface;
 use Mpdf\Mpdf;
 use Mpdf\Output\Destination;
@@ -20,6 +23,12 @@ use Symfony\Component\Routing\Attribute\Route;
 
 final class DocumentCreateFromTemplateController extends AbstractController
 {
+    public function __construct(
+        private readonly LegacyEditorSession $sessions,
+        private readonly OnlyOfficeJwt $jwt,
+    ) {
+    }
+
     #[Route('/document_create_docx_form', name: 'app_document_create_docx_form')]
     public function creteDocxForm(): Response
     {
@@ -79,38 +88,65 @@ final class DocumentCreateFromTemplateController extends AbstractController
     #[Route('/edit_docx', name: 'app_edit_docx')]
     public function editDocx(
         Request $request,
+        DocumentRepository $documents,
+        DocumentAccessService $access,
         #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
         #[Autowire('%private_upload_dir_documents_templates%')] string $templatesDir,
         #[Autowire('%onlyoffice_document_server_url%')] string $onlyofficeDocumentServerUrl,
     ): Response {
+        $this->jwt->requireEnabled();
+        $user = $this->getUser();
         $documentId = $request->query->getInt('id') ?: null;
-        $requestedFilename = $request->query->get('filename');
-
-        $documentServerBaseUrl = 'http://nginx';
-
-        $fromTemplate = false;
-        if ($requestedFilename !== null && $requestedFilename !== '') {
-            $filename = basename($requestedFilename);
-            $docPath = $originalsDir . DIRECTORY_SEPARATOR . $filename;
-        } else {
-            $filename = 'application.docx';
-            $docPath = $templatesDir . DIRECTORY_SEPARATOR . $filename;
-            $fromTemplate = true;
+        $document = $documentId !== null ? $documents->find($documentId) : null;
+        if (!$user instanceof User || ($documentId !== null && (!$document || !$access->canEditOutgoingDocument($document, $user)))) {
+            throw $this->createAccessDeniedException();
         }
-
-        $documentVersion = file_exists($docPath) ? (string) filemtime($docPath) : (string) time();
-        $documentFileUrl = $documentServerBaseUrl . $docPath . '?v=' . $documentVersion;
-        $docKey = 'doc-' . random_int(100000000, 999999999);
+        $fromTemplate = !$document?->getOriginalFile();
+        $filename = $fromTemplate ? 'application.docx' : $document->getOriginalFile();
+        $docPath = $fromTemplate ? $templatesDir . DIRECTORY_SEPARATOR . $filename : $this->sessions->path($filename);
+        if (!is_readable($docPath)) {
+            throw $this->createNotFoundException();
+        }
+        $session = $this->sessions->create($user, $document, $docPath, $fromTemplate);
+        $config = [
+            'width' => '100%', 'height' => '100%', 'type' => 'desktop',
+            'document' => [
+                'fileType' => 'docx', 'key' => $session['key'], 'title' => $filename,
+                'url' => 'http://nginx' . $this->generateUrl('app_docx_editor_content', ['session' => $session['id']]),
+            ],
+            'editorConfig' => [
+                'lang' => 'ru',
+                'callbackUrl' => 'http://nginx' . $this->generateUrl('app_save_docx', ['session' => $session['id']]),
+                'autosave' => true, 'autosaveInterval' => 2,
+                'customization' => ['forcesave' => true],
+            ],
+        ];
+        $config['token'] = $this->jwt->encode($config + ['exp' => $session['expires']]);
 
         return $this->render('document_create_from_template/edit_docx.html.twig', [
-            'filename' => $filename,
-            'fileUrl' => $filename,
-            'docKey' => $docKey,
-            'documentFileUrl' => $documentFileUrl,
+            'filename' => $session['filename'],
+            'sessionId' => $session['id'],
+            'docKey' => $session['key'],
+            'editorConfig' => $config,
             'documentId' => $documentId,
             'fromTemplate' => $fromTemplate,
             'onlyofficeDocumentServerUrl' => $onlyofficeDocumentServerUrl,
         ]);
+    }
+
+    #[Route('/docx_editor_content/{session}', name: 'app_docx_editor_content', methods: ['GET'])]
+    public function editorContent(string $session): Response
+    {
+        $this->jwt->requireEnabled();
+        $data = $this->sessions->get($session);
+        if ($data === null) {
+            throw $this->createAccessDeniedException();
+        }
+        $response = $this->file($this->sessions->path($data['filename']));
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('Cache-Control', 'private, no-store');
+
+        return $response;
     }
 
     #[Route('/save_file_from_template_to_document', name: 'app_save_file_from_template_to_document', methods: ['POST'])]
@@ -123,8 +159,6 @@ final class DocumentCreateFromTemplateController extends AbstractController
         DocumentAccessService $accessService,
         #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
     ): Response {
-        $fromTemplate = $request->request->get('from_template');
-
         $documentId = (int) ($request->request->get('document_id') ?? $request->query->get('id') ?? 0);
         if ($documentId <= 0) {
             $this->addFlash('error', 'Не указан документ.');
@@ -147,10 +181,15 @@ final class DocumentCreateFromTemplateController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $requestedFilename = $request->request->get('filename');
-        $hasFilename = $requestedFilename !== null && $requestedFilename !== '';
-        $sourceFilename = $hasFilename ? basename($requestedFilename) : 'doc.docx';
-        $sourceFile = $originalsDir . DIRECTORY_SEPARATOR . $sourceFilename;
+        $session = $this->sessions->get((string) $request->request->get('session', ''));
+        if ($session === null || $session['userId'] !== $user->getId()
+            || ($session['documentId'] !== null && $session['documentId'] !== $documentId)) {
+            throw $this->createAccessDeniedException();
+        }
+        $fromTemplate = $session['fromTemplate'];
+        $hasFilename = !$fromTemplate;
+        $sourceFilename = $session['filename'];
+        $sourceFile = $this->sessions->path($sourceFilename);
         if (!is_readable($sourceFile)) {
             $this->addFlash('error', sprintf('Файл «%s» не найден. Сначала сохраните документ в редакторе.', $sourceFilename));
             return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
@@ -159,7 +198,7 @@ final class DocumentCreateFromTemplateController extends AbstractController
         if ($fromTemplate) {
             // Новый документ — создаём новый файл с уникальным именем и обновляем запись в БД
             $uniqueName = date('Y-m-d') . '_' . $fileUploadService->generateFileName() . '.docx';
-            $targetPath = $originalsDir . DIRECTORY_SEPARATOR . $uniqueName;
+            $targetPath = $this->sessions->path($uniqueName);
             if (!@copy($sourceFile, $targetPath)) {
                 $this->addFlash('error', 'Не удалось сохранить копию файла.');
                 return $this->redirectToRoute('app_edit_docx', ['id' => $documentId]);
@@ -182,87 +221,100 @@ final class DocumentCreateFromTemplateController extends AbstractController
 
 
     #[Route('/trigger_forcesave', name: 'app_trigger_forcesave', methods: ['POST'])]
-    public function triggerForcesave(Request $request): JsonResponse
-    {
-        $body = $request->getContent();
-        $data = json_decode($body, true);
-        $key = $data['key'] ?? null;
-        if (!$key || !is_string($key)) {
-            return $this->json(['error' => 1, 'message' => 'key required'], 400);
+    public function triggerForcesave(
+        Request $request,
+        #[Autowire('%onlyoffice_internal_url%')] string $internalUrl,
+    ): JsonResponse {
+        $data = json_decode($request->getContent(), true);
+        if (!is_array($data) || !$this->isCsrfTokenValid('trigger_forcesave', $data['_token'] ?? null)) {
+            throw $this->createAccessDeniedException();
         }
-
-        $commandUrl = 'http://onlyoffice/command?shardkey=' . rawurlencode($key);
-        $payload = json_encode(['c' => 'forcesave', 'key' => $key]);
-
+        $session = $this->sessions->get((string) ($data['session'] ?? ''));
+        $user = $this->getUser();
+        if ($session === null || !$user instanceof User || $session['userId'] !== $user->getId()
+            || $session['key'] !== ($data['key'] ?? null)) {
+            throw $this->createAccessDeniedException();
+        }
+        $key = $session['key'];
+        $saveId = $this->sessions->beginSave($session['id']);
+        $body = ['c' => 'forcesave', 'key' => $key, 'userdata' => $saveId];
+        $body['token'] = $this->jwt->encode($body);
+        $payload = json_encode($body, JSON_THROW_ON_ERROR);
         $context = stream_context_create([
             'http' => [
                 'method' => 'POST',
                 'header' => "Content-Type: application/json\r\nContent-Length: " . strlen($payload),
                 'content' => $payload,
                 'timeout' => 5,
+                'follow_location' => 0,
             ],
         ]);
-
-        $response = @file_get_contents($commandUrl, false, $context);
+        $response = @file_get_contents(rtrim($internalUrl, '/') . '/command?shardkey=' . rawurlencode($key), false, $context);
         if ($response === false) {
             return $this->json(['error' => 1, 'message' => 'OnlyOffice command failed']);
         }
 
         $result = json_decode($response, true);
-        return $this->json($result ?? ['error' => 0]);
+        if (!is_array($result)) {
+            $result = ['error' => 1];
+        }
+        if (($result['error'] ?? null) === 4) {
+            $this->sessions->acknowledgeSave($session['id'], $saveId);
+        }
+
+        return $this->json($result + ['saveId' => $saveId]);
+    }
+
+    #[Route('/docx_editor_save_status/{session}', name: 'app_docx_editor_save_status', methods: ['GET'])]
+    public function editorSaveStatus(string $session, Request $request): JsonResponse
+    {
+        $data = $this->sessions->get($session);
+        $user = $this->getUser();
+        if ($data === null || !$user instanceof User || $data['userId'] !== $user->getId()) {
+            throw $this->createAccessDeniedException();
+        }
+
+        return $this->json(['saved' => $this->sessions->isSaved($session, (string) $request->query->get('saveId', ''))]);
     }
 
     #[Route('/save_docx', name: 'app_save_docx', methods: ['POST'])]
     public function saveDocx(
         Request $request,
         DocxToPdfConvertorService $docxToPdfConvertorService,
-        #[Autowire('%onlyoffice_document_server_url%')] string $onlyofficeDocumentServerUrl,
-    ): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
-
-//        file_put_contents('./onlyoffice_callback.json', json_encode($data, JSON_PRETTY_PRINT));
-
-        if (!isset($data['status']) || !in_array($data['status'], [2, 6], true)) {
+        OnlyOfficeCallback $callback,
+    ): JsonResponse {
+        $data = $callback->data($request);
+        $session = $this->sessions->get((string) $request->query->get('session', ''));
+        if ($data === null || $session === null || ($data['key'] ?? null) !== $session['key']) {
+            return $this->json(['error' => 1], Response::HTTP_FORBIDDEN);
+        }
+        if (!in_array($data['status'] ?? null, [2, 6], true)) {
             return $this->json(['error' => 0]);
         }
-
-        if (empty($data['url'])) {
-            return $this->json(['error' => 0]);
+        if (!is_string($data['url'] ?? null)) {
+            return $this->json(['error' => 1], Response::HTTP_BAD_REQUEST);
         }
-
-        $requestedFilename = $request->query->get('filename');
-        $filename = $requestedFilename !== null && $requestedFilename !== ''
-            ? basename($requestedFilename)
-            : 'doc.docx';
-
-        // Сохраняем в ту же папку (originals), откуда загружается документ в редактор,
-        // чтобы файл «на диске» обновлялся при автосохранении
-        $targetPath = $this->getParameter('private_upload_dir_documents_originals') . '/' . $filename;
-
-        // ⚡ Заменяем localhost на onlyoffice для Docker-сети
-        // $url = str_replace('localhost:8081', 'onlyoffice:80', $data['url']);
-
-        // ⚡ Заменяем публичный URL OnlyOffice на внутренний Docker-хост
-        $url = str_replace($onlyofficeDocumentServerUrl, 'http://onlyoffice:80', $data['url']);
-        $fileContent = @file_get_contents($url);
-
-        if ($fileContent === false) {
-//            file_put_contents('./onlyoffice_error.log', date('Y-m-d H:i:s') . " - Failed to download file from URL: {$url}\n", FILE_APPEND);
-            return $this->json(['error' => 1]);
+        $fileContent = $callback->download($data['url']);
+        if ($fileContent === null) {
+            return $this->json(['error' => 1], Response::HTTP_BAD_REQUEST);
         }
-
-        $result = @file_put_contents($targetPath, $fileContent);
-
-        // convert docx to pdf at once when document saved
+        $targetPath = $this->sessions->path($session['filename']);
+        $temporaryPath = tempnam(dirname($targetPath), '.onlyoffice-');
+        if ($temporaryPath === false) {
+            return $this->json(['error' => 1], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+        try {
+            if (file_put_contents($temporaryPath, $fileContent, LOCK_EX) !== strlen($fileContent)
+                || !rename($temporaryPath, $targetPath)) {
+                return $this->json(['error' => 1], Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+        } finally {
+            if (is_file($temporaryPath)) {
+                unlink($temporaryPath);
+            }
+        }
         $docxToPdfConvertorService->convertDocxToPdf($targetPath);
-
-        if ($result === false) {
-//            file_put_contents('./onlyoffice_error.log', date('Y-m-d H:i:s') . " - Failed to write file to path: {$targetPath}\n", FILE_APPEND);
-            return $this->json(['error' => 1]);
-        }
-
-//        file_put_contents('./onlyoffice_success.log', date('Y-m-d H:i:s') . " - File saved: {$targetPath}, size: {$result} bytes\n", FILE_APPEND);
+        $this->sessions->acknowledgeSave($session['id'], (string) ($data['userdata'] ?? ''));
 
         return $this->json(['error' => 0]);
     }

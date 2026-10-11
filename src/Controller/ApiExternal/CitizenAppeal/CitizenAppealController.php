@@ -89,6 +89,9 @@ final class CitizenAppealController extends AbstractController
     #[Route('/citizen-appeal/{id}/update', name: 'app_citizen_appeal_update', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function update(int $id, Request $request): Response
     {
+        if (!$this->isCsrfTokenValid('citizen_appeal_update_' . $id, $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException();
+        }
         $status       = $request->request->get('status') ?: null;
         $adminComment = $request->request->get('adminComment') ?: null;
 

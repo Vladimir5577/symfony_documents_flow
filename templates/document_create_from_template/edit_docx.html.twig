@@ -29,7 +29,7 @@
 {% if documentId %}
 <form id="save-file-to-document-form" method="post" action="{{ path('app_save_file_from_template_to_document') }}" style="display: none;">
     <input type="hidden" name="document_id" value="{{ documentId }}">
-    <input type="hidden" name="filename" value="{{ filename }}">
+    <input type="hidden" name="session" value="{{ sessionId }}">
     <input type="hidden" name="from_template" value="{{ fromTemplate ? '1' : '0' }}">
     <input type="hidden" name="_token" value="{{ csrf_token('save_file_to_document') }}">
 </form>
@@ -40,55 +40,42 @@
     {# Один ключ на сессию — нужен для кнопки «Сохранить» и для сохранения при уходе со страницы #}
     const docKey = "{{ docKey|e('js') }}";
     const triggerSaveUrl = "{{ path('app_trigger_forcesave')|e('js') }}";
+    const saveStatusUrl = "{{ path('app_docx_editor_save_status', {session: sessionId})|e('js') }}";
     const documentId = {{ documentId ?? 'null' }};
-    const filename = "{{ filename|e('js') }}";
-    const callbackUrl = "http://nginx/save_docx?filename=" + encodeURIComponent(filename);
-
-    const docEditor = new DocsAPI.DocEditor("editor", {
-        width: "100%",
-        height: "100%",
-        type: "desktop",
-        document: {
-            fileType: "docx",
-            key: docKey,
-            title: filename,
-            url: "{{ documentFileUrl|e('js') }}"
-        },
-        editorConfig: {
-            lang: "ru",
-            callbackUrl: callbackUrl,
-            autosave: true,
-            autosaveInterval: 2,
-            customization: {
-                forcesave: true   // кнопка «Сохранить» в панели OnlyOffice — сразу шлёт callback
-            }
-        }
-    });
+    const saveRequest = { key: docKey, session: "{{ sessionId|e('js') }}", _token: "{{ csrf_token('trigger_forcesave')|e('js') }}" };
+    const docEditor = new DocsAPI.DocEditor("editor", {{ editorConfig|json_encode(constant('JSON_HEX_TAG') b-or constant('JSON_HEX_AMP') b-or constant('JSON_HEX_APOS') b-or constant('JSON_HEX_QUOT'))|raw }});
 
     // ???
     // Сохранение при уходе со страницы (закрытие вкладки, переход, перезагрузка)
     window.addEventListener("beforeunload", function () {
-        navigator.sendBeacon(triggerSaveUrl, new Blob([JSON.stringify({ key: docKey })], { type: "application/json" }));
+        navigator.sendBeacon(triggerSaveUrl, new Blob([JSON.stringify(saveRequest)], { type: "application/json" }));
     });
 
     document.querySelector('.save-btn').addEventListener('click', function () {
         // Сначала триггерим сохранение в OnlyOffice (как нажатие кнопки «Сохранить» в редакторе)
         fetch(triggerSaveUrl, {
             method: 'POST',
-            body: JSON.stringify({ key: docKey }),
+            body: JSON.stringify(saveRequest),
             headers: { 'Content-Type': 'application/json' }
+        }).then(function (response) {
+            if (!response.ok) throw new Error('OnlyOffice command failed');
+            return response.json();
+        }).then(async function (result) {
+            if (result.error !== 0 && result.error !== 4) throw new Error('OnlyOffice command failed');
+            for (let attempt = 0; attempt < 60; attempt++) {
+                const response = await fetch(saveStatusUrl + '?saveId=' + encodeURIComponent(result.saveId));
+                if (!response.ok) throw new Error('OnlyOffice command failed');
+                if ((await response.json()).saved) return;
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            throw new Error('OnlyOffice command failed');
         }).then(function () {
             return Swal.fire({ title: "Файл будет прикреплен к документу" });
         }).then(function () {
             if (!documentId) return;
             var form = document.getElementById('save-file-to-document-form');
             if (form) form.submit();
-        }).catch(function () {
-            if (documentId) {
-                var form = document.getElementById('save-file-to-document-form');
-                if (form) form.submit();
-            }
-        });
+        }).catch(console.error);
     });
 </script>
 </body>

@@ -223,7 +223,9 @@ final class DocumentCommentController extends AbstractController
         }
 
         $downloadName = $fileEntity->getFilename() ?: $storageKey;
-        $inline = $request->query->getBoolean('inline');
+        $mime = mime_content_type($absolutePath) ?: 'application/octet-stream';
+        $safePreview = in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'], true);
+        $inline = $request->query->getBoolean('inline') && $safePreview;
 
         $response = new StreamedResponse(static function () use ($absolutePath) {
             $handle = fopen($absolutePath, 'rb');
@@ -237,7 +239,8 @@ final class DocumentCommentController extends AbstractController
             fclose($handle);
         });
 
-        $response->headers->set('Content-Type', $fileEntity->getContentType() ?: 'application/octet-stream');
+        $response->headers->set('Content-Type', $safePreview ? $mime : 'application/octet-stream');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Content-Disposition', ($inline ? 'inline' : 'attachment') . '; filename="' . addslashes($downloadName) . '"');
 
         return $response;

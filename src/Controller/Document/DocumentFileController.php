@@ -35,6 +35,10 @@ final class DocumentFileController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
+        if (!$this->isCsrfTokenValid('document_upload_files', $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException();
+        }
+
         $baseUploadDir = $this->getParameter('private_upload_dir_documents_originals');
         $documentDir = $baseUploadDir . '/' . $id;
         if (!is_dir($documentDir)) {
@@ -145,7 +149,9 @@ final class DocumentFileController extends AbstractController
             ? $fileEntity->getTitle().'.'.pathinfo($filePath, PATHINFO_EXTENSION)
             : $filePath;
 
-        $inline = $request->query->getBoolean('inline');
+        $mime = mime_content_type($absolutePath) ?: 'application/octet-stream';
+        $safePreview = in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'], true);
+        $inline = $request->query->getBoolean('inline') && $safePreview;
 
         $response = new StreamedResponse(static function () use ($absolutePath) {
             $handle = fopen($absolutePath, 'rb');
@@ -159,7 +165,8 @@ final class DocumentFileController extends AbstractController
             fclose($handle);
         });
 
-        $response->headers->set('Content-Type', mime_content_type($absolutePath) ?: 'application/octet-stream');
+        $response->headers->set('Content-Type', $safePreview ? $mime : 'application/octet-stream');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Content-Disposition', ($inline ? 'inline' : 'attachment').'; filename="'.addslashes($filename).'"');
 
         return $response;

@@ -110,7 +110,10 @@ final class LegacyDocumentAccessTest extends KernelTestCase
         $fileController->setContainer($this->controllerContainer);
         $signController = new DocumentSignController($this->accessService);
         $signController->setContainer($this->controllerContainer);
-        $templateController = new DocumentCreateFromTemplateController();
+        $templateController = new DocumentCreateFromTemplateController(
+            self::getContainer()->get(\App\Service\OnlyOffice\LegacyEditorSession::class),
+            self::getContainer()->get(\App\Service\OnlyOffice\OnlyOfficeJwt::class),
+        );
         $templateController->setContainer($this->controllerContainer);
         $tokens = $this->controllerContainer->get('security.csrf.token_manager');
 
@@ -205,6 +208,81 @@ final class LegacyDocumentAccessTest extends KernelTestCase
 
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('signing form', $response->getContent());
+    }
+
+    public static function attachmentContents(): iterable
+    {
+        yield 'HTML' => ['<!DOCTYPE html><html><body>marker</body></html>', false];
+        yield 'SVG' => ['<svg xmlns="http://www.w3.org/2000/svg"><text>marker</text></svg>', false];
+        yield 'PDF' => ["%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF", true];
+    }
+
+    #[DataProvider('attachmentContents')]
+    public function testDocumentAndCommentInlineDownloadUseSafeMimeTypes(string $content, bool $inline): void
+    {
+        $user = $this->login(1);
+        $document = $this->document($user, $user, null, false);
+        file_put_contents($this->directory . '/document.pdf', $content);
+        $file = (new File())->setDocument($document)->setFilePath('./document.pdf');
+        $repository = $this->createMock(FileRepository::class);
+        $repository->method('find')->willReturn($file);
+        $controller = new DocumentFileController($this->accessService);
+        $controller->setContainer($this->controllerContainer);
+        $response = $controller->download(7, new Request(['inline' => '1']), $repository);
+        self::assertStringStartsWith($inline ? 'inline;' : 'attachment;', $response->headers->get('Content-Disposition'));
+        self::assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        self::assertSame($inline ? 'application/pdf' : 'application/octet-stream', $response->headers->get('Content-Type'));
+
+        mkdir($this->directory . '/10');
+        file_put_contents($this->directory . '/10/comment.pdf', $content);
+        try {
+            $comment = (new \App\Entity\Document\DocumentComment())->setDocument($document)->setAuthor($user);
+            $commentFile = (new \App\Entity\Document\DocumentCommentFile())->setComment($comment)
+                ->setStorageKey('comment.pdf')->setFilename('comment.pdf')->setContentType('application/pdf');
+            $comments = $this->createMock(\App\Repository\Document\DocumentCommentFileRepository::class);
+            $comments->method('find')->willReturn($commentFile);
+            $commentController = new \App\Controller\Document\DocumentCommentController($this->directory, $this->accessService);
+            $commentController->setContainer($this->controllerContainer);
+            $response = $commentController->download(7, new Request(['inline' => '1']), $comments);
+            self::assertStringStartsWith($inline ? 'inline;' : 'attachment;', $response->headers->get('Content-Disposition'));
+            self::assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+            self::assertSame($inline ? 'application/pdf' : 'application/octet-stream', $response->headers->get('Content-Type'));
+        } finally {
+            unlink($this->directory . '/10/comment.pdf');
+            rmdir($this->directory . '/10');
+        }
+    }
+
+    public function testAuthorUploadWithoutCsrfDoesNotPersistFiles(): void
+    {
+        $user = $this->login(1);
+        $document = $this->document($user, $user, null, false);
+        $repository = $this->createMock(DocumentRepository::class);
+        $repository->method('find')->willReturn($document);
+        $em = $this->createMock(EntityManagerInterface::class);
+        $em->expects(self::never())->method('persist');
+        $em->expects(self::never())->method('flush');
+        $controller = new DocumentFileController($this->accessService);
+        $controller->setContainer($this->controllerContainer);
+        $this->expectException(AccessDeniedException::class);
+        $controller->new(new Request(), 10, $repository, $em);
+    }
+
+    public function testExecutorSignatureWithoutCsrfDoesNotChangeFile(): void
+    {
+        $user = $this->login(2);
+        $document = $this->document($this->user(1), $user, DocumentRecipientRole::EXECUTOR, true);
+        $repository = $this->createMock(DocumentRepository::class);
+        $repository->method('findOneWithRelations')->willReturn($document);
+        $controller = new DocumentSignController($this->accessService);
+        $controller->setContainer($this->controllerContainer);
+        $request = Request::create('/executors_signature', 'POST', [], [], [], [], '{"id":10,"page":1,"x":0,"y":0}');
+        try {
+            $controller->executorsSignature($request, $repository, $this->directory, $this->directory);
+            self::fail('Unsigned session request must be rejected.');
+        } catch (AccessDeniedException) {
+            self::assertSame('original document contents', file_get_contents($this->directory . '/document.pdf'));
+        }
     }
 
     private function login(int $id, bool $admin = false): User
