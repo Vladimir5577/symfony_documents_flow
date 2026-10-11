@@ -16,6 +16,7 @@ use App\Repository\Post\FileRepository;
 use App\Repository\Post\PostRepository;
 use App\Repository\Post\PostUserCommentRepository;
 use App\Repository\Post\PostUserStatusRepository;
+use App\Security\Voter\PostVoter;
 use App\Service\SpaApi\Post\PostCreateService;
 use App\Service\SpaApi\Post\PostResponseFormatter;
 use Doctrine\ORM\EntityManagerInterface;
@@ -99,6 +100,8 @@ final class PostController extends AbstractController
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
+        $this->denyAccessUnlessGranted(PostVoter::VIEW, $post);
+
         $status = $this->statusRepository->findOneBy(['post' => $post, 'user' => $user])?->getStatus();
         $commentCount = $this->commentRepository->count(['post' => $post]);
 
@@ -124,6 +127,33 @@ final class PostController extends AbstractController
         }
 
         return $this->json($this->formatter->formatPostDetail($post), Response::HTTP_CREATED);
+    }
+
+    #[Route('/{id}/cover', name: 'spa_api_posts_cover', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function cover(int $id): Response
+    {
+        $post = $this->postRepository->find($id);
+        if ($post === null || $post->getDeletedAt() !== null) {
+            return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->denyAccessUnlessGranted(PostVoter::VIEW, $post);
+        $name = $post->getCoverImageName();
+        if (!$name) {
+            return $this->json(['error' => SpaApiError::POST_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $path = $this->uploadDirPosts . '/' . $post->getId() . '/' . $name;
+        if (!is_file($path)) {
+            return $this->json(['error' => SpaApiError::POST_FILE_NOT_FOUND_ON_DISK], Response::HTTP_NOT_FOUND);
+        }
+
+        $response = new BinaryFileResponse($path);
+        $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_INLINE, basename($name));
+        $response->headers->set('Cache-Control', 'private, no-store');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+
+        return $response;
     }
 
     #[Route('/{id}/active', name: 'spa_api_posts_set_active', requirements: ['id' => '\d+'], methods: ['PATCH'])]
@@ -181,6 +211,8 @@ final class PostController extends AbstractController
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
+        $this->denyAccessUnlessGranted(PostVoter::VIEW, $post);
+
         $offset = max(0, $request->query->getInt('offset', 0));
         $limit = max(1, min(100, $request->query->getInt('limit', 5)));
 
@@ -205,6 +237,8 @@ final class PostController extends AbstractController
         if ($post === null || $post->getDeletedAt() !== null) {
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
+
+        $this->denyAccessUnlessGranted(PostVoter::VIEW, $post);
 
         $payload = json_decode($request->getContent(), true);
         if (!is_array($payload)) {
@@ -234,6 +268,8 @@ final class PostController extends AbstractController
         if ($post === null || $post->getDeletedAt() !== null) {
             return $this->json(['error' => SpaApiError::POST_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
+
+        $this->denyAccessUnlessGranted(PostVoter::VIEW, $post);
 
         $status = $this->statusRepository->findOneBy(['post' => $post, 'user' => $user]);
         if ($status === null) {
@@ -265,6 +301,8 @@ final class PostController extends AbstractController
             return $this->json(['error' => SpaApiError::POST_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
+        $this->denyAccessUnlessGranted(PostVoter::VIEW, $fileEntity->getPost());
+
         $filePath = $fileEntity->getFilePath();
         if ($filePath === null) {
             return $this->json(['error' => SpaApiError::POST_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
@@ -281,9 +319,10 @@ final class PostController extends AbstractController
 
         $filename = $fileEntity->getTitle()
             ? $fileEntity->getTitle() . '.' . pathinfo($filePath, PATHINFO_EXTENSION)
-            : $filePath;
+            : basename($filePath);
 
         $response = new BinaryFileResponse($absolutePath);
+        $response->headers->set('Cache-Control', 'private, no-store');
         $disposition = $request->query->getBoolean('inline', false)
             ? ResponseHeaderBag::DISPOSITION_INLINE
             : ResponseHeaderBag::DISPOSITION_ATTACHMENT;

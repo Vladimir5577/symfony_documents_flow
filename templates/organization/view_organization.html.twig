@@ -260,6 +260,7 @@
 
 
 
+        {% if is_granted('ROLE_ADMIN') %}
         <div class="d-flex justify-content-end gap-2 mt-4">
 
             <a href="{{ path('edit_organization', {id: organization.id}) }}" class="btn btn-primary">
@@ -285,6 +286,7 @@
 
         </div>
 
+        {% endif %}
     </section>
 
     {% include 'user/partials/_modal_view_user.html.twig' %}
