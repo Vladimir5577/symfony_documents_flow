@@ -183,7 +183,8 @@ final class PurchaseMutationSecurityTest extends KernelTestCase
     public function testPaymentDecisionUsesTheSameRequestLock(): void
     {
         $payment = $this->stage(PurchaseStagePurpose::PAYMENT, 1, PurchaseStageStatus::ACTIVE);
-        $task = new PurchaseApprovalTask();
+        $task = (new PurchaseApprovalTask())->setAssigneeUser($this->user);
+        (new \ReflectionProperty(PurchaseApprovalTask::class, 'id'))->setValue($task, 3);
         $payment->addTask($task)->addTask(new PurchaseApprovalTask());
         $locked = false;
         $this->em->method('refresh')->willReturnCallback(function (object $entity, mixed $mode = null) use (&$locked): void {
@@ -211,7 +212,8 @@ final class PurchaseMutationSecurityTest extends KernelTestCase
         $item = (new PurchaseRequestItem())->setInvoiceFile($file);
         $this->purchase->addItem($item);
         $payment = $this->stage(PurchaseStagePurpose::PAYMENT, 1, PurchaseStageStatus::ACTIVE);
-        $task = (new PurchaseApprovalTask())->setRequiresFileType(PurchaseFileType::INVOICE);
+        $task = (new PurchaseApprovalTask())->setRequiresFileType(PurchaseFileType::INVOICE)->setAssigneeUser($this->user);
+        (new \ReflectionProperty(PurchaseApprovalTask::class, 'id'))->setValue($task, 3);
         $payment->addTask($task);
         $this->em->method('refresh')->willReturnCallback(function (object $entity, mixed $mode = null) use ($file, $item): void {
             self::assertTrue($this->inTransaction);
@@ -232,6 +234,63 @@ final class PurchaseMutationSecurityTest extends KernelTestCase
             self::assertSame(SpaApiError::PURCHASE_TASK_FILE_REQUIRED, $exception->errorCode);
             self::assertSame(PurchaseTaskDecision::PENDING, $task->getDecision());
             self::assertNull($item->getInvoiceFile());
+        }
+    }
+
+    public static function changedTasks(): iterable
+    {
+        foreach (['approveTask', 'returnTask'] as $action) {
+            yield $action . ' after route replacement' => [$action, 'replaced', SpaApiError::PURCHASE_CONCURRENT_UPDATE];
+            yield $action . ' after reassignment' => [$action, 'reassigned', SpaApiError::ACCESS_DENIED];
+            yield $action . ' after decision' => [$action, 'decided', SpaApiError::PURCHASE_TASK_NOT_ACTIVE];
+        }
+    }
+
+    #[DataProvider('changedTasks')]
+    public function testTaskActionRechecksCurrentRoute(string $action, string $change, string $error): void
+    {
+        $this->purchase->setStatus(PurchaseStatus::ON_APPROVAL);
+        $sourcing = $this->stage(PurchaseStagePurpose::SOURCING, 1, PurchaseStageStatus::COMPLETED);
+        $active = $this->stage(PurchaseStagePurpose::PAYMENT, 2, PurchaseStageStatus::ACTIVE);
+        $task = (new PurchaseApprovalTask())->setAssigneeUser($this->user);
+        (new \ReflectionProperty(PurchaseApprovalTask::class, 'id'))->setValue($task, 3);
+        $active->addTask($task);
+        $newTriage = null;
+        $this->em->method('refresh')->willReturnCallback(function (object $entity, mixed $mode = null) use ($active, $task, $change, &$newTriage): void {
+            self::assertTrue($this->inTransaction);
+            if ($entity === $this->purchase) {
+                self::assertSame(LockMode::PESSIMISTIC_WRITE, $mode);
+                if ($change === 'replaced') {
+                    // Старая задача остаётся в памяти, но больше не входит в перечитанный маршрут.
+                    $this->purchase->getStages()->removeElement($active);
+                    $newTriage = $this->stage(PurchaseStagePurpose::TRIAGE, 0, PurchaseStageStatus::ACTIVE);
+                }
+            } elseif ($entity === $task) {
+                if ($change === 'reassigned') {
+                    $other = (new User())->setLogin('other');
+                    (new \ReflectionProperty(User::class, 'id'))->setValue($other, 11);
+                    $task->setAssigneeUser($other);
+                } elseif ($change === 'decided') {
+                    $task->decide(PurchaseTaskDecision::APPROVED, $this->user);
+                }
+            }
+        });
+        $this->em->expects(self::never())->method('persist');
+        $this->em->expects(self::never())->method('flush');
+
+        $response = self::getContainer()->get(PurchaseTransitionController::class)->$action(
+            1, 3, Request::create('/', 'POST', content: '{"comment":"Correct documents"}'), $this->user,
+        );
+
+        self::assertSame(409, $response->getStatusCode());
+        self::assertSame(['error' => $error], json_decode($response->getContent(), true));
+        self::assertFalse($this->committed);
+        self::assertSame(PurchaseStatus::ON_APPROVAL, $this->purchase->getStatus());
+        self::assertSame(PurchaseStageStatus::COMPLETED, $sourcing->getStatus());
+        self::assertSame(PurchaseStageStatus::ACTIVE, $active->getStatus());
+        self::assertSame($change === 'decided' ? PurchaseTaskDecision::APPROVED : PurchaseTaskDecision::PENDING, $task->getDecision());
+        if ($newTriage !== null) {
+            self::assertSame(PurchaseStageStatus::ACTIVE, $newTriage->getStatus());
         }
     }
 

@@ -20,6 +20,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 final class DocumentCreateFromTemplateController extends AbstractController
 {
@@ -132,6 +133,24 @@ final class DocumentCreateFromTemplateController extends AbstractController
             'fromTemplate' => $fromTemplate,
             'onlyofficeDocumentServerUrl' => $onlyofficeDocumentServerUrl,
         ]);
+    }
+
+    #[Route('/docx_editor_heartbeat/{session}', name: 'app_docx_editor_heartbeat', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function editorHeartbeat(string $session, Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $user = $this->getUser();
+        if (!$user instanceof User || !is_array($data)
+            || !$this->isCsrfTokenValid('docx_editor_heartbeat', $data['_token'] ?? null)) {
+            throw $this->createAccessDeniedException();
+        }
+        $renewed = $this->sessions->renew($session, $user);
+        if ($renewed === null) {
+            return $this->json(['message' => 'Сохранение остановлено. Сессия редактора истекла или доступ к документу изменился.'], Response::HTTP_FORBIDDEN);
+        }
+
+        return $this->json(['expires' => $renewed['expires']]);
     }
 
     #[Route('/docx_editor_content/{session}', name: 'app_docx_editor_content', methods: ['GET'])]

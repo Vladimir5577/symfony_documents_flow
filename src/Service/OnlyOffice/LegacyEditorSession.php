@@ -70,6 +70,22 @@ final class LegacyEditorSession
         return $session;
     }
 
+    public function renew(string $id, User $user): ?array
+    {
+        $session = $this->get($id);
+        if ($session === null || $session['userId'] !== $user->getId()) {
+            return null;
+        }
+        $session['expires'] = time() + 3600;
+        $item = $this->cache->getItem('legacy_editor_' . $id);
+        $item->set($session)->expiresAt(new \DateTimeImmutable('@' . $session['expires']));
+        if (!$this->cache->save($item)) {
+            return null;
+        }
+
+        return $session;
+    }
+
     public function path(string $filename): string
     {
         $directory = realpath($this->originalsDir);

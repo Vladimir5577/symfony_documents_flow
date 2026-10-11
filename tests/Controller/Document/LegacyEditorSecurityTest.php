@@ -163,6 +163,73 @@ final class LegacyEditorSecurityTest extends KernelTestCase
         $sessions->path('document.docx');
     }
 
+    public function testHeartbeatRenewsActiveSessionWithoutChangingDocumentKey(): void
+    {
+        $session = $this->sessions->create($this->user, $this->document, '', false);
+        $session['expires'] = time() + 10;
+        $item = $this->cache->getItem('legacy_editor_' . $session['id']);
+        $item->set($session)->expiresAfter(10);
+        $this->cache->save($item);
+
+        $response = $this->heartbeat($session['id'], $this->user);
+
+        self::assertSame(200, $response->getStatusCode());
+        $renewed = $this->sessions->get($session['id']);
+        self::assertGreaterThan($session['expires'], $renewed['expires']);
+        self::assertSame($session['key'], $renewed['key']);
+        self::assertSame($renewed['expires'], json_decode($response->getContent(), true)['expires']);
+    }
+
+    public static function invalidHeartbeatSessions(): iterable
+    {
+        yield 'expired session' => ['expired'];
+        yield 'deleted user' => ['deleted'];
+        yield 'document ownership revoked' => ['owner'];
+        yield 'source file replaced' => ['file'];
+        yield 'another logged-in user' => ['stranger'];
+    }
+
+    #[DataProvider('invalidHeartbeatSessions')]
+    public function testHeartbeatDoesNotRenewInvalidSession(string $reason): void
+    {
+        $session = $this->sessions->create($this->user, $this->document, '', false);
+        $other = new User();
+        (new \ReflectionProperty(User::class, 'id'))->setValue($other, 2);
+        $session['expires'] = time() + 10;
+        if ($reason === 'expired') {
+            $session['expires'] = time() - 1;
+        } elseif ($reason === 'deleted') {
+            $this->user->setDeletedAt(new \DateTimeImmutable());
+        } elseif ($reason === 'owner') {
+            $this->document->setCreatedBy($other);
+        } elseif ($reason === 'file') {
+            $this->document->setOriginalFile('replacement.docx');
+        }
+        $item = $this->cache->getItem('legacy_editor_' . $session['id']);
+        $item->set($session);
+        $this->cache->save($item);
+
+        $response = $this->heartbeat($session['id'], $reason === 'stranger' ? $other : $this->user);
+
+        self::assertSame(403, $response->getStatusCode());
+        self::assertStringContainsString('Сохранение остановлено.', json_decode($response->getContent(), true)['message']);
+        self::assertSame($session['expires'], $this->cache->getItem('legacy_editor_' . $session['id'])->get()['expires']);
+    }
+
+    public function testHeartbeatRequiresCsrf(): void
+    {
+        $session = $this->sessions->create($this->user, $this->document, '', false);
+        $this->expectException(\Symfony\Component\Security\Core\Exception\AccessDeniedException::class);
+        $this->heartbeat($session['id'], $this->user, false);
+    }
+
+    public function testHeartbeatRequiresLoggedInUser(): void
+    {
+        $session = $this->sessions->create($this->user, $this->document, '', false);
+        $this->expectException(\Symfony\Component\Security\Core\Exception\AccessDeniedException::class);
+        $this->heartbeat($session['id'], null);
+    }
+
     public function testEditorDoesNotOpenWithoutSigningSecret(): void
     {
         $controller = new DocumentCreateFromTemplateController($this->sessions, new OnlyOfficeJwt(null));
@@ -183,6 +250,23 @@ final class LegacyEditorSecurityTest extends KernelTestCase
         $controller->setContainer($container);
         $this->expectException(\Symfony\Component\Security\Core\Exception\AccessDeniedException::class);
         $controller->triggerForcesave(Request::create('/trigger_forcesave', 'POST', [], [], [], [], '{"key":"document"}'), 'http://onlyoffice:80');
+    }
+
+    private function heartbeat(string $session, ?User $user, bool $validCsrf = true): \Symfony\Component\HttpFoundation\JsonResponse
+    {
+        $controller = new DocumentCreateFromTemplateController($this->sessions, $this->jwt);
+        $tokens = $this->createMock(\Symfony\Component\Security\Csrf\CsrfTokenManagerInterface::class);
+        $tokens->method('isTokenValid')->willReturn($validCsrf);
+        $storage = new \Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage();
+        if ($user !== null) {
+            $storage->setToken(new \Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken($user, 'main', $user->getRoles()));
+        }
+        $container = new Container();
+        $container->set('security.csrf.token_manager', $tokens);
+        $container->set('security.token_storage', $storage);
+        $controller->setContainer($container);
+
+        return $controller->editorHeartbeat($session, Request::create('/docx_editor_heartbeat/' . $session, 'POST', [], [], [], [], '{"_token":"test"}'));
     }
 
     private function callback(array $session, array $data, bool $signed): \Symfony\Component\HttpFoundation\JsonResponse

@@ -145,6 +145,27 @@ final class PurchaseFileEditorController extends AbstractController
         ]);
     }
 
+    #[Route('/spa/api/purchases/{id}/files/{fileId}/editor/heartbeat', name: 'spa_api_purchases_file_editor_heartbeat', requirements: ['id' => '\d+', 'fileId' => '\d+'], methods: ['POST'])]
+    public function heartbeat(int $id, int $fileId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        $session = $this->sessionFromBody($id, $fileId, $user, $request);
+        if ($session === null) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $token = $session['token'];
+        unset($session['token']);
+        $session['expiresAt'] = time() + self::SESSION_TTL;
+        $item = $this->cache->getItem('purchase_editor_session_' . $token);
+        $item->set($session);
+        $item->expiresAfter(self::SESSION_TTL);
+        if (!$this->cache->save($item)) {
+            return $this->json(['error' => SpaApiError::PURCHASE_FILE_EDITOR_FAILED], Response::HTTP_SERVICE_UNAVAILABLE);
+        }
+
+        return $this->json(['expiresAt' => $session['expiresAt']]);
+    }
+
     #[Route('/spa/api/purchases/{id}/files/{fileId}/editor/save', name: 'spa_api_purchases_file_editor_save', requirements: ['id' => '\d+', 'fileId' => '\d+'], methods: ['POST'])]
     public function save(int $id, int $fileId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -232,8 +253,8 @@ final class PurchaseFileEditorController extends AbstractController
     #[Route('/purchase_file_editor/{id}/{fileId}/callback', name: 'purchase_file_editor_callback', requirements: ['id' => '\d+', 'fileId' => '\d+'], methods: ['POST'])]
     public function callback(int $id, int $fileId, Request $request): JsonResponse
     {
-        // До скачивания проверяем capability, но не кэшируем роли пользователя на весь запрос.
-        $key = $this->keyFromQuery('callback', $id, $fileId, $request, false);
+        // URL выбирает Document Server: его владелец не обязательно инициатор сохранения.
+        $key = $this->keyFromQuery('callback', $id, $fileId, $request);
         $data = $key !== null ? $this->callbackData($request) : null;
         // Тело — про ту же сессию, что и подписанный адрес.
         if ($data === null || ($data['key'] ?? null) !== $key) {
@@ -299,12 +320,9 @@ final class PurchaseFileEditorController extends AbstractController
             [$saveId, $committerId, $accept] = self::parseUserdata((string) ($data['userdata'] ?? ''));
             $pending = $this->cache->getItem('purchase_editor_save_' . $fileId . '_' . $saveId);
             $permission = $pending->isHit() ? $pending->get() : null;
-            $transport = $this->cachedSession((string) $request->query->get('session', ''), $id, $fileId);
-            foreach (array_unique([$committerId, $transport['userId'] ?? 0]) as $userId) {
-                $currentUser = $this->em->find(User::class, $userId);
-                if ($currentUser instanceof User) {
-                    $this->em->refresh($currentUser);
-                }
+            $currentUser = $this->em->find(User::class, $committerId);
+            if ($currentUser instanceof User) {
+                $this->em->refresh($currentUser);
             }
             $committer = is_array($permission)
                 ? $this->activeSession((string) ($permission['session'] ?? ''), $id, $fileId)
@@ -588,7 +606,7 @@ final class PurchaseFileEditorController extends AbstractController
     }
 
     /** Ключ документа из подписанного адреса файла или callback; null — подпись не сошлась. */
-    private function keyFromQuery(string $purpose, int $purchaseId, int $fileId, Request $request, bool $checkAccess = true): ?string
+    private function keyFromQuery(string $purpose, int $purchaseId, int $fileId, Request $request): ?string
     {
         $key = (string) $request->query->get('key', '');
         $token = (string) $request->query->get('token', '');
@@ -596,11 +614,15 @@ final class PurchaseFileEditorController extends AbstractController
         if ($key === '' || $token === '' || !hash_equals($this->signFile($purpose, $purchaseId, $fileId, $key, $sessionToken), $token)) {
             return null;
         }
-        // Для callback задачу проверяем по серверному разрешению committer, а не по выбранному DS соавтору.
-        $session = $checkAccess
-            ? $this->activeSession($sessionToken, $purchaseId, $fileId, $purpose !== 'callback')
-            : $this->cachedSession($sessionToken, $purchaseId, $fileId);
-        if ($session === null || $session['key'] !== $key || ($purpose === 'callback' && $session['mode'] !== 'edit')) {
+        if ($purpose === 'callback') {
+            $purchase = $this->purchases->find($purchaseId);
+            $file = $this->findFile($purchase, $fileId);
+
+            return $purchase instanceof PurchaseRequest && $file !== null && $this->documentKey($purchase, $file) === $key
+                ? $key : null;
+        }
+        $session = $this->activeSession($sessionToken, $purchaseId, $fileId);
+        if ($session === null || $session['key'] !== $key) {
             return null;
         }
 
@@ -608,7 +630,7 @@ final class PurchaseFileEditorController extends AbstractController
     }
 
     /** Серверное разрешение проверяется заново, включая отзыв роли и завершение задачи. */
-    private function activeSession(string $token, int $purchaseId, int $fileId, bool $requireActiveTask = true): ?array
+    private function activeSession(string $token, int $purchaseId, int $fileId): ?array
     {
         $session = $this->cachedSession($token, $purchaseId, $fileId);
         if ($session === null) {
@@ -628,7 +650,7 @@ final class PurchaseFileEditorController extends AbstractController
 
             return null;
         }
-        if ($requireActiveTask && $session['mode'] === 'edit'
+        if ($session['mode'] === 'edit'
             && ($session['taskId'] === null || $this->access->findMyActiveTask($purchase, $user)?->getId() !== $session['taskId'])
         ) {
             return null;

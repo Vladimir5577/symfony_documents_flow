@@ -50,6 +50,7 @@ final class PurchaseApprovalWorkflow
         private readonly PurchaseHistoryLogger $history,
         private readonly PurchaseRequestEditor $editor,
         private readonly PurchaseDocumentBinding $binding,
+        private readonly PurchaseAccess $access,
     ) {
     }
 
@@ -127,6 +128,7 @@ final class PurchaseApprovalWorkflow
     ): void {
         $stage = $this->em->wrapInTransaction(function () use ($request, $task, $actor, $comment, $itemEdits): ?PurchaseApprovalStage {
             $this->lockAndRefreshRoute($request);
+            $task = $this->findCurrentTask($request, $task->getId(), $actor);
 
             return $this->approveLockedTask($request, $task, $actor, $comment, $itemEdits);
         });
@@ -302,6 +304,7 @@ final class PurchaseApprovalWorkflow
     ): void {
         $this->em->wrapInTransaction(function () use ($request, $task, $actor, $comment): void {
             $this->lockAndRefreshRoute($request);
+            $task = $this->findCurrentTask($request, $task->getId(), $actor);
             $this->returnLockedToSourcing($request, $task, $actor, $comment);
         });
 
@@ -703,6 +706,19 @@ final class PurchaseApprovalWorkflow
         }
 
         return $stage;
+    }
+
+    private function findCurrentTask(PurchaseRequest $request, ?int $taskId, User $actor): PurchaseApprovalTask
+    {
+        $task = $taskId !== null ? $request->findTask($taskId) : null;
+        if ($task === null) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONCURRENT_UPDATE);
+        }
+        if (!$this->access->canActOn($task, $actor)) {
+            throw new PurchaseTransitionException(SpaApiError::ACCESS_DENIED);
+        }
+
+        return $task;
     }
 
     /** Та же строка блокируется при удалении вложения; перечитываем уже загруженный снимок. */
