@@ -75,7 +75,7 @@ final class LegacyEditorSecurityTest extends KernelTestCase
     public function testSignedCallbackRejectsForbiddenSourceBeforeNetwork(string $source): void
     {
         $session = $this->sessions->create($this->user, $this->document, '', false);
-        $response = $this->callback($session, ['key' => $session['key'], 'status' => 2, 'url' => $source], true);
+        $response = $this->sendCallback($session, ['key' => $session['key'], 'status' => 2, 'url' => $source], true);
         self::assertSame(400, $response->getStatusCode());
         self::assertSame('original', file_get_contents($this->directory . '/private/source.docx'));
     }
@@ -84,9 +84,9 @@ final class LegacyEditorSecurityTest extends KernelTestCase
     {
         $session = $this->sessions->create($this->user, $this->document, '', false);
         $data = ['key' => $session['key'], 'status' => 2, 'url' => 'file:///etc/passwd'];
-        self::assertSame(403, $this->callback($session, $data, false)->getStatusCode());
+        self::assertSame(403, $this->sendCallback($session, $data, false)->getStatusCode());
         $data['key'] = 'other-session';
-        self::assertSame(403, $this->callback($session, $data, true)->getStatusCode());
+        self::assertSame(403, $this->sendCallback($session, $data, true)->getStatusCode());
         self::assertSame(['.', '..', 'source.docx'], scandir($this->directory . '/private'));
     }
 
@@ -103,7 +103,8 @@ final class LegacyEditorSecurityTest extends KernelTestCase
         self::assertFalse($this->sessions->isSaved($session['id'], $saveId));
         $data = ['key' => $session['key'], 'status' => 6, 'url' => 'https://office.example/cache/files/edited.docx', 'userdata' => $saveId];
         $http = new MockHttpClient(function (string $method, string $url, array $options) use ($docx) {
-            self::assertSame('http://onlyoffice:80/cache/files/edited.docx', $url);
+            // MockHttpClient нормализует URL и убирает порт по умолчанию :80.
+            self::assertSame('http://onlyoffice/cache/files/edited.docx', $url);
             self::assertSame(0, $options['max_redirects']);
             return new MockResponse($docx);
         });
@@ -269,7 +270,7 @@ final class LegacyEditorSecurityTest extends KernelTestCase
         return $controller->editorHeartbeat($session, Request::create('/docx_editor_heartbeat/' . $session, 'POST', [], [], [], [], '{"_token":"test"}'));
     }
 
-    private function callback(array $session, array $data, bool $signed): \Symfony\Component\HttpFoundation\JsonResponse
+    private function sendCallback(array $session, array $data, bool $signed): \Symfony\Component\HttpFoundation\JsonResponse
     {
         $http = new MockHttpClient(static function () { self::fail('Forbidden callback reached the network.'); });
         $callback = new OnlyOfficeCallback($this->jwt, $http, 'https://office.example', 'http://onlyoffice:80');

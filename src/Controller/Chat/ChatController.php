@@ -21,7 +21,8 @@ final class ChatController extends AbstractController
         $topic = '/chat/user/' . $user->getId();
         $response = new JsonResponse(['topic' => $topic]);
         $response->headers->setCookie($authorization->createCookie($request, [$topic], [], [
-            'exp' => new \DateTimeImmutable('+1 hour'),
+            // Целые секунды: дробный exp в JWT понимают не все клиенты.
+            'exp' => new \DateTimeImmutable('@' . (time() + 3600)),
         ]));
         $response->headers->set('Cache-Control', 'private, no-store');
 

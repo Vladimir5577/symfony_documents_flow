@@ -55,7 +55,7 @@ final class PostImageController extends AbstractController
     }
 
     #[Route('/files/{fileId}', name: 'spa_api_post_images_file', requirements: ['fileId' => '\d+'], methods: ['GET'])]
-    public function file(int $fileId, Request $request): BinaryFileResponse
+    public function postFile(int $fileId, Request $request): BinaryFileResponse
     {
         $expiration = $this->checkSignature($request);
         $file = $this->fileRepository->find($fileId);

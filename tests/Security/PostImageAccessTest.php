@@ -52,7 +52,7 @@ final class PostImageAccessTest extends WebTestCase
         $posts->method('find')->willReturnCallback(fn ($id) => (int) $id === 7 ? $this->post : null);
         $files = $this->createMock(FileRepository::class);
         $files->method('find')->willReturnCallback(fn ($id) => (int) $id === 9 ? $this->file : null);
-        $container->set(PostImageController::class, new PostImageController(
+        $controller = new PostImageController(
             $posts,
             $files,
             $container->get(UriSigner::class),
@@ -60,7 +60,10 @@ final class PostImageAccessTest extends WebTestCase
             $filesystem,
             $this->directory . '/uploads',
             $this->directory . '/thumbnails',
-        ));
+        );
+        // Ручной экземпляр: контейнер AbstractController обычно ставит DI.
+        $controller->setContainer($container);
+        $container->set(PostImageController::class, $controller);
     }
 
     protected function tearDown(): void

@@ -257,7 +257,7 @@ final class PurchaseEditorSecurityTest extends KernelTestCase
     public function testCallbackWithoutServerSavePermissionCannotCommit(): void
     {
         $opened = $this->open();
-        self::assertSame(['error' => 0], $this->callback($opened));
+        self::assertSame(['error' => 0], $this->sendCallback($opened));
         self::assertSame(0, $this->reads);
     }
 
@@ -273,7 +273,7 @@ final class PurchaseEditorSecurityTest extends KernelTestCase
         $this->cache->save($item);
         // URL соавтора допустим, даже когда он завершил свою задачу; право записи — у committer.
         $otherTask->setDecision(PurchaseTaskDecision::APPROVED);
-        self::assertSame(['error' => 1], $this->callback($receiver));
+        self::assertSame(['error' => 1], $this->sendCallback($receiver));
         $this->task->setDecision(PurchaseTaskDecision::APPROVED);
         $this->em->expects(self::once())->method('wrapInTransaction')->willReturnCallback(static fn (callable $callback) => $callback());
         $this->commitDownloaded($receiver);
@@ -294,7 +294,7 @@ final class PurchaseEditorSecurityTest extends KernelTestCase
         // Чтение A отзывает и удаляет его серверную сессию. Callback URL всё ещё выбирает DS.
         self::assertSame(404, $this->controller->content(10, 40, $this->contentRequest($receiver))->getStatusCode());
         self::assertFalse($this->cache->hasItem('purchase_editor_session_' . $receiver['token']));
-        self::assertSame(['error' => 1], $this->callback($receiver));
+        self::assertSame(['error' => 1], $this->sendCallback($receiver));
 
         $this->allowWrite = true;
         $this->file->setType(PurchaseFileType::OTHER);
@@ -322,10 +322,10 @@ final class PurchaseEditorSecurityTest extends KernelTestCase
         $this->cache->save($item);
         $tampered = $opened;
         $tampered['config']['editorConfig']['callbackUrl'] .= '&token=invalid';
-        self::assertSame(['error' => 0], $this->callback($tampered));
-        self::assertSame(['error' => 0], $this->callback($opened, false));
+        self::assertSame(['error' => 0], $this->sendCallback($tampered));
+        self::assertSame(['error' => 0], $this->sendCallback($opened, false));
         $this->file->nextEditorRevision();
-        self::assertSame(['error' => 0], $this->callback($opened));
+        self::assertSame(['error' => 0], $this->sendCallback($opened));
         self::assertSame(0, $this->writes);
     }
 
@@ -427,7 +427,7 @@ final class PurchaseEditorSecurityTest extends KernelTestCase
         );
     }
 
-    private function callback(array $opened, bool $signed = true): array
+    private function sendCallback(array $opened, bool $signed = true): array
     {
         $data = ['status' => 6, 'key' => $opened['config']['document']['key'], 'userdata' => 'commit.0123456789abcdef.1', 'url' => 'file:///denied'];
         if ($signed) {

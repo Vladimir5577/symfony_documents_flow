@@ -82,6 +82,7 @@ final class StructureHrAccessTest extends KernelTestCase
         ];
 
         $request = Request::create($path, $method, ['parent_id' => 1]);
+        $container->get('router')->getContext()->fromRequest($request); // матчинг по методу запроса, а не GET по умолчанию
         $request->attributes->add($container->get('router')->matchRequest($request));
         [$class, $action] = explode('::', $request->attributes->get('_controller'));
         $event = new ControllerArgumentsEvent(
