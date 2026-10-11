@@ -158,6 +158,59 @@ final class LegacyDocumentAccessTest extends KernelTestCase
         }
     }
 
+    public function testOwnDestinationCannotCopyForeignDocxByFilename(): void
+    {
+        $user = $this->login(2);
+        $destination = $this->document($user, $user, null, false);
+        $source = $this->document($this->user(1), $user, null, true)->setOriginalFile('foreign.docx');
+        (new \ReflectionProperty(Document::class, 'id'))->setValue($source, 11);
+        self::assertTrue($this->accessService->canEditOutgoingDocument($destination, $user));
+        self::assertFalse($this->accessService->canViewDocument($source, $user));
+
+        $repository = $this->createMock(DocumentRepository::class);
+        $repository->expects(self::once())->method('find')->with(10)->willReturn($destination);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->expects(self::never())->method('flush');
+        $uploadService = $this->createMock(FileUploadService::class);
+        $uploadService->expects(self::never())->method('generateFileName');
+        $uploadService->expects(self::never())->method('deleteUpdatedFile');
+        $converter = $this->createMock(DocxToPdfConvertorService::class);
+        $converter->expects(self::never())->method('convertDocxToPdf');
+        $controller = new DocumentCreateFromTemplateController(
+            self::getContainer()->get(\App\Service\OnlyOffice\LegacyEditorSession::class),
+            self::getContainer()->get(\App\Service\OnlyOffice\OnlyOfficeJwt::class),
+        );
+        $controller->setContainer($this->controllerContainer);
+        $tokens = $this->controllerContainer->get('security.csrf.token_manager');
+        $request = Request::create('/save_file_from_template_to_document', 'POST', [
+            'document_id' => $destination->getId(),
+            'from_template' => '1',
+            'filename' => $source->getOriginalFile(),
+            '_token' => $tokens->getToken('save_file_to_document')->getValue(),
+        ]);
+        $sourcePath = $this->directory . '/foreign.docx';
+        file_put_contents($sourcePath, 'confidential document contents');
+        $sourceHash = hash_file('sha256', $sourcePath);
+        $destinationHash = hash_file('sha256', $this->directory . '/document.pdf');
+        $files = scandir($this->directory);
+
+        try {
+            $controller->saveFileFromTemplateToDocument(
+                $request, $repository, $entityManager, $uploadService, $converter,
+                $this->accessService, $this->directory,
+            );
+            self::fail('A foreign filename without an editor session must deny access.');
+        } catch (AccessDeniedException) {
+            self::assertSame($sourceHash, hash_file('sha256', $sourcePath));
+            self::assertSame($destinationHash, hash_file('sha256', $this->directory . '/document.pdf'));
+            self::assertSame('document.docx', $destination->getOriginalFile());
+            self::assertSame('document.pdf', $destination->getUpdatedFile());
+            self::assertSame($files, scandir($this->directory));
+        } finally {
+            unlink($sourcePath);
+        }
+    }
+
     public static function allowedReaders(): iterable
     {
         yield 'author draft' => [1, false, false];

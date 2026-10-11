@@ -27,6 +27,7 @@ use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
+use Twig\Environment;
 
 /** Контроллер и security берутся из ядра; репозитории не обращаются к БД. */
 final class ProfileAccessTest extends KernelTestCase
@@ -71,6 +72,44 @@ final class ProfileAccessTest extends KernelTestCase
             'editUserPhoto' => $this->controller->editUserPhoto(2, $this->users),
             'updateUserPhoto' => $this->controller->updateUserPhoto(2, $request, $this->users, $this->em),
         };
+    }
+
+    public static function profileViewers(): iterable
+    {
+        foreach ([false, true] as $hasPhoto) {
+            yield 'self, photo=' . (int) $hasPhoto => [1, false, $hasPhoto, true];
+            yield 'admin, photo=' . (int) $hasPhoto => [2, true, $hasPhoto, true];
+            yield 'manager viewing another user, photo=' . (int) $hasPhoto => [2, false, $hasPhoto, false];
+        }
+    }
+
+    #[DataProvider('profileViewers')]
+    public function testProfileEditButtonsAreVisibleOnlyToSelfOrAdmin(int $viewerId, bool $admin, bool $hasPhoto, bool $canEdit): void
+    {
+        $viewer = $this->user($viewerId, $admin);
+        if (!$admin && $viewerId !== 1) {
+            $viewer->addRoleEntity(new Role('ROLE_MANAGER'));
+        }
+        $this->login($viewer);
+        $this->request([]);
+        $target = $this->user(1);
+        if ($hasPhoto) {
+            $target->setAvatarName('avatar.jpg');
+        }
+        $twig = self::getContainer()->get(Environment::class);
+        $context = ['user' => $target, 'worker' => null, 'avatar_preview_url' => '/avatar.jpg'];
+        $modal = $twig->render('user/partials/_modal_view_user_content.html.twig', $context);
+        $page = $twig->load('user/view_user.html.twig')->renderBlock('main', $context);
+        $router = self::getContainer()->get('router');
+        $editLink = 'href="' . $router->generate('app_edit_user', ['id' => 1]) . '"';
+        $photoLink = 'href="' . $router->generate('app_edit_user_photo', ['id' => 1]) . '"';
+
+        self::assertSame($canEdit, str_contains($modal, $editLink));
+        self::assertSame($canEdit, str_contains($page, $editLink));
+        self::assertSame($canEdit, str_contains($page, $photoLink));
+        self::assertSame($admin && $viewerId !== 1, str_contains($page, '<form id="delete-user-form"'));
+        self::assertStringContainsString('href="' . $router->generate('app_view_user', ['id' => 1]) . '"', $modal);
+        self::assertSame($hasPhoto, str_contains($page, 'data-image-url="'));
     }
 
     public static function invalidCurrentPasswords(): iterable

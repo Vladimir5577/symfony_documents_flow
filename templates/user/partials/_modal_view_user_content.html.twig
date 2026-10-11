@@ -92,8 +92,10 @@
         <a href="{{ path('app_view_user', {id: user.id}) }}" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-box-arrow-up-right me-1"></i>Открыть страницу
         </a>
+        {% if is_granted('ROLE_ADMIN') or app.user.id == user.id %}
         <a href="{{ path('app_edit_user', {id: user.id}) }}" class="btn btn-primary btn-sm">
             <i class="bi bi-pencil me-1"></i>Редактировать
         </a>
+        {% endif %}
     </div>
 </div>
