@@ -11,13 +11,10 @@ liip_imagine:
         default:
             filesystem:
                 data_root: '%kernel.project_dir%/public'
-        post_uploads:
-            filesystem:
-                data_root: '%private_upload_dir_posts%'
     data_loader: default
     filter_sets:
         post_image_preview:
-            data_loader: post_uploads
+            # Private source files are passed directly to FilterManager by PostImageController.
             quality: 85
             filters:
                 thumbnail:

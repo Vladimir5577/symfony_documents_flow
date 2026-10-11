@@ -27,6 +27,7 @@ use App\Service\User\UserAvatarUrlGenerator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\UriSigner;
 use Symfony\Component\HttpKernel\Event\ControllerArgumentsEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -86,7 +87,11 @@ final class PostChatAccessTest extends KernelTestCase
         $em->expects(self::never())->method('persist');
         $em->expects(self::never())->method('flush');
         $urls = $this->createMock(UrlGeneratorInterface::class);
-        $formatter = new PostResponseFormatter($urls, new PostImagePreviewUrlGenerator($urls));
+        $formatter = new PostResponseFormatter($urls, new PostImagePreviewUrlGenerator(
+            $urls,
+            self::getContainer()->get(UriSigner::class),
+            self::getContainer()->get('security.authorization_checker'),
+        ));
         $controller = new PostController($posts, $comments, $statuses, $files, $formatter, $em, '/unused');
         $controller->setContainer(self::getContainer());
 

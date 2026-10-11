@@ -16,6 +16,7 @@
         hasMore: true,
         subscriptionTimer: null,
         eventSourceUser: null,
+        lastEventId: '',
     };
 
     // DOM refs
@@ -839,8 +840,10 @@
             .then(function (subscription) {
                 var url = new URL(MERCURE_URL, window.location.href);
                 url.searchParams.append('topic', subscription.topic);
+                if (state.lastEventId) url.searchParams.set('lastEventID', state.lastEventId);
                 state.eventSourceUser = new EventSource(url, { withCredentials: true });
                 state.eventSourceUser.onmessage = function (e) {
+                    state.lastEventId = e.lastEventId;
                     try {
                         var data = JSON.parse(e.data);
                         if (data.type === 'room_updated') {

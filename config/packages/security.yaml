@@ -23,6 +23,10 @@ security:
         internal_api:
             pattern: ^/api/internal
             security: false
+        # Подписанные картинки для <img>: подпись и срок проверяет контроллер.
+        post_images:
+            pattern: ^/spa/api/post-images/
+            security: false
         refresh_jwt:
             pattern: ^/spa/api/(token/refresh|logout)
             stateless: true
