@@ -2,8 +2,12 @@
 
 namespace App\Controller\Document;
 
+use App\Entity\Document\Document;
+use App\Entity\User\User;
+use App\Enum\Document\DocumentRecipientRole;
 use App\Repository\Document\DocumentRepository;
 use App\Service\Document\FileUploadService;
+use App\Service\SpaApi\Documents\DocumentAccessService;
 use setasign\Fpdi\Tcpdf\Fpdi;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -14,6 +18,26 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 final class DocumentSignController extends AbstractController
 {
+    public function __construct(private readonly DocumentAccessService $accessService)
+    {
+    }
+
+    private function denyUnlessCanSign(Document $document): void
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User || !$this->accessService->canViewDocument($document, $user)) {
+            throw $this->createAccessDeniedException();
+        }
+
+        foreach ($document->getUserRecipients() as $recipient) {
+            if ($recipient->getUser()?->getId() === $user->getId()
+                && $recipient->getRole() === DocumentRecipientRole::EXECUTOR) {
+                return;
+            }
+        }
+
+        throw $this->createAccessDeniedException();
+    }
 
     #[Route('/document/sign', name: 'app_document_sign')]
     public function index(): Response
@@ -227,6 +251,9 @@ final class DocumentSignController extends AbstractController
         $signDate = (new \DateTime())->format('d.m.Y');
 
         $document = $documentRepository->findOneWithRelations($data['id']);
+        if ($document) {
+            $this->denyUnlessCanSign($document);
+        }
         if (!$document?->getOriginalFile()) {
             throw $this->createNotFoundException('У документа нет файла для подписания.');
         }
@@ -350,6 +377,9 @@ final class DocumentSignController extends AbstractController
     ): Response
     {
         $document = $documentRepository->findOneWithRelations($id);
+        if ($document) {
+            $this->denyUnlessCanSign($document);
+        }
         if (!$document?->getOriginalFile()) {
             throw $this->createNotFoundException('У документа нет файла для подписания.');
         }

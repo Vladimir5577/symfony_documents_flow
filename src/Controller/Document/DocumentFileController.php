@@ -4,8 +4,10 @@ namespace App\Controller\Document;
 
 use App\Entity\Document\Document;
 use App\Entity\Document\File;
+use App\Entity\User\User;
 use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\FileRepository;
+use App\Service\SpaApi\Documents\DocumentAccessService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -16,12 +18,21 @@ use Symfony\Component\Routing\Attribute\Route;
 
 final class DocumentFileController extends AbstractController
 {
+    public function __construct(private readonly DocumentAccessService $accessService)
+    {
+    }
+
     #[Route('/document_upload_files_action/{id}', name: 'document_upload_files_action', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function new(Request $request, int $id, DocumentRepository $documentRepository, \Doctrine\ORM\EntityManagerInterface $entityManager): Response
     {
         $document = $documentRepository->find($id);
         if (!$document) {
             throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        $user = $this->getUser();
+        if (!$user instanceof User || !$this->accessService->canEditOutgoingDocument($document, $user)) {
+            throw $this->createAccessDeniedException();
         }
 
         $baseUploadDir = $this->getParameter('private_upload_dir_documents_originals');
@@ -109,6 +120,12 @@ final class DocumentFileController extends AbstractController
             throw $this->createNotFoundException('Файл не найден.');
         }
 
+        $document = $fileEntity->getDocument();
+        $user = $this->getUser();
+        if (!$document || !$user instanceof User || !$this->accessService->canViewDocument($document, $user)) {
+            throw $this->createAccessDeniedException();
+        }
+
         $filePath = $fileEntity->getFilePath();
         if (!$filePath) {
             throw $this->createNotFoundException('Файл не прикреплён.');
@@ -156,7 +173,13 @@ final class DocumentFileController extends AbstractController
             throw $this->createNotFoundException('Файл не найден.');
         }
 
-        $documentId = $fileEntity->getDocument()?->getId();
+        $document = $fileEntity->getDocument();
+        $user = $this->getUser();
+        if (!$document || !$user instanceof User || !$this->accessService->canEditOutgoingDocument($document, $user)) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $documentId = $document->getId();
 
         $csrfToken = 'document_file_delete_'.$id;
         if (!$this->isCsrfTokenValid($csrfToken, $request->request->get('_token'))) {

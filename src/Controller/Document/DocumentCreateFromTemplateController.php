@@ -2,9 +2,11 @@
 
 namespace App\Controller\Document;
 
+use App\Entity\User\User;
 use App\Repository\Document\DocumentRepository;
 use App\Service\Document\Convertor\DocxToPdfConvertorService;
 use App\Service\Document\FileUploadService;
+use App\Service\SpaApi\Documents\DocumentAccessService;
 use Doctrine\ORM\EntityManagerInterface;
 use Mpdf\Mpdf;
 use Mpdf\Output\Destination;
@@ -118,6 +120,7 @@ final class DocumentCreateFromTemplateController extends AbstractController
         EntityManagerInterface $entityManager,
         FileUploadService $fileUploadService,
         DocxToPdfConvertorService $docxToPdfConvertorService,
+        DocumentAccessService $accessService,
         #[Autowire('%private_upload_dir_documents_originals%')] string $originalsDir,
     ): Response {
         $fromTemplate = $request->request->get('from_template');
@@ -137,6 +140,11 @@ final class DocumentCreateFromTemplateController extends AbstractController
         if (!$document) {
             $this->addFlash('error', 'Документ не найден.');
             return $this->redirectToRoute('app_outgoing_documents');
+        }
+
+        $user = $this->getUser();
+        if (!$user instanceof User || !$accessService->canEditOutgoingDocument($document, $user)) {
+            throw $this->createAccessDeniedException();
         }
 
         $requestedFilename = $request->request->get('filename');

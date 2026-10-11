@@ -417,6 +417,7 @@ final class UserController extends AbstractController
         RoleRepository $roleRepository,
         WorkerRepository $workerRepository
     ): Response {
+        $this->denyAccessUnlessCanEditUser($id);
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
 
@@ -471,6 +472,7 @@ final class UserController extends AbstractController
     #[Route('/user/{id}/edit-photo', name: 'app_edit_user_photo', methods: ['GET'], requirements: ['id' => '\d+'])]
     public function editUserPhoto(int $id, UserRepository $userRepository): Response
     {
+        $this->denyAccessUnlessCanEditUser($id);
         $user = $userRepository->find($id);
         if (!$user) {
             throw $this->createNotFoundException('Пользователь не найден');
@@ -491,6 +493,7 @@ final class UserController extends AbstractController
     #[Route('/user/{id}/update-photo', name: 'app_update_user_photo', methods: ['POST'], requirements: ['id' => '\d+'])]
     public function updateUserPhoto(int $id, Request $request, UserRepository $userRepository, EntityManagerInterface $entityManager): Response
     {
+        $this->denyAccessUnlessCanEditUser($id);
         if (!$this->isCsrfTokenValid('user_photo_' . $id, $request->request->get('_csrf_token', ''))) {
             $this->addFlash('error', 'Неверный CSRF токен.');
             return $this->redirectToRoute('app_edit_user_photo', ['id' => $id]);
@@ -587,6 +590,8 @@ final class UserController extends AbstractController
             return $this->redirectToRoute('app_all_users');
         }
 
+        $this->denyAccessUnlessCanEditUser($userId);
+
         // Загружаем пользователя со всеми связанными данными
         // Фильтр soft delete автоматически исключает удаленных пользователей
         $user = $userRepository->createQueryBuilder('u')
@@ -602,6 +607,20 @@ final class UserController extends AbstractController
         if (!$user) {
             $this->addFlash('error', 'Пользователь не найден.');
             return $this->redirectToRoute('app_all_users');
+        }
+
+        $plainPassword = trim((string) ($formData['plain_password'] ?? ''));
+        $confirmPassword = trim((string) ($formData['confirm_password'] ?? ''));
+        if ($plainPassword !== '') {
+            if ($currentUser instanceof User && $currentUser->getId() === $user->getId()
+                && !$passwordHasher->isPasswordValid($user, (string) ($formData['current_password'] ?? ''))) {
+                $this->addFlash('error', 'Неверный текущий пароль.');
+                return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
+            }
+            if ($plainPassword !== $confirmPassword) {
+                $this->addFlash('error', 'Пароли не совпадают.');
+                return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
+            }
         }
 
         // Только админ может редактировать ФИО.
@@ -646,13 +665,7 @@ final class UserController extends AbstractController
         }
 
         // Обновляем пароль, если он указан
-        $plainPassword = trim((string) ($formData['plain_password'] ?? ''));
-        $confirmPassword = trim((string) ($formData['confirm_password'] ?? ''));
         if ($plainPassword !== '') {
-            if ($plainPassword !== $confirmPassword) {
-                $this->addFlash('error', 'Пароли не совпадают.');
-                return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
-            }
             $user->setPassword($passwordHasher->hashPassword($user, $plainPassword));
         }
 
@@ -789,6 +802,14 @@ final class UserController extends AbstractController
 
         $this->addFlash('success', 'Пользователь удалён.');
         return $this->redirectToRoute('app_all_users');
+    }
+
+    private function denyAccessUnlessCanEditUser(int $userId): void
+    {
+        $currentUser = $this->getUser();
+        if (!$currentUser instanceof User || $currentUser->getId() !== $userId) {
+            $this->denyAccessUnlessGranted('ROLE_ADMIN');
+        }
     }
 
     /** @return int[] */
