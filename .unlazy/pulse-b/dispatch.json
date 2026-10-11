@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "waves": {
+    "ready-1": {
+      "leaves": [
+        "leaf-access",
+        "leaf-analytics",
+        "leaf-social"
+      ],
+      "state": "complete",
+      "openedAt": "2026-10-11T13:24:25.800Z",
+      "started": {
+        "leaf-access": {
+          "handle": "/root/access",
+          "at": "2026-10-11T13:25:09.852Z"
+        },
+        "leaf-analytics": {
+          "handle": "/root/analytics",
+          "at": "2026-10-11T13:25:09.944Z"
+        },
+        "leaf-social": {
+          "handle": "/root/social",
+          "at": "2026-10-11T13:25:10.031Z"
+        }
+      },
+      "returned": {
+        "leaf-access": {
+          "at": "2026-10-11T13:40:12.838Z"
+        },
+        "leaf-analytics": {
+          "at": "2026-10-11T13:40:12.919Z"
+        },
+        "leaf-social": {
+          "at": "2026-10-11T13:40:13.000Z"
+        }
+      },
+      "sealedAt": "2026-10-11T13:25:10.119Z",
+      "completedAt": "2026-10-11T13:40:13.000Z"
+    }
+  }
+}

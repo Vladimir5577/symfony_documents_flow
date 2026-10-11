@@ -12,6 +12,7 @@ use App\Entity\User\User;
 use App\Enum\Analytics\AnalyticsReportStatus;
 use App\Repository\Analytics\AnalyticsBoardRepository;
 use App\Repository\Analytics\AnalyticsReportRepository;
+use App\Security\AnalyticsReportAccess;
 use App\Service\Analytics\CreateReportService;
 use App\Service\Analytics\FillReportValueService;
 use App\Service\Analytics\ApproveReportService;
@@ -33,6 +34,10 @@ use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 final class AnalyticsReportController extends AbstractController
 {
+    public function __construct(private readonly AnalyticsReportAccess $reportAccess)
+    {
+    }
+
     /**
      * Собрать id текущей организации и всех её родителей (вверх по дереву).
      *
@@ -68,24 +73,6 @@ final class AnalyticsReportController extends AbstractController
     private function hasAnalyticsFullAccess(): bool
     {
         return $this->isGranted('ROLE_ADMIN') || $this->isGranted('ROLE_ANALYTIC');
-    }
-
-    /**
-     * Доступ к отчёту по роли: админ/аналитик — любой отчёт,
-     * иначе роль доски (belongsToRole) должна входить в роли пользователя.
-     */
-    private function canAccessReport(User $user, AnalyticsReport $report): bool
-    {
-        if ($this->hasAnalyticsFullAccess()) {
-            return true;
-        }
-
-        $boardRoleId = $report->getBoard()?->getBelongsToRole()?->getId();
-        if ($boardRoleId === null) {
-            return false;
-        }
-
-        return in_array($boardRoleId, $this->resolveUserRoleIds($user), true);
     }
 
     /**
@@ -650,7 +637,7 @@ final class AnalyticsReportController extends AbstractController
             throw $this->createNotFoundException('Отчёт не найден.');
         }
 
-        if (!$this->canAccessReport($user, $report)) {
+        if (!$this->reportAccess->canAccessReport($report)) {
             throw $this->createNotFoundException('Отчёт не найден.');
         }
 
@@ -681,7 +668,7 @@ final class AnalyticsReportController extends AbstractController
             throw $this->createNotFoundException('Отчёт не найден.');
         }
 
-        if (!$this->canAccessReport($user, $report)) {
+        if (!$this->reportAccess->canAccessReport($report)) {
             throw $this->createNotFoundException('Отчёт не найден.');
         }
 

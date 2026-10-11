@@ -3,6 +3,7 @@
 namespace App\Repository\Analytics;
 
 use App\Entity\Analytics\AnalyticsReport;
+use App\Security\AnalyticsReportAccess;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -13,7 +14,7 @@ class AnalyticsReportRepository extends ServiceEntityRepository
 {
     private const MAX_AVAILABLE_WEEKS = 100;
 
-    public function __construct(ManagerRegistry $registry)
+    public function __construct(ManagerRegistry $registry, private readonly AnalyticsReportAccess $reportAccess)
     {
         parent::__construct($registry, AnalyticsReport::class);
     }
@@ -74,7 +75,8 @@ class AnalyticsReportRepository extends ServiceEntityRepository
         int $page,
         int $perPage,
     ): array {
-        if ($organizationIds === []) {
+        $roleIds = $this->reportAccess->getAllowedRoleIds();
+        if ($organizationIds === [] || $roleIds === []) {
             return ['items' => [], 'total' => 0];
         }
 
@@ -85,6 +87,12 @@ class AnalyticsReportRepository extends ServiceEntityRepository
                   AND r.status = 'confirmed'
                   AND r.organization_id IN ($orgPlaceholders)";
         $params = array_merge([$category], array_map('intval', $organizationIds));
+
+        if ($roleIds !== null) {
+            $rolePlaceholders = implode(',', array_fill(0, count($roleIds), '?'));
+            $where .= " AND b.belongs_to_role_id IN ($rolePlaceholders)";
+            $params = array_merge($params, $roleIds);
+        }
 
         if ($from !== null) {
             $where .= ' AND p.start_date >= ?';
@@ -173,7 +181,8 @@ class AnalyticsReportRepository extends ServiceEntityRepository
         ?string $from,
         ?string $to,
     ): array {
-        if ($organizationIds === []) {
+        $roleIds = $this->reportAccess->getAllowedRoleIds();
+        if ($organizationIds === [] || $roleIds === []) {
             return [];
         }
 
@@ -184,6 +193,12 @@ class AnalyticsReportRepository extends ServiceEntityRepository
                   AND r.status = 'confirmed'
                   AND r.organization_id IN ($orgPlaceholders)";
         $params = array_merge([$category], array_map('intval', $organizationIds));
+
+        if ($roleIds !== null) {
+            $rolePlaceholders = implode(',', array_fill(0, count($roleIds), '?'));
+            $where .= " AND b.belongs_to_role_id IN ($rolePlaceholders)";
+            $params = array_merge($params, $roleIds);
+        }
 
         if ($from !== null) {
             $where .= ' AND p.start_date >= ?';

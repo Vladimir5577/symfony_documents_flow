@@ -13,13 +13,15 @@ use App\Repository\Post\FileRepository;
 use App\Repository\Post\PostRepository;
 use App\Repository\Post\PostUserCommentRepository;
 use App\Repository\Post\PostUserStatusRepository;
+use App\Security\Voter\PostVoter;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
@@ -112,6 +114,7 @@ final class PostController extends AbstractController
     }
 
     #[Route('/posts/{id}/comment', name: 'app_post_add_comment', methods: ['POST'])]
+    #[IsGranted(PostVoter::VIEW, subject: 'post')]
     public function addComment(
         Post                       $post,
         Request                    $request,
@@ -146,6 +149,7 @@ final class PostController extends AbstractController
     }
 
     #[Route('/posts/{id}/comments', name: 'app_post_load_comments', methods: ['GET'])]
+    #[IsGranted(PostVoter::VIEW, subject: 'post')]
     public function loadComments(
         Post                       $post,
         Request                    $request,
@@ -168,6 +172,7 @@ final class PostController extends AbstractController
     }
 
     #[Route('/posts/{id}/acknowledge', name: 'app_post_acknowledge', methods: ['POST'])]
+    #[IsGranted(PostVoter::VIEW, subject: 'post')]
     public function acknowledgePost(
         Post                       $post,
         EntityManagerInterface     $entityManager,
@@ -207,6 +212,8 @@ final class PostController extends AbstractController
             throw $this->createNotFoundException('Файл не найден.');
         }
 
+        $this->denyAccessUnlessGranted(PostVoter::VIEW, $fileEntity->getPost());
+
         $filePath = $fileEntity->getFilePath();
         if (!$filePath) {
             throw $this->createNotFoundException('Файл не прикреплён.');
@@ -224,22 +231,34 @@ final class PostController extends AbstractController
 
         $filename = $fileEntity->getTitle()
             ? $fileEntity->getTitle() . '.' . pathinfo($filePath, PATHINFO_EXTENSION)
-            : $filePath;
+            : basename($filePath);
 
-        $response = new StreamedResponse(static function () use ($absolutePath) {
-            $handle = fopen($absolutePath, 'rb');
-            if ($handle === false) {
-                return;
-            }
-            while (!feof($handle)) {
-                echo fread($handle, 8192);
-                flush();
-            }
-            fclose($handle);
-        });
+        $response = new BinaryFileResponse($absolutePath);
+        $response->headers->set('Cache-Control', 'private, no-store');
+        $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT, $filename);
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
 
-        $response->headers->set('Content-Type', mime_content_type($absolutePath) ?: 'application/octet-stream');
-        $response->headers->set('Content-Disposition', 'attachment; filename="' . addslashes($filename) . '"');
+        return $response;
+    }
+
+    #[Route('/posts/{id}/cover', name: 'app_post_cover', requirements: ['id' => '\d+'], methods: ['GET'])]
+    #[IsGranted(PostVoter::VIEW, subject: 'post')]
+    public function cover(Post $post): Response
+    {
+        $name = $post->getCoverImageName();
+        if (!$name) {
+            throw $this->createNotFoundException('Файл не найден.');
+        }
+
+        $path = $this->getParameter('private_upload_dir_posts') . '/' . $post->getId() . '/' . $name;
+        if (!is_file($path)) {
+            throw $this->createNotFoundException('Файл не найден на диске.');
+        }
+
+        $response = new BinaryFileResponse($path);
+        $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_INLINE, basename($name));
+        $response->headers->set('Cache-Control', 'private, no-store');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
 
         return $response;
     }

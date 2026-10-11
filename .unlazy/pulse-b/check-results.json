@@ -1,0 +1,222 @@
+﻿[
+    {
+        "value":  [
+                      {
+                          "command":  "php -l src/Controller/Organization/OrganizationController.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Controller/ApiExternal/HR/VacancyController.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Controller/ApiExternal/HR/VacancyApplicationController.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Controller/ApiExternal/HR/VacancyApplicationResumeProxyController.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l tests/Security/StructureHrAccessTest.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Security/AnalyticsReportAccess.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Controller/Analytics/AnalyticsReportController.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Repository/Analytics/AnalyticsReportRepository.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Repository/Analytics/AnalyticsReportValueRepository.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l tests/Security/AnalyticsAccessTest.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Controller/Post/PostController.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Controller/SpaApi/Post/PostController.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Controller/Chat/ChatController.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Service/Chat/ChatMessageService.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Security/Voter/PostVoter.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Service/SpaApi/Post/PostResponseFormatter.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/Service/SpaApi/Post/PostImagePreviewUrlGenerator.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l tests/Security/PostChatAccessTest.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l src/EventSubscriber/PrivateFileResponseSubscriber.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php -l tests/Security/PrivateFileResponseTest.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php bin/phpunit tests/Security/StructureHrAccessTest.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php bin/phpunit tests/Security/AnalyticsAccessTest.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php bin/phpunit tests/Security/PostChatAccessTest.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php bin/phpunit tests/Security/PrivateFileResponseTest.php",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php bin/console lint:container",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "php bin/console lint:twig",
+                          "exitCode":  1,
+                          "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+                          "errorId":  "CommandNotFoundException",
+                          "status":  "not_started"
+                      },
+                      {
+                          "command":  "node --check public/front_end/assets/static/js/chat.js",
+                          "exitCode":  0,
+                          "output":  "",
+                          "status":  "ran"
+                      }
+                  ],
+        "Count":  27
+    },
+    {
+        "command":  "php -l tests/Security/PrivateFileResponseTest.php",
+        "exitCode":  1,
+        "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+        "errorId":  "CommandNotFoundException",
+        "status":  "not_started"
+    },
+    {
+        "command":  "php -l src/Security/Voter/PostVoter.php",
+        "exitCode":  1,
+        "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+        "errorId":  "CommandNotFoundException",
+        "status":  "not_started"
+    },
+    {
+        "command":  "php bin/phpunit tests/Security/PrivateFileResponseTest.php",
+        "exitCode":  1,
+        "output":  "Имя \"php\" не распознано как имя командлета, функции, файла сценария или выполняемой программы. Проверьте правильность написания имени, а также наличие и правильность пути, после чего повторите попытку.",
+        "errorId":  "CommandNotFoundException",
+        "status":  "not_started"
+    },
+    {
+        "command":  "node .unlazy/pulse-b/check-chat.cjs",
+        "exitCode":  0,
+        "output":  "PASS: subscriber credentials, personal topic, room isolation, JWT refresh and retry\r\n",
+        "status":  "ran"
+    }
+]

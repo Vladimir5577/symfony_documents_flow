@@ -192,7 +192,7 @@ final class PostResponseFormatter
             return null;
         }
 
-        return '/uploads/posts/' . $post->getId() . '/' . $name;
+        return $this->urlGenerator->generate('spa_api_posts_cover', ['id' => $post->getId()]);
     }
 
     private function formatUserFullName(User $user): string
