@@ -136,7 +136,8 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         //
         // Через pr.id IN (подзапрос по задачам), а не JOIN этапов и задач:
         // JOIN размножал строки, и COUNT(DISTINCT) на каждой странице перебирал
-        // все задачи модуля (замер 13.10 на 100k заявок: 856 мс → 260 мс у роли LEGAL).
+        // все задачи модуля (замер 13.10 на 100k заявок, SQL на запрос списка:
+        // юрист 391 → 276 мс, сотрудник без ролей 672 → 58 мс).
         if ($approverUserId !== null) {
             $participant = [$this->requestIdsOfTasks('pt1', 'pt1.assigneeUser = :user')];
             $qb->setParameter('user', $approverUserId);

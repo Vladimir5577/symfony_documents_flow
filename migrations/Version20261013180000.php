@@ -30,7 +30,10 @@ final class Version20261013180000 extends AbstractMigration
     public function up(Schema $schema): void
     {
         $this->addSql('CREATE EXTENSION IF NOT EXISTS pg_trgm');
-        $this->addSql('CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_purchase_request_title_trgm ON purchase_request USING gin (LOWER(title) gin_trgm_ops)');
+        // Упавший CONCURRENTLY оставляет индекс INVALID: IF NOT EXISTS молча его
+        // пропустил бы, и поиск остался бы без индекса. Поэтому сначала сносим.
+        $this->addSql('DROP INDEX CONCURRENTLY IF EXISTS idx_purchase_request_title_trgm');
+        $this->addSql('CREATE INDEX CONCURRENTLY idx_purchase_request_title_trgm ON purchase_request USING gin (LOWER(title) gin_trgm_ops)');
     }
 
     public function down(Schema $schema): void
