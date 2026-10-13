@@ -5,15 +5,14 @@ declare(strict_types=1);
 namespace App\Service\OnlyOffice;
 
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 
 /**
  * Подпись обмена с OnlyOffice Document Server: HS256 на общем секрете
  * (JWT_SECRET сервера документов = ONLYOFFICE_JWT_SECRET здесь).
  *
- * Пока секрет не задан, подписи нет — так Document Server работает сейчас
- * (JWT_ENABLED=false). Для общего документа она нужна всерьёз: без неё любой,
- * кому договор открыт на просмотр, может поправить конфиг в браузере, войти в
- * сессию правщиком под чужим отделом, и его правки сохранятся вместе со всеми.
+ * Без общего секрета редактор недоступен: права в конфигурации должны быть подписаны.
  *
  * Своя реализация вместо библиотеки: lcobucci/jwt требует ключ от 256 бит, а
  * секрет Document Server такого ограничения не имеет.
@@ -23,6 +22,7 @@ final class OnlyOfficeJwt
     public function __construct(
         #[Autowire('%onlyoffice_jwt_secret%')]
         private readonly ?string $secret,
+        private readonly ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -31,9 +31,18 @@ final class OnlyOfficeJwt
         return $this->secret !== null && $this->secret !== '';
     }
 
+    public function requireEnabled(): void
+    {
+        if (!$this->isEnabled()) {
+            $this->logger?->error('OnlyOffice editor disabled: ONLYOFFICE_JWT_SECRET is not configured.');
+            throw new ServiceUnavailableHttpException();
+        }
+    }
+
     /** @param array<string, mixed> $payload */
     public function encode(array $payload): string
     {
+        $this->requireEnabled();
         $header = self::base64url((string) json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
         $body = self::base64url(json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
@@ -69,7 +78,7 @@ final class OnlyOfficeJwt
         if (!is_array($payload)) {
             return null;
         }
-        if (isset($payload['exp']) && is_numeric($payload['exp']) && (int) $payload['exp'] < time()) {
+        if (isset($payload['exp']) && (!is_numeric($payload['exp']) || (int) $payload['exp'] <= time())) {
             return null;
         }
 

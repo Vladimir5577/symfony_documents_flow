@@ -192,7 +192,7 @@ final class OrganizationController extends AbstractController
     }
 
     #[Route('/edit_organization/{id}', name: 'edit_organization', requirements: ['id' => '\d+'], methods: ['GET', 'POST'])]
-    #[IsGranted('ROLE_USER')]
+    #[IsGranted('ROLE_ADMIN')]
     public function editOrganization(
         int $id,
         Request $request,
@@ -291,7 +291,7 @@ final class OrganizationController extends AbstractController
     }
 
     #[Route('/create_organization', name: 'create_organization', methods: ['GET', 'POST'])]
-    #[IsGranted('ROLE_USER')]
+    #[IsGranted('ROLE_ADMIN')]
     public function createOrganization(
         Request $request,
         OrganizationRepository $organizationRepository,
@@ -408,7 +408,7 @@ final class OrganizationController extends AbstractController
     }
 
     #[Route('/delete_organization/{id}', name: 'app_delete_organization', requirements: ['id' => '\d+'], methods: ['POST'])]
-    #[IsGranted('ROLE_USER')]
+    #[IsGranted('ROLE_ADMIN')]
     public function deleteOrganization(
         int $id,
         Request $request,

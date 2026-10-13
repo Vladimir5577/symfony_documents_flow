@@ -187,12 +187,7 @@ final class PostResponseFormatter
 
     private function buildCoverImageUrl(Post $post): ?string
     {
-        $name = $post->getCoverImageName();
-        if ($name === null || $name === '') {
-            return null;
-        }
-
-        return '/uploads/posts/' . $post->getId() . '/' . $name;
+        return $this->previewUrlGenerator->getCoverImageUrl($post);
     }
 
     private function formatUserFullName(User $user): string
