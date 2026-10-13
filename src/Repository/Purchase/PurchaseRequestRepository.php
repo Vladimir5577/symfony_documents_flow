@@ -104,7 +104,7 @@ class PurchaseRequestRepository extends ServiceEntityRepository
      * @param list<PurchaseStatus>|null $statuses          ограничение по статусам (null = все)
      * @param int|null                  $approverUserId    только заявки, где пользователь есть в маршруте
      * @param list<string>              $approverRoleCodes его роли модуля — для ролевых задач маршрута
-     * @param float|null                $minAmount         скрыть заявки дешевле порога (сумма считается из позиций)
+     * @param float|null                $minAmount         скрыть заявки дешевле порога (по колонке total_amount_kopecks)
      * @param bool                      $overdue           только заявки с открытым просроченным этапом
      * @return array{items: list<PurchaseRequest>, total: int}
      */
@@ -317,17 +317,11 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         $qb = $this->createQueryBuilder('pr');
 
         if ($minAmount !== null) {
-            // Сумма не хранится в колонке (считается из позиций) — фильтруем скалярным подзапросом,
-            // чтобы клон под COUNT(pr.id) работал без группировок.
-            // Та же сумма, что в строке (PurchaseRequest::getTotalAmountKopecks): без снятых
-            // позиций, позиция со склада бесплатна, количество — утверждённое. Отличие одно:
-            // там каждая позиция округляется до копейки, здесь нет — расхождение меньше копейки на позицию.
-            $qb->andWhere(
-                '(SELECT COALESCE(SUM(i.estimatedPrice * COALESCE(i.approvedQuantity, i.quantity)
-                         * CASE WHEN i.excluded = true OR i.inStock = true THEN 0 ELSE 1 END), 0)
-                  FROM App\Entity\Purchase\PurchaseRequestItem i
-                  WHERE i.purchaseRequest = pr) >= :minAmount'
-            )->setParameter('minAmount', $minAmount);
+            // Колонка — та же сумма, что в строке (PurchaseRequest::getTotalAmountKopecks).
+            // Сумма в целых копейках, поэтому порог округляем вверх; round() срезает
+            // хвост float (0.07 * 100 = 7.000000000000001), иначе ceil дал бы 8.
+            $qb->andWhere('pr.totalAmountKopecks >= :minKopecks')
+                ->setParameter('minKopecks', (int) ceil(round($minAmount * 100, 4)));
         }
 
         if ($createdById !== null) {
