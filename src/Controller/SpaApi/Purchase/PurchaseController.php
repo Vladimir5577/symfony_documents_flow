@@ -44,6 +44,7 @@ final class PurchaseController extends AbstractController
 {
     private const DEFAULT_PAGE_SIZE = 20;
     private const MAX_PAGE_SIZE = 100;
+    private const MAX_DECISION_PAGE_SIZE = 50;
     private const MAX_ITEMS_PER_REQUEST = 100;
 
     public function __construct(
@@ -197,35 +198,75 @@ final class PurchaseController extends AbstractController
     }
 
     /**
-     * Inbox: заявки, ждущие решения этого человека, по порядку.
+     * Inbox: заявки, ждущие решения этого человека, по порядку — постранично.
      *
      * Ролевого гейта нет — очередь сама и есть ответ: пусто, если сейчас не
      * твоя задача. Раньше это был только разбор директора; теперь любой этап,
      * где указатель стоит на мне. ROLE_ADMIN видит все такие заявки, не только
      * адресованные ему: он закрывает задачу за адресата.
      *
-     * Отдаётся карточками целиком, а не списком id: модалка показывает позиции
-     * и обоснование, и догружать их по одной — лишний круг на каждую заявку.
+     * Отдаются строки списка, а не карточки: у админа в очереди десятки тысяч
+     * заявок, и карточки целиком не помещались в лимиты запроса. Карточку
+     * текущей заявки модалка берёт по GET /{id}.
+     *
+     * lane=pay|decision — две кнопки директора («На оплату» и «Решение»).
      *
      * Объявлен до /{id}: иначе «decision-required» уйдёт в маршрут карточки.
      */
     #[Route('/decision-required', name: 'spa_api_purchases_decision_required', methods: ['GET'])]
-    public function decisionRequired(#[CurrentUser] ?User $user): JsonResponse
+    public function decisionRequired(Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
 
-        $queue = $this->roster->isAdmin($user)
-            ? $this->purchaseRepo->findAllDecisionRequired()
-            : $this->purchaseRepo->findDecisionRequiredFor($user, $this->roster->roleCodesOf($user));
+        $page = max(1, $request->query->getInt('page', 1));
+        $pageSize = min(self::MAX_DECISION_PAGE_SIZE, max(1, $request->query->getInt('page_size', self::DEFAULT_PAGE_SIZE)));
+        $lane = (string) $request->query->get('lane', '');
+
+        $result = $this->purchaseRepo->findDecisionRequiredPage(
+            $this->roster->isAdmin($user) ? null : $user,
+            $this->roster->roleCodesOf($user),
+            in_array($lane, ['pay', 'decision'], true) ? $lane : null,
+            $page,
+            $pageSize,
+        );
 
         return $this->json([
             'items' => array_map(
-                fn (PurchaseRequest $purchase): array => $this->presenter->presentDetail($purchase),
-                $queue,
+                fn (PurchaseRequest $purchase): array => $this->presenter->presentListItem($purchase),
+                $result['items'],
             ),
-            'total' => count($queue),
+            'pagination' => [
+                'current_page' => $page,
+                'items_per_page' => $pageSize,
+                'total_items' => $result['total'],
+                'total_pages' => (int) ceil($result['total'] / $pageSize),
+            ],
+        ]);
+    }
+
+    /**
+     * Размер очереди для бейджа меню и кнопок списка — один COUNT, без заявок.
+     *
+     * pay — сколько из них ждут подписи директора перед оплатой (его вторая
+     * кнопка). Считаем только носителю роли DIRECTOR, остальным кнопки нет.
+     */
+    #[Route('/decision-required/count', name: 'spa_api_purchases_decision_required_count', methods: ['GET'])]
+    public function decisionRequiredCount(#[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $forUser = $this->roster->isAdmin($user) ? null : $user;
+        $roleCodes = $this->roster->roleCodesOf($user);
+
+        return $this->json([
+            'total' => $this->purchaseRepo->countDecisionRequired($forUser, $roleCodes),
+            'pay' => in_array(PurchaseRoleCode::DIRECTOR->value, $roleCodes, true)
+                ? $this->purchaseRepo->countDecisionRequired($forUser, $roleCodes, 'pay')
+                : 0,
         ]);
     }
 
