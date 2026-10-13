@@ -19,6 +19,7 @@ use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\Purchase\PurchaseTaskAssignment;
 use App\Enum\Purchase\PurchaseTaskDecision;
 use App\Repository\Purchase\PurchaseApproverRoleRepository;
+use App\Repository\Purchase\PurchaseRequestFileRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Repository\User\UserRepository;
 use App\Service\Notification\NotificationPublisher;
@@ -114,7 +115,7 @@ final class PurchaseEditorSecurityTest extends KernelTestCase
         $coEditing = new PurchaseFileCoEditing($storage, new PurchaseHistoryLogger($em), $notifier, $access, $em, new NullLogger(), 'test');
         $this->cache = new ArrayAdapter();
         $this->jwt = new OnlyOfficeJwt('document-server-secret');
-        $this->controller = new PurchaseFileEditorController($purchases, $access, $storage, $coEditing, $this->jwt, $em, $this->cache, 'test', 'https://office.example');
+        $this->controller = new PurchaseFileEditorController($purchases, $access, $this->createStub(PurchaseRequestFileRepository::class), $storage, $coEditing, $this->jwt, $em, $this->cache, 'test', 'https://office.example');
         $this->controller->setContainer(self::getContainer());
     }
 
