@@ -193,6 +193,12 @@ class PurchaseApprovalStage
     {
         $this->status = $status;
         $now = WorkingMinutes::now();
+        // Откат возвращает этап в ожидание: срок пойдёт заново, когда указатель
+        // снова на него встанет, а не от первого захода.
+        if ($status === PurchaseStageStatus::PENDING || $status === PurchaseStageStatus::AWAITING_ASSIGNMENT) {
+            $this->startedAt = null;
+            $this->dueAt = null;
+        }
         if ($status === PurchaseStageStatus::ACTIVE && $this->startedAt === null) {
             $this->startedAt = $now;
             // Минуты из маршрута тратятся только в рабочее время, в колонку кладётся абсолютный срок.
@@ -260,10 +266,19 @@ class PurchaseApprovalStage
         return $this->status === PurchaseStageStatus::ACTIVE;
     }
 
+    /**
+     * Указатель на этапе и заявка по маршруту идёт. У возвращённой автору или
+     * отменённой заявки этап остаётся ACTIVE, но её никто не ждёт.
+     */
+    private function isRunning(): bool
+    {
+        return $this->isActive() && ($this->purchaseRequest?->getStatus()->isInRoute() ?? true);
+    }
+
     /** Этап всё ещё открыт, а сохранённый срок уже прошёл. */
     public function isOverdue(?\DateTimeImmutable $now = null): bool
     {
-        return $this->isActive()
+        return $this->isRunning()
             && $this->dueAt !== null
             && $this->dueAt < ($now ?? new \DateTimeImmutable());
     }
@@ -274,7 +289,7 @@ class PurchaseApprovalStage
      */
     public function minutesLeft(?\DateTimeImmutable $now = null): ?int
     {
-        if (!$this->isActive() || $this->dueAt === null) {
+        if (!$this->isRunning() || $this->dueAt === null) {
             return null;
         }
 

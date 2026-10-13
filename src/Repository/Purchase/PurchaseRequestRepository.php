@@ -398,6 +398,14 @@ class PurchaseRequestRepository extends ServiceEntityRepository
                 ->setParameter('createdById', $createdById);
         }
 
+        // Возвращённая и отменённая заявки хранят активный этап и прежний
+        // progressStatus, но никого не ждут: в «Просроченные», «Новые» и
+        // «В процессе» они не попадают.
+        if ($overdue || $progress === 'new' || $progress === 'progress') {
+            $qb->andWhere('pr.status IN (:inRouteStatuses)')
+                ->setParameter('inRouteStatuses', PurchaseStatus::getInRoute());
+        }
+
         if ($overdue) {
             $qb->andWhere('EXISTS (
                 SELECT 1 FROM App\Entity\Purchase\PurchaseApprovalStage overdueStage

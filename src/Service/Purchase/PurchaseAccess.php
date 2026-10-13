@@ -9,6 +9,7 @@ use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseCapability;
+use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseRoleCode;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
@@ -214,7 +215,8 @@ final class PurchaseAccess
      * Вернуть заявку в отдел закупок со своей задачи: этап ресёрча в маршруте
      * есть и он раньше моего.
      *
-     * В маршруте без ресёрча возвращать некуда, и кнопки не будет.
+     * В маршруте без ресёрча возвращать некуда, и кнопки не будет. После оплаты
+     * и на поставке тоже: деньги ушли, пакет документов уже не переделать.
      */
     public function canReturnToSourcing(PurchaseRequest $purchase, User $user): bool
     {
@@ -228,7 +230,26 @@ final class PurchaseAccess
 
         return $sourcing !== null
             && $stage !== null
-            && $sourcing->getPosition() < $stage->getPosition();
+            && $sourcing->getPosition() < $stage->getPosition()
+            && !$purchase->isPastPayment($stage);
+    }
+
+    /**
+     * Отменить заявку как автор. Директор отменяет с разбора (ручка triage),
+     * автор — пока разбор не решён и когда заявку вернули ему на доработку.
+     * После разбора заявка идёт по маршруту, и отменять её автор не вправе.
+     */
+    public function canCancel(PurchaseRequest $purchase, User $user): bool
+    {
+        if (!$this->isOwner($purchase, $user)) {
+            return false;
+        }
+
+        return match ($purchase->getStatus()) {
+            PurchaseStatus::REJECTED => true,
+            PurchaseStatus::ON_APPROVAL => $purchase->getCurrentStage()?->getPurpose() === PurchaseStagePurpose::TRIAGE,
+            default => false,
+        };
     }
 
     /**
@@ -250,12 +271,18 @@ final class PurchaseAccess
     }
 
     /**
-     * Раскладывать позиции по счетам и договорам: работа отдела закупок, и
-     * только пока заявка стоит на его шаге.
+     * Раскладывать позиции по счетам и договорам: работа отдела закупок или
+     * того, чья задача требует счёт, и только пока заявка стоит на этом шаге.
+     * Иначе задачу «счёт», поставленную не отделу закупок, не закрыл бы никто.
      */
     public function canBindDocuments(PurchaseRequest $purchase, User $user): bool
     {
-        return $this->findMyActiveTask($purchase, $user)?->getRoleCode() === PurchaseRoleCode::PURCHASE_DEPARTMENT;
+        $task = $this->findMyActiveTask($purchase, $user);
+
+        return $task !== null && (
+            $task->getRoleCode() === PurchaseRoleCode::PURCHASE_DEPARTMENT
+            || $task->getRequiresFileType() === PurchaseFileType::INVOICE
+        );
     }
 
     public function can(User $user, PurchaseCapability $capability): bool

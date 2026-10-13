@@ -331,6 +331,9 @@ final class PurchaseApprovalWorkflow
         if ($sourcing === null || $sourcing->getPosition() >= $stage->getPosition()) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_NOT_ACTIVE);
         }
+        if ($request->isPastPayment($stage)) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
+        }
 
         $burned = $this->rewindTo($request, $sourcing);
 
@@ -496,10 +499,13 @@ final class PurchaseApprovalWorkflow
         $this->announce($request, $actor, $stage);
     }
 
-    /** Отмена с разбора. Кто может — решает ручка triage: активная задача разбора. */
+    /**
+     * Отмена заявки. Кто может — решает вызывающий: ручка triage (активная
+     * задача разбора) или PurchaseAccess::canCancel (автор).
+     */
     public function cancel(PurchaseRequest $request, User $actor, ?string $comment): void
     {
-        if ($request->getStatus() === PurchaseStatus::CANCELLED) {
+        if ($request->getStatus()->isFinal()) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
         }
 
@@ -561,7 +567,8 @@ final class PurchaseApprovalWorkflow
      * повод остановить заявку в ожидании тех, кого не будет.
      *
      * Пустой нединамический этап — ошибка настройки, и здесь она становится
-     * отказом. Такого этапа не пропустит редактор заготовок, но проехать
+     * отказом. Редактор заготовок такой этап не сохраняет (ApprovalRouteEditor::
+     * parseStages), но снимки, собранные до этой проверки, остались, а проехать
      * согласование молча хуже, чем остановиться с внятной ошибкой.
      */
     private function advance(PurchaseRequest $request, User $actor): void
@@ -679,22 +686,33 @@ final class PurchaseApprovalWorkflow
                 continue;
             }
 
+            $later = $stage->getPosition() > $target->getPosition();
             foreach ($stage->getTasks() as $task) {
-                if ($task->getDecision()->isDecided()) {
-                    if ($task !== $exclude) {
-                        $burned[] = $task->resolveTitle();
-                    }
+                $decided = $task->getDecision()->isDecided();
+                if ($decided && $task !== $exclude) {
+                    $burned[] = $task->resolveTitle();
+                }
+                // На последующих этапах и нерешённые: у них могли остаться
+                // отметки рецензии договора, а пакет документов будет другой.
+                if ($decided || $later) {
                     $task->reset();
                 }
             }
 
+            // Указатель и так на этом этапе (сняли подпись в параллельном этапе):
+            // этап не перезапускаем, иначе «согласовал и снял» обнуляло бы срок.
+            if ($stage === $target && $stage->isActive()) {
+                continue;
+            }
             $stage->setStatus($stage->getTasks()->isEmpty() && $stage->isDynamic()
                 ? PurchaseStageStatus::AWAITING_ASSIGNMENT
                 : PurchaseStageStatus::PENDING);
         }
 
         $request->setStatus(PurchaseStatus::ON_APPROVAL);
-        $target->setStatus(PurchaseStageStatus::ACTIVE);
+        if (!$target->isActive()) {
+            $target->setStatus(PurchaseStageStatus::ACTIVE);
+        }
 
         return $burned;
     }

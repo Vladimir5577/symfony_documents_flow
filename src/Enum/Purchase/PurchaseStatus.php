@@ -89,6 +89,15 @@ enum PurchaseStatus: string
         };
     }
 
+    /** @return list<PurchaseStatus> */
+    public static function getInRoute(): array
+    {
+        return array_values(array_filter(
+            self::cases(),
+            static fn (self $status): bool => $status->isInRoute(),
+        ));
+    }
+
     /**
      * Что видит носитель полномочия «видеть все заявки»: весь путь заявки,
      * кроме чужих черновиков — заявки ещё нет, есть замысел автора.

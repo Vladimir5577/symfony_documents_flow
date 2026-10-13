@@ -341,7 +341,7 @@ class PurchaseRequest
         return $this->progressStatus;
     }
 
-    /** Пересчитать фильтр списка из этапов. Черновик без маршрута — null. */
+    /** Пересчитать фильтр списка из этапов. Черновик, возвращённая и отменённая заявки — null. */
     public function syncProgressStatus(): void
     {
         $current = $this->getCurrentStage();
@@ -707,6 +707,11 @@ class PurchaseRequest
      */
     public function getCurrentStage(): ?PurchaseApprovalStage
     {
+        // Возвращённая автору и отменённая заявки хранят этап ACTIVE, но никого не ждут.
+        if (!$this->status->isInRoute()) {
+            return null;
+        }
+
         $current = null;
         foreach ($this->stages as $stage) {
             if (!$stage->isActive()) {
@@ -752,6 +757,16 @@ class PurchaseRequest
         }
 
         return null;
+    }
+
+    /**
+     * Заявка оплачена или стоит на поставке: откатывать её к ресёрчу поздно.
+     * На оплате до подтверждения откат законен — финдиректор нашёл ошибку в счёте.
+     */
+    public function isPastPayment(PurchaseApprovalStage $stage): bool
+    {
+        return $stage->getPurpose() === PurchaseStagePurpose::DELIVERY
+            || in_array($this->status, [PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED], true);
     }
 
     /** Самый ранний этап такого назначения. */

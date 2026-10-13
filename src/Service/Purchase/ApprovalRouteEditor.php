@@ -360,7 +360,20 @@ final class ApprovalRouteEditor
                 ->setAllowsReject((bool) ($row['allowsReject'] ?? !$purpose->isExecution()))
                 ->setReviewMinutes($this->parseReviewMinutes($row['reviewMinutes'] ?? null));
 
-            foreach ($this->parseTasks($row['tasks'] ?? []) as $task) {
+            $tasks = $this->parseTasks($row['tasks'] ?? []);
+            // Этап без задач некому закрыть: заявка, дойдя до него, встанет навсегда,
+            // а правка заготовки снимок уже поданной заявки не меняет.
+            if ($tasks === []) {
+                throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_STAGE_INVALID);
+            }
+            // Динамический этап ждёт назначения людей на разборе, только пока в нём
+            // нет других задач. С соседней задачей он сразу «готов», и выбрать на
+            // него людей уже нельзя — динамическую часть маршрут молча проедет.
+            $dynamic = array_filter($tasks, static fn (PurchaseRouteTemplateTask $task): bool => $task->isDynamic());
+            if ($dynamic !== [] && count($tasks) > 1) {
+                throw new PurchaseRouteException(SpaApiError::PURCHASE_ROUTE_DYNAMIC_MIXED);
+            }
+            foreach ($tasks as $task) {
                 $stage->addTask($task);
             }
 
