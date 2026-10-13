@@ -7,6 +7,8 @@ use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseProgressStatus;
+use App\Enum\Purchase\PurchaseRoleCode;
+use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStageStatus;
 use App\Enum\Purchase\PurchaseStatus;
 use App\Enum\Purchase\PurchaseTaskAssignment;
@@ -42,48 +44,81 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     }
 
     /**
-     * Inbox: заявки, где сейчас очередь этого человека — любой этап, не только разбор.
+     * Inbox постранично: старые заявки первыми, маршрут прогрет для строки списка.
      *
-     * Зеркало PurchaseAccess::findMyActiveTask: заявка в маршруте, этап ACTIVE,
-     * на нём нерешённая задача, адресованная лично, ролью или как автору.
-     * Гейта по роли модуля нет — пусто, если решать нечего.
+     * Карточки целиком здесь не собираем: у админа в очереди десятки тысяч
+     * заявок, и полный ответ не помещается ни во время, ни в память запроса.
+     * Карточку текущей заявки модалка берёт отдельно по GET /{id}.
      *
      * @param list<string> $roleCodes роли модуля, выданные пользователю
-     * @return list<PurchaseRequest>
+     * @return array{items: list<PurchaseRequest>, total: int}
      */
-    public function findDecisionRequiredFor(User $user, array $roleCodes): array
+    public function findDecisionRequiredPage(?User $forUser, array $roleCodes, ?string $lane, int $page, int $pageSize): array
     {
-        $qb = $this->decisionRequiredQuery()
-            ->andWhere($this->addressedExpr($roleCodes, 't', 'p'))
-            ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
-            ->setParameter('user', $user);
+        $qb = $this->decisionRequiredQuery($forUser, $roleCodes, $lane);
 
-        if ($roleCodes !== []) {
-            $qb->setParameter('roleCodes', $roleCodes, ArrayParameterType::STRING);
-        }
+        $total = (int) (clone $qb)
+            ->select('COUNT(p.id)')
+            ->getQuery()
+            ->getSingleScalarResult();
 
-        return $qb->getQuery()->getResult();
+        // id вторым ключом: у заявок бывает одинаковое время создания, и без
+        // него соседние страницы повторяют или теряют строки.
+        $items = $qb
+            ->orderBy('p.createdAt', 'ASC')
+            ->addOrderBy('p.id', 'ASC')
+            ->setFirstResult(($page - 1) * $pageSize)
+            ->setMaxResults($pageSize)
+            ->getQuery()
+            ->getResult();
+
+        $this->warmUpStages($items);
+
+        return ['items' => $items, 'total' => $total];
     }
 
     /**
-     * Все заявки, которые сейчас стоят в чьей-то очереди: активный этап и
-     * нерешённая задача, без фильтра «адресована мне». Для ROLE_ADMIN.
+     * Размер очереди для бейджа — без загрузки заявок.
      *
-     * @return list<PurchaseRequest>
+     * @param list<string> $roleCodes
      */
-    public function findAllDecisionRequired(): array
+    public function countDecisionRequired(?User $forUser, array $roleCodes, ?string $lane = null): int
     {
-        return $this->decisionRequiredQuery()->getQuery()->getResult();
+        return (int) $this->decisionRequiredQuery($forUser, $roleCodes, $lane)
+            ->select('COUNT(p.id)')
+            ->getQuery()
+            ->getSingleScalarResult();
     }
 
-    private function decisionRequiredQuery(): QueryBuilder
+    /**
+     * Заявки, где сейчас чья-то очередь — любой этап, не только разбор.
+     *
+     * Зеркало PurchaseAccess::findMyActiveTask: заявка в маршруте, этап ACTIVE,
+     * на нём нерешённая задача, адресованная лично, ролью или как автору.
+     * Гейта по роли модуля нет — пусто, если решать нечего. $forUser = null —
+     * без фильтра «адресована мне»: так видит очередь ROLE_ADMIN.
+     *
+     * $lane делит очередь директора: 'pay' — его подпись прямо перед оплатой,
+     * 'decision' — всё остальное, null — вся очередь. Правило то же, что у
+     * фронта в isDirectorPayHandoff.
+     *
+     * Отбор — подзапросом по id, а не DISTINCT по строкам заявки: так
+     * сортировка и LIMIT идут по самой заявке, а этапы и задачи строк не множат.
+     *
+     * @param list<string> $roleCodes
+     */
+    private function decisionRequiredQuery(?User $forUser, array $roleCodes, ?string $lane): QueryBuilder
     {
-        return $this->createQueryBuilder('p')
-            ->innerJoin('p.stages', 's')
-            ->innerJoin('s.tasks', 't')
-            ->andWhere('p.status IN (:inRoute)')
-            ->andWhere('s.status = :active')
-            ->andWhere('t.decision = :pending')
+        $queued = $this->getEntityManager()->createQueryBuilder()
+            ->select('dp.id')
+            ->from(PurchaseRequest::class, 'dp')
+            ->innerJoin('dp.stages', 'ds')
+            ->innerJoin('ds.tasks', 'dt')
+            ->andWhere('dp.status IN (:inRoute)')
+            ->andWhere('ds.status = :active')
+            ->andWhere('dt.decision = :pending');
+
+        $qb = $this->createQueryBuilder('p')
             ->setParameter('inRoute', [
                 PurchaseStatus::ON_APPROVAL,
                 PurchaseStatus::APPROVED,
@@ -91,9 +126,41 @@ class PurchaseRequestRepository extends ServiceEntityRepository
                 PurchaseStatus::DELIVERED,
             ])
             ->setParameter('active', PurchaseStageStatus::ACTIVE)
-            ->setParameter('pending', PurchaseTaskDecision::PENDING)
-            ->distinct()
-            ->addOrderBy('p.createdAt', 'ASC');
+            ->setParameter('pending', PurchaseTaskDecision::PENDING);
+
+        if ($forUser !== null) {
+            $queued->andWhere($this->addressedExpr($roleCodes, 'dt', 'dp'));
+            $qb->setParameter('author', PurchaseTaskAssignment::AUTHOR)
+                ->setParameter('user', $forUser);
+            if ($roleCodes !== []) {
+                $qb->setParameter('roleCodes', $roleCodes, ArrayParameterType::STRING);
+            }
+        }
+
+        if ($lane === 'pay' || $lane === 'decision') {
+            // roleCode IS NOT NULL — иначе у личной задачи условие станет NULL,
+            // и NOT(...) выкинет её из «решения» вместо того, чтобы оставить.
+            $payHandoff = 'ds.purpose = :laneSignOff
+                AND dt.roleCode IS NOT NULL AND dt.roleCode = :laneDirector
+                AND EXISTS (
+                    SELECT 1 FROM App\Entity\Purchase\PurchaseApprovalStage laneNext
+                    WHERE laneNext.purchaseRequest = dp
+                      AND laneNext.purpose = :lanePayment
+                      AND laneNext.position = (
+                          SELECT MIN(laneMin.position) FROM App\Entity\Purchase\PurchaseApprovalStage laneMin
+                          WHERE laneMin.purchaseRequest = dp
+                            AND laneMin.position > ds.position
+                            AND laneMin.status <> :laneSkipped
+                      )
+                )';
+            $queued->andWhere($lane === 'pay' ? '(' . $payHandoff . ')' : 'NOT (' . $payHandoff . ')');
+            $qb->setParameter('laneSignOff', PurchaseStagePurpose::SIGN_OFF)
+                ->setParameter('laneDirector', PurchaseRoleCode::DIRECTOR)
+                ->setParameter('lanePayment', PurchaseStagePurpose::PAYMENT)
+                ->setParameter('laneSkipped', PurchaseStageStatus::SKIPPED);
+        }
+
+        return $qb->andWhere($qb->expr()->in('p.id', $queued->getDQL()));
     }
 
     /**
