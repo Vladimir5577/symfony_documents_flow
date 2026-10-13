@@ -320,8 +320,10 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             // Колонка — та же сумма, что в строке (PurchaseRequest::getTotalAmountKopecks).
             // Сумма в целых копейках, поэтому порог округляем вверх; round() срезает
             // хвост float (0.07 * 100 = 7.000000000000001), иначе ceil дал бы 8.
+            // Порог больше int (min_amount=1e20) при (int) стал бы отрицательным и пустил бы всё.
+            $minKopecks = ceil(round($minAmount * 100, 4));
             $qb->andWhere('pr.totalAmountKopecks >= :minKopecks')
-                ->setParameter('minKopecks', (int) ceil(round($minAmount * 100, 4)));
+                ->setParameter('minKopecks', $minKopecks >= PHP_INT_MAX ? PHP_INT_MAX : (int) $minKopecks);
         }
 
         if ($createdById !== null) {
