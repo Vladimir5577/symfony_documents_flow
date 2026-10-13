@@ -231,7 +231,7 @@ final class PurchaseAccess
         return $sourcing !== null
             && $stage !== null
             && $sourcing->getPosition() < $stage->getPosition()
-            && !PurchaseApprovalWorkflow::isPastPayment($purchase, $stage);
+            && !$purchase->isPastPayment($stage);
     }
 
     /**

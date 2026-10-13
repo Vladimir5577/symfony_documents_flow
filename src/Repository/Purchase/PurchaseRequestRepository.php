@@ -257,10 +257,7 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         // «В процессе» они не попадают.
         if ($overdue || $progress === 'new' || $progress === 'progress') {
             $qb->andWhere('pr.status IN (:inRouteStatuses)')
-                ->setParameter('inRouteStatuses', array_values(array_filter(
-                    PurchaseStatus::cases(),
-                    static fn (PurchaseStatus $status): bool => $status->isInRoute(),
-                )));
+                ->setParameter('inRouteStatuses', PurchaseStatus::getInRoute());
         }
 
         if ($overdue) {

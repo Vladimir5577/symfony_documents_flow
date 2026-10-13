@@ -731,6 +731,16 @@ class PurchaseRequest
         return null;
     }
 
+    /**
+     * Заявка оплачена или стоит на поставке: откатывать её к ресёрчу поздно.
+     * На оплате до подтверждения откат законен — финдиректор нашёл ошибку в счёте.
+     */
+    public function isPastPayment(PurchaseApprovalStage $stage): bool
+    {
+        return $stage->getPurpose() === PurchaseStagePurpose::DELIVERY
+            || in_array($this->status, [PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED], true);
+    }
+
     /** Самый ранний этап такого назначения. */
     public function findStageByPurpose(PurchaseStagePurpose $purpose): ?PurchaseApprovalStage
     {

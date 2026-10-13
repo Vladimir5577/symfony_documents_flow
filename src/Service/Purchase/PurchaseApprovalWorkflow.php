@@ -291,7 +291,7 @@ final class PurchaseApprovalWorkflow
         if ($sourcing === null || $sourcing->getPosition() >= $stage->getPosition()) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_NOT_ACTIVE);
         }
-        if (self::isPastPayment($request, $stage)) {
+        if ($request->isPastPayment($stage)) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_STATUS);
         }
 
@@ -308,16 +308,6 @@ final class PurchaseApprovalWorkflow
 
         $this->notifier->notifyReturnedToDepartment($request, $actor, $comment);
         $this->notifier->notifyStageActivated($request, $actor);
-    }
-
-    /**
-     * Заявка оплачена или стоит на поставке: откатывать её к ресёрчу поздно.
-     * На оплате до подтверждения откат законен — финдиректор нашёл ошибку в счёте.
-     */
-    public static function isPastPayment(PurchaseRequest $request, PurchaseApprovalStage $stage): bool
-    {
-        return $stage->getPurpose() === PurchaseStagePurpose::DELIVERY
-            || in_array($request->getStatus(), [PurchaseStatus::INVOICE_PAID, PurchaseStatus::DELIVERED], true);
     }
 
     /**
@@ -659,13 +649,20 @@ final class PurchaseApprovalWorkflow
                 }
             }
 
+            // Указатель и так на этом этапе (сняли подпись в параллельном этапе):
+            // этап не перезапускаем, иначе «согласовал и снял» обнуляло бы срок.
+            if ($stage === $target && $stage->isActive()) {
+                continue;
+            }
             $stage->setStatus($stage->getTasks()->isEmpty() && $stage->isDynamic()
                 ? PurchaseStageStatus::AWAITING_ASSIGNMENT
                 : PurchaseStageStatus::PENDING);
         }
 
         $request->setStatus(PurchaseStatus::ON_APPROVAL);
-        $target->setStatus(PurchaseStageStatus::ACTIVE);
+        if (!$target->isActive()) {
+            $target->setStatus(PurchaseStageStatus::ACTIVE);
+        }
 
         return $burned;
     }
