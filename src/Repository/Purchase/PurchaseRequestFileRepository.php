@@ -349,12 +349,18 @@ class PurchaseRequestFileRepository extends ServiceEntityRepository
 
     public function isConfirmed(int $fileId): bool
     {
+        // Только задачи своей заявки: отметку ставят лишь по договорам заявки
+        // (PurchaseApprovalWorkflow::passContractReview), а без этого JOIN
+        // проверка листает jsonb всех задач модуля — seq scan на каждый файл.
         return self::isTrue($this->getEntityManager()->getConnection()->fetchOne(
             "SELECT EXISTS (
                 SELECT 1
-                FROM purchase_approval_task t
-                WHERE t.contract_review = 'ACCEPT'
-                  AND t.contract_reviewed_file_ids::jsonb @> jsonb_build_array(CAST(:id AS integer))
+                FROM purchase_request_file f
+                INNER JOIN purchase_approval_stage s ON s.purchase_request_id = f.purchase_request_id
+                INNER JOIN purchase_approval_task t ON t.stage_id = s.id
+                WHERE f.id = :id
+                  AND t.contract_review = 'ACCEPT'
+                  AND t.contract_reviewed_file_ids::jsonb @> jsonb_build_array(f.id)
             )",
             ['id' => $fileId],
             ['id' => ParameterType::INTEGER],

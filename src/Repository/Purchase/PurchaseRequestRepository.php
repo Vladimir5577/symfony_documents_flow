@@ -2,7 +2,8 @@
 
 namespace App\Repository\Purchase;
 
-use App\Entity\Purchase\PurchaseApprovalStage;
+use App\Entity\Organization\AbstractOrganization;
+use App\Entity\Purchase\PurchaseApprovalTask;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRouteTemplate;
 use App\Entity\User\User;
@@ -132,34 +133,59 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         // «Я согласант» — заявки, где человек есть в маршруте: лично, через роль
         // или как автор задачи, адресованной заявителю. Вместе с createdBy —
         // свои ИЛИ назначенные: иначе зам видит заявку только в inbox.
+        //
+        // Через pr.id IN (подзапрос по задачам), а не JOIN этапов и задач:
+        // JOIN размножал строки, и COUNT(DISTINCT) на каждой странице перебирал
+        // все задачи модуля (замер 13.10 на 100k заявок: 856 мс → 260 мс у роли LEGAL).
         if ($approverUserId !== null) {
-            $join = $ownerAndApprover ? 'leftJoin' : 'join';
-            $qb->$join(PurchaseApprovalStage::class, 'fs', 'WITH', 'fs.purchaseRequest = pr')
-                ->$join('fs.tasks', 'ft')
-                ->setParameter('user', $approverUserId)
-                ->setParameter('author', PurchaseTaskAssignment::AUTHOR)
-                ->distinct();
+            $participant = [$this->requestIdsOfTasks('pt1', 'pt1.assigneeUser = :user')];
+            $qb->setParameter('user', $approverUserId);
 
             if ($approverRoleCodes !== []) {
+                $participant[] = $this->requestIdsOfTasks('pt2', 'pt2.roleCode IN (:roleCodes)');
                 $qb->setParameter('roleCodes', $approverRoleCodes, ArrayParameterType::STRING);
             }
 
-            $addressed = $this->addressedExpr($approverRoleCodes, 'ft', 'pr');
             if ($ownerAndApprover) {
-                $qb->andWhere('pr.createdBy = :createdById OR ' . $addressed)
-                    ->setParameter('createdById', $createdById);
+                // Задача «автору» адресована создателю — его заявки и так в списке.
+                $participant[] = 'pr.createdBy = :createdById';
+                $qb->setParameter('createdById', $createdById);
             } else {
-                $qb->andWhere($addressed);
+                // Подзапрос сразу по своим заявкам: задач «автору» по всему
+                // модулю десятки тысяч, и хеш по ним строился на каждый запрос.
+                $participant[] = $this->requestIdsOfTasks(
+                    'pt3',
+                    'pt3.assignmentType = :author AND pt3r.createdBy = :user',
+                    'JOIN pt3s.purchaseRequest pt3r',
+                );
+                $qb->setParameter('author', PurchaseTaskAssignment::AUTHOR);
             }
+
+            $qb->andWhere('(' . implode(' OR ', $participant) . ')');
         }
 
         $total = (int) (clone $qb)
-            ->select($approverUserId !== null ? 'COUNT(DISTINCT pr.id)' : 'COUNT(pr.id)')
+            ->select('COUNT(pr.id)')
             ->getQuery()
             ->getSingleScalarResult();
 
+        if ($total > 0) {
+            $this->warmUpOrganizations();
+        }
+
+        // Связи «к одному» строк не размножают — их можно брать прямо в запрос
+        // страницы. Без этого автор, исполнитель, их Worker и категория
+        // поднимались отдельным SQL на каждую строку.
         $items = $qb
+            ->leftJoin('pr.createdBy', 'cb')->addSelect('cb')
+            ->leftJoin('cb.worker', 'cbw')->addSelect('cbw')
+            ->leftJoin('pr.executor', 'ex')->addSelect('ex')
+            ->leftJoin('ex.worker', 'exw')->addSelect('exw')
+            ->leftJoin('pr.category', 'cat')->addSelect('cat')
+            // id — второй ключ: заявки одной секунды иначе меняются местами
+            // между запросами страниц, и строка попадает на две страницы.
             ->orderBy('pr.createdAt', 'DESC')
+            ->addOrderBy('pr.id', 'DESC')
             ->setFirstResult(($page - 1) * $pageSize)
             ->setMaxResults($pageSize)
             ->getQuery()
@@ -168,6 +194,21 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         $this->warmUpStages($items);
 
         return ['items' => $items, 'total' => $total];
+    }
+
+    /**
+     * DQL-условие «заявка есть среди заявок задач, отобранных $condition».
+     * Этап задачи — псевдоним {$alias}s.
+     */
+    private function requestIdsOfTasks(string $alias, string $condition, string $join = ''): string
+    {
+        return sprintf(
+            'pr.id IN (SELECT IDENTITY(%1$ss.purchaseRequest) FROM %2$s %1$s JOIN %1$s.stage %1$ss %3$s WHERE %4$s)',
+            $alias,
+            PurchaseApprovalTask::class,
+            $join,
+            $condition,
+        );
     }
 
     /**
@@ -209,16 +250,53 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             return;
         }
 
+        $ids = array_map(
+            static fn (PurchaseRequest $request): int => (int) $request->getId(),
+            $items,
+        );
+
+        // Worker у User — обратная сторона OneToOne: Doctrine поднимает его
+        // отдельным SQL на каждого пользователя, если не взять в тот же запрос.
         $this->createQueryBuilder('wpr')
             ->leftJoin('wpr.stages', 'wst')->addSelect('wst')
             ->leftJoin('wst.tasks', 'wta')->addSelect('wta')
             ->leftJoin('wta.assigneeUser', 'wau')->addSelect('wau')
+            ->leftJoin('wau.worker', 'wauw')->addSelect('wauw')
             ->leftJoin('wta.decidedBy', 'wdb')->addSelect('wdb')
+            ->leftJoin('wdb.worker', 'wdbw')->addSelect('wdbw')
             ->andWhere('wpr.id IN (:ids)')
-            ->setParameter('ids', array_map(
-                static fn (PurchaseRequest $request): int => (int) $request->getId(),
-                $items,
-            ))
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->getResult();
+
+        // Позиции — отдельным запросом: в одном с этапами и задачами коллекции
+        // перемножились бы. Нужны строке ради суммы и числа позиций.
+        $this->createQueryBuilder('wpi')
+            ->leftJoin('wpi.items', 'wit')->addSelect('wit')
+            ->andWhere('wpi.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * Загрузить справочник организаций одним запросом.
+     *
+     * Организация — корень иерархии с наследованием (Organization/Filial/
+     * Department), и ссылку на неё Doctrine не может отдать ленивой: грузит
+     * сразу отдельным SQL — у заявки, у каждого пользователя строки и у каждого
+     * родителя в пути. Уже загруженные объекты Doctrine берёт из памяти, поэтому
+     * весь справочник (это сотни строк, не тысячи) дешевле, чем 17–38 запросов
+     * на страницу. Два родителя — в том же запросе, иначе родитель, ещё не
+     * попавший в память, снова поднимается отдельно.
+     */
+    private function warmUpOrganizations(): void
+    {
+        $this->getEntityManager()->createQueryBuilder()
+            ->select('wo', 'wop', 'wopp')
+            ->from(AbstractOrganization::class, 'wo')
+            ->leftJoin('wo.parent', 'wop')
+            ->leftJoin('wop.parent', 'wopp')
             ->getQuery()
             ->getResult();
     }
@@ -240,8 +318,12 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         if ($minAmount !== null) {
             // Сумма не хранится в колонке (считается из позиций) — фильтруем скалярным подзапросом,
             // чтобы клон под COUNT(pr.id) работал без группировок.
+            // Та же сумма, что в строке (PurchaseRequest::getTotalAmountKopecks): без снятых
+            // позиций, позиция со склада бесплатна, количество — утверждённое. Отличие одно:
+            // там каждая позиция округляется до копейки, здесь нет — расхождение меньше копейки на позицию.
             $qb->andWhere(
-                '(SELECT COALESCE(SUM(i.quantity * i.estimatedPrice), 0)
+                '(SELECT COALESCE(SUM(i.estimatedPrice * COALESCE(i.approvedQuantity, i.quantity)
+                         * CASE WHEN i.excluded = true OR i.inStock = true THEN 0 ELSE 1 END), 0)
                   FROM App\Entity\Purchase\PurchaseRequestItem i
                   WHERE i.purchaseRequest = pr) >= :minAmount'
             )->setParameter('minAmount', $minAmount);
@@ -281,7 +363,10 @@ class PurchaseRequestRepository extends ServiceEntityRepository
             } else {
                 $qb->andWhere('LOWER(pr.title) LIKE :search');
             }
-            $qb->setParameter('search', '%' . mb_strtolower($search) . '%');
+            // % и _ в запросе — обычные символы, не шаблон LIKE. Обратный слеш —
+            // экранирующий символ LIKE в PostgreSQL по умолчанию.
+            // Индекс по LOWER(title) — триграммный GIN (миграция Version20261013180000).
+            $qb->setParameter('search', '%' . addcslashes(mb_strtolower($search), '\\%_') . '%');
         }
 
         return $qb;
