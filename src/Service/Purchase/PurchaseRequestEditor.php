@@ -63,6 +63,11 @@ final class PurchaseRequestEditor
             $item->setExcluded(false);
 
             $quantity = $edit['quantity'];
+            // Три знака, как в колонке: иначе сумма из памяти (и total_amount_kopecks)
+            // разошлась бы с сохранённым количеством («1.0005», «1e2»).
+            if ($quantity !== null) {
+                $quantity = number_format((float) $quantity, 3, '.', '');
+            }
             if ($quantity === null || (float) $quantity === (float) $item->getQuantity()) {
                 $item->setApprovedQuantity(null);
             } elseif ((float) $quantity <= 0) {

@@ -324,12 +324,13 @@ final class PurchaseApiPresenter
             'canDelete' => $file->getContract() === null && $this->canDeleteFile($file),
             'canRename' => $file->getContract() === null && $this->canRenameFile($file),
             // Зеркалит режим PurchaseFileEditorController::open(): правит тот, чей сейчас этап.
+            // isConfirmed — SQL на файл, поэтому последним: после проверки в памяти.
             'canEdit' => $extension === 'docx'
                 && $file->getSourceFile() === null
                 && $file->getContract() === null
-                && ($file->getType() !== PurchaseFileType::CONTRACT || !$this->files->isConfirmed((int) $file->getId()))
                 && $request !== null
-                && $this->findMyActiveTask($request) !== null,
+                && $this->findMyActiveTask($request) !== null
+                && ($file->getType() !== PurchaseFileType::CONTRACT || !$this->files->isConfirmed((int) $file->getId())),
             'downloadUrl' => $this->fileDownloadUrl($file),
             'purchaseId' => $file->getPurchaseRequest()?->getId(),
         ];
