@@ -51,6 +51,7 @@ final class PurchaseApprovalWorkflow
         private readonly PurchaseRequestEditor $editor,
         private readonly PurchaseDocumentBinding $binding,
         private readonly PurchaseAccess $access,
+        private readonly PurchaseContractCatalog $contracts,
     ) {
     }
 
@@ -171,6 +172,8 @@ final class PurchaseApprovalWorkflow
         // задачи «договор» нет, и требовать с него договор не за что. Так же и УПД
         // при поставке — это файл задачи поставки, а не условие перехода.
         $requiredFile = $task->getRequiresFileType();
+        // Договор из справочника может быть без файла «Договор»: шаг закрывает сама ссылка.
+        $linkedContract = $requiredFile === PurchaseFileType::CONTRACT && !$request->getContractLinks()->isEmpty();
         if ($requiredFile === PurchaseFileType::INVOICE) {
             // Счёт мало приложить: позиции надо разложить по счетам. А когда всё
             // нашлось на складе, счёт не нужен вовсе.
@@ -179,7 +182,7 @@ final class PurchaseApprovalWorkflow
             if ($bound !== '') {
                 $this->history->log($request, $actor, PurchaseHistoryAction::DOCUMENTS_BOUND, $bound);
             }
-        } elseif ($requiredFile !== null && !$request->hasFileOfType($requiredFile)) {
+        } elseif ($requiredFile !== null && !$linkedContract && !$request->hasFileOfType($requiredFile)) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         }
 
@@ -309,6 +312,7 @@ final class PurchaseApprovalWorkflow
         });
 
         $this->notifier->notifyReturnedToDepartment($request, $actor, $comment);
+        $this->notifier->notifyStageActivated($request, $actor);
     }
 
     private function returnLockedToSourcing(
@@ -545,6 +549,7 @@ final class PurchaseApprovalWorkflow
             $this->setStatus($request, $actor, $reached);
         }
 
+        $this->contracts->materializeIfDue($request, $stage);
         $this->advance($request, $actor);
     }
 
@@ -574,6 +579,12 @@ final class PurchaseApprovalWorkflow
             }
 
             if (!$stage->getTasks()->isEmpty()) {
+                // Прикреплённый договор не рецензируется. Смешанный этап, где есть
+                // и обычная подпись, не трогаем: ей ещё кого ждать.
+                if ($this->contractsAreReused($request) && $this->stageOnlyReviewsContract($stage)) {
+                    $stage->setStatus(PurchaseStageStatus::SKIPPED);
+                    continue;
+                }
                 // Дошли до исполнения — значит согласование позади. Иначе оплату
                 // ждала бы заявка, по статусу всё ещё «на согласовании».
                 if ($stage->getPurpose()->isExecution()) {
@@ -590,6 +601,35 @@ final class PurchaseApprovalWorkflow
 
             $stage->setStatus(PurchaseStageStatus::SKIPPED);
         }
+    }
+
+    /**
+     * Заявка ссылается на договор и не загрузила новый файл мимо справочника.
+     * Новый файл без записи в справочнике отменяет пропуск рецензий.
+     */
+    private function contractsAreReused(PurchaseRequest $request): bool
+    {
+        if ($request->getContractLinks()->isEmpty()) {
+            return false;
+        }
+        foreach ($request->getFiles() as $file) {
+            if ($file->getType() === PurchaseFileType::CONTRACT && $file->getContract() === null) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function stageOnlyReviewsContract(PurchaseApprovalStage $stage): bool
+    {
+        foreach ($stage->getTasks() as $task) {
+            if ($task->getContractReview() === null) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** Согласующая часть маршрута пройдена. */
@@ -750,6 +790,7 @@ final class PurchaseApprovalWorkflow
     private function save(PurchaseRequest $request): void
     {
         $request->touch();
+        $request->syncProgressStatus();
 
         try {
             $this->em->flush();

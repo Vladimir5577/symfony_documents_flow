@@ -111,8 +111,12 @@ final class PurchaseDocumentBinding
 
     /**
      * Шаг «счета» можно закрыть: каждая закупаемая позиция оплачивается по
-     * счёту, а если договоры есть — относится к одному из них. И приложен
-     * подписанный договор: без него шаг не закрывается.
+     * счёту, а если договоры есть — относится к одному из них.
+     *
+     * Неутверждённый договор — файл, которого ещё нет в справочнике. К нему
+     * нужен подписанный скан. Ссылка на утверждённый договор шаг закрывает
+     * сама: скан у него уже есть. Один неутверждённый договор закрывает и
+     * скан без привязки — его отнесут к договору, когда появится запись.
      *
      * Всё на складе — ни счёта, ни подписанного договора: покупать нечего.
      *
@@ -142,9 +146,54 @@ final class PurchaseDocumentBinding
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_CONTRACT_REQUIRED);
             }
         }
-        if (!$request->hasFileOfType(PurchaseFileType::SIGNED_CONTRACT)) {
+        if ($this->missingSignedScan($request)) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         }
+    }
+
+    /**
+     * Неутверждённому договору не хватает подписанного скана.
+     * Утверждённая ссылка со сканом этот шаг не держит.
+     */
+    private function missingSignedScan(PurchaseRequest $request): bool
+    {
+        $unapproved = [];
+        foreach ($request->getFiles() as $file) {
+            if ($file->getType() === PurchaseFileType::CONTRACT && $file->getContract() === null) {
+                $unapproved[] = $file;
+            }
+        }
+
+        if ($unapproved === []) {
+            return $request->getContractLinks()->isEmpty()
+                && !$request->hasFileOfType(PurchaseFileType::SIGNED_CONTRACT);
+        }
+
+        $loose = 0;
+        foreach ($request->getFiles() as $file) {
+            if (
+                $file->getType() === PurchaseFileType::SIGNED_CONTRACT
+                && $file->getContractFile() === null
+                && $file->getContract() === null
+            ) {
+                ++$loose;
+            }
+        }
+
+        foreach ($unapproved as $contract) {
+            $attached = false;
+            foreach ($request->getFiles() as $scan) {
+                if ($scan->getType() === PurchaseFileType::SIGNED_CONTRACT && $scan->getContractFile() === $contract) {
+                    $attached = true;
+                    break;
+                }
+            }
+            if (!$attached && !(count($unapproved) === 1 && $loose > 0)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** Итог раскладки для истории: «Счёт 1.pdf — 3 поз.; на складе — 1 поз.». */
@@ -202,13 +251,24 @@ final class PurchaseDocumentBinding
     private function onlyFile(PurchaseRequest $request, PurchaseFileType $type, ?PurchaseRequestFile $except): ?PurchaseRequestFile
     {
         $found = [];
+        $add = static function (PurchaseRequestFile $file) use (&$found, $except): void {
+            if ($file === $except) {
+                return;
+            }
+            $found[$file->getId() ?? spl_object_id($file)] = $file;
+        };
         foreach ($request->getFiles() as $file) {
-            if ($file->getType() === $type && $file !== $except) {
-                $found[] = $file;
+            if ($file->getType() === $type) {
+                $add($file);
+            }
+        }
+        if ($type === PurchaseFileType::CONTRACT) {
+            foreach ($request->sharedFilesOf($type) as $file) {
+                $add($file);
             }
         }
 
-        return count($found) === 1 ? $found[0] : null;
+        return count($found) === 1 ? array_values($found)[0] : null;
     }
 
     private function nextInvoiceColor(PurchaseRequest $request, PurchaseRequestFile $new): string
@@ -249,6 +309,13 @@ final class PurchaseDocumentBinding
         foreach ($request->getFiles() as $file) {
             if ($file->getId() === $id && $file->getType() === $type) {
                 return $file;
+            }
+        }
+        if ($type === PurchaseFileType::CONTRACT) {
+            foreach ($request->sharedFilesOf($type) as $file) {
+                if ($file->getId() === $id) {
+                    return $file;
+                }
             }
         }
 

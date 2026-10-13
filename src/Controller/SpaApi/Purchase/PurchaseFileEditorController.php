@@ -11,6 +11,7 @@ use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseHistoryAction;
+use App\Repository\Purchase\PurchaseRequestFileRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
 use App\Service\Purchase\PurchaseAccess;
@@ -61,6 +62,7 @@ final class PurchaseFileEditorController extends AbstractController
     public function __construct(
         private readonly PurchaseRequestRepository $purchases,
         private readonly PurchaseAccess $access,
+        private readonly PurchaseRequestFileRepository $files,
         private readonly PurchaseFileStorageService $storage,
         private readonly PurchaseFileCoEditing $coEditing,
         private readonly OnlyOfficeJwt $jwt,
@@ -88,6 +90,10 @@ final class PurchaseFileEditorController extends AbstractController
 
         $this->jwt->requireEnabled();
         $task = $this->access->findMyActiveTask($purchase, $user);
+        // Утверждённый договор и его копия только смотрятся, даже на своём шаге.
+        if ($file->getSourceFile() !== null || $file->getContract() !== null || $this->files->isConfirmed((int) $file->getId())) {
+            $task = null;
+        }
         $mode = $task !== null ? 'edit' : 'view';
         $key = $this->documentKey($purchase, $file);
         $sessionToken = bin2hex(random_bytes(32));

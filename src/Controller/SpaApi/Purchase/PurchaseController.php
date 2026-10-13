@@ -7,6 +7,7 @@ namespace App\Controller\SpaApi\Purchase;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Purchase\PurchaseCategoryItem;
 use App\Entity\Purchase\PurchaseRequest;
+use App\Entity\Purchase\PurchaseRequestHistory;
 use App\Entity\Purchase\PurchaseRequestItem;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseCapability;
@@ -127,6 +128,8 @@ final class PurchaseController extends AbstractController
             $asParticipant ? (int) $user->getId() : null,
             $minAmount,
             $asParticipant ? $this->roster->roleCodesOf($user) : [],
+            $request->query->getBoolean('overdue'),
+            $this->progressFilter($request),
         );
 
         return $this->json([
@@ -141,6 +144,14 @@ final class PurchaseController extends AbstractController
                 'total_pages' => (int) ceil($result['total'] / $pageSize),
             ],
         ]);
+    }
+
+    /** Новые / в процессе / завершённые — место на маршруте, не статус заявки. */
+    private function progressFilter(Request $request): ?string
+    {
+        $progress = trim((string) $request->query->get('progress', ''));
+
+        return in_array($progress, ['new', 'progress', 'done'], true) ? $progress : null;
     }
 
     /**
@@ -393,6 +404,39 @@ final class PurchaseController extends AbstractController
         }
 
         $this->wipePurchase($purchase);
+
+        return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    /** Строка ленты активности. Только ROLE_ADMIN. */
+    #[Route('/{id}/history/{historyId}', name: 'spa_api_purchases_history_delete', requirements: ['id' => '\d+', 'historyId' => '\d+'], methods: ['DELETE'])]
+    public function deleteHistory(int $id, int $historyId, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+        if (!$this->isGranted(UserRole::ROLE_ADMIN->value)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $purchase = $this->purchaseRepo->find($id);
+        if ($purchase === null) {
+            return $this->json(['error' => SpaApiError::PURCHASE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $entry = null;
+        foreach ($purchase->getHistory() as $row) {
+            if ($row->getId() === $historyId) {
+                $entry = $row;
+                break;
+            }
+        }
+        if (!$entry instanceof PurchaseRequestHistory) {
+            return $this->json(['error' => SpaApiError::PURCHASE_HISTORY_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $this->em->remove($entry);
+        $this->em->flush();
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
     }

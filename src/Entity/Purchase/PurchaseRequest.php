@@ -7,6 +7,7 @@ use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseLaw;
 use App\Enum\Purchase\PurchaseMethod;
+use App\Enum\Purchase\PurchaseProgressStatus;
 use App\Enum\Purchase\PurchaseRequestKind;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseStatus;
@@ -21,6 +22,7 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[ORM\Entity(repositoryClass: PurchaseRequestRepository::class)]
 #[ORM\Index(columns: ['organization_id', 'status'])]
 #[ORM\Index(columns: ['status'])]
+#[ORM\Index(columns: ['progress_status'])]
 #[ORM\Index(columns: ['created_at'])]
 class PurchaseRequest
 {
@@ -77,6 +79,13 @@ class PurchaseRequest
 
     #[ORM\Column(type: Types::STRING, length: 50, enumType: PurchaseStatus::class)]
     private PurchaseStatus $status = PurchaseStatus::DRAFT;
+
+    /**
+     * Место на маршруте для фильтра списка. null — маршрута ещё нет (черновик).
+     * Пишет PurchaseApprovalWorkflow вместе с этапами.
+     */
+    #[ORM\Column(name: 'progress_status', type: Types::STRING, length: 20, nullable: true, enumType: PurchaseProgressStatus::class)]
+    private ?PurchaseProgressStatus $progressStatus = null;
 
     // Какой кнопкой создана. НЕ меняется: от неё зависят набор полей формы
     // при редактировании и проверка потолка быстрой заявки при подаче.
@@ -159,6 +168,10 @@ class PurchaseRequest
     #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseRequestFile::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $files;
 
+    /** @var Collection<int, PurchaseRequestContract> */
+    #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseRequestContract::class, cascade: ['persist'], orphanRemoval: true)]
+    private Collection $contractLinks;
+
     /** @var Collection<int, PurchaseApprovalStage> */
     #[ORM\OneToMany(mappedBy: 'purchaseRequest', targetEntity: PurchaseApprovalStage::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['position' => 'ASC', 'id' => 'ASC'])]
@@ -170,6 +183,7 @@ class PurchaseRequest
         $this->comments = new ArrayCollection();
         $this->history = new ArrayCollection();
         $this->files = new ArrayCollection();
+        $this->contractLinks = new ArrayCollection();
         $this->stages = new ArrayCollection();
     }
 
@@ -309,6 +323,41 @@ class PurchaseRequest
         $this->status = $status;
 
         return $this;
+    }
+
+    public function getProgressStatus(): ?PurchaseProgressStatus
+    {
+        return $this->progressStatus;
+    }
+
+    /** Пересчитать фильтр списка из этапов. Черновик без маршрута — null. */
+    public function syncProgressStatus(): void
+    {
+        $current = $this->getCurrentStage();
+        if ($current === null) {
+            $passed = !$this->stages->isEmpty();
+            foreach ($this->stages as $stage) {
+                if (!$stage->isClosed()) {
+                    $passed = false;
+                    break;
+                }
+            }
+            $this->progressStatus = $passed ? PurchaseProgressStatus::DONE : null;
+
+            return;
+        }
+
+        $first = null;
+        foreach ($this->stages as $stage) {
+            $position = $stage->getPosition();
+            if ($first === null || $position < $first) {
+                $first = $position;
+            }
+        }
+
+        $this->progressStatus = $current->getPosition() === $first
+            ? PurchaseProgressStatus::NEW
+            : PurchaseProgressStatus::PROGRESS;
     }
 
     public function getDueDate(): ?\DateTimeImmutable
@@ -483,7 +532,68 @@ class PurchaseRequest
             }
         }
 
-        return false;
+        return $this->sharedFilesOf($type) !== [];
+    }
+
+    /**
+     * @return Collection<int, PurchaseRequestContract>
+     */
+    public function getContractLinks(): Collection
+    {
+        return $this->contractLinks;
+    }
+
+    public function addContractLink(PurchaseRequestContract $link): static
+    {
+        if (!$this->contractLinks->contains($link)) {
+            $this->contractLinks->add($link);
+        }
+
+        return $this;
+    }
+
+    public function removeContractLink(PurchaseRequestContract $link): static
+    {
+        $this->contractLinks->removeElement($link);
+
+        return $this;
+    }
+
+    /** Договор этой заявки или договор, на который она ссылается. */
+    public function findContractFile(int $id): ?PurchaseRequestFile
+    {
+        foreach ($this->files as $file) {
+            if ($file->getId() === $id && $file->getType() === PurchaseFileType::CONTRACT) {
+                return $file;
+            }
+        }
+        foreach ($this->sharedFilesOf(PurchaseFileType::CONTRACT) as $file) {
+            if ($file->getId() === $id) {
+                return $file;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Файлы прикреплённых договоров. Своя копия той же строки сюда не попадает дважды:
+     * вызывающий склеивает со своими файлами по id.
+     *
+     * @return list<PurchaseRequestFile>
+     */
+    public function sharedFilesOf(PurchaseFileType $type): array
+    {
+        $found = [];
+        foreach ($this->contractLinks as $link) {
+            foreach ($link->getContract()->getFiles() as $file) {
+                if ($file->getType() === $type && $file->getId() !== null) {
+                    $found[$file->getId()] = $file;
+                }
+            }
+        }
+
+        return array_values($found);
     }
 
     public function getCreatedAs(): PurchaseRequestKind
