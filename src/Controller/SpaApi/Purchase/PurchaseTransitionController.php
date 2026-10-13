@@ -54,6 +54,23 @@ final class PurchaseTransitionController extends AbstractController
             fn (PurchaseRequest $p, User $u) => $this->workflow->submit($p, $u));
     }
 
+    /**
+     * Отменить заявку как автор: пока разбор не решён или когда её вернули на
+     * доработку. Директор отменяет с разбора — через triage. Причина обязательна.
+     */
+    #[Route('/cancel', name: 'spa_api_purchases_cancel', methods: ['POST'])]
+    public function cancel(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        $comment = $this->comment($request);
+        if ($comment === '') {
+            return $this->json(['error' => SpaApiError::PURCHASE_COMMENT_REQUIRED], Response::HTTP_BAD_REQUEST);
+        }
+
+        return $this->transition($id, $user,
+            fn (PurchaseRequest $p, User $u) => $this->access->canCancel($p, $u),
+            fn (PurchaseRequest $p, User $u) => $this->workflow->cancel($p, $u, $comment));
+    }
+
     /** Кнопка редактора: рецензия пройдена или рецензии утверждены. */
     #[Route('/tasks/{taskId}/contract-review', name: 'spa_api_purchases_task_contract_review', requirements: ['taskId' => '\d+'], methods: ['POST'])]
     public function passContractReview(int $id, int $taskId, Request $request, #[CurrentUser] ?User $user): JsonResponse

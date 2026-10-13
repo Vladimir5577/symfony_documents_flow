@@ -495,6 +495,8 @@ final class PurchaseApiPresenter
             'canEdit' => $isOwner && $status->isEditable(),
             'canDelete' => $isOwner && $status === PurchaseStatus::DRAFT,
             'canSubmit' => $isOwner && $status->isEditable(),
+            // Отмена автором; директор отменяет из модалки разбора.
+            'canCancel' => $this->access->canCancel($request, $user),
             // Согласовать/вернуть — одна пара кнопок на всех, включается задачей
             'canApproveTask' => $myTask !== null,
             // Возврат автору разрешает этап: на исполнении его нет — деньги ушли

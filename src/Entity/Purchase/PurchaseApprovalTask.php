@@ -328,6 +328,8 @@ class PurchaseApprovalTask
         $this->decidedBy = null;
         $this->decidedAt = null;
         $this->comment = null;
+        // После отката пакет документов будет другой: прежняя рецензия его не покрывает.
+        $this->contractReviewedFileIds = [];
 
         return $this;
     }

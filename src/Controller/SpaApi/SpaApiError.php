@@ -103,6 +103,8 @@ final class SpaApiError
     public const PURCHASE_ROUTE_META_INVALID = 'purchase_route_meta_invalid';
     /** В этапе нет задач, назначения или значения нет в справочнике. */
     public const PURCHASE_ROUTE_STAGE_INVALID = 'purchase_route_stage_invalid';
+    /** Динамический этап (людей выбирают на разборе) смешан с другими задачами. */
+    public const PURCHASE_ROUTE_DYNAMIC_MIXED = 'purchase_route_dynamic_mixed';
     /** Минуты на этап — целое от 1 до 525600, либо поле пустое. */
     public const PURCHASE_ROUTE_REVIEW_MINUTES_INVALID = 'purchase_route_review_minutes_invalid';
     /** В задаче нет роли, пула или назначение недопустимо в заготовке. */
