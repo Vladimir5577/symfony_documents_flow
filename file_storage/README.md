@@ -56,8 +56,12 @@ docker compose up -d
 ```
 **В материнском проекте (из корня, вместе с ядром):**
 ```sh
-docker compose -f docker-compose.yml -f file_storage/docker-compose.yml up -d
+FILE_STORAGE_DIR=./file_storage docker compose -f docker-compose.yml -f file_storage/docker-compose.yml up -d
 ```
+`FILE_STORAGE_DIR` обязателен: compose считает относительные пути от папки первого файла. Без него
+nginx-кэш получит конфиг nginx ядра, а MinIO будет писать в каталог рядом с ядром, а не рядом с этой папкой.
+Если раньше уже запускали без него, перед первым запуском с ним перенесите данные MinIO из `../minio_data`
+(рядом с корнем ядра) в `minio_data` (в корне ядра) или задайте путь явно.
 
 ### 4. Создать bucket (ОБЯЗАТЕЛЬНЫЙ разовый шаг)
 MinIO стартует пустым. Bucket для канбан-вложений нужно создать один раз —
