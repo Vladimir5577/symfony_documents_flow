@@ -47,7 +47,11 @@ class AdminStartFixtures extends Fixture implements FixtureGroupInterface
         $admin->setEmail('admin@admin.com');
         // Админ без привязки к конкретной организации
         $admin->setOrganization(null);
-        $admin->setPassword($this->passwordHasher->hashPassword($admin, '1234'));
+        $plain = (string) ($_SERVER['ADMIN_INITIAL_PASSWORD'] ?? '');
+        if (\strlen($plain) < 12) {
+            throw new \RuntimeException('Set ADMIN_INITIAL_PASSWORD (12+ chars) before loading the admin fixture');
+        }
+        $admin->setPassword($this->passwordHasher->hashPassword($admin, $plain));
         $admin->addRoleEntity($adminRole);
         $manager->persist($admin);
 

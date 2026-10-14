@@ -26,7 +26,8 @@ final class KanbanUserController extends AbstractController
         $apiKey = $this->getParameter('kanban_internal_api_key');
         $providedKey = $request->headers->get('X-API-Key');
 
-        if ($apiKey === null || $providedKey !== $apiKey) {
+        if (!\is_string($apiKey) || $apiKey === ''
+            || !\is_string($providedKey) || !hash_equals($apiKey, $providedKey)) {
             return $this->json(['error' => 'Access Denied'], Response::HTTP_FORBIDDEN);
         }
 
