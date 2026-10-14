@@ -9,6 +9,7 @@ use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\Purchase\PurchaseRequestItem;
 use App\Enum\Purchase\PurchaseFileType;
+use App\Enum\Purchase\PurchaseRequestKind;
 
 /**
  * Раскладка позиций заявки по договорам и счетам.
@@ -137,11 +138,17 @@ final class PurchaseDocumentBinding
         if (!$request->hasFileOfType(PurchaseFileType::INVOICE)) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         }
-        $hasContract = $request->hasFileOfType(PurchaseFileType::CONTRACT);
         foreach ($toBuy as $item) {
             if ($item->getInvoiceFile() === null) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_INVOICE_REQUIRED);
             }
+        }
+        // Быстрая заявка идёт без договора: шаг «Счёт» закрывает один счёт.
+        if ($request->getCreatedAs() === PurchaseRequestKind::FAST) {
+            return;
+        }
+        $hasContract = $request->hasFileOfType(PurchaseFileType::CONTRACT);
+        foreach ($toBuy as $item) {
             if ($hasContract && $item->getContractFile() === null) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_CONTRACT_REQUIRED);
             }
