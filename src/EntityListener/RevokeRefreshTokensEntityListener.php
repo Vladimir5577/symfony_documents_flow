@@ -7,7 +7,7 @@ use Doctrine\Bundle\DoctrineBundle\Attribute\AsEntityListener;
 use Doctrine\ORM\Event\PreUpdateEventArgs;
 
 /**
- * Doctrine Entity Listener на User — при смене пароля удаляет все его refresh-токены.
+ * Doctrine Entity Listener на User — при смене пароля или логина удаляет все его refresh-токены.
  *
  * Без этого сброс пароля не выкидывает того, кто уже вошёл: access-токен живёт час,
  * но старый refresh (ttl gesdinet по умолчанию — 30 дней) молча выдаёт новые. Админ
@@ -26,7 +26,7 @@ final class RevokeRefreshTokensEntityListener
 {
     public function preUpdate(User $user, PreUpdateEventArgs $event): void
     {
-        if (!$event->hasChangedField('password')) {
+        if (!$event->hasChangedField('password') && !$event->hasChangedField('login')) {
             return;
         }
 
@@ -37,9 +37,15 @@ final class RevokeRefreshTokensEntityListener
             ? $event->getOldValue('login')
             : $user->getLogin();
 
+        $entityManager = $event->getObjectManager();
+        // Общая с Go Auth блокировка упорядочивает обмен и отзыв токенов до конца транзакции flush.
+        $entityManager->getConnection()
+            ->executeQuery('SELECT pg_advisory_xact_lock(hashtext(:login))', ['login' => $login])
+            ->free();
+
         // DQL DELETE, а не findBy + remove: внутри preUpdate нельзя трогать UnitOfWork,
         // а запрос уходит в БД напрямую и в той же транзакции, что и сам flush.
-        $event->getObjectManager()
+        $entityManager
             ->createQuery('DELETE FROM App\Entity\User\RefreshToken t WHERE t.username = :login')
             ->setParameter('login', $login)
             ->execute();

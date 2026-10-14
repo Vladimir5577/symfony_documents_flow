@@ -3,6 +3,7 @@
 namespace App\Service\Document\Convertor;
 
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Filesystem\Filesystem;
 
 class DocxToPdfConvertorService
 {
@@ -30,26 +31,34 @@ class DocxToPdfConvertorService
 //        $docxFilePath = $this->documentsOriginalsDir . DIRECTORY_SEPARATOR . $docxFileName; // файл который загружен
 
         // создаём временный профиль для LibreOffice
-        $tmpProfile = '/tmp/libreoffice_profile';
-        if (!is_dir($tmpProfile)) {
-            mkdir($tmpProfile, 0777, true);
-        }
+        $tmpProfile = '/tmp/lo-' . bin2hex(random_bytes(16));
+        $filesystem = new Filesystem();
+        try {
+            $filesystem->mkdir($tmpProfile, 0700);
 
-        // запуск LibreOffice для конвертации DOCX → PDF
-        $process = new \Symfony\Component\Process\Process([
-            '/usr/bin/soffice', // путь к бинарнику LibreOffice
-            '--headless',
-            '--convert-to', 'pdf',
-            $docxFilePath,
-            '--outdir', $this->documentsUpdatedDir,
-            '-env:UserInstallation=file://' . $tmpProfile
-        ]);
+            // timeout завершает также дочерние процессы обёртки soffice.
+            $process = new \Symfony\Component\Process\Process([
+                'timeout', '-k', '5', '120',
+                '/usr/bin/soffice', // путь к бинарнику LibreOffice
+                '--headless',
+                '--convert-to', 'pdf',
+                $docxFilePath,
+                '--outdir', $this->documentsUpdatedDir,
+                '-env:UserInstallation=file://' . $tmpProfile
+            ]);
+            $process->setTimeout(130);
+            $process->run();
 
-        $process->run();
-
-        // проверка на ошибки
-        if (!$process->isSuccessful()) {
-            throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
+            // проверка на ошибки
+            if (!$process->isSuccessful()) {
+                throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
+            }
+        } finally {
+            try {
+                $filesystem->remove($tmpProfile);
+            } catch (\Throwable) {
+                // Мусор в /tmp не повод терять результат конвертации.
+            }
         }
 
         // путь к PDF

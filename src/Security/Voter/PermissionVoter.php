@@ -25,7 +25,7 @@ final class PermissionVoter extends Voter
             return false;
         }
 
-        return $user->hasPermission($attribute);
+        return false;
     }
 }
 

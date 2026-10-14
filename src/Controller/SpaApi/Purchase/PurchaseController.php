@@ -628,8 +628,10 @@ final class PurchaseController extends AbstractController
             $price = $itemPayload['estimatedPrice'] ?? null;
 
             if ($name === '' || $unit === ''
-                || !is_numeric($quantity) || (float) $quantity <= 0
-                || !is_numeric($price) || (float) $price < 0
+                || !is_numeric($quantity) || !is_finite((float) $quantity)
+                || round((float) $quantity, 3) <= 0 || (float) $quantity > 999999999.999
+                || !is_numeric($price) || !is_finite((float) $price)
+                || (float) $price < 0 || (float) $price > 9999999999.99
             ) {
                 return $this->json(['error' => SpaApiError::PURCHASE_INVALID_ITEM], Response::HTTP_BAD_REQUEST);
             }

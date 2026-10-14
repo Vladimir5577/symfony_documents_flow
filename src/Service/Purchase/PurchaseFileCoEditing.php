@@ -59,6 +59,10 @@ final class PurchaseFileCoEditing
      */
     public function documentKey(PurchaseRequestFile $file): string
     {
+        if ($this->appSecret === '') {
+            throw new \LogicException('APP_SECRET не настроен.');
+        }
+
         $base = sprintf('pf%dr%d', $file->getId(), $file->getEditorRevision());
 
         return $base . '-' . substr(hash_hmac('sha256', 'purchase-file-key|' . $base, $this->appSecret), 0, 16);

@@ -717,6 +717,10 @@ final class PurchaseFileEditorController extends AbstractController
      */
     private function signFile(string $purpose, int $purchaseId, int $fileId, string $key, string $session): string
     {
+        if ($this->appSecret === '') {
+            throw new \LogicException('APP_SECRET не настроен.');
+        }
+
         return hash_hmac('sha256', $purpose . "\n" . $purchaseId . "\n" . $fileId . "\n" . $key . "\n" . $session, $this->appSecret);
     }
 

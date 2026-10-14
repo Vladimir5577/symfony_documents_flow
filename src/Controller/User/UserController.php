@@ -63,7 +63,13 @@ final class UserController extends AbstractController
             }
         }
 
-        $roles = $roleRepository->findAllExceptAdmin();
+        $allowedRoleNames = array_filter(
+            [UserRole::ROLE_USER->value, UserRole::ROLE_MANAGER->value],
+            fn (string $role): bool => $this->isGranted($role),
+        );
+        $roles = $isAdmin
+            ? $roleRepository->findAllExceptAdmin()
+            : $roleRepository->findBy(['name' => $allowedRoleNames], ['sortOrder' => 'ASC', 'id' => 'ASC']);
 
         $initialFormData = [];
         if (!$isAdmin && $userOrganization) {
@@ -139,6 +145,10 @@ final class UserController extends AbstractController
 
         $plainPassword = (string) ($formData['plain_password'] ?? '');
         $confirmPassword = (string) ($formData['confirm_password'] ?? '');
+        if ($plainPassword === '') {
+            $this->addFlash('error', 'Пароль не может быть пустым.');
+            return $renderForm($formData);
+        }
         if ($plainPassword !== $confirmPassword) {
             $this->addFlash('error', 'Пароли не совпадают.');
             return $renderForm($formData);
@@ -173,6 +183,10 @@ final class UserController extends AbstractController
 
         foreach ($this->parseSelectedRoleIds($formData) as $roleId) {
             $role = $roleRepository->find($roleId);
+            if ($role && !$isAdmin && !in_array($role->getName(), $allowedRoleNames, true)) {
+                $this->addFlash('error', 'Недостаточно прав для назначения выбранной роли.');
+                return $renderForm($formData);
+            }
             if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
                 $user->addRoleEntity($role);
             }
