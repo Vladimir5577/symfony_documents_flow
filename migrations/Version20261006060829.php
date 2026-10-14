@@ -7,9 +7,6 @@ namespace DoctrineMigrations;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\Migrations\AbstractMigration;
 
-/**
- * Auto-generated Migration: Please modify to your needs!
- */
 final class Version20261006060829 extends AbstractMigration
 {
     public function getDescription(): string
@@ -19,7 +16,6 @@ final class Version20261006060829 extends AbstractMigration
 
     public function up(Schema $schema): void
     {
-        // this up() migration is auto-generated, please modify it to your needs
         $this->addSql('ALTER TABLE purchase_approval_task ADD contract_reviewed_file_ids JSON DEFAULT \'[]\' NOT NULL');
         $this->addSql('ALTER TABLE purchase_approval_task DROP contract_review_passed');
         $this->addSql('ALTER TABLE purchase_request_file ADD color VARCHAR(7) DEFAULT NULL');
@@ -34,7 +30,6 @@ final class Version20261006060829 extends AbstractMigration
 
     public function down(Schema $schema): void
     {
-        // this down() migration is auto-generated, please modify it to your needs
         $this->addSql('ALTER TABLE purchase_approval_task ADD contract_review_passed BOOLEAN DEFAULT false NOT NULL');
         $this->addSql('ALTER TABLE purchase_approval_task DROP contract_reviewed_file_ids');
         $this->addSql('ALTER TABLE purchase_request_file DROP color');

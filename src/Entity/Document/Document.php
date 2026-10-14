@@ -40,7 +40,6 @@ class Document
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
-    // document_type (ManyToOne relation)
     #[ORM\ManyToOne(targetEntity: DocumentType::class)]
     #[ORM\JoinColumn(name: 'document_type_id', referencedColumnName: 'id', nullable: false, onDelete: 'RESTRICT')]
     #[Assert\NotNull(message: 'Тип документа обязателен для заполнения.')]
@@ -63,21 +62,17 @@ class Document
     #[ORM\Column(name: 'is_published', type: Types::BOOLEAN, options: ['default' => false])]
     private bool $isPublished = false;
 
-    // created_at
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
 
-    // updated_at
     #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable]
     private ?\DateTimeImmutable $updatedAt = null;
 
-    // deleted_at (soft delete)
     #[ORM\Column(name: 'deleted_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $deletedAt = null;
 
-    // created_by (author)
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'created_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?User $createdBy = null;
@@ -289,7 +284,6 @@ class Document
     public function removeUserRecipient(DocumentUserRecipient $userRecipient): static
     {
         if ($this->userRecipients->removeElement($userRecipient)) {
-            // set the owning side to null (unless already changed)
             if ($userRecipient->getDocument() === $this) {
                 $userRecipient->setDocument(null);
             }

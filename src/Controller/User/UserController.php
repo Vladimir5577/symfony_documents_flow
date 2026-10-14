@@ -103,7 +103,6 @@ final class UserController extends AbstractController
             return $this->redirectToRoute('user_register');
         }
 
-        // Получаем выбранную организацию
         $organizationId = (int) ($formData['organization_id'] ?? 0);
         if ($organizationId <= 0) {
             $this->addFlash('error', 'Необходимо выбрать организацию.');
@@ -350,7 +349,6 @@ final class UserController extends AbstractController
             throw $this->createAccessDeniedException('Недостаточно прав для просмотра профиля.');
         }
 
-        // Загружаем Worker для пользователя, если он существует
         $worker = $workerRepository->findOneBy(['user' => $user]);
 
         $avatarPreviewUrl = null;
@@ -449,7 +447,6 @@ final class UserController extends AbstractController
             throw $this->createNotFoundException('Пользователь не найден');
         }
 
-        // Получаем Worker для пользователя, если он существует
         $worker = $workerRepository->findOneBy(['user' => $user]);
 
         // Получаем дерево организаций
@@ -591,13 +588,11 @@ final class UserController extends AbstractController
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
         $formData = $request->request->all();
 
-        // Валидация CSRF токена
         if (!$this->isCsrfTokenValid('edit_user', $formData['_csrf_token'] ?? '')) {
             $this->addFlash('error', 'Неверный CSRF токен.');
             return $this->redirectToRoute('app_all_users');
         }
 
-        // Получаем ID пользователя из формы
         $userId = (int) ($formData['user_id'] ?? 0);
         if ($userId === 0) {
             $this->addFlash('error', 'Не указан ID пользователя.');
@@ -697,7 +692,6 @@ final class UserController extends AbstractController
                 return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
             }
 
-            // Обновляем организацию только если изменилась
             if ($user->getOrganization()->getId() !== $organization->getId()) {
                 $user->setOrganization($organization);
             }
@@ -724,12 +718,10 @@ final class UserController extends AbstractController
             );
         }
 
-        // Устанавливаем updated_by текущим залогиненным пользователем
         if ($currentUser instanceof User) {
             $user->setUpdatedBy($currentUser);
         }
 
-        // Сохраняем изменения пользователя
         $entityManager->flush();
 
         if ($isAdmin) {
@@ -747,7 +739,6 @@ final class UserController extends AbstractController
                 $worker->setDescription($description !== '' ? $description : null);
                 $entityManager->persist($worker);
             } elseif ($worker) {
-                // Если профессия пустая, удаляем Worker
                 $entityManager->remove($worker);
             }
         }

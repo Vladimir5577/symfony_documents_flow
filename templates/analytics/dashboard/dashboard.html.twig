@@ -18,7 +18,6 @@
         <span class="name">Донснабкомплект</span>
     </a>
     <div class="header-meta">
-{#        <span class="badge-period">Апрель 2025</span>#}
     </div>
 </header>
 
@@ -41,11 +40,6 @@
     <!-- TAB NAVIGATION -->
     <div class="tabs-nav tabs-nav-main" id="tabsNav">
         <button class="tab-btn active" onclick="switchTab('finance')"><span class="ico">💰</span> Финансы</button>
-{#        <button class="tab-btn" onclick="switchTab('tko')"><span class="ico">🚛</span> ТКО</button>#}
-{#        <button class="tab-btn" onclick="switchTab('clients')"><span class="ico">👤</span> Клиенты</button>#}
-{#        <button class="tab-btn" onclick="switchTab('hr')"><span class="ico">👥</span> Кадры</button>#}
-{#        <button class="tab-btn" onclick="switchTab('complaints')"><span class="ico">📞</span> Жалобы</button>#}
-{#        <button class="tab-btn" onclick="switchTab('compare')"><span class="ico">📊</span> Сравнение</button>#}
     </div>
     <div class="tabs-nav" style="margin-top:8px;">
         <button id="scaleMonthBtn" class="tab-btn {{ initialScale == 'month' ? 'active' : '' }}" onclick="setScale('month')">По месяцам</button>
@@ -81,10 +75,6 @@
             Срез за период: --
         </div>
         <div class="grid-3" style="margin-bottom:12px">
-{#            <div class="card">#}
-{#                <div class="card-title">Выручка по месяцам</div>#}
-{#                <div class="chart-wrap"><canvas id="chartRevenue"></canvas></div>#}
-{#            </div>#}
             <div class="card">
                 <div class="card-title">Дебиторская задолженность</div>
                 <div class="stat-row"><span class="label">Итого</span><span class="value" id="finReceivableTotal">0 ₽</span></div>
@@ -97,10 +87,6 @@
                 <div class="card-title">Остатки на счетах</div>
                 <div class="stat-row"><span class="label">Итого</span><span class="value" id="finBalanceTotal">0 ₽</span></div>
             </div>
-{#            <div class="card">#}
-{#                <div class="card-title">Структура расходов</div>#}
-{#                <div class="chart-wrap"><canvas id="chartExpenses"></canvas></div>#}
-{#            </div>#}
         </div>
         <div class="grid-3" style="margin-bottom:12px">
             <div class="card">
@@ -124,54 +110,6 @@
                 <div class="stat-row"><span class="label">Чистая позиция (остатки - кредиторка)</span><span class="value" id="finNetPosition">0 ₽</span></div>
             </div>
         </div>
-{#        <div class="grid-2" style="margin-bottom:12px">#}
-{#            <div class="card">#}
-{#                <div class="card-title">Дебиторка по филиалам <span style="color:var(--accent-amber);font-size:10px">млн руб.</span></div>#}
-{#                <div class="chart-wrap"><canvas id="chartDebt"></canvas></div>#}
-{#            </div>#}
-{#            <div class="card">#}
-{#                <div class="card-title">Финансовые показатели</div>#}
-{#                <div class="stat-row"><span class="label">Выручка за месяц</span><span class="value" style="color:var(--accent-blue)">42 620 000 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">Выручка с начала года</span><span class="value">156 400 000 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">План выручки на апрель</span><span class="value">41 000 000 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">% выполнения плана</span><span class="value" style="color:var(--accent-teal)">103.9%</span></div>#}
-{#                <div class="stat-row"><span class="label">Поступило денежных средств</span><span class="value">38 100 000 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">Чистый денежный поток</span><span class="value" style="color:var(--accent-teal)">+6 300 000 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">Остаток на счетах</span><span class="value">11 450 000 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">Дебиторка просроченная</span><span class="value" style="color:var(--accent-red)">7 800 000 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">Кредиторская задолженность</span><span class="value" style="color:var(--accent-amber)">3 200 000 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">Финансовый результат</span><span class="value" style="color:var(--accent-teal)">+4 100 000 ₽</span></div>#}
-{#            </div>#}
-{#        </div>#}
-{#        <div class="card">#}
-{#            <div class="card-title">Расходы по статьям — план / факт</div>#}
-{#            <div style="padding-top:4px">#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>ФОТ</span><span class="val">14.2М / 14.0М</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:101%;background:var(--accent-amber)"></div></div>#}
-{#                </div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>ГСМ</span><span class="val">5.8М / 5.2М</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:112%;background:var(--accent-red)"></div></div>#}
-{#                </div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>Ремонт и ТО</span><span class="val">3.1М / 3.4М</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:91%;background:var(--accent-teal)"></div></div>#}
-{#                </div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>Полигонные услуги</span><span class="val">4.2М / 4.2М</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:100%;background:var(--accent-blue)"></div></div>#}
-{#                </div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>Административные расходы</span><span class="val">2.8М / 3.0М</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:93%;background:var(--accent-cyan)"></div></div>#}
-{#                </div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>Прочие расходы</span><span class="val">1.4М / 1.5М</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:93%;background:var(--accent-purple)"></div></div>#}
-{#                </div>#}
-{#            </div>#}
-{#        </div>#}
     </div>
 
     <!-- ═══════════════════════ TKO ═══════════════════════ -->
@@ -185,77 +123,8 @@
                 <div class="card-title">Расход топлива (литры)</div>
                 <div class="chart-wrap"><canvas id="chartFuelConsumption"></canvas></div>
             </div>
-{#            <div class="card">#}
-{#                <div class="card-title">Выход техники по филиалам</div>#}
-{#                <div class="chart-wrap"><canvas id="chartTechOut"></canvas></div>#}
-{#            </div>#}
-{#            <div class="card">#}
-{#                <div class="card-title">Причины невыходов техники</div>#}
-{#                <div class="chart-wrap"><canvas id="chartDowntime"></canvas></div>#}
-{#            </div>#}
         </div>
         <div class="grid-2" style="margin-bottom:12px">
-{#            <div class="card">#}
-{#                <div class="card-title">Производственные показатели</div>#}
-{#                <div class="stat-row"><span class="label">Вывезено ТКО, тонн</span><span class="value" style="color:var(--accent-cyan)">4 820 т</span></div>#}
-{#                <div class="stat-row"><span class="label">Вывезено ТКО, м³</span><span class="value">36 150 м³</span></div>#}
-{#                <div class="stat-row"><span class="label">Захоронено на полигонах</span><span class="value">4 690 т</span></div>#}
-{#                <div class="stat-row"><span class="label">Количество рейсов</span><span class="value">2 841</span></div>#}
-{#                <div class="stat-row"><span class="label">Машин на маршруте в среднем</span><span class="value">76 / 87</span></div>#}
-{#                <div class="stat-row"><span class="label">Невыходы за месяц</span><span class="value" style="color:var(--accent-amber)">248 случаев</span></div>#}
-{#                <div class="stat-row"><span class="label">Сорвано маршрутов</span><span class="value" style="color:var(--accent-red)">31</span></div>#}
-{#                <div class="stat-row"><span class="label">Выработка 1 машины / день</span><span class="value">2.4 рейса</span></div>#}
-{#                <div class="stat-row"><span class="label">Тонн на 1 рейс</span><span class="value">1.70 т</span></div>#}
-{#                <div class="stat-row"><span class="label">Расход топлива на 1 рейс</span><span class="value">18.4 л</span></div>#}
-{#            </div>#}
-{#            <div class="card">#}
-{#                <div class="card-title">KPI производительности</div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>Выход техники на линию</span><span class="val">87.3%</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:87%;background:var(--accent-amber)"></div></div>#}
-{#                </div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>Выполнение маршрутов</span><span class="val">98.9%</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:99%;background:var(--accent-teal)"></div></div>#}
-{#                </div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>Загрузка машины (от норм.)</span><span class="val">92.4%</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:92%;background:var(--accent-blue)"></div></div>#}
-{#                </div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>Себестоимость 1 тонны</span><span class="val">6 820 ₽</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:78%;background:var(--accent-cyan)"></div></div>#}
-{#                </div>#}
-{#                <div class="prog-row">#}
-{#                    <div class="prog-label"><span>Исполнение плана вывоза</span><span class="val">103.1%</span></div>#}
-{#                    <div class="prog-track"><div class="prog-fill" style="width:100%;background:var(--accent-teal)"></div></div>#}
-{#                </div>#}
-{#                <div style="margin-top:14px">#}
-{#                    <div class="section-title" style="margin-bottom:10px">Топ причин невыходов</div>#}
-{#                    <div class="risk-list">#}
-{#                        <div class="risk-item" style="--item-color:var(--accent-red)">#}
-{#                            <div class="risk-dot"></div>#}
-{#                            <div class="risk-text">Технические неисправности — 98 случаев</div>#}
-{#                        </div>#}
-{#                        <div class="risk-item" style="--item-color:var(--accent-amber)">#}
-{#                            <div class="risk-dot"></div>#}
-{#                            <div class="risk-text">Плановый ремонт — 72 случая</div>#}
-{#                        </div>#}
-{#                        <div class="risk-item" style="--item-color:var(--accent-blue)">#}
-{#                            <div class="risk-dot"></div>#}
-{#                            <div class="risk-text">Отсутствие водителя — 44 случая</div>#}
-{#                        </div>#}
-{#                        <div class="risk-item" style="--item-color:var(--accent-cyan)">#}
-{#                            <div class="risk-dot"></div>#}
-{#                            <div class="risk-text">Нехватка топлива — 22 случая</div>#}
-{#                        </div>#}
-{#                        <div class="risk-item" style="--item-color:var(--text-muted)">#}
-{#                            <div class="risk-dot"></div>#}
-{#                            <div class="risk-text">Иные причины — 12 случаев</div>#}
-{#                        </div>#}
-{#                    </div>#}
-{#                </div>#}
-{#            </div>#}
         </div>
     </div>
 
@@ -325,14 +194,6 @@
                 <div class="card-title">Принятые / Уволенные по месяцам</div>
                 <div class="chart-wrap"><canvas id="chartHiringFiring"></canvas></div>
             </div>
-{#            <div class="card">#}
-{#                <div class="card-title">ФОТ по филиалам</div>#}
-{#                <div class="chart-wrap"><canvas id="chartFot"></canvas></div>#}
-{#            </div>#}
-{#            <div class="card">#}
-{#                <div class="card-title">Структура персонала</div>#}
-{#                <div class="chart-wrap"><canvas id="chartPersonnel"></canvas></div>#}
-{#            </div>#}
         </div>
         <div class="grid-2" style="margin-bottom:12px">
             <div class="card">
@@ -340,58 +201,7 @@
                 <div class="stat-row"><span class="label">Штатная численность</span><span class="value" id="statStaffPlanned">--</span></div>
                 <div class="stat-row"><span class="label">Фактическая численность</span><span class="value" id="statStaffActual" style="color:var(--accent-amber)">--</span></div>
                 <div class="stat-row"><span class="label">Открытых вакансий</span><span class="value" id="statVacancies" style="color:var(--accent-red)">--</span></div>
-{#                <div class="stat-row"><span class="label">Укомплектованность штата</span><span class="value" style="color:var(--accent-amber)">91.9%</span></div>#}
-{#                <div class="stat-row"><span class="label">Принято за апрель</span><span class="value" style="color:var(--accent-teal)">+8</span></div>#}
-{#                <div class="stat-row"><span class="label">Уволено за апрель</span><span class="value" style="color:var(--accent-amber)">-11</span></div>#}
-{#                <div class="stat-row"><span class="label">Текучесть кадров</span><span class="value" style="color:var(--accent-amber)">3.8%</span></div>#}
-{#                <div class="stat-row"><span class="label">ФОТ за месяц</span><span class="value">14 200 000 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">Средняя зарплата</span><span class="value">49 478 ₽</span></div>#}
-{#                <div class="stat-row"><span class="label">ФОТ / выручка</span><span class="value" style="color:var(--accent-amber)">33.3%</span></div>#}
             </div>
-{#            <div class="card">#}
-{#                <div class="card-title">Сигналы по кадрам</div>#}
-{#                <div class="risk-list">#}
-{#                    <div class="risk-item" style="--item-color:var(--accent-red)">#}
-{#                        <div class="risk-dot"></div>#}
-{#                        <div class="risk-text">Критичный дефицит водителей — 9 вакансий</div>#}
-{#                        <span class="risk-branch">Ф-3, Ф-6</span>#}
-{#                    </div>#}
-{#                    <div class="risk-item" style="--item-color:var(--accent-amber)">#}
-{#                        <div class="risk-dot"></div>#}
-{#                        <div class="risk-text">Текучесть выше нормы — 3.8% за месяц</div>#}
-{#                        <span class="risk-branch">Ф-5</span>#}
-{#                    </div>#}
-{#                    <div class="risk-item" style="--item-color:var(--accent-amber)">#}
-{#                        <div class="risk-dot"></div>#}
-{#                        <div class="risk-text">ФОТ на 1 сотр. превышает норму</div>#}
-{#                        <span class="risk-branch">Ф-1</span>#}
-{#                    </div>#}
-{#                    <div class="risk-item" style="--item-color:var(--accent-blue)">#}
-{#                        <div class="risk-dot"></div>#}
-{#                        <div class="risk-text">8 сотрудников на больничном листе</div>#}
-{#                        <span class="risk-branch">Все ф.</span>#}
-{#                    </div>#}
-{#                    <div class="risk-item" style="--item-color:var(--accent-teal)">#}
-{#                        <div class="risk-dot"></div>#}
-{#                        <div class="risk-text">Укомплектованность ремонтного цеха — норма</div>#}
-{#                        <span class="risk-branch">Ф-2, Ф-4</span>#}
-{#                    </div>#}
-{#                </div>#}
-{#                <div style="margin-top:14px">#}
-{#                    <div class="prog-row">#}
-{#                        <div class="prog-label"><span>ФОТ производственного персонала</span><span class="val">67%</span></div>#}
-{#                        <div class="prog-track"><div class="prog-fill" style="width:67%;background:var(--accent-blue)"></div></div>#}
-{#                    </div>#}
-{#                    <div class="prog-row">#}
-{#                        <div class="prog-label"><span>ФОТ административного персонала</span><span class="val">21%</span></div>#}
-{#                        <div class="prog-track"><div class="prog-fill" style="width:21%;background:var(--accent-purple)"></div></div>#}
-{#                    </div>#}
-{#                    <div class="prog-row">#}
-{#                        <div class="prog-label"><span>ФОТ управленческого персонала</span><span class="val">12%</span></div>#}
-{#                        <div class="prog-track"><div class="prog-fill" style="width:12%;background:var(--accent-cyan)"></div></div>#}
-{#                    </div>#}
-{#                </div>#}
-{#            </div>#}
         </div>
     </div>
 
@@ -467,16 +277,6 @@
 
     <!-- ═══════════════════════ COMPARE ═══════════════════════ -->
     <div class="tab-panel" id="tab-compare">
-{#        <div class="grid-2" style="margin-bottom:12px">#}
-{#            <div class="card">#}
-{#                <div class="card-title">Рейтинг филиалов — выручка</div>#}
-{#                <div class="chart-wrap"><canvas id="chartRatingRev"></canvas></div>#}
-{#            </div>#}
-{#            <div class="card">#}
-{#                <div class="card-title">Собираемость vs Задолженность</div>#}
-{#                <div class="chart-wrap"><canvas id="chartCollDebt"></canvas></div>#}
-{#            </div>#}
-{#        </div>#}
         <div class="card" style="margin-bottom:12px">
             <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
                 <span>Сводная таблица сравнения филиалов</span>
@@ -517,18 +317,6 @@
     <button class="bnav-btn active" onclick="switchTab('finance');setActiveNav(this)">
         <span class="ico">💰</span>Финансы
     </button>
-{#    <button class="bnav-btn" onclick="switchTab('tko');setActiveNav(this)">#}
-{#        <span class="ico">🚛</span>ТКО#}
-{#    </button>#}
-{#    <button class="bnav-btn" onclick="switchTab('clients');setActiveNav(this)">#}
-{#        <span class="ico">👤</span>Клиенты#}
-{#    </button>#}
-{#    <button class="bnav-btn" onclick="switchTab('hr');setActiveNav(this)">#}
-{#        <span class="ico">👥</span>Кадры#}
-{#    </button>#}
-{#    <button class="bnav-btn" onclick="switchTab('complaints');setActiveNav(this)">#}
-{#        <span class="ico">📞</span>Жалобы#}
-{#    </button>#}
     <button class="bnav-btn" onclick="switchTab('compare');setActiveNav(this)">
         <span class="ico">📊</span>Свод
     </button>

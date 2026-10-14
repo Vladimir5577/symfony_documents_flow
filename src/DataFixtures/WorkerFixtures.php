@@ -17,14 +17,12 @@ class WorkerFixtures extends Fixture implements DependentFixtureInterface
 
     public function load(ObjectManager $manager): void
     {
-        // Получаем всех пользователей
         $users = $this->userRepository->findAll();
 
         if (empty($users)) {
-            return; // Если нет пользователей, не создаем работников
+            return;
         }
 
-        // Профессии для работников
         $professions = [
             'Инженер-строитель',
             'Прораб',

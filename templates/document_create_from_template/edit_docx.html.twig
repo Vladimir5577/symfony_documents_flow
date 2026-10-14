@@ -79,7 +79,6 @@
         if (!document.hidden) renewSession();
     });
 
-    // ???
     // Сохранение при уходе со страницы (закрытие вкладки, переход, перезагрузка)
     window.addEventListener("beforeunload", function () {
         if (savingStopped) return;

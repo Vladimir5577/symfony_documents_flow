@@ -18,21 +18,18 @@ final class UserLastSeenActivityListener
     #[AsEventListener(event: 'kernel.request')]
     public function onKernelRequest(RequestEvent $event): void
     {
-        // Ignore sub-requests
         if (!$event->isMainRequest()) {
             return;
         }
 
         $user = $this->security->getUser();
 
-        // Only handle logged-in users
         if (!$user instanceof User) {
             return;
         }
 
         $lastSeen = $user->getLastSeenAt();
 
-        // Update only every 5 minutes
         if ($lastSeen && $lastSeen > new \DateTimeImmutable('-5 minutes')) {
             return;
         }

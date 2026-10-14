@@ -26,9 +26,6 @@ class DocxToPdfConvertorService
 
     public function convertDocxToPdf(string $docxFilePath): void
     {
-//        $projectDir = $this->getParameter('kernel.project_dir');
-//        $outputDir = $projectDir . '/public/files'; // абсолютный путь
-//        $docxFilePath = $this->documentsOriginalsDir . DIRECTORY_SEPARATOR . $docxFileName; // файл который загружен
 
         // создаём временный профиль для LibreOffice
         $tmpProfile = '/tmp/lo-' . bin2hex(random_bytes(16));
@@ -39,7 +36,7 @@ class DocxToPdfConvertorService
             // timeout завершает также дочерние процессы обёртки soffice.
             $process = new \Symfony\Component\Process\Process([
                 'timeout', '-k', '5', '120',
-                '/usr/bin/soffice', // путь к бинарнику LibreOffice
+                '/usr/bin/soffice',
                 '--headless',
                 '--convert-to', 'pdf',
                 $docxFilePath,
@@ -49,7 +46,6 @@ class DocxToPdfConvertorService
             $process->setTimeout(130);
             $process->run();
 
-            // проверка на ошибки
             if (!$process->isSuccessful()) {
                 throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
             }
@@ -61,10 +57,8 @@ class DocxToPdfConvertorService
             }
         }
 
-        // путь к PDF
         $pdfFilePath = $this->documentsUpdatedDir . DIRECTORY_SEPARATOR . basename($docxFilePath, '.docx') . '.pdf';
 
-        // проверка, что файл создан
         if (!file_exists($pdfFilePath)) {
             throw new \Exception("PDF не был создан");
         }

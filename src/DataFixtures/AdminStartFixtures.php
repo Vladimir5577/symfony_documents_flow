@@ -32,14 +32,12 @@ class AdminStartFixtures extends Fixture implements FixtureGroupInterface
             $role->setSortOrder($index);
             $manager->persist($role);
 
-            // Сохраняем ссылку на роль админа
             if ($userRole === UserRole::ROLE_ADMIN) {
                 $adminRole = $role;
                 $this->addReference('admin_role', $role);
             }
         }
 
-        // Создаем админа
         $admin = new User();
         $admin->setLogin('admin');
         $admin->setLastname('Админ');
@@ -55,7 +53,6 @@ class AdminStartFixtures extends Fixture implements FixtureGroupInterface
         $admin->addRoleEntity($adminRole);
         $manager->persist($admin);
 
-        // Сохраняем ссылку на админа
         $this->addReference('admin_user', $admin);
 
         // Сначала сохраняем все сущности

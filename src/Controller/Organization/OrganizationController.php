@@ -225,7 +225,6 @@ final class OrganizationController extends AbstractController
         if ($request->isMethod('POST')) {
             $formData = $request->request->all();
 
-            // Валидация CSRF токена
             if (!$this->isCsrfTokenValid('edit_organization_' . $id, $formData['_csrf_token'] ?? '')) {
                 $this->addFlash('error', 'Неверный CSRF токен.');
                 return $this->redirectToRoute('edit_organization', ['id' => $id]);
@@ -260,7 +259,6 @@ final class OrganizationController extends AbstractController
                 $organization->setParent(null);
             }
 
-            // Валидация объекта
             $errors = $validator->validate($organization);
             if (count($errors) > 0) {
                 foreach ($errors as $error) {
@@ -330,7 +328,6 @@ final class OrganizationController extends AbstractController
 
         $formData = $request->request->all();
 
-        // Валидация CSRF токена
         if (!$this->isCsrfTokenValid('create_organization', $formData['_csrf_token'] ?? '')) {
             $this->addFlash('error', 'Неверный CSRF токен.');
             return $this->redirectToRoute('create_organization');
@@ -359,7 +356,6 @@ final class OrganizationController extends AbstractController
             }
         }
 
-        // Создаём сущность по типу
         $organization = match ($organizationType) {
             OrganizationType::FILIAL => new Filial(),
             OrganizationType::DEPARTMENT => new Department(),
@@ -391,7 +387,6 @@ final class OrganizationController extends AbstractController
             }
         }
 
-        // Валидация объекта
         $errors = $validator->validate($organization);
         if (count($errors) > 0) {
             foreach ($errors as $error) {

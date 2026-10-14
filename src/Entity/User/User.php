@@ -37,7 +37,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     private ?AbstractOrganization $organization = null;
 
 
-    // 1) lastname
     #[ORM\Column(length: 50)]
     #[Assert\NotBlank(message: 'Фамилия обязательна для заполнения.')]
     #[Assert\Length(max: 50, maxMessage: 'Фамилия не должна превышать {{ limit }} символов.')]
@@ -47,7 +46,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     )]
     private ?string $lastname = null;
 
-    // 2) firstname
     #[ORM\Column(length: 50)]
     #[Assert\NotBlank(message: 'Имя обязательно для заполнения.')]
     #[Assert\Length(max: 50, maxMessage: 'Имя не должно превышать {{ limit }} символов.')]
@@ -57,7 +55,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     )]
     private ?string $firstname = null;
 
-    // 3) patronymic
     #[ORM\Column(length: 50, nullable: true)]
     #[Assert\Length(max: 50, maxMessage: 'Отчество не должно превышать {{ limit }} символов.')]
     #[Assert\Regex(
@@ -66,7 +63,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     )]
     private ?string $patronymic = null;
 
-    // 4) boss (self-reference)
     #[ORM\ManyToOne(targetEntity: self::class)]
     #[ORM\JoinColumn(name: 'boss_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?self $boss = null;
@@ -74,7 +70,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\OneToOne(mappedBy: 'user', targetEntity: Worker::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private ?Worker $worker = null;
 
-    // 5) phone
     #[ORM\Column(length: 30, nullable: true)]
     #[Assert\Length(max: 30, maxMessage: 'Телефон не должен превышать {{ limit }} символов.')]
     #[Assert\Regex(
@@ -86,7 +81,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(name: 'birth_date', type: Types::DATE_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $birthDay = null;
 
-    // 6) email
     #[ORM\Column(length: 50, nullable: true)]
     #[Assert\Email(message: 'Email имеет неверный формат.')]
     #[Assert\Length(max: 50, maxMessage: 'Email не должен превышать {{ limit }} символов.')]
@@ -102,11 +96,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     )]
     private ?string $login = null;
 
-//    /**
-//     * @var list<string> The user roles
-//     */
-//    #[ORM\Column]
-//    private array $roles = [];
 
     /**
      * @var string The hashed password
@@ -115,33 +104,27 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[Assert\NotBlank(message: 'Пароль обязателен для заполнения.')]
     private ?string $password = null;
 
-    // work_with_documents
     #[ORM\Column(options: ['default' => false])]
     private bool $workWithDocuments = false;
 
-    // 9) created_at
     #[ORM\Column(name: 'created_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable(on: 'create')]
     private ?\DateTimeImmutable $createdAt = null;
 
-    // 10) created_by (self-reference)
     #[ORM\ManyToOne(targetEntity: self::class)]
     #[ORM\JoinColumn(name: 'created_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?self $createdBy = null;
 
-    // 11) updated_at
     #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE)]
     #[Gedmo\Timestampable]
     private ?\DateTimeImmutable $updatedAt = null;
 
-    // 12) deleted_at (soft delete)
     #[ORM\Column(name: 'deleted_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $deletedAt = null;
 
     #[ORM\Column(name: 'last_seen_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $lastSeenAt = null;
 
-    // 13) updated_by (self-reference)
     #[ORM\ManyToOne(targetEntity: self::class)]
     #[ORM\JoinColumn(name: 'updated_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?self $updatedBy = null;
@@ -185,23 +168,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return (string) $this->login;
     }
 
-//    public function getRoles(): array
-//    {
-//        $roles = $this->roles;
-//        $roles[] = 'ROLE_USER';
-//
-//        return array_unique($roles);
-//    }
-//
-//    /**
-//     * @param list<string> $roles
-//     */
-//    public function setRoles(array $roles): static
-//    {
-//        $this->roles = $roles;
-//
-//        return $this;
-//    }
 
     public function getPassword(): ?string
     {

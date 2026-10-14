@@ -201,7 +201,6 @@ final class PurchaseTransitionController extends AbstractController
      * Правки состава из payload. Позиции, которых разбирающий не прислал,
      * остаются как есть.
      *
-     * @param mixed $rows
      * @return array<int, array{included: bool, quantity: string|null, price: string|null}>
      */
     private function collectItemEdits(mixed $rows): array

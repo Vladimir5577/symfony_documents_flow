@@ -97,7 +97,7 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     }
 
     /**
-     * Список с фильтрами и пагинацией. Срочные — сверху, затем новые.
+     * Список с фильтрами и пагинацией. Новые — сверху.
      *
      * @param int|null                  $createdById       только заявки этого автора (null = без ограничения)
      * @param list<PurchaseStatus>|null $statuses          ограничение по статусам (null = все)
@@ -224,7 +224,6 @@ class PurchaseRequestRepository extends ServiceEntityRepository
     }
 
     /**
-     * @param int|null                  $createdById
      * @param list<PurchaseStatus>|null $statuses
      */
     private function createFilteredQueryBuilder(

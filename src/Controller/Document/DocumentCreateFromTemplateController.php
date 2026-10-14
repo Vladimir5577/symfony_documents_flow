@@ -84,7 +84,6 @@ final class DocumentCreateFromTemplateController extends AbstractController
     }
 
 
-    // ======================================================
 
     #[Route('/edit_docx', name: 'app_edit_docx')]
     public function editDocx(
@@ -227,7 +226,6 @@ final class DocumentCreateFromTemplateController extends AbstractController
                 $fileUploadService->deleteUpdatedFile($document->getUpdatedFile());
             }
 
-            // convert docx to pdf
             $docxToPdfConvertorService->convertDocxToPdf($targetPath);
             $document->setOriginalFile($uniqueName);
             $document->setUpdatedFile(pathinfo($uniqueName, \PATHINFO_FILENAME) . '.pdf');

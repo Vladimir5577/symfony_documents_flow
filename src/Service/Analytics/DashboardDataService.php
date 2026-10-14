@@ -70,7 +70,6 @@ final class DashboardDataService
         'bank_balance_amvrosiivka_branch',
     ];
 
-    /** Все бизнес-ключи */
     private const ALL_KEYS = [
         'cash_inflow', 'cash_outflow', 'account_balance',
         'fuel_consumption', 'tko_export',
@@ -329,7 +328,6 @@ final class DashboardDataService
             $orgData[$parentId][$bk] += $val;
         }
 
-        // Формируем строки
         $resultRows = [];
         $totals = array_fill_keys(self::ALL_KEYS, 0.0);
 
@@ -398,7 +396,6 @@ final class DashboardDataService
     private function resolveOrganizationIds(int $orgId): array
     {
         if ($orgId === 0) {
-            // Все родительские организации
             $parents = $this->organizationRepo->findAllParentOrganizations();
             $ids = [];
             foreach ($parents as $parent) {

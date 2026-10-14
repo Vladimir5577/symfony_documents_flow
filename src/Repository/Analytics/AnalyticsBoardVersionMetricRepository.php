@@ -16,28 +16,5 @@ class AnalyticsBoardVersionMetricRepository extends ServiceEntityRepository
         parent::__construct($registry, AnalyticsBoardVersionMetric::class);
     }
 
-    //    /**
-    //     * @return AnalyticsBoardVersionMetric[] Returns an array of AnalyticsBoardVersionMetric objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('a')
-    //            ->andWhere('a.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('a.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
 
-    //    public function findOneBySomeField($value): ?AnalyticsBoardVersionMetric
-    //    {
-    //        return $this->createQueryBuilder('a')
-    //            ->andWhere('a.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
 }

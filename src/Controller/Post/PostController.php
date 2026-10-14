@@ -286,7 +286,6 @@ final class PostController extends AbstractController
 
         $formData = $request->request->all();
 
-        // CSRF
         if (!$this->isCsrfTokenValid('create_post', $formData['_csrf_token'] ?? '')) {
             $this->addFlash('error', 'Неверный CSRF токен.');
             return $renderForm($formData);
@@ -318,7 +317,6 @@ final class PostController extends AbstractController
             return $this->redirectToRoute('app_login');
         }
 
-        // Создаём пост
         $post = new Post();
         $post->setTitle($title);
         $post->setType($postType);
@@ -327,7 +325,6 @@ final class PostController extends AbstractController
         $post->setIsActive(isset($formData['is_active']));
         $post->setIsRequiredAcknowledgment(isset($formData['is_required_acknowledgment']));
 
-        // Валидация сущности
         $errors = $validator->validate($post);
         if (count($errors) > 0) {
             foreach ($errors as $error) {
@@ -382,7 +379,6 @@ final class PostController extends AbstractController
             }
         }
 
-        // Сохраняем
         $entityManager->persist($post);
 
         $connection = $entityManager->getConnection();

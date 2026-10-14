@@ -16,10 +16,8 @@ class AuthController extends AbstractController
             return $this->redirectToRoute('app_dash_board');
         }
 
-        // get the login error if there is one
         $error = $authenticationUtils->getLastAuthenticationError();
 
-        // last username entered by the user
         $lastUsername = $authenticationUtils->getLastUsername();
 
         return $this->render('auth/login.html.twig', [
