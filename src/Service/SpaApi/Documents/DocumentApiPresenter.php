@@ -51,7 +51,7 @@ final class DocumentApiPresenter
 
         return [
             'id' => $organization->getId(),
-            'name' => $organization->getName(),
+            'name' => trim((string) $organization->getName()) !== '' ? $organization->getName() : 'Удалённая организация',
             'path' => $this->buildOrganizationPath($organization),
         ];
     }
@@ -186,7 +186,11 @@ final class DocumentApiPresenter
             (string) ($user->getPatronymic() ?? ''),
         ));
 
-        return $fullName !== '' ? $fullName : (string) $user->getLogin();
+        if ($fullName !== '') {
+            return $fullName;
+        }
+
+        return $user->getDeletedAt() !== null ? 'Удалённый пользователь' : (string) $user->getLogin();
     }
 
     public function buildOrganizationPath(?AbstractOrganization $organization): string

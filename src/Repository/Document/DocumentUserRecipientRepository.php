@@ -5,6 +5,7 @@ namespace App\Repository\Document;
 use App\Entity\Document\DocumentUserRecipient;
 use App\Entity\User\User;
 use App\Enum\Document\DocumentStatus;
+use App\Service\SpaApi\Documents\DocumentHistoricalRelationsLoader;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -13,7 +14,7 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class DocumentUserRecipientRepository extends ServiceEntityRepository
 {
-    public function __construct(ManagerRegistry $registry)
+    public function __construct(ManagerRegistry $registry, private readonly DocumentHistoricalRelationsLoader $historicalRelationsLoader)
     {
         parent::__construct($registry, DocumentUserRecipient::class);
     }
@@ -25,16 +26,18 @@ class DocumentUserRecipientRepository extends ServiceEntityRepository
      */
     public function findByUserWithDocument(User $user): array
     {
-        return $this->createQueryBuilder('r')
+        $query = $this->createQueryBuilder('r')
             ->innerJoin('r.document', 'd')->addSelect('d')
             ->leftJoin('d.documentType', 'dt')->addSelect('dt')
             ->leftJoin('d.organizationCreator', 'o')->addSelect('o')
-            ->leftJoin('d.createdBy', 'cb')->addSelect('cb')
+            ->leftJoin('d.createdBy', 'cb', 'WITH', 'cb.deletedAt IS NULL')->addSelect('cb')
             ->where('r.user = :user')
+            ->andWhere('d.deletedAt IS NULL')
             ->setParameter('user', $user)
             ->orderBy('d.createdAt', 'DESC')
-            ->getQuery()
-            ->getResult();
+            ->getQuery();
+
+        return $this->historicalRelationsLoader->load($query);
     }
 
     public function countNewIncomingForUser(User $user): int
@@ -79,9 +82,10 @@ class DocumentUserRecipientRepository extends ServiceEntityRepository
             ->innerJoin('r.document', 'd')->addSelect('d')
             ->leftJoin('d.documentType', 'dt')->addSelect('dt')
             ->leftJoin('d.organizationCreator', 'o')->addSelect('o')
-            ->leftJoin('d.createdBy', 'cb')->addSelect('cb')
+            ->leftJoin('d.createdBy', 'cb', 'WITH', 'cb.deletedAt IS NULL')->addSelect('cb')
             ->where('r.user = :user')
             ->andWhere('d.isPublished = :published')
+            ->andWhere('d.deletedAt IS NULL')
             ->setParameter('user', $user)
             ->setParameter('published', true)
             ->orderBy('d.createdAt', 'DESC')
@@ -113,7 +117,7 @@ class DocumentUserRecipientRepository extends ServiceEntityRepository
         }
 
         $total = (int) $countQb->getQuery()->getSingleScalarResult();
-        $recipients = $listQb->getQuery()->getResult();
+        $recipients = $this->historicalRelationsLoader->load($listQb->getQuery());
 
         $totalPages = (int) ceil($total / $limit);
 

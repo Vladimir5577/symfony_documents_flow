@@ -101,27 +101,37 @@ final class UpdFileService
 
     public function delete(UpdFile $file): void
     {
-        $this->deleteObject($file->getStorageKey());
-
+        $storageKey = $file->getStorageKey();
         $this->em->remove($file);
         $this->em->flush();
+
+        $this->deleteObject($storageKey);
     }
 
     /**
-     * Снести файлы документа перед удалением самого документа.
+     * Удаление строк фиксируется вместе с УПД; ключи нужны для очистки S3 после commit.
      *
-     * Внешний ключ стоит CASCADE, то есть строки уедут сами — а объекты остались бы
-     * висеть в бакете навсегда, и найти их потом было бы уже нечем: ключи хранятся
-     * только в этих строках.
+     * @return string[]
      */
-    public function deleteAllForUpd(Upd $upd): void
+    public function removeAllForUpd(Upd $upd): array
     {
+        $storageKeys = [];
         foreach ($this->fileRepository->findByUpd($upd) as $file) {
-            $this->deleteObject($file->getStorageKey());
+            $storageKeys[] = $file->getStorageKey();
             $this->em->remove($file);
         }
 
-        $this->em->flush();
+        return $storageKeys;
+    }
+
+    /**
+     * @param string[] $storageKeys
+     */
+    public function deleteObjects(array $storageKeys): void
+    {
+        foreach ($storageKeys as $storageKey) {
+            $this->deleteObject($storageKey);
+        }
     }
 
     /**

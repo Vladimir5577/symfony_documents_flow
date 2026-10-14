@@ -70,7 +70,7 @@ final class MechanicsReportTreeService
     /**
      * @return array{
      *     availableWeeks: list<array{startDate: string, endDate: string}>,
-     *     weeks: list<array{startDate: string, endDate: string, reports: list<array<string, mixed>>}>
+     *     weeks: list<array{reportIds: list<int>, organizationId: int, startDate: string, endDate: string, reports: list<array<string, mixed>>}>
      * }
      */
     public function buildWeeks(
@@ -106,13 +106,20 @@ final class MechanicsReportTreeService
 
         $grouped = [];
         foreach ($rows as $row) {
-            $key = $row['start_date'];
+            // Неделя × организация: отчёты разных организаций не затирают друг друга,
+            // а несколько досок одной организации за неделю (разные vm_id) дают одно дерево, как раньше.
+            $key = $row['start_date'] . '|' . (int) $row['organization_id'];
             if (!isset($grouped[$key])) {
                 $grouped[$key] = [
+                    'reportIds' => [],
+                    'organizationId' => (int) $row['organization_id'],
                     'startDate' => $row['start_date'],
                     'endDate'   => $row['end_date'],
                     'rows'      => [],
                 ];
+            }
+            if (!in_array((int) $row['report_id'], $grouped[$key]['reportIds'], true)) {
+                $grouped[$key]['reportIds'][] = (int) $row['report_id'];
             }
             $grouped[$key]['rows'][] = $row;
         }
@@ -120,6 +127,8 @@ final class MechanicsReportTreeService
         $weeks = [];
         foreach ($grouped as $period) {
             $weeks[] = [
+                'reportIds' => $period['reportIds'],
+                'organizationId' => $period['organizationId'],
                 'startDate' => $period['startDate'],
                 'endDate'   => $period['endDate'],
                 'reports'   => $this->buildTree($period['rows']),

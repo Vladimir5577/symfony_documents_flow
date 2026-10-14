@@ -3,9 +3,12 @@
 namespace App\Repository\Post;
 
 use App\Entity\Post\Post;
+use App\Entity\Post\PostUserStatus;
 use App\Entity\User\User;
 use App\Enum\Post\PostType;
+use App\Enum\Post\PostUserStatusType;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -27,6 +30,7 @@ class PostRepository extends ServiceEntityRepository
         int $limit = 10,
         bool $isActive = true,
         ?User $author = null,
+        ?User $unacknowledgedBy = null,
     ): array {
         $qb = $this->createQueryBuilder('p')
             ->addSelect('a')
@@ -50,11 +54,19 @@ class PostRepository extends ServiceEntityRepository
                 ->setParameter('type', $type);
         }
 
+        if ($unacknowledgedBy !== null) {
+            $this->applyUnacknowledgedFilter($qb, $unacknowledgedBy);
+        }
+
         return $qb->getQuery()->getResult();
     }
 
-    public function countActive(?PostType $type, bool $isActive = true, ?User $author = null): int
-    {
+    public function countActive(
+        ?PostType $type,
+        bool $isActive = true,
+        ?User $author = null,
+        ?User $unacknowledgedBy = null,
+    ): int {
         $qb = $this->createQueryBuilder('p')
             ->select('COUNT(p.id)')
             ->where('p.isActive = :isActive')
@@ -71,6 +83,25 @@ class PostRepository extends ServiceEntityRepository
                 ->setParameter('type', $type);
         }
 
+        if ($unacknowledgedBy !== null) {
+            $this->applyUnacknowledgedFilter($qb, $unacknowledgedBy);
+        }
+
         return (int) $qb->getQuery()->getSingleScalarResult();
+    }
+
+    private function applyUnacknowledgedFilter(QueryBuilder $qb, User $user): void
+    {
+        $qb->leftJoin(
+            PostUserStatus::class,
+            'ack',
+            'WITH',
+            'ack.post = p AND ack.user = :ackUser AND ack.status = :acknowledged',
+        )
+            ->andWhere('p.isActive = true')
+            ->andWhere('p.isRequiredAcknowledgment = true')
+            ->andWhere('ack.id IS NULL')
+            ->setParameter('ackUser', $user)
+            ->setParameter('acknowledged', PostUserStatusType::ACKNOWLEDGED->value);
     }
 }

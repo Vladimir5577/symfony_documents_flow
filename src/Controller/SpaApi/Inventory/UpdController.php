@@ -15,6 +15,7 @@ use App\Repository\Inventory\UpdRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Service\Inventory\InventoryAccessResolver;
 use App\Service\Inventory\UpdFileService;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\HeaderUtils;
@@ -176,22 +177,27 @@ final class UpdController extends AbstractController
             return $error;
         }
 
-        $itemsCount = $this->itemRepository->countByUpd($upd);
-        if ($itemsCount > 0) {
-            return $this->json([
-                'error' => SpaApiError::INVENTORY_UPD_HAS_ITEMS,
-                'itemsCount' => $itemsCount,
-            ], Response::HTTP_CONFLICT);
-        }
+        $storageKeys = [];
+        $response = $this->em->wrapInTransaction(function () use ($upd, &$storageKeys): JsonResponse {
+            $this->em->refresh($upd, LockMode::PESSIMISTIC_WRITE);
+            $itemsCount = $this->itemRepository->countByUpd($upd);
+            if ($itemsCount > 0) {
+                return $this->json([
+                    'error' => SpaApiError::INVENTORY_UPD_HAS_ITEMS,
+                    'itemsCount' => $itemsCount,
+                ], Response::HTTP_CONFLICT);
+            }
 
-        // Файлы сносим до документа: внешний ключ стоит CASCADE, строки уехали бы
-        // сами, а объекты остались бы висеть в бакете — ключи хранятся только в них.
-        $this->fileService->deleteAllForUpd($upd);
+            $storageKeys = $this->fileService->removeAllForUpd($upd);
+            $this->em->remove($upd);
 
-        $this->em->remove($upd);
-        $this->em->flush();
+            return $this->json(['success' => true]);
+        });
 
-        return $this->json(['success' => true]);
+        // Объекты удаляем только после commit: при откате файлы должны остаться доступными.
+        $this->fileService->deleteObjects($storageKeys);
+
+        return $response;
     }
 
     #[Route('/{id}/files', name: 'spa_api_inventory_upd_file_upload', requirements: ['id' => '\d+'], methods: ['POST'])]

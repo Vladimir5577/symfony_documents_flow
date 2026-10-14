@@ -69,8 +69,10 @@ final class PostController extends AbstractController
             }
         }
 
-        $posts = $this->postRepository->findActivePaginated($type, $page, $limit, $isActive, $author);
-        $total = $this->postRepository->countActive($type, $isActive, $author);
+        $unacknowledgedBy = $request->query->getBoolean('unacknowledged_only') ? $user : null;
+        $posts = $this->postRepository->findActivePaginated($type, $page, $limit, $isActive, $author, $unacknowledgedBy);
+        $total = $this->postRepository->countActive($type, $isActive, $author, $unacknowledgedBy);
+        $unacknowledgedCount = $this->postRepository->countActive(null, true, null, $user);
 
         $postIds = array_map(static fn (Post $p): ?int => $p->getId(), $posts);
         $commentCounts = $this->commentRepository->countGroupedByPosts($postIds);
@@ -86,6 +88,7 @@ final class PostController extends AbstractController
                 $posts,
             ),
             'pagination' => $this->formatter->formatPagination($page, $limit, $total),
+            'unacknowledgedCount' => $unacknowledgedCount,
             'filters' => [
                 'typeChoices' => $this->formatter->formatTypeChoices(),
             ],

@@ -92,9 +92,11 @@ final class DocumentUpdateService
 
         $wasAlreadyPublished = $document->isPublished();
 
-        $description = trim((string) ($payload['description'] ?? $document->getDescription() ?? ''));
         $document->setName($name);
-        $document->setDescription($description !== '' ? $description : null);
+        if (array_key_exists('description', $payload)) {
+            $description = trim((string) $payload['description']);
+            $document->setDescription($description !== '' ? $description : null);
+        }
         $document->setOrganizationCreator($organization);
         $document->setStatus($status);
         $document->setDeadline($deadline);

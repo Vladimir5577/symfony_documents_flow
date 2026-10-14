@@ -24,6 +24,7 @@ use App\Service\Chat\ChatMessageService;
 use App\Service\SpaApi\Post\PostImagePreviewUrlGenerator;
 use App\Service\SpaApi\Post\PostResponseFormatter;
 use App\Service\User\UserAvatarUrlGenerator;
+use App\Service\ImgproxyUrlSigner;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -132,7 +133,7 @@ final class PostChatAccessTest extends KernelTestCase
             $this->createMock(ChatMessageReadRepository::class),
             $participants,
             $hub,
-            new UserAvatarUrlGenerator('', ''),
+            new UserAvatarUrlGenerator('', '', new ImgproxyUrlSigner('', '')),
         );
 
         $service->publishToMercure($room, ['type' => 'new_message', 'message' => ['content' => 'private marker']]);

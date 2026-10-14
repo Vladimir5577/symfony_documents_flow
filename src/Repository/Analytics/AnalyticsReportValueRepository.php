@@ -80,6 +80,7 @@ class AnalyticsReportValueRepository extends ServiceEntityRepository
      *
      * @return list<array{
      *     report_id:int,
+     *     organization_id:int,
      *     start_date:string,
      *     end_date:string,
      *     vm_id:int,
@@ -147,6 +148,7 @@ class AnalyticsReportValueRepository extends ServiceEntityRepository
         $sql = <<<SQL
             SELECT
                 r.id            AS report_id,
+                r.organization_id AS organization_id,
                 p.start_date    AS start_date,
                 p.end_date      AS end_date,
                 bvm.id          AS vm_id,
@@ -177,7 +179,7 @@ class AnalyticsReportValueRepository extends ServiceEntityRepository
                   GROUP BY p2.id, p2.start_date
                   ORDER BY p2.start_date DESC$subLimit
               )
-            ORDER BY p.start_date ASC, bvm.position ASC
+            ORDER BY p.start_date ASC, r.organization_id ASC, bvm.position ASC, r.id ASC
         SQL;
 
         $params = array_merge(
