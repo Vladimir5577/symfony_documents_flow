@@ -54,9 +54,11 @@ final class PurchaseRequestEditor
                 continue;
             }
 
-            if ($edit['included'] === false && !$item->isExcluded()) {
-                $item->setExcluded(true);
-                $changes[] = sprintf('снята позиция «%s»', (string) $item->getName());
+            if ($edit['included'] === false) {
+                if (!$item->isExcluded()) {
+                    $item->setExcluded(true);
+                    $changes[] = sprintf('снята позиция «%s»', (string) $item->getName());
+                }
                 continue;
             }
 

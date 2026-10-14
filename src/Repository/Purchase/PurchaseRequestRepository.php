@@ -240,11 +240,14 @@ class PurchaseRequestRepository extends ServiceEntityRepository
         if ($minAmount !== null) {
             // Сумма не хранится в колонке (считается из позиций) — фильтруем скалярным подзапросом,
             // чтобы клон под COUNT(pr.id) работал без группировок.
-            $qb->andWhere(
-                '(SELECT COALESCE(SUM(i.quantity * i.estimatedPrice), 0)
+            // В DQL нет ROUND: отбрасываем через MOD дробь после добавления половины копейки.
+            $lineKopecks = '(COALESCE(i.approvedQuantity, i.quantity) * i.estimatedPrice * 100 + 0.5)';
+            $qb->andWhere(sprintf(
+                '(SELECT COALESCE(SUM((%1$s - MOD(%1$s, 1)) / 100), 0)
                   FROM App\Entity\Purchase\PurchaseRequestItem i
-                  WHERE i.purchaseRequest = pr) >= :minAmount'
-            )->setParameter('minAmount', $minAmount);
+                  WHERE i.purchaseRequest = pr AND i.excluded = false AND i.inStock = false) >= :minAmount',
+                $lineKopecks,
+            ))->setParameter('minAmount', $minAmount);
         }
 
         if ($createdById !== null) {

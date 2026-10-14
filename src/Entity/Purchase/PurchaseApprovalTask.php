@@ -328,6 +328,7 @@ class PurchaseApprovalTask
         $this->decidedBy = null;
         $this->decidedAt = null;
         $this->comment = null;
+        $this->contractReviewedFileIds = [];
 
         return $this;
     }

@@ -151,6 +151,7 @@ final class PurchaseAccess
                 // отказа есть повторная подача.
                 if ($task->getDecision() === PurchaseTaskDecision::APPROVED
                     && $task->getDecidedBy()?->getId() === $user->getId()
+                    && $this->canActOn($task, $user)
                 ) {
                     $mine = $task;
                 }
