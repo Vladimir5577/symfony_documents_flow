@@ -57,7 +57,8 @@ class PurchaseRequestFileRepository extends ServiceEntityRepository
         $legal = $this->approverJoin('legal', "t.role_code = 'LEGAL'");
         $accounting = $this->approverJoin('accounting', "t.role_code = 'ACCOUNTING'");
         $deputy = $this->approverJoin('deputy', "(t.role_code = 'PROFILE_DEPUTY' OR s.candidate_role_code = 'PROFILE_DEPUTY')");
-        $conditions = ['TRUE'];
+        // Неподтверждённый договор виден только на своей заявке, не в справочнике.
+        $conditions = ["c.status <> 'DRAFT'"];
         $params = [
             'limit' => $pageSize,
             'offset' => max(0, ($page - 1) * $pageSize),
@@ -283,9 +284,9 @@ class PurchaseRequestFileRepository extends ServiceEntityRepository
     }
 
     /**
-     * Заявки, к которым прикреплён договор. Отдельный запрос: в списке их только считают.
+     * Заявки, к которым прикреплён договор, и позиции, идущие по его файлу.
      *
-     * @return list<array{id: int, title: string}>
+     * @return list<array{id: int, title: string, total: float, items: list<array{name: string, quantity: float, amount: float}>}>
      */
     public function findRequests(int $contractId): array
     {
@@ -299,10 +300,54 @@ class PurchaseRequestFileRepository extends ServiceEntityRepository
             ['id' => ParameterType::INTEGER],
         );
 
-        return array_map(static fn (array $row): array => [
-            'id' => (int) $row['id'],
-            'title' => (string) ($row['title'] ?? ''),
-        ], $rows);
+        $itemRows = $this->getEntityManager()->getConnection()->fetchAllAssociative(
+            'SELECT i.purchase_request_id, i.name, i.quantity, i.approved_quantity, i.estimated_price, i.in_stock
+            FROM purchase_request_item i
+            WHERE i.contract_id = :id AND i.excluded = false
+            ORDER BY i.purchase_request_id, i.position',
+            ['id' => $contractId],
+            ['id' => ParameterType::INTEGER],
+        );
+
+        $byRequest = [];
+        foreach ($itemRows as $item) {
+            $requestId = (int) $item['purchase_request_id'];
+            $quantity = (float) ($item['approved_quantity'] ?? $item['quantity']);
+            $inStock = $item['in_stock'] === true || $item['in_stock'] === 't' || $item['in_stock'] === '1' || $item['in_stock'] === 1;
+            $amount = $inStock ? 0.0 : self::lineAmount((string) $item['quantity'], $item['approved_quantity'], (string) $item['estimated_price']);
+            $byRequest[$requestId][] = [
+                'name' => (string) ($item['name'] ?? ''),
+                'quantity' => $quantity,
+                'amount' => $amount,
+            ];
+        }
+
+        return array_map(static function (array $row) use ($byRequest): array {
+            $id = (int) $row['id'];
+            $items = $byRequest[$id] ?? [];
+
+            return [
+                'id' => $id,
+                'title' => (string) ($row['title'] ?? ''),
+                'items' => $items,
+                'total' => array_sum(array_column($items, 'amount')),
+            ];
+        }, $rows);
+    }
+
+    /** Сумма строки в рублях, как PurchaseRequest::getTotalAmountKopecks: утверждённое количество, иначе заявленное. */
+    private static function lineAmount(string $quantity, mixed $approved, string $price): float
+    {
+        $qty = $approved !== null && $approved !== '' ? (string) $approved : $quantity;
+        $toInt = static function (string $decimal, int $scale): int {
+            [$whole, $fraction] = array_pad(explode('.', trim($decimal), 2), 2, '');
+
+            return (int) ($whole . substr(str_pad($fraction, $scale, '0'), 0, $scale));
+        };
+        $kopecks = $toInt($price, 2);
+        $thousandths = $toInt($qty, 3);
+
+        return intdiv($kopecks * $thousandths + 500, 1000) / 100;
     }
 
     /**

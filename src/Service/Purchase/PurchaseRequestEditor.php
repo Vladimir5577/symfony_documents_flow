@@ -63,6 +63,7 @@ final class PurchaseRequestEditor
                     $item->setInStock(false);
                     $changes[] = sprintf('со склада «%s»', (string) $item->getName());
                 }
+                $item->setContract(null);
                 continue;
             }
 
@@ -89,7 +90,7 @@ final class PurchaseRequestEditor
             if (array_key_exists('inStock', $edit) && is_bool($edit['inStock']) && $edit['inStock'] !== $item->isInStock()) {
                 $item->setInStock($edit['inStock']);
                 if ($edit['inStock']) {
-                    $item->setContractFile(null);
+                    $item->setContract(null);
                     $item->setInvoiceFile(null);
                 }
                 $changes[] = sprintf(

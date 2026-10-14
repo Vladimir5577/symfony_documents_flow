@@ -12,6 +12,8 @@ namespace App\Enum\Purchase;
  */
 enum PurchaseContractStatus: string
 {
+    /** Файл загружен на заявку, в справочник ещё не попал. */
+    case DRAFT = 'DRAFT';
     case ACTIVE = 'ACTIVE';
     case VOID = 'VOID';
     case EXHAUSTED = 'EXHAUSTED';
@@ -19,6 +21,7 @@ enum PurchaseContractStatus: string
     public function getLabel(): string
     {
         return match ($this) {
+            self::DRAFT => 'Не подтверждён',
             self::ACTIVE => 'Действующий',
             self::VOID => 'Утратил силу',
             self::EXHAUSTED => 'Исчерпан по сумме',

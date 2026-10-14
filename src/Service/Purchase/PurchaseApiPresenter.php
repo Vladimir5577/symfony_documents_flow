@@ -145,7 +145,7 @@ final class PurchaseApiPresenter
                 'approvedQuantity' => $item->getApprovedQuantity(),
                 'categoryItemId' => $item->getCategoryItem()?->getId(),
                 // Раскладка по документам: по какому договору и счёту идёт позиция.
-                'contractFileId' => $item->getContractFile()?->getId(),
+                'contractId' => $item->getContract()?->getId(),
                 'invoiceFileId' => $item->getInvoiceFile()?->getId(),
                 'inStock' => $item->isInStock(),
             ],
@@ -321,12 +321,12 @@ final class PurchaseApiPresenter
             'contractFileId' => $file->getContractFile()?->getId(),
             'uploadedBy' => $this->presentUser($file->getUploadedBy()),
             'createdAt' => $file->getCreatedAt()?->format('c'),
-            'canDelete' => $file->getContract() === null && $this->canDeleteFile($file),
-            'canRename' => $file->getContract() === null && $this->canRenameFile($file),
+            'canDelete' => !$file->belongsToConfirmedContract() && $this->canDeleteFile($file),
+            'canRename' => !$file->belongsToConfirmedContract() && $this->canRenameFile($file),
             // Зеркалит режим PurchaseFileEditorController::open(): правит тот, чей сейчас этап.
             'canEdit' => $extension === 'docx'
                 && $file->getSourceFile() === null
-                && $file->getContract() === null
+                && !$file->belongsToConfirmedContract()
                 && ($file->getType() !== PurchaseFileType::CONTRACT || !$this->files->isConfirmed((int) $file->getId()))
                 && $request !== null
                 && $this->findMyActiveTask($request) !== null,
