@@ -11,13 +11,16 @@ use App\Entity\Purchase\PurchaseRequestContract;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseContractReview;
+use App\Enum\Purchase\PurchaseContractStatus;
 use App\Enum\Purchase\PurchaseFileType;
+use App\Enum\Purchase\PurchaseRequestKind;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 /**
- * Договор появляется, когда закрыт этап следом за утверждением рецензий,
- * и только если к файлу договора уже есть подписанный скан.
+ * Загруженный файл сразу становится договором заявки, чтобы на шаге счёта
+ * его можно было выбрать. В справочник он попадает, когда этот шаг закрыт
+ * и к файлу уже есть подписанный скан.
  */
 final class PurchaseContractCatalog
 {
@@ -98,6 +101,35 @@ final class PurchaseContractCatalog
         return $file;
     }
 
+    /**
+     * Файл договора на заявке — уже договор, просто ещё не из справочника.
+     * Быстрой заявке договор не нужен.
+     *
+     * @return bool появились новые договоры, их надо сохранить
+     */
+    public function ensureDrafts(PurchaseRequest $request): bool
+    {
+        if ($request->getCreatedAs() === PurchaseRequestKind::FAST) {
+            return false;
+        }
+
+        $created = false;
+        foreach ($request->getFiles() as $file) {
+            if ($file->getType() !== PurchaseFileType::CONTRACT || $file->getContract() !== null) {
+                continue;
+            }
+            $contract = new PurchaseContract();
+            $contract->setStatus(PurchaseContractStatus::DRAFT);
+            $contract->setName(mb_substr((string) $file->getOriginalName(), 0, 255));
+            $this->em->persist($contract);
+            $contract->addFile($file);
+            $this->link($request, $contract);
+            $created = true;
+        }
+
+        return $created;
+    }
+
     public function materializeIfDue(PurchaseRequest $request, PurchaseApprovalStage $closed): void
     {
         if (!$this->followsAccept($request, $closed)) {
@@ -106,7 +138,11 @@ final class PurchaseContractCatalog
 
         $pending = [];
         foreach ($request->getFiles() as $file) {
-            if ($file->getType() === PurchaseFileType::CONTRACT && $file->getContract() === null) {
+            if ($file->getType() !== PurchaseFileType::CONTRACT) {
+                continue;
+            }
+            $contract = $file->getContract();
+            if ($contract === null || $contract->isDraft()) {
                 $pending[] = $file;
             }
         }
@@ -134,14 +170,18 @@ final class PurchaseContractCatalog
                 continue;
             }
 
-            $contract = new PurchaseContract();
-            $contract->setName(mb_substr((string) $file->getOriginalName(), 0, 255));
-            $this->em->persist($contract);
-            $contract->addFile($file);
+            $contract = $file->getContract();
+            if ($contract === null) {
+                $contract = new PurchaseContract();
+                $contract->setName(mb_substr((string) $file->getOriginalName(), 0, 255));
+                $this->em->persist($contract);
+                $contract->addFile($file);
+                $this->link($request, $contract);
+            }
+            $contract->setStatus(PurchaseContractStatus::ACTIVE);
             foreach ($signed as $scan) {
                 $contract->addFile($scan);
             }
-            $this->link($request, $contract);
         }
     }
 

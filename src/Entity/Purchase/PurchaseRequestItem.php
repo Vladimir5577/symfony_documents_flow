@@ -63,10 +63,10 @@ class PurchaseRequestItem
     #[ORM\JoinColumn(name: 'category_item_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?PurchaseCategoryItem $categoryItem = null;
 
-    /** По какому договору закупают позицию. Один договор на заявке — он и есть. */
-    #[ORM\ManyToOne(targetEntity: PurchaseRequestFile::class)]
-    #[ORM\JoinColumn(name: 'contract_file_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
-    private ?PurchaseRequestFile $contractFile = null;
+    /** Договор справочника, по которому закупают позицию. Выбирает человек на шаге счёта. */
+    #[ORM\ManyToOne(targetEntity: PurchaseContract::class)]
+    #[ORM\JoinColumn(name: 'contract_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?PurchaseContract $contract = null;
 
     /** По какому счёту позицию оплачивают. */
     #[ORM\ManyToOne(targetEntity: PurchaseRequestFile::class)]
@@ -205,14 +205,14 @@ class PurchaseRequestItem
         return $this->approvedQuantity ?? (string) $this->quantity;
     }
 
-    public function getContractFile(): ?PurchaseRequestFile
+    public function getContract(): ?PurchaseContract
     {
-        return $this->contractFile;
+        return $this->contract;
     }
 
-    public function setContractFile(?PurchaseRequestFile $contractFile): static
+    public function setContract(?PurchaseContract $contract): static
     {
-        $this->contractFile = $contractFile;
+        $this->contract = $contract;
 
         return $this;
     }

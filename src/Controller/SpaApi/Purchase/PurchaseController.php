@@ -26,6 +26,7 @@ use App\Repository\Purchase\PurchaseRouteTemplateRepository;
 use App\Service\Purchase\ApprovalRouteBuilder;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
+use App\Service\Purchase\PurchaseContractCatalog;
 use App\Service\Purchase\PurchaseFileStorageService;
 use App\Service\Purchase\PurchaseApprovalWorkflow;
 use App\Service\Purchase\PurchaseRequestEditor;
@@ -59,6 +60,7 @@ final class PurchaseController extends AbstractController
         private readonly ApprovalRouteBuilder $routeBuilder,
         private readonly PurchaseRouteDefaultRepository $routeDefaults,
         private readonly PurchaseRouteTemplateRepository $templateRepo,
+        private readonly PurchaseContractCatalog $contracts,
     ) {
     }
 
@@ -320,6 +322,10 @@ final class PurchaseController extends AbstractController
 
         if (!$this->canView($purchase, $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        if ($this->contracts->ensureDrafts($purchase)) {
+            $this->em->flush();
         }
 
         return $this->json($this->presenter->presentDetail($purchase));

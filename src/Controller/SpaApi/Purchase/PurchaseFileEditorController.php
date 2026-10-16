@@ -731,7 +731,7 @@ final class PurchaseFileEditorController extends AbstractController
 
     private function isReadOnly(PurchaseRequestFile $file): bool
     {
-        return $file->getSourceFile() !== null || $file->getContract() !== null
+        return $file->getSourceFile() !== null || $file->belongsToConfirmedContract()
             || $this->files->isConfirmed((int) $file->getId());
     }
 

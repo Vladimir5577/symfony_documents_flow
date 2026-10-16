@@ -40,7 +40,7 @@ final class PurchaseRequestEditor
      * урезанным составом, но без решения — у согласанта оказалось бы не то, что
      * разбирающий согласовал.
      *
-     * @param array<int, array{included: bool, quantity: string|null, price?: string|null}> $itemEdits ключ — id позиции
+     * @param array<int, array{included: bool, quantity: string|null, price?: string|null, inStock?: bool|null}> $itemEdits ключ — id позиции
      * @return list<string> человекочитаемый дифф для истории
      * @throws PurchaseTransitionException
      */
@@ -59,10 +59,18 @@ final class PurchaseRequestEditor
                     $item->setExcluded(true);
                     $changes[] = sprintf('снята позиция «%s»', (string) $item->getName());
                 }
+                if ($item->isInStock()) {
+                    $item->setInStock(false);
+                    $changes[] = sprintf('со склада «%s»', (string) $item->getName());
+                }
+                $item->setContract(null);
                 continue;
             }
 
-            $item->setExcluded(false);
+            if ($item->isExcluded()) {
+                $item->setExcluded(false);
+                $changes[] = sprintf('возвращена позиция «%s»', (string) $item->getName());
+            }
 
             $quantity = $edit['quantity'];
             if ($quantity !== null) {
@@ -82,6 +90,18 @@ final class PurchaseRequestEditor
                     (string) $item->getName(),
                     rtrim(rtrim((string) $item->getQuantity(), '0'), '.'),
                     rtrim(rtrim($quantity, '0'), '.'),
+                );
+            }
+
+            if (array_key_exists('inStock', $edit) && is_bool($edit['inStock']) && $edit['inStock'] !== $item->isInStock()) {
+                $item->setInStock($edit['inStock']);
+                if ($edit['inStock']) {
+                    $item->setContract(null);
+                    $item->setInvoiceFile(null);
+                }
+                $changes[] = sprintf(
+                    $edit['inStock'] ? 'на складе «%s»' : 'со склада «%s»',
+                    (string) $item->getName(),
                 );
             }
 
