@@ -14,7 +14,6 @@ use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseApiPresenter;
 use App\Service\Purchase\PurchaseContractCatalog;
-use App\Service\Purchase\PurchaseDocumentBinding;
 use App\Service\Purchase\PurchaseRequestEditor;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -33,7 +32,6 @@ final class PurchaseContractLinkController extends AbstractController
         private readonly PurchaseAccess $access,
         private readonly PurchaseApiPresenter $presenter,
         private readonly PurchaseContractCatalog $catalog,
-        private readonly PurchaseDocumentBinding $binding,
         private readonly PurchaseRequestEditor $editor,
         private readonly EntityManagerInterface $em,
     ) {
@@ -65,7 +63,6 @@ final class PurchaseContractLinkController extends AbstractController
 
         if ($this->catalog->link($purchase, $contract)) {
             $name = $contract->getName();
-            $this->binding->refresh($purchase);
             $this->editor->log($purchase, $user, PurchaseHistoryAction::CONTRACT_ATTACHED, $name !== '' ? $name : null);
         }
 
@@ -105,11 +102,10 @@ final class PurchaseContractLinkController extends AbstractController
         $contract->removeLink($link);
         $this->em->remove($link);
         foreach ($purchase->getItems() as $item) {
-            if ($item->getContractFile()?->getContract() === $contract) {
-                $item->setContractFile(null);
+            if ($item->getContract() === $contract) {
+                $item->setContract(null);
             }
         }
-        $this->binding->refresh($purchase);
         $this->editor->log($purchase, $user, PurchaseHistoryAction::CONTRACT_DETACHED, null);
 
         return $this->json($this->presenter->presentDetail($purchase));

@@ -90,8 +90,6 @@ final class PurchaseApprovalWorkflow
         // откат никого не оповестил о подаче, которой не было.
         $this->em->wrapInTransaction(function () use ($request, $actor, $from): void {
             $this->builder->build($request, $this->resolver->resolve($request));
-            // Перед повторной подачей автор мог пересоздать позиции — без привязок.
-            $this->binding->refresh($request);
 
             $request->setStatus(PurchaseStatus::ON_APPROVAL);
             $this->history->logTransition(
@@ -384,6 +382,17 @@ final class PurchaseApprovalWorkflow
         }
 
         $burned = $this->rewindTo($request, $stage, $task);
+        $comment = $burned === []
+            ? 'Согласование снято автором подписи'
+            : 'Согласование снято автором подписи. Сброшены согласования после него: '
+                . implode(', ', $burned);
+        // Зама ставит разбирающий. Снял свою подпись — выбор зама тоже недействителен.
+        if ($stage->getPurpose() === PurchaseStagePurpose::TRIAGE) {
+            $released = $this->releaseProfileDeputy($request);
+            if ($released !== []) {
+                $comment .= '. Снят профильный зам: ' . implode(', ', $released);
+            }
+        }
 
         $this->history->logTransition(
             $request,
@@ -391,10 +400,7 @@ final class PurchaseApprovalWorkflow
             $from,
             $request->getStatus(),
             PurchaseHistoryAction::TASK_REVOKED,
-            $burned === []
-                ? 'Согласование снято автором подписи'
-                : 'Согласование снято автором подписи. Сброшены согласования после него: '
-                    . implode(', ', $burned),
+            $comment,
         );
         $this->save($request);
 
@@ -419,9 +425,9 @@ final class PurchaseApprovalWorkflow
      * Подписывать они будут по готовым документам, но ответственными становятся
      * сразу — заявка появляется у них в списке, и им уходит уведомление.
      *
-     * Пустой список — законное решение: значит, на этом этапе согласовывать некому.
-     * Этап так и останется ждать назначения, а указатель, дойдя до него, проедет
-     * мимо: см. advance().
+     * Пустой список на обычном динамическом этапе — законное решение: согласовывать
+     * некому, и указатель, дойдя до него, проедет мимо (см. advance()). Профильный
+     * зам исключение: его выбирают ровно одного, иначе разбор не закрывается.
      *
      * Что выбранные входят в пул этапа, проверяет вызывающий: пул — состав людей,
      * и спрашивать его надо у ростера.
@@ -450,6 +456,20 @@ final class PurchaseApprovalWorkflow
                 PurchaseHistoryAction::ITEMS_EDITED,
                 'Состав правил разбирающий: ' . implode('; ', $changes),
             );
+        }
+
+        foreach ($request->getStages() as $deputyStage) {
+            if (
+                !$deputyStage->isAwaitingAssignment()
+                || !$deputyStage->isDynamic()
+                || $deputyStage->getCandidateRoleCode() !== PurchaseRoleCode::PROFILE_DEPUTY
+            ) {
+                continue;
+            }
+            $picked = $assignments[$deputyStage->getId()] ?? [];
+            if (count($picked) !== 1) {
+                throw new PurchaseTransitionException(SpaApiError::PURCHASE_DEPUTY_REQUIRED);
+            }
         }
 
         $assigned = [];
@@ -613,7 +633,8 @@ final class PurchaseApprovalWorkflow
             return false;
         }
         foreach ($request->getFiles() as $file) {
-            if ($file->getType() === PurchaseFileType::CONTRACT && $file->getContract() === null) {
+            $contract = $file->getContract();
+            if ($file->getType() === PurchaseFileType::CONTRACT && ($contract === null || $contract->isDraft())) {
                 return false;
             }
         }
@@ -697,6 +718,31 @@ final class PurchaseApprovalWorkflow
         $target->setStatus(PurchaseStageStatus::ACTIVE);
 
         return $burned;
+    }
+
+    /**
+     * Убрать профильного зама, назначенного на разборе.
+     *
+     * @return list<string>
+     */
+    private function releaseProfileDeputy(PurchaseRequest $request): array
+    {
+        $names = [];
+        foreach ($request->getStages() as $stage) {
+            if ($stage->getCandidateRoleCode() !== PurchaseRoleCode::PROFILE_DEPUTY) {
+                continue;
+            }
+            foreach ($stage->getTasks()->toArray() as $task) {
+                $user = $task->getAssigneeUser();
+                if ($user !== null) {
+                    $names[] = PurchaseHistoryLogger::nameOf($user);
+                }
+                $stage->removeTask($task);
+            }
+            $stage->setStatus(PurchaseStageStatus::AWAITING_ASSIGNMENT);
+        }
+
+        return $names;
     }
 
     /** Сменить статус заявки с записью в историю. */

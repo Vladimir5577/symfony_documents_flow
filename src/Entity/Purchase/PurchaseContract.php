@@ -68,6 +68,12 @@ class PurchaseContract
         return $this;
     }
 
+    /** Загружен на заявку и ещё не попал в справочник. */
+    public function isDraft(): bool
+    {
+        return $this->status === PurchaseContractStatus::DRAFT;
+    }
+
     public function getName(): string
     {
         return $this->name;

@@ -91,7 +91,7 @@ final class PurchaseFileEditorController extends AbstractController
         $this->jwt->requireEnabled();
         $task = $this->access->findMyActiveTask($purchase, $user);
         // Утверждённый договор и его копия только смотрятся, даже на своём шаге.
-        if ($file->getSourceFile() !== null || $file->getContract() !== null || $this->files->isConfirmed((int) $file->getId())) {
+        if ($file->getSourceFile() !== null || $file->belongsToConfirmedContract() || $this->files->isConfirmed((int) $file->getId())) {
             $task = null;
         }
         $mode = $task !== null ? 'edit' : 'view';

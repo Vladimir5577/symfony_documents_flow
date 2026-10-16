@@ -202,7 +202,7 @@ final class PurchaseTransitionController extends AbstractController
      * остаются как есть.
      *
      * @param mixed $rows
-     * @return array<int, array{included: bool, quantity: string|null, price: string|null}>
+     * @return array<int, array{included: bool, quantity: string|null, price: string|null, inStock: bool|null}>
      */
     private function collectItemEdits(mixed $rows): array
     {
@@ -222,6 +222,7 @@ final class PurchaseTransitionController extends AbstractController
                 'included' => (bool) ($row['included'] ?? true),
                 'quantity' => is_numeric($quantity) ? (string) $quantity : null,
                 'price' => is_numeric($price) ? (string) $price : null,
+                'inStock' => array_key_exists('inStock', $row) ? (bool) $row['inStock'] : null,
             ];
         }
 

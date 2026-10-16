@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Purchase;
 
 use App\Controller\SpaApi\SpaApiError;
+use App\Entity\Purchase\PurchaseContract;
 use App\Entity\Purchase\PurchaseRequest;
 use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\Purchase\PurchaseRequestItem;
 use App\Enum\Purchase\PurchaseFileType;
+use App\Enum\Purchase\PurchaseRequestKind;
 
 /**
  * Раскладка позиций заявки по договорам и счетам.
@@ -17,8 +19,7 @@ use App\Enum\Purchase\PurchaseFileType;
  * счетов. Поэтому связь лежит на позиции: у каждой свой договор и свой счёт.
  * Счёт отдельно к договору не привязан — эта связь читается через позиции.
  *
- * Пока документ своего типа на заявке один, выбирать нечего: все позиции
- * относятся к нему сами. Выбор появляется со вторым документом.
+ * Счёт и договор на позиции выбирают явно, даже если документ один.
  *
  * Позиция «есть на складе» не покупается: ни счёта, ни договора у неё нет.
  */
@@ -35,16 +36,6 @@ final class PurchaseDocumentBinding
         if ($file->getType() === PurchaseFileType::INVOICE && $file->getColor() === null) {
             $file->setColor($this->nextInvoiceColor($request, $file));
         }
-        $this->applyDefaults($request);
-    }
-
-    /**
-     * Позиции могли пересоздать: автор правил возвращённую заявку. Единственный
-     * документ снова достаётся всем, ручную раскладку придётся повторить.
-     */
-    public function refresh(PurchaseRequest $request): void
-    {
-        $this->applyDefaults($request);
     }
 
     /**
@@ -54,20 +45,16 @@ final class PurchaseDocumentBinding
     public function onFileRemoved(PurchaseRequest $request, PurchaseRequestFile $file): void
     {
         foreach ($request->getItems() as $item) {
-            if ($item->getContractFile() === $file) {
-                $item->setContractFile(null);
-            }
             if ($item->getInvoiceFile() === $file) {
                 $item->setInvoiceFile(null);
             }
         }
-        $this->applyDefaults($request, $file);
     }
 
     /**
      * Правки раскладки из модалки. Присланное поле меняется, остальное остаётся.
      *
-     * @param list<array<string, mixed>> $itemRows {id, contractFileId?, invoiceFileId?, inStock?}
+     * @param list<array<string, mixed>> $itemRows {id, contractId?, invoiceFileId?, inStock?}
      * @param list<array<string, mixed>> $fileRows {id, color}
      * @throws PurchaseTransitionException
      */
@@ -94,19 +81,25 @@ final class PurchaseDocumentBinding
                 }
                 $item->setInStock($row['inStock']);
             }
-            if (array_key_exists('contractFileId', $row)) {
-                $item->setContractFile($this->fileFromRow($request, $row['contractFileId'], PurchaseFileType::CONTRACT));
+            if (array_key_exists('contractId', $row)) {
+                $contract = $this->contractFromRow($request, $row['contractId']);
+                $item->setContract($contract);
+                if ($contract !== null) {
+                    $item->setInStock(false);
+                }
             }
             if (array_key_exists('invoiceFileId', $row)) {
-                $item->setInvoiceFile($this->fileFromRow($request, $row['invoiceFileId'], PurchaseFileType::INVOICE));
+                $invoice = $this->fileFromRow($request, $row['invoiceFileId'], PurchaseFileType::INVOICE);
+                $item->setInvoiceFile($invoice);
+                if ($invoice !== null) {
+                    $item->setInStock(false);
+                }
             }
             if ($item->isInStock()) {
-                $item->setContractFile(null);
+                $item->setContract(null);
                 $item->setInvoiceFile(null);
             }
         }
-
-        $this->applyDefaults($request);
     }
 
     /**
@@ -124,8 +117,6 @@ final class PurchaseDocumentBinding
      */
     public function assertComplete(PurchaseRequest $request): void
     {
-        $this->applyDefaults($request);
-
         $toBuy = array_filter(
             $request->getItems()->toArray(),
             static fn (PurchaseRequestItem $item): bool => !$item->isExcluded() && !$item->isInStock(),
@@ -137,13 +128,20 @@ final class PurchaseDocumentBinding
         if (!$request->hasFileOfType(PurchaseFileType::INVOICE)) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         }
-        $hasContract = $request->hasFileOfType(PurchaseFileType::CONTRACT);
         foreach ($toBuy as $item) {
             if ($item->getInvoiceFile() === null) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_INVOICE_REQUIRED);
             }
-            if ($hasContract && $item->getContractFile() === null) {
-                throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_CONTRACT_REQUIRED);
+        }
+        // Быстрая заявка идёт без договора: шаг «Счёт» закрывает один счёт.
+        if ($request->getCreatedAs() === PurchaseRequestKind::FAST) {
+            return;
+        }
+        if (!$request->getContractLinks()->isEmpty()) {
+            foreach ($toBuy as $item) {
+                if ($item->getContract() === null) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_CONTRACT_REQUIRED);
+                }
             }
         }
         if ($this->missingSignedScan($request)) {
@@ -159,7 +157,8 @@ final class PurchaseDocumentBinding
     {
         $unapproved = [];
         foreach ($request->getFiles() as $file) {
-            if ($file->getType() === PurchaseFileType::CONTRACT && $file->getContract() === null) {
+            $contract = $file->getContract();
+            if ($file->getType() === PurchaseFileType::CONTRACT && ($contract === null || $contract->isDraft())) {
                 $unapproved[] = $file;
             }
         }
@@ -226,51 +225,6 @@ final class PurchaseDocumentBinding
         return implode('; ', $parts);
     }
 
-    /**
-     * Единственный документ типа достаётся всем позициям без привязки.
-     * Позиции со склада не трогаем: им документы не нужны.
-     */
-    private function applyDefaults(PurchaseRequest $request, ?PurchaseRequestFile $except = null): void
-    {
-        $contract = $this->onlyFile($request, PurchaseFileType::CONTRACT, $except);
-        $invoice = $this->onlyFile($request, PurchaseFileType::INVOICE, $except);
-
-        foreach ($request->getItems() as $item) {
-            if ($item->isInStock()) {
-                continue;
-            }
-            if ($contract !== null && $item->getContractFile() === null) {
-                $item->setContractFile($contract);
-            }
-            if ($invoice !== null && $item->getInvoiceFile() === null) {
-                $item->setInvoiceFile($invoice);
-            }
-        }
-    }
-
-    private function onlyFile(PurchaseRequest $request, PurchaseFileType $type, ?PurchaseRequestFile $except): ?PurchaseRequestFile
-    {
-        $found = [];
-        $add = static function (PurchaseRequestFile $file) use (&$found, $except): void {
-            if ($file === $except) {
-                return;
-            }
-            $found[$file->getId() ?? spl_object_id($file)] = $file;
-        };
-        foreach ($request->getFiles() as $file) {
-            if ($file->getType() === $type) {
-                $add($file);
-            }
-        }
-        if ($type === PurchaseFileType::CONTRACT) {
-            foreach ($request->sharedFilesOf($type) as $file) {
-                $add($file);
-            }
-        }
-
-        return count($found) === 1 ? array_values($found)[0] : null;
-    }
-
     private function nextInvoiceColor(PurchaseRequest $request, PurchaseRequestFile $new): string
     {
         $used = [];
@@ -288,6 +242,24 @@ final class PurchaseDocumentBinding
         }
 
         return self::INVOICE_COLORS[$count % count(self::INVOICE_COLORS)];
+    }
+
+    /** null — снять договор. Чужой для этой заявки договор — ошибка. */
+    private function contractFromRow(PurchaseRequest $request, mixed $id): ?PurchaseContract
+    {
+        if ($id === null) {
+            return null;
+        }
+        if (!is_int($id)) {
+            throw new PurchaseTransitionException(SpaApiError::PURCHASE_BINDING_INVALID);
+        }
+        foreach ($request->getContractLinks() as $link) {
+            if ($link->getContract()->getId() === $id) {
+                return $link->getContract();
+            }
+        }
+
+        throw new PurchaseTransitionException(SpaApiError::PURCHASE_BINDING_INVALID);
     }
 
     /** null в запросе — снять привязку; чужой файл или не тот тип — ошибка. */

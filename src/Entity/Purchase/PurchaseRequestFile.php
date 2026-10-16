@@ -186,6 +186,12 @@ class PurchaseRequestFile
         return $this;
     }
 
+    /** Файл справочника: его не правят и не удаляют. Неподтверждённый — ещё нет. */
+    public function belongsToConfirmedContract(): bool
+    {
+        return $this->contract !== null && !$this->contract->isDraft();
+    }
+
     public function getCreatedAt(): ?\DateTimeImmutable
     {
         return $this->createdAt;

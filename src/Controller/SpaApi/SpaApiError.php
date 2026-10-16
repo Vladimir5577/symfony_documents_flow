@@ -83,6 +83,8 @@ final class SpaApiError
     public const PURCHASE_ROLE_NOT_FOUND = 'purchase_role_not_found';
     /** Разбирающий отмечает согласантом того, кто не входит в пул этапа. */
     public const PURCHASE_APPROVER_NOT_DEPUTY = 'purchase_approver_not_deputy';
+    /** На разборе нужен ровно один профильный зам. */
+    public const PURCHASE_DEPUTY_REQUIRED = 'purchase_deputy_required';
     /** Подача заявки, маршрут которой не назначен или больше не годится. */
     public const PURCHASE_ROUTE_NOT_CONFIGURED = 'purchase_route_not_configured';
     /** Двое изменили заявку одновременно — повторить с актуальными данными. */

@@ -123,7 +123,7 @@ final class PurchaseFileController extends AbstractController
         $fileEntity->setType($type);
         $fileEntity->setContractFile($contract);
         // К утверждённому договору файлы не добавляют: скан у него уже есть.
-        if ($contract?->getContract() !== null) {
+        if ($contract?->belongsToConfirmedContract() === true) {
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
         }
         $fileEntity->setUploadedBy($user);
@@ -216,7 +216,7 @@ final class PurchaseFileController extends AbstractController
     /**
      * Раскладка позиций по счетам и договорам, цвета счетов.
      *
-     * body: {items?: [{id, contractFileId?, invoiceFileId?, inStock?}], files?: [{id, color}]}
+     * body: {items?: [{id, contractId?, invoiceFileId?, inStock?}], files?: [{id, color}]}
      * Сохраняется сразу, по одной правке: раскладка большой заявки — долгая
      * работа, и закрытая модалка не должна её терять. В историю пишется итог,
      * когда шаг закрывают.
@@ -272,7 +272,7 @@ final class PurchaseFileController extends AbstractController
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        if ($fileEntity->getContract() !== null) {
+        if ($fileEntity->belongsToConfirmedContract()) {
             return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
         }
 
@@ -293,6 +293,10 @@ final class PurchaseFileController extends AbstractController
 
         $previous = (string) $fileEntity->getOriginalName();
         $fileEntity->setOriginalName($name);
+        $draft = $fileEntity->getContract();
+        if ($draft !== null && $draft->isDraft()) {
+            $draft->setName($name);
+        }
         $this->editor->log(
             $purchase,
             $user,
@@ -326,7 +330,7 @@ final class PurchaseFileController extends AbstractController
 
             $this->em->refresh($fileEntity);
 
-            if ($fileEntity->getContract() !== null) {
+            if ($fileEntity->belongsToConfirmedContract()) {
                 return $this->json(['error' => SpaApiError::PURCHASE_FILE_LOCKED], Response::HTTP_FORBIDDEN);
             }
 
@@ -361,6 +365,11 @@ final class PurchaseFileController extends AbstractController
             );
 
             $storageKey = $fileEntity->getStorageKey();
+            $draft = $fileEntity->getContract();
+            if ($draft !== null && $draft->isDraft()) {
+                $fileEntity->setContract(null);
+                $this->em->remove($draft);
+            }
             $this->binding->onFileRemoved($purchase, $fileEntity);
             $purchase->removeFile($fileEntity);
             $this->em->remove($fileEntity);
