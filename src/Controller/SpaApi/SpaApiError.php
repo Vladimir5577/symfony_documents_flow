@@ -76,6 +76,8 @@ final class SpaApiError
     public const PURCHASE_ITEMS_INVOICE_REQUIRED = 'purchase_items_invoice_required';
     public const PURCHASE_ITEMS_CONTRACT_REQUIRED = 'purchase_items_contract_required';
     public const PURCHASE_BINDING_INVALID = 'purchase_binding_invalid';
+    /** Позицию со склада возвращают в закупку решением: там рост суммы ведёт на повторное согласование. */
+    public const PURCHASE_STOCK_RELEASE_BY_DECISION = 'purchase_stock_release_by_decision';
     public const PURCHASE_TASK_NOT_REVOKABLE = 'purchase_task_not_revokable';
     /** С этого этапа возвращать автору нельзя — например, товар уже оплачен. */
     public const PURCHASE_REJECT_NOT_ALLOWED = 'purchase_reject_not_allowed';

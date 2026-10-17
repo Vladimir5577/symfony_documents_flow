@@ -201,7 +201,11 @@ final class PurchaseTransitionController extends AbstractController
      * Правки состава из payload. Позиции, которых разбирающий не прислал,
      * остаются как есть.
      *
-     * @return array<int, array{included: bool, quantity: string|null, price: string|null, inStock: bool|null}>
+     * Счёт и договор фронт шлёт у позиции, которую этим решением возвращают со
+     * склада: раскладка её не примет, пока решение не снимет отметку. Право то же,
+     * что у раскладки, поэтому для остальных позиций они тоже допустимы.
+     *
+     * @return array<int, array{included: bool, quantity: string|null, price: string|null, inStock: bool|null, invoiceFileId?: int|null, contractId?: int|null}>
      */
     private function collectItemEdits(mixed $rows): array
     {
@@ -230,6 +234,14 @@ final class PurchaseTransitionController extends AbstractController
                 'price' => is_numeric($price) ? (string) $price : null,
                 'inStock' => array_key_exists('inStock', $row) ? (bool) $row['inStock'] : null,
             ];
+            foreach (['invoiceFileId', 'contractId'] as $key) {
+                if (array_key_exists($key, $row)) {
+                    if ($row[$key] !== null && !is_int($row[$key])) {
+                        throw new PurchaseTransitionException(SpaApiError::PURCHASE_BINDING_INVALID);
+                    }
+                    $edits[(int) $row['id']][$key] = $row[$key];
+                }
+            }
         }
 
         return $edits;

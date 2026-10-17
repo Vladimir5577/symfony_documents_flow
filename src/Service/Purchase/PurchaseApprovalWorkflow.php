@@ -153,7 +153,7 @@ final class PurchaseApprovalWorkflow
         }
     }
 
-    /** @param array<int, array{included: bool, quantity: string|null, price?: string|null}> $itemEdits */
+    /** @param array<int, array{included: bool, quantity: string|null, price?: string|null, inStock?: bool|null, invoiceFileId?: int|null, contractId?: int|null}> $itemEdits */
     private function approveLockedTask(
         PurchaseRequest $request,
         PurchaseApprovalTask $task,
@@ -175,6 +175,21 @@ final class PurchaseApprovalWorkflow
                     PurchaseHistoryAction::ITEMS_EDITED,
                     implode('; ', $changes),
                 );
+            }
+
+            // Позиция, которую это решение вернуло со склада: её счёт и договор приходят
+            // здесь же, раскладка до решения их не принимала. Иначе шаг со счётом без
+            // отката подписей не закрылся бы (быстрая закупка, «Счета» сразу после ресёрча).
+            // Сумму раскладка не меняет, а при откате подписей выбор не теряется.
+            $bindRows = [];
+            foreach ($itemEdits as $itemId => $edit) {
+                $row = array_intersect_key($edit, ['invoiceFileId' => true, 'contractId' => true]);
+                if ($row !== []) {
+                    $bindRows[] = ['id' => $itemId] + $row;
+                }
+            }
+            if ($bindRows !== []) {
+                $this->binding->apply($request, $bindRows, []);
             }
 
             $after = $request->getTotalAmountKopecks();
