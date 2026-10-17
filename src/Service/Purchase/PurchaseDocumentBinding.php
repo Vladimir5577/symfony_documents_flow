@@ -75,25 +75,30 @@ final class PurchaseDocumentBinding
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_BINDING_INVALID);
             }
 
+            // Снять «На складе» — значит купить позицию и поднять сумму. Здесь это не делаем:
+            // раскладка пишется сразу, мимо проверки роста суммы в решении (approveTask).
             if (array_key_exists('inStock', $row)) {
                 if (!is_bool($row['inStock'])) {
                     throw new PurchaseTransitionException(SpaApiError::PURCHASE_BINDING_INVALID);
+                }
+                if ($item->isInStock() && !$row['inStock']) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_STOCK_RELEASE_BY_DECISION);
                 }
                 $item->setInStock($row['inStock']);
             }
             if (array_key_exists('contractId', $row)) {
                 $contract = $this->contractFromRow($request, $row['contractId']);
-                $item->setContract($contract);
-                if ($contract !== null) {
-                    $item->setInStock(false);
+                if ($contract !== null && $item->isInStock()) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_STOCK_RELEASE_BY_DECISION);
                 }
+                $item->setContract($contract);
             }
             if (array_key_exists('invoiceFileId', $row)) {
                 $invoice = $this->fileFromRow($request, $row['invoiceFileId'], PurchaseFileType::INVOICE);
-                $item->setInvoiceFile($invoice);
-                if ($invoice !== null) {
-                    $item->setInStock(false);
+                if ($invoice !== null && $item->isInStock()) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_STOCK_RELEASE_BY_DECISION);
                 }
+                $item->setInvoiceFile($invoice);
             }
             if ($item->isInStock()) {
                 $item->setContract(null);

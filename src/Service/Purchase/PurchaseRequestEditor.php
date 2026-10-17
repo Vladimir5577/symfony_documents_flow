@@ -93,6 +93,7 @@ final class PurchaseRequestEditor
                 );
             }
 
+            $wasInStock = $item->isInStock();
             if (array_key_exists('inStock', $edit) && is_bool($edit['inStock']) && $edit['inStock'] !== $item->isInStock()) {
                 $item->setInStock($edit['inStock']);
                 if ($edit['inStock']) {
@@ -106,8 +107,11 @@ final class PurchaseRequestEditor
             }
 
             $price = $edit['price'] ?? null;
-            // Позиция со склада показана с нулевой ценой: не даём этому нулю затереть настоящую.
-            if ($price === null || $price === '' || $item->isInStock()) {
+            // Позиция со склада показана с нулевой ценой: не даём этому нулю затереть настоящую,
+            // и когда отметку склада снимают этим же решением — ноль пришёл из карточки.
+            if ($price === null || $price === '' || $item->isInStock()
+                || ($wasInStock && is_numeric($price) && (float) $price === 0.0)
+            ) {
                 continue;
             }
             if (!is_numeric($price) || !is_finite((float) $price)
