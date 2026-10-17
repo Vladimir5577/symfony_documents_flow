@@ -6,6 +6,8 @@ namespace App\Tests\Service\OnlyOffice;
 
 use App\Service\OnlyOffice\OnlyOfficeJwt;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 
 /** Подпись обмена с Document Server: чужой или испорченный токен не проходит. */
 final class OnlyOfficeJwtTest extends TestCase
@@ -36,11 +38,15 @@ final class OnlyOfficeJwtTest extends TestCase
         self::assertNull($jwt->decode($jwt->encode(['status' => 2, 'exp' => time() - 10])));
     }
 
-    public function testWithoutSecretSigningIsOff(): void
+    public function testWithoutSecretEditorFailsClosedAndLogsReason(): void
     {
-        $jwt = new OnlyOfficeJwt(null);
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::once())->method('error')->with('OnlyOffice editor disabled: ONLYOFFICE_JWT_SECRET is not configured.');
+        $jwt = new OnlyOfficeJwt(null, $logger);
 
         self::assertFalse($jwt->isEnabled());
         self::assertNull($jwt->decode((new OnlyOfficeJwt('secret'))->encode(['status' => 2])));
+        $this->expectException(ServiceUnavailableHttpException::class);
+        $jwt->encode(['document' => ['key' => 'document']]);
     }
 }

@@ -17,6 +17,7 @@ use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
+use App\Service\SpaApi\Documents\DocumentAccessService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -31,6 +32,11 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class DocumentController extends AbstractController
 {
+    public function __construct(
+        private readonly DocumentAccessService $accessService,
+    ) {
+    }
+
     #[Route('/new_document', name: 'app_new_document')]
     public function index(DocumentTypeRepository $documentTypeRepository): Response
     {
@@ -578,9 +584,10 @@ final class DocumentController extends AbstractController
             throw $this->createNotFoundException('Документ не найден.');
         }
 
-        // Доступ: создатель, получатель или админ
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
-        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
+        if (!$this->accessService->canViewDocument($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к этому документу.');
+        }
+
         $isRecipient = false;
         $userRecipient = null;
         foreach ($document->getUserRecipients() as $recipient) {
@@ -606,11 +613,6 @@ final class DocumentController extends AbstractController
                 }
                 break;
             }
-        }
-
-        if (!$isAdmin && !$isCreator && !$isRecipient) {
-            $this->addFlash('error', 'Нет доступа к этому документу.');
-            return $this->redirectToRoute('app_incoming_documents');
         }
 
         [$executorRecipients, $recipientRecipients] = $this->splitRecipientsByRole($document->getUserRecipients()->toArray());
@@ -641,20 +643,8 @@ final class DocumentController extends AbstractController
             throw $this->createNotFoundException('Документ не найден.');
         }
 
-        // Доступ: создатель, получатель или админ
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
-        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
-        $isRecipient = false;
-        foreach ($document->getUserRecipients() as $recipient) {
-            if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
-                $isRecipient = true;
-                break;
-            }
-        }
-
-        if (!$isAdmin && !$isCreator && !$isRecipient) {
-            $this->addFlash('error', 'Нет доступа к этому документу.');
-            return $this->redirectToRoute('app_incoming_documents');
+        if (!$this->accessService->canViewDocument($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к этому документу.');
         }
 
         [$executorRecipients, $recipientRecipients] = $this->splitRecipientsByRole($document->getUserRecipients()->toArray());
@@ -768,6 +758,12 @@ final class DocumentController extends AbstractController
         if ($organizationId <= 0) {
             $this->addFlash('error', 'Организация обязательна для заполнения.');
             return $renderForm($formData);
+        }
+
+        if ($organizationId !== $document->getOrganizationCreator()?->getId()
+            && !$isAdmin
+            && $organizationId !== $currentUser->getOrganization()?->getId()) {
+            throw $this->createAccessDeniedException('Нет доступа к редактированию этого документа.');
         }
 
         $organization = $organizationRepository->find($organizationId);
@@ -1151,19 +1147,8 @@ final class DocumentController extends AbstractController
             throw $this->createNotFoundException('Документ не найден.');
         }
 
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
-        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
-        $isRecipient = false;
-        foreach ($document->getUserRecipients() as $recipient) {
-            if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
-                $isRecipient = true;
-                break;
-            }
-        }
-
-        if (!$isAdmin && !$isCreator && !$isRecipient) {
-            $this->addFlash('error', 'Нет доступа к этому документу.');
-            return $this->redirectToRoute('app_incoming_documents');
+        if (!$this->accessService->canViewDocument($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к этому документу.');
         }
 
         $filename = $type === 'original' ? $document->getOriginalFile() : $document->getUpdatedFile();
@@ -1205,6 +1190,10 @@ final class DocumentController extends AbstractController
         $document = $documentRepository->findOneWithRelations($id);
         if (!$document) {
             throw $this->createNotFoundException('Документ не найден.');
+        }
+
+        if (!$this->accessService->canViewDocument($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к этому документу.');
         }
 
         // Находим получателя для текущего пользователя
@@ -1304,26 +1293,8 @@ final class DocumentController extends AbstractController
             throw $this->createNotFoundException('Пользователь не найден.');
         }
 
-        // Доступ: создатель, получатель или админ
-        $isAdmin = $this->isGranted('ROLE_ADMIN');
-        $isCreator = $document->getCreatedBy() && $document->getCreatedBy()->getId() === $currentUser->getId();
-        $isRecipient = false;
-        foreach ($document->getUserRecipients() as $recipient) {
-            if ($recipient->getUser() && $recipient->getUser()->getId() === $currentUser->getId()) {
-                $isRecipient = true;
-                break;
-            }
-        }
-
-        // Проверяем, что запрашиваемая история принадлежит текущему пользователю (если не админ)
-//        if (!$isAdmin && $userId !== $currentUser->getId()) {
-//            $this->addFlash('error', 'Нет доступа к истории этого пользователя.');
-//            return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
-//        }
-
-        if (!$isAdmin && !$isCreator && !$isRecipient) {
-            $this->addFlash('error', 'Нет доступа к этому документу.');
-            return $this->redirectToRoute('app_incoming_documents');
+        if (!$this->accessService->canViewDocument($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к этому документу.');
         }
 
         $history = $historyRepository->findByDocumentAndUserOrderByCreatedAtDesc($id, $userId);

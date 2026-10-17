@@ -46,10 +46,14 @@
                                          class="w-100 h-100"
                                          style="object-fit: cover;">
                                 </button>
+                                {% if is_granted('ROLE_ADMIN') or app.user.id == user.id %}
                                 <a href="{{ path('app_edit_user_photo', {id: user.id}) }}" class="btn btn-outline-primary btn-sm">Изменить фото</a>
+                                {% endif %}
                                 {% else %}
                                 <p class="text-muted small mb-0">Фото не загружено</p>
+                                {% if is_granted('ROLE_ADMIN') or app.user.id == user.id %}
                                 <a href="{{ path('app_edit_user_photo', {id: user.id}) }}" class="btn btn-outline-primary btn-sm">Добавить фото</a>
+                                {% endif %}
                                 {% endif %}
                             </div>
                             <table class="table table-borderless">
@@ -140,7 +144,7 @@
 
     <div class="d-flex justify-content-end gap-2 mt-4">
 
-        {% if user.id != app.user.id and is_granted('ROLE_ADMIN') %}
+        {% if is_granted('ROLE_ADMIN') or app.user.id == user.id %}
         <a href="{{ path('app_edit_user', {id: user.id}) }}" class="btn btn-primary">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-edit">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -148,7 +152,9 @@
             </svg>
             Редактировать пользователя
         </a>
+        {% endif %}
 
+        {% if user.id != app.user.id and is_granted('ROLE_ADMIN') %}
         <form id="delete-user-form" method="post" action="{{ path('app_delete_user', {id: user.id}) }}" class="d-inline">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token('delete_user_' ~ user.id) }}">
             <button type="submit" class="btn btn-danger" id="delete-user-btn">

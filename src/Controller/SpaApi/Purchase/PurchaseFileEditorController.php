@@ -10,6 +10,7 @@ use App\Entity\Purchase\PurchaseRequestFile;
 use App\Entity\User\User;
 use App\Enum\Purchase\PurchaseContractReview;
 use App\Enum\Purchase\PurchaseFileType;
+use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Repository\Purchase\PurchaseRequestFileRepository;
 use App\Repository\Purchase\PurchaseRequestRepository;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
@@ -17,6 +18,7 @@ use App\Service\Purchase\PurchaseAccess;
 use App\Service\Purchase\PurchaseFileCoEditing;
 use App\Service\Purchase\PurchaseFileStorageService;
 use Aws\S3\Exception\S3Exception;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -44,8 +46,8 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  *
  * Браузер ходит в /spa/api с JWT. Document Server скачивает файл и шлёт
  * callback без JWT пользователя, поэтому их адреса подписаны HMAC по ключу
- * документа. Подпись Document Server (ONLYOFFICE_JWT_SECRET) проверяется, если
- * задана.
+ * документа и серверной сессии. Подпись Document Server (ONLYOFFICE_JWT_SECRET)
+ * обязательна.
  */
 final class PurchaseFileEditorController extends AbstractController
 {
@@ -55,6 +57,7 @@ final class PurchaseFileEditorController extends AbstractController
      * Symfony, он один.
      */
     private const INTERNAL_APP = 'http://nginx_web';
+    private const SESSION_TTL = 7200;
 
     public function __construct(
         private readonly PurchaseRequestRepository $purchases,
@@ -85,17 +88,30 @@ final class PurchaseFileEditorController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
+        $this->jwt->requireEnabled();
         $task = $this->access->findMyActiveTask($purchase, $user);
         // Утверждённый договор и его копия только смотрятся, даже на своём шаге.
         if ($file->getSourceFile() !== null || $file->belongsToConfirmedContract() || $this->files->isConfirmed((int) $file->getId())) {
             $task = null;
         }
         $mode = $task !== null ? 'edit' : 'view';
-        $key = $this->coEditing->documentKey($file);
+        $key = $this->documentKey($purchase, $file);
+        $sessionToken = bin2hex(random_bytes(32));
+        $item = $this->cache->getItem('purchase_editor_session_' . $sessionToken);
+        $item->set([
+            'purchaseId' => $id, 'fileId' => $fileId, 'userId' => $user->getId(),
+            'key' => $key, 'mode' => $mode, 'taskId' => $task?->getId(),
+            'stageId' => $purchase->getCurrentStage()?->getId(),
+            'status' => $purchase->getStatus()->value, 'routeRevision' => $this->routeRevision($purchase),
+            'expiresAt' => time() + self::SESSION_TTL,
+        ]);
+        $item->expiresAfter(self::SESSION_TTL);
+        $this->cache->save($item);
         $base = sprintf('%s/purchase_file_editor/%d/%d', self::INTERNAL_APP, $purchase->getId(), $file->getId());
         $signed = fn (string $purpose): string => sprintf('%s/%s?%s', $base, $purpose, http_build_query([
             'key' => $key,
-            'token' => $this->signFile($purpose, (int) $purchase->getId(), (int) $file->getId(), $key),
+            'session' => $sessionToken,
+            'token' => $this->signFile($purpose, $id, $fileId, $key, $sessionToken),
         ]));
 
         // Адрес callback — только правщику: с ним можно записать файл, а зрителю
@@ -107,13 +123,12 @@ final class PurchaseFileEditorController extends AbstractController
             $signed('content'),
             $task !== null ? $signed('callback') : null,
         );
-        if ($this->jwt->isEnabled()) {
-            $config['token'] = $this->jwt->encode($config);
-        }
+        $config['document']['key'] = $key;
+        $config['token'] = $this->jwt->encode($config + ['exp' => time() + self::SESSION_TTL]);
 
         return $this->json([
             'mode' => $mode,
-            'token' => $this->sign((int) $purchase->getId(), (int) $file->getId(), (int) $user->getId(), $key, $mode),
+            'token' => $sessionToken,
             'taskId' => $task?->getId(),
             'contractReview' => $file->getType() === PurchaseFileType::CONTRACT
                 ? $task?->getContractReview()?->value
@@ -136,6 +151,27 @@ final class PurchaseFileEditorController extends AbstractController
         ]);
     }
 
+    #[Route('/spa/api/purchases/{id}/files/{fileId}/editor/heartbeat', name: 'spa_api_purchases_file_editor_heartbeat', requirements: ['id' => '\d+', 'fileId' => '\d+'], methods: ['POST'])]
+    public function heartbeat(int $id, int $fileId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        $session = $this->sessionFromBody($id, $fileId, $user, $request);
+        if ($session === null) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $token = $session['token'];
+        unset($session['token']);
+        $session['expiresAt'] = time() + self::SESSION_TTL;
+        $item = $this->cache->getItem('purchase_editor_session_' . $token);
+        $item->set($session);
+        $item->expiresAfter(self::SESSION_TTL);
+        if (!$this->cache->save($item)) {
+            return $this->json(['error' => SpaApiError::PURCHASE_FILE_EDITOR_FAILED], Response::HTTP_SERVICE_UNAVAILABLE);
+        }
+
+        return $this->json(['expiresAt' => $session['expiresAt']]);
+    }
+
     #[Route('/spa/api/purchases/{id}/files/{fileId}/editor/save', name: 'spa_api_purchases_file_editor_save', requirements: ['id' => '\d+', 'fileId' => '\d+'], methods: ['POST'])]
     public function save(int $id, int $fileId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -153,6 +189,11 @@ final class PurchaseFileEditorController extends AbstractController
             && $this->access->findMyActiveTask($purchase, $user)?->getContractReview() === PurchaseContractReview::ACCEPT;
 
         $saveId = bin2hex(random_bytes(8));
+        // Callback может прийти на URL другого соавтора: разрешение относится к нажавшему «Сохранить».
+        $pending = $this->cache->getItem('purchase_editor_save_' . $fileId . '_' . $saveId);
+        $pending->set(['session' => $session['token'], 'accept' => $accept]);
+        $pending->expiresAfter(120);
+        $this->cache->save($pending);
         // Кто нажал «Сохранить» — в userdata: callback придёт на адрес того
         // участника, которого выберет Document Server, а не обязательно этого.
         $result = $this->command(
@@ -163,8 +204,14 @@ final class PurchaseFileEditorController extends AbstractController
         $error = (int) ($result['error'] ?? 1);
         // 4 — документ не менялся с прошлого сохранения, callback не придёт.
         if ($error === 4) {
-            if ($accept && !$this->acceptStored($purchase, $file, $user)) {
-                return $this->json(['error' => SpaApiError::PURCHASE_FILE_EDITOR_FAILED], Response::HTTP_BAD_GATEWAY);
+            if ($accept) {
+                $accepted = $this->acceptStoredForSession($purchase, $file, $user, $session['token']);
+                if ($accepted === null) {
+                    return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+                }
+                if (!$accepted) {
+                    return $this->json(['error' => SpaApiError::PURCHASE_FILE_EDITOR_FAILED], Response::HTTP_BAD_GATEWAY);
+                }
             }
             $this->markAck($fileId, $saveId);
 
@@ -212,6 +259,7 @@ final class PurchaseFileEditorController extends AbstractController
     #[Route('/purchase_file_editor/{id}/{fileId}/callback', name: 'purchase_file_editor_callback', requirements: ['id' => '\d+', 'fileId' => '\d+'], methods: ['POST'])]
     public function callback(int $id, int $fileId, Request $request): JsonResponse
     {
+        // URL выбирает Document Server: его владелец не обязательно инициатор сохранения.
         $key = $this->keyFromQuery('callback', $id, $fileId, $request);
         $data = $key !== null ? $this->callbackData($request) : null;
         // Тело — про ту же сессию, что и подписанный адрес.
@@ -222,7 +270,9 @@ final class PurchaseFileEditorController extends AbstractController
         $status = (int) ($data['status'] ?? 0);
         // 2 — все вышли. Автосохранение и закрытие файл не пишут.
         if ($status === 2) {
-            $this->dropUnsavedSession($id, $fileId, $key);
+            if ($this->keyFromQuery('callback', $id, $fileId, $request) !== null) {
+                $this->dropUnsavedSession($id, $fileId, $key);
+            }
 
             return $this->json(['error' => 0]);
         }
@@ -239,7 +289,17 @@ final class PurchaseFileEditorController extends AbstractController
         $purchase = $this->purchases->find($id);
         $file = $this->findFile($purchase, $fileId);
         // Ключ уже сменился — это отставший callback прошлой сессии, её итог записан.
-        if ($file === null || !$purchase instanceof PurchaseRequest || $this->coEditing->documentKey($file) !== $key) {
+        if ($file === null || !$purchase instanceof PurchaseRequest || $this->documentKey($purchase, $file) !== $key) {
+            return $this->json(['error' => 0]);
+        }
+        $pending = $this->cache->getItem('purchase_editor_save_' . $fileId . '_' . $saveId);
+        $permission = $pending->isHit() ? $pending->get() : null;
+        $committer = is_array($permission)
+            ? $this->cachedSession((string) ($permission['session'] ?? ''), $id, $fileId)
+            : null;
+        if ($committer === null || $committer['mode'] !== 'edit' || $committer['key'] !== $key
+            || $committer['userId'] !== $committerId || ($permission['accept'] ?? null) !== $accept
+        ) {
             return $this->json(['error' => 0]);
         }
         $url = self::internalDownloadUrl((string) ($data['url'] ?? ''), $this->onlyofficeDocumentServerUrl);
@@ -250,17 +310,62 @@ final class PurchaseFileEditorController extends AbstractController
         if ($downloaded === false || $downloaded === '') {
             return $this->json(['error' => 1]);
         }
-        if ($accept) {
-            $downloaded = PurchaseFileCoEditing::acceptedCopy($downloaded);
-        }
-
-        // Утверждение закрывает сессию: иначе чужое «Сохранить» затрёт уже принятый текст.
-        $this->coEditing->commit($purchase, $file, $downloaded, $accept, $this->editorsOf($data, $committerId));
-        if ($saveId !== '') {
-            $this->markAck($fileId, $saveId);
-        }
+        $this->commitDownloaded($purchase, $file, $data, $downloaded, $request);
 
         return $this->json(['error' => 0]);
+    }
+
+    /** @param array<string, mixed> $data */
+    private function commitDownloaded(PurchaseRequest $purchase, PurchaseRequestFile $file, array $data, string $downloaded, Request $request): void
+    {
+        // Задача могла завершиться, пока Document Server отдавал файл. Блокировка общая с approveTask.
+        $committed = $this->em->wrapInTransaction(function () use ($purchase, $file, $data, $downloaded, $request): bool {
+            $this->refreshEditorState($purchase, $file);
+            $id = (int) $purchase->getId();
+            $fileId = (int) $file->getId();
+            [$saveId, $committerId, $accept] = self::parseUserdata((string) ($data['userdata'] ?? ''));
+            $pending = $this->cache->getItem('purchase_editor_save_' . $fileId . '_' . $saveId);
+            $permission = $pending->isHit() ? $pending->get() : null;
+            $currentUser = $this->em->find(User::class, $committerId);
+            if ($currentUser instanceof User) {
+                $this->em->refresh($currentUser);
+            }
+            $committer = is_array($permission)
+                ? $this->activeSession((string) ($permission['session'] ?? ''), $id, $fileId)
+                : null;
+            $user = $committer !== null ? $this->em->find(User::class, $committer['userId']) : null;
+            if ($committer === null || $committer['mode'] !== 'edit' || $committer['key'] !== ($data['key'] ?? null)
+                || $committer['userId'] !== $committerId || ($permission['accept'] ?? null) !== $accept
+                || !$user instanceof User || $this->isAcked($fileId, $saveId)
+                || $this->keyFromQuery('callback', $id, $fileId, $request) === null
+                || ($accept && $this->access->findMyActiveTask($purchase, $user)?->getContractReview() !== PurchaseContractReview::ACCEPT)
+            ) {
+                return false;
+            }
+            if ($accept) {
+                $downloaded = PurchaseFileCoEditing::acceptedCopy($downloaded);
+            }
+            $this->coEditing->commit($purchase, $file, $downloaded, $accept, $this->editorsOf($data, $committerId));
+
+            return true;
+        });
+        if ($committed) {
+            [$saveId] = self::parseUserdata((string) ($data['userdata'] ?? ''));
+            $this->markAck((int) $file->getId(), $saveId);
+        }
+    }
+
+    /** Вызывается внутри транзакции, общей с изменением файла. */
+    private function refreshEditorState(PurchaseRequest $purchase, PurchaseRequestFile $file): void
+    {
+        $this->em->refresh($purchase, LockMode::PESSIMISTIC_WRITE);
+        $this->em->refresh($file);
+        foreach ($purchase->getStages() as $stage) {
+            $this->em->refresh($stage);
+            foreach ($stage->getTasks() as $task) {
+                $this->em->refresh($task);
+            }
+        }
     }
 
     /** Все вышли без «Сохранить»: файл остаётся как был, ключ сессии сменяется. */
@@ -268,7 +373,7 @@ final class PurchaseFileEditorController extends AbstractController
     {
         $purchase = $this->purchases->find($id);
         $file = $this->findFile($purchase, $fileId);
-        if ($file === null || !$purchase instanceof PurchaseRequest || $this->coEditing->documentKey($file) !== $key) {
+        if ($file === null || !$purchase instanceof PurchaseRequest || $this->documentKey($purchase, $file) !== $key) {
             return;
         }
         $this->coEditing->dropSession($file);
@@ -325,7 +430,7 @@ final class PurchaseFileEditorController extends AbstractController
             return null;
         }
         if (!$this->jwt->isEnabled()) {
-            return $data;
+            return null;
         }
 
         $token = is_string($data['token'] ?? null) ? $data['token'] : null;
@@ -391,7 +496,24 @@ final class PurchaseFileEditorController extends AbstractController
     /**
      * Сессия не прислала новый файл. Принять правки в том, что уже лежит в хранилище.
      * false — файл не прочитался, кнопку утверждения повторяют.
+     * null — право утверждения закончилось, пока выполнялась команда Document Server.
      */
+    private function acceptStoredForSession(PurchaseRequest $purchase, PurchaseRequestFile $file, User $user, string $token): ?bool
+    {
+        return $this->em->wrapInTransaction(function () use ($purchase, $file, $user, $token): ?bool {
+            $this->refreshEditorState($purchase, $file);
+            $this->em->refresh($user);
+            $session = $this->activeSession($token, (int) $purchase->getId(), (int) $file->getId());
+            if ($session === null || $session['mode'] !== 'edit' || $session['userId'] !== $user->getId()
+                || $this->access->findMyActiveTask($purchase, $user)?->getContractReview() !== PurchaseContractReview::ACCEPT
+            ) {
+                return null;
+            }
+
+            return $this->acceptStored($purchase, $file, $user);
+        });
+    }
+
     private function acceptStored(PurchaseRequest $purchase, PurchaseRequestFile $file, User $user): bool
     {
         try {
@@ -462,7 +584,7 @@ final class PurchaseFileEditorController extends AbstractController
         return null;
     }
 
-    /** @return array{key: string, mode: string}|null */
+    /** @return array<string, mixed>|null */
     private function sessionFromBody(int $purchaseId, int $fileId, ?User $user, Request $request): ?array
     {
         if (!$user instanceof User) {
@@ -479,11 +601,14 @@ final class PurchaseFileEditorController extends AbstractController
         if ($key === '' || $token === '' || !in_array($mode, ['edit', 'view'], true)) {
             return null;
         }
-        if (!hash_equals($this->sign($purchaseId, $fileId, (int) $user->getId(), $key, $mode), $token)) {
+        $session = $this->activeSession($token, $purchaseId, $fileId);
+        if ($session === null || $session['userId'] !== $user->getId()
+            || $session['key'] !== $key || $session['mode'] !== $mode
+        ) {
             return null;
         }
 
-        return ['key' => $key, 'mode' => $mode];
+        return $session + ['token' => $token];
     }
 
     /** Ключ документа из подписанного адреса файла или callback; null — подпись не сошлась. */
@@ -491,26 +616,107 @@ final class PurchaseFileEditorController extends AbstractController
     {
         $key = (string) $request->query->get('key', '');
         $token = (string) $request->query->get('token', '');
-        if ($key === '' || $token === '' || !hash_equals($this->signFile($purpose, $purchaseId, $fileId, $key), $token)) {
+        $sessionToken = (string) $request->query->get('session', '');
+        if ($key === '' || $token === '' || !hash_equals($this->signFile($purpose, $purchaseId, $fileId, $key, $sessionToken), $token)) {
+            return null;
+        }
+        if ($purpose === 'callback') {
+            $purchase = $this->purchases->find($purchaseId);
+            $file = $this->findFile($purchase, $fileId);
+
+            return $purchase instanceof PurchaseRequest && $file !== null && $this->documentKey($purchase, $file) === $key
+                ? $key : null;
+        }
+        $session = $this->activeSession($sessionToken, $purchaseId, $fileId);
+        if ($session === null || $session['key'] !== $key) {
             return null;
         }
 
         return $key;
     }
 
-    /** Подпись сессии участника: ею браузер подтверждает «Сохранить». */
-    private function sign(int $purchaseId, int $fileId, int $userId, string $key, string $mode): string
+    /** Серверное разрешение проверяется заново, включая отзыв роли и завершение задачи. */
+    private function activeSession(string $token, int $purchaseId, int $fileId): ?array
     {
-        return hash_hmac('sha256', $purchaseId . "\n" . $fileId . "\n" . $userId . "\n" . $key . "\n" . $mode, $this->appSecret);
+        $session = $this->cachedSession($token, $purchaseId, $fileId);
+        if ($session === null) {
+            return null;
+        }
+        $purchase = $this->purchases->find($purchaseId);
+        $file = $this->findFile($purchase, $fileId);
+        $user = $this->em->find(User::class, $session['userId']);
+        if (!$purchase instanceof PurchaseRequest || $file === null
+            || !$user instanceof User || $user->isDeleted() || !$this->access->canView($purchase, $user)
+            || $this->documentKey($purchase, $file) !== $session['key']
+            || $purchase->getCurrentStage()?->getId() !== $session['stageId']
+            || $purchase->getStatus()->value !== $session['status']
+            || $this->routeRevision($purchase) !== $session['routeRevision']
+        ) {
+            $this->cache->deleteItem('purchase_editor_session_' . $token);
+
+            return null;
+        }
+        if ($session['mode'] === 'edit'
+            && ($session['taskId'] === null || $this->access->findMyActiveTask($purchase, $user)?->getId() !== $session['taskId'])
+        ) {
+            return null;
+        }
+
+        return $session;
+    }
+
+    /** @return array<string, mixed>|null */
+    private function cachedSession(string $token, int $purchaseId, int $fileId): ?array
+    {
+        if (preg_match('/^[a-f0-9]{64}$/D', $token) !== 1) {
+            return null;
+        }
+        $cacheKey = 'purchase_editor_session_' . $token;
+        $item = $this->cache->getItem($cacheKey);
+        $session = $item->isHit() ? $item->get() : null;
+        if (!is_array($session) || $session['purchaseId'] !== $purchaseId || $session['fileId'] !== $fileId) {
+            return null;
+        }
+        if ($session['expiresAt'] <= time()) {
+            $this->cache->deleteItem($cacheKey);
+
+            return null;
+        }
+
+        return $session;
+    }
+
+    /** Новый этап не подключается к документу, который ещё открыт у прежних редакторов. */
+    private function documentKey(PurchaseRequest $purchase, PurchaseRequestFile $file): string
+    {
+        $stage = $purchase->getCurrentStage()?->getId() . ':' . $purchase->getStatus()->value . ':' . $this->routeRevision($purchase);
+
+        return $this->coEditing->documentKey($file) . '-' . substr(hash('sha256', $stage), 0, 16);
+    }
+
+    /** Возврат на тот же этап не должен оживлять его старые разрешения. */
+    private function routeRevision(PurchaseRequest $purchase): int
+    {
+        $revision = 0;
+        foreach ($purchase->getHistory() as $entry) {
+            if (in_array($entry->getAction(), [
+                PurchaseHistoryAction::SUBMITTED,
+                PurchaseHistoryAction::TASK_REVOKED,
+                PurchaseHistoryAction::RETURNED_TO_DEPARTMENT,
+            ], true)) {
+                $revision = max($revision, (int) $entry->getId());
+            }
+        }
+
+        return $revision;
     }
 
     /**
-     * Подпись адресов файла (content) и callback: они общие на сессию, пользователя
-     * в них нет. Назначение входит в подпись — по адресу чтения запись не собрать.
+     * Назначение входит в подпись — по адресу чтения запись не собрать.
      */
-    private function signFile(string $purpose, int $purchaseId, int $fileId, string $key): string
+    private function signFile(string $purpose, int $purchaseId, int $fileId, string $key, string $session): string
     {
-        return hash_hmac('sha256', $purpose . "\n" . $purchaseId . "\n" . $fileId . "\n" . $key, $this->appSecret);
+        return hash_hmac('sha256', $purpose . "\n" . $purchaseId . "\n" . $fileId . "\n" . $key . "\n" . $session, $this->appSecret);
     }
 
     private function isDocx(PurchaseRequestFile $file): bool
@@ -549,9 +755,7 @@ final class PurchaseFileEditorController extends AbstractController
         if ($userdata !== null) {
             $body['userdata'] = $userdata;
         }
-        if ($this->jwt->isEnabled()) {
-            $body['token'] = $this->jwt->encode($body);
-        }
+        $body['token'] = $this->jwt->encode($body);
         $payload = json_encode($body);
         if ($payload === false) {
             return ['error' => 1];

@@ -88,6 +88,9 @@ final class ContractApplicationController extends AbstractController
     #[Route('/contract-application/{id}/update', name: 'app_contract_application_update', requirements: ['id' => '\d+'], methods: ['POST'])]
     public function update(int $id, Request $request): Response
     {
+        if (!$this->isCsrfTokenValid('contract_application_update_' . $id, $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException();
+        }
         $status       = $request->request->get('status') ?: null;
         $adminComment = $request->request->get('adminComment') ?: null;
 

@@ -16,6 +16,7 @@ use App\Service\Acknowledgment\AckFileStorageService;
 use App\Service\Acknowledgment\AckPresenter;
 use Aws\S3\Exception\S3Exception;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\HeaderUtils;
@@ -170,33 +171,40 @@ final class AckDocumentController extends AbstractController
             return $this->json(['error' => SpaApiError::ACK_STATUS_COMMENT_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
-        $ack = $this->ackRepo->findOneFor($document, $user);
-        // Отметку об ознакомлении назад не отыгрывают: иначе охват документа
-        // «дышал» бы и отчёт делопроизводства ничего не значил.
-        if ($ack !== null && $ack->isFinal()) {
-            return $this->json(['error' => SpaApiError::ACK_STATUS_ALREADY_FINAL], Response::HTTP_CONFLICT);
-        }
-
-        if ($ack === null) {
-            $ack = (new AckDocumentUser())
-                ->setDocument($document)
-                ->setUser($user);
-            $this->em->persist($ack);
-        }
-
-        $ack->setStatus($status)
-            ->setComment($comment !== '' ? $comment : null)
-            ->setActedAt(new \DateTimeImmutable());
-
         try {
-            $this->em->flush();
+            return $this->em->wrapInTransaction(function () use ($document, $user, $status, $comment): JsonResponse {
+                // Родитель сериализует и первую отметку, когда строки сотрудника ещё нет.
+                $this->em->refresh($document, LockMode::PESSIMISTIC_WRITE);
+                if (!$document->isActive()) {
+                    return $this->json(['error' => SpaApiError::ACK_DOCUMENT_NOT_ACTIVE], Response::HTTP_CONFLICT);
+                }
+                if (!$this->documentRepo->isAddressedTo($document, $user)) {
+                    return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+                }
+
+                $ack = $this->ackRepo->findOneFor($document, $user);
+                if ($ack !== null) {
+                    $this->em->refresh($ack, LockMode::PESSIMISTIC_WRITE);
+                    if ($ack->isFinal()) {
+                        return $this->json(['error' => SpaApiError::ACK_STATUS_ALREADY_FINAL], Response::HTTP_CONFLICT);
+                    }
+                } else {
+                    $ack = (new AckDocumentUser())
+                        ->setDocument($document)
+                        ->setUser($user);
+                    $this->em->persist($ack);
+                }
+
+                $ack->setStatus($status)
+                    ->setComment($comment !== '' ? $comment : null)
+                    ->setActedAt(new \DateTimeImmutable());
+                $this->em->flush();
+
+                return $this->json($this->presenter->presentDocument($document, $ack, $user));
+            });
         } catch (UniqueConstraintViolationException) {
-            // Две вкладки нажали кнопку одновременно: строка уже создана соседним
-            // запросом, и его отметка ничем не хуже нашей.
             return $this->json(['error' => SpaApiError::ACK_STATUS_ALREADY_FINAL], Response::HTTP_CONFLICT);
         }
-
-        return $this->json($this->presenter->presentDocument($document, $ack, $user));
     }
 
     #[Route(

@@ -13,10 +13,12 @@ use App\Enum\Purchase\PurchaseFileType;
 use App\Enum\Purchase\PurchaseHistoryAction;
 use App\Enum\Purchase\PurchaseStagePurpose;
 use App\Enum\Purchase\PurchaseTaskDecision;
+use App\Service\OnlyOffice\DocxArchiveGuard;
 use Aws\S3\Exception\S3Exception;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Совместная правка вложения в OnlyOffice: один документ на всех, кто сейчас
@@ -311,12 +313,15 @@ final class PurchaseFileCoEditing
         if ($path === false) {
             return $docx;
         }
+        $zip = new \ZipArchive();
+        $opened = false;
         try {
             file_put_contents($path, $docx);
-            $zip = new \ZipArchive();
-            if ($zip->open($path) !== true) {
+            $opened = $zip->open($path) === true;
+            if (!$opened) {
                 return $docx;
             }
+            DocxArchiveGuard::validate($zip);
             $names = [];
             for ($i = 0; $i < $zip->numFiles; ++$i) {
                 $name = $zip->getNameIndex($i);
@@ -326,10 +331,7 @@ final class PurchaseFileCoEditing
             }
             $changed = false;
             foreach ($names as $name) {
-                $xml = $zip->getFromName($name);
-                if (!is_string($xml)) {
-                    continue;
-                }
+                $xml = DocxArchiveGuard::read($zip, $name);
                 $clean = self::acceptRevisionsXml($xml);
                 if ($clean === $xml) {
                     continue;
@@ -339,6 +341,7 @@ final class PurchaseFileCoEditing
                 $changed = true;
             }
             $zip->close();
+            $opened = false;
             if (!$changed) {
                 return $docx;
             }
@@ -346,6 +349,9 @@ final class PurchaseFileCoEditing
 
             return $bytes === false ? $docx : $bytes;
         } finally {
+            if ($opened) {
+                $zip->close();
+            }
             @unlink($path);
         }
     }
@@ -551,19 +557,26 @@ final class PurchaseFileCoEditing
         if ($path === false) {
             return null;
         }
+        $zip = new \ZipArchive();
+        $opened = false;
         try {
             file_put_contents($path, $docx);
-            $zip = new \ZipArchive();
-            if ($zip->open($path) !== true) {
-                return null;
+            $opened = $zip->open($path) === true;
+            if (!$opened) {
+                throw new HttpException(422, 'Invalid DOCX archive.');
             }
+            DocxArchiveGuard::validate($zip);
             $zip->deleteName('word/document.xml');
             $zip->addFromString('word/document.xml', $xml);
             $zip->close();
+            $opened = false;
             $bytes = file_get_contents($path);
 
             return $bytes === false ? null : $bytes;
         } finally {
+            if ($opened) {
+                $zip->close();
+            }
             @unlink($path);
         }
     }
@@ -574,17 +587,21 @@ final class PurchaseFileCoEditing
         if ($path === false) {
             return null;
         }
+        $zip = new \ZipArchive();
+        $opened = false;
         try {
             file_put_contents($path, $docx);
-            $zip = new \ZipArchive();
-            if ($zip->open($path) !== true) {
-                return null;
+            $opened = $zip->open($path) === true;
+            if (!$opened) {
+                throw new HttpException(422, 'Invalid DOCX archive.');
             }
-            $xml = $zip->getFromName('word/document.xml');
-            $zip->close();
+            DocxArchiveGuard::validate($zip);
 
-            return $xml === false ? null : $xml;
+            return DocxArchiveGuard::read($zip, 'word/document.xml');
         } finally {
+            if ($opened) {
+                $zip->close();
+            }
             @unlink($path);
         }
     }
