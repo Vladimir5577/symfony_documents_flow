@@ -9,6 +9,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use App\Http\ProxiedFileResponse;
 
 final class CitizenAppealFileProxyController extends AbstractController
 {
@@ -29,14 +30,6 @@ final class CitizenAppealFileProxyController extends AbstractController
             throw $e;
         }
 
-        $response = new Response($file['content'], Response::HTTP_OK, [
-            'Content-Type' => $file['contentType'],
-        ]);
-
-        if ($file['disposition'] !== null) {
-            $response->headers->set('Content-Disposition', $file['disposition']);
-        }
-
-        return $response;
+        return ProxiedFileResponse::create($file);
     }
 }

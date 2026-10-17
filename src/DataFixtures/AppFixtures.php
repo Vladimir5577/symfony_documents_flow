@@ -16,10 +16,7 @@ class AppFixtures extends Fixture implements FixtureGroupInterface, DependentFix
 
     public function load(ObjectManager $manager): void
     {
-        // $product = new Product();
-        // $manager->persist($product);
 
-//        $manager->flush();
     }
 
     public function getDependencies(): array

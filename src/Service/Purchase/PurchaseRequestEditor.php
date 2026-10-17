@@ -73,10 +73,16 @@ final class PurchaseRequestEditor
             }
 
             $quantity = $edit['quantity'];
+            if ($quantity !== null) {
+                if (!is_numeric($quantity) || !is_finite((float) $quantity)
+                    || round((float) $quantity, 3) <= 0 || (float) $quantity > 999999999.999
+                ) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
+                }
+                $quantity = number_format((float) $quantity, 3, '.', '');
+            }
             if ($quantity === null || (float) $quantity === (float) $item->getQuantity()) {
                 $item->setApprovedQuantity(null);
-            } elseif ((float) $quantity <= 0) {
-                throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
             } else {
                 $item->setApprovedQuantity($quantity);
                 $changes[] = sprintf(
@@ -104,7 +110,9 @@ final class PurchaseRequestEditor
             if ($price === null || $price === '' || $item->isInStock()) {
                 continue;
             }
-            if (!is_numeric($price) || (float) $price < 0) {
+            if (!is_numeric($price) || !is_finite((float) $price)
+                || (float) $price < 0 || (float) $price > 9999999999.99
+            ) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
             }
             $priceValue = number_format((float) $price, 2, '.', '');
@@ -169,7 +177,9 @@ final class PurchaseRequestEditor
             if ($price === null || $item->isInStock()) {
                 continue;
             }
-            if (!is_numeric($price) || (float) $price < 0) {
+            if (!is_numeric($price) || !is_finite((float) $price)
+                || (float) $price < 0 || (float) $price > 9999999999.99
+            ) {
                 throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
             }
             if ((float) $price === (float) $item->getEstimatedPrice()) {

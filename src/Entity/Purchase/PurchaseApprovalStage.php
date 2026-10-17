@@ -235,7 +235,21 @@ class PurchaseApprovalStage
     /** @return Collection<int, PurchaseApprovalTask> */
     public function getTasks(): Collection
     {
-        return $this->tasks;
+        return $this->tasks->filter(
+            static fn (PurchaseApprovalTask $task): bool => $task->getAssignmentType() !== PurchaseTaskAssignment::DYNAMIC_USERS,
+        );
+    }
+
+    /** Требования неназначенной задачи хранятся в снимке, но подписью не считаются. */
+    public function getDynamicTaskSnapshot(): ?PurchaseApprovalTask
+    {
+        foreach ($this->tasks as $task) {
+            if ($task->getAssignmentType() === PurchaseTaskAssignment::DYNAMIC_USERS) {
+                return $task;
+            }
+        }
+
+        return null;
     }
 
     public function addTask(PurchaseApprovalTask $task): static
@@ -311,11 +325,11 @@ class PurchaseApprovalStage
      */
     public function isSatisfied(): bool
     {
-        if ($this->tasks->isEmpty()) {
+        if ($this->getTasks()->isEmpty()) {
             return false;
         }
 
-        foreach ($this->tasks as $task) {
+        foreach ($this->getTasks() as $task) {
             if ($task->getDecision() !== PurchaseTaskDecision::APPROVED) {
                 return false;
             }
@@ -332,7 +346,7 @@ class PurchaseApprovalStage
     public function getPendingTasks(): array
     {
         $pending = [];
-        foreach ($this->tasks as $task) {
+        foreach ($this->getTasks() as $task) {
             if ($task->isPending()) {
                 $pending[] = $task;
             }
@@ -354,7 +368,7 @@ class PurchaseApprovalStage
     /** Есть ли в этапе задача, которую закрывает автор заявки. */
     public function hasAuthorTask(): bool
     {
-        foreach ($this->tasks as $task) {
+        foreach ($this->getTasks() as $task) {
             if ($task->getAssignmentType() === PurchaseTaskAssignment::AUTHOR) {
                 return true;
             }
@@ -367,7 +381,7 @@ class PurchaseApprovalStage
     public function resolveTitle(): string
     {
         $titles = [];
-        foreach ($this->tasks as $task) {
+        foreach ($this->getTasks() as $task) {
             $titles[] = $task->resolveTitle();
         }
         $titles = array_values(array_unique(array_filter(

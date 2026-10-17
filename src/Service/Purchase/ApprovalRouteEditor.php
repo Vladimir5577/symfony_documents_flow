@@ -327,7 +327,6 @@ final class ApprovalRouteEditor
      * Разобрать дерево этапов. Позиции нумеруются по порядку присланного списка:
      * фронт присылает структуру, номера считает бэк.
      *
-     * @param mixed $rows
      * @return list<PurchaseRouteTemplateStage>
      * @throws PurchaseRouteException
      */
@@ -371,7 +370,6 @@ final class ApprovalRouteEditor
     }
 
     /**
-     * @param mixed $rows
      * @return list<PurchaseRouteTemplateTask>
      * @throws PurchaseRouteException
      */

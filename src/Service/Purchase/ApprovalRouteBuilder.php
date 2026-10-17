@@ -26,9 +26,9 @@ use Doctrine\ORM\EntityManagerInterface;
  * что есть.
  *
  * Люди в динамический этап при сборке не попадают: до решения разбирающего
- * неизвестно, кто они и нужны ли вообще. Такой этап создаётся пустым со статусом
- * AWAITING_ASSIGNMENT — он виден в карточке как «ожидает назначения», и вставка
- * людей в середину маршрута не двигает соседние этапы.
+ * неизвестно, кто они и нужны ли вообще. Требования сохраняются отдельной
+ * задачей DYNAMIC_USERS, скрытой из списка подписей. Этап ждёт назначения,
+ * и вставка людей в середину маршрута не двигает соседние этапы.
  *
  * Снос предыдущего снимка пишется отдельным flush — иначе повторная подача
  * падает на уникальном ключе (см. build). Остальное — на вызывающей стороне.
@@ -69,16 +69,10 @@ final class ApprovalRouteBuilder
             $this->em->persist($stage);
 
             foreach ($templateStage->getTasks() as $templateTask) {
-                // Динамическая задача — это место, а не адрес: людей в него
-                // выберет разбирающий, и до тех пор задачи здесь нет.
-                if ($templateTask->isDynamic()) {
-                    continue;
-                }
-
                 $task = (new PurchaseApprovalTask())
                     ->setPosition($templateTask->getPosition())
                     ->setAssignmentType($templateTask->getAssignmentType())
-                    ->setRoleCode($templateTask->getRoleCode())
+                    ->setRoleCode($templateTask->isDynamic() ? null : $templateTask->getRoleCode())
                     ->setTitle($templateTask->getTitle())
                     ->setRequiresFileType($templateTask->getRequiresFileType())
                     ->setContractReview($templateTask->getContractReview());
@@ -112,6 +106,9 @@ final class ApprovalRouteBuilder
         $assigned = [];
         $seen = [];
         $position = 0;
+        // Снимки, поданные до хранения требований, их не содержат: для них —
+        // прежнее поведение, требования из текущей заготовки (или без них).
+        $requirements = $stage->getDynamicTaskSnapshot() ?? $this->dynamicTemplateTask($stage);
 
         foreach ($users as $user) {
             $userId = $user->getId();
@@ -120,14 +117,13 @@ final class ApprovalRouteBuilder
             }
             $seen[$userId] = true;
 
-            $templateTask = $this->dynamicTemplateTask($stage);
             $task = (new PurchaseApprovalTask())
                 ->setPosition(++$position)
                 ->setAssignmentType(PurchaseTaskAssignment::USER)
                 ->setAssigneeUser($user)
                 ->setCreatedBy($actor)
-                ->setRequiresFileType($templateTask?->getRequiresFileType())
-                ->setContractReview($templateTask?->getContractReview());
+                ->setRequiresFileType($requirements?->getRequiresFileType())
+                ->setContractReview($requirements?->getContractReview());
 
             $stage->addTask($task);
             $this->em->persist($task);
@@ -164,11 +160,7 @@ final class ApprovalRouteBuilder
         return $preview;
     }
 
-    /**
-     * Динамическая задача в снимок при подаче не попадает — людей ещё нет.
-     * Требование документа и отметка договора остаются на задаче заготовки
-     * и переносятся сюда, когда разбирающий назначает людей.
-     */
+    /** Резерв для старых снимков без задачи DYNAMIC_USERS. */
     private function dynamicTemplateTask(PurchaseApprovalStage $stage): ?PurchaseRouteTemplateTask
     {
         $position = $stage->getPosition();

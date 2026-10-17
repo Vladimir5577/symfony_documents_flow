@@ -13,6 +13,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use App\Http\ProxiedFileResponse;
 
 #[Route('/spa/api/contract-applications')]
 #[IsGranted('ROLE_CONTRACT_APPLICATION')]
@@ -114,12 +115,7 @@ final class ContractApplicationController extends AbstractController
             return $this->json(['error' => $e->getMessage()], $e->getCode() ?: Response::HTTP_NOT_FOUND);
         }
 
-        $response = new Response($file['content'], Response::HTTP_OK, ['Content-Type' => $file['contentType']]);
-        if ($file['disposition'] !== null) {
-            $response->headers->set('Content-Disposition', $file['disposition']);
-        }
-
-        return $response;
+        return ProxiedFileResponse::create($file);
     }
 
     /** DTO → массив; вложенные блоки (consumer/requisites/…) отдаём как есть, файлы — через наш прокси. */

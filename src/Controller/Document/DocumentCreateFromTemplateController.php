@@ -61,10 +61,10 @@ final class DocumentCreateFromTemplateController extends AbstractController
         }
 
         $template = new TemplateProcessor($templatePath);
-        $template->setValue('company_name', $companyName);
-        $template->setValue('client_name', $clientName);
-        $template->setValue('amount', $amount);
-        $template->setValue('contract_date', $contractDate);
+        $template->setValue('company_name', htmlspecialchars($companyName, ENT_XML1 | ENT_QUOTES, 'UTF-8'));
+        $template->setValue('client_name', htmlspecialchars($clientName, ENT_XML1 | ENT_QUOTES, 'UTF-8'));
+        $template->setValue('amount', htmlspecialchars($amount, ENT_XML1 | ENT_QUOTES, 'UTF-8'));
+        $template->setValue('contract_date', htmlspecialchars($contractDate, ENT_XML1 | ENT_QUOTES, 'UTF-8'));
 
         $filesDir = $this->getParameter('kernel.project_dir') . '/public/files';
         $outputFilename = 'generated_' . date('Y-m-d_His') . '_' . bin2hex(random_bytes(4)) . '.docx';
@@ -84,7 +84,6 @@ final class DocumentCreateFromTemplateController extends AbstractController
     }
 
 
-    // ======================================================
 
     #[Route('/edit_docx', name: 'app_edit_docx')]
     public function editDocx(
@@ -227,7 +226,6 @@ final class DocumentCreateFromTemplateController extends AbstractController
                 $fileUploadService->deleteUpdatedFile($document->getUpdatedFile());
             }
 
-            // convert docx to pdf
             $docxToPdfConvertorService->convertDocxToPdf($targetPath);
             $document->setOriginalFile($uniqueName);
             $document->setUpdatedFile(pathinfo($uniqueName, \PATHINFO_FILENAME) . '.pdf');

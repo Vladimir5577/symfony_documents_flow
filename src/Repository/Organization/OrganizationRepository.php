@@ -83,8 +83,6 @@ class OrganizationRepository extends ServiceEntityRepository
     /**
      * Загрузить организацию со всеми дочерними организациями (рекурсивно, до 5 уровней)
      *
-     * @param int $organizationId ID организации
-     * @return AbstractOrganization|null
      */
     public function findWithChildren(int $organizationId): ?AbstractOrganization
     {

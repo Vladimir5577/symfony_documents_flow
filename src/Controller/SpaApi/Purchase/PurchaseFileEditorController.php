@@ -91,7 +91,7 @@ final class PurchaseFileEditorController extends AbstractController
         $this->jwt->requireEnabled();
         $task = $this->access->findMyActiveTask($purchase, $user);
         // Утверждённый договор и его копия только смотрятся, даже на своём шаге.
-        if ($file->getSourceFile() !== null || $file->belongsToConfirmedContract() || $this->files->isConfirmed((int) $file->getId())) {
+        if ($this->isReadOnly($file)) {
             $task = null;
         }
         $mode = $task !== null ? 'edit' : 'view';
@@ -657,7 +657,8 @@ final class PurchaseFileEditorController extends AbstractController
             return null;
         }
         if ($session['mode'] === 'edit'
-            && ($session['taskId'] === null || $this->access->findMyActiveTask($purchase, $user)?->getId() !== $session['taskId'])
+            && ($this->isReadOnly($file) || $session['taskId'] === null
+                || $this->access->findMyActiveTask($purchase, $user)?->getId() !== $session['taskId'])
         ) {
             return null;
         }
@@ -716,12 +717,22 @@ final class PurchaseFileEditorController extends AbstractController
      */
     private function signFile(string $purpose, int $purchaseId, int $fileId, string $key, string $session): string
     {
+        if ($this->appSecret === '') {
+            throw new \LogicException('APP_SECRET не настроен.');
+        }
+
         return hash_hmac('sha256', $purpose . "\n" . $purchaseId . "\n" . $fileId . "\n" . $key . "\n" . $session, $this->appSecret);
     }
 
     private function isDocx(PurchaseRequestFile $file): bool
     {
         return strtolower(pathinfo($file->getStorageKey(), PATHINFO_EXTENSION)) === 'docx';
+    }
+
+    private function isReadOnly(PurchaseRequestFile $file): bool
+    {
+        return $file->getSourceFile() !== null || $file->belongsToConfirmedContract()
+            || $this->files->isConfirmed((int) $file->getId());
     }
 
     private function markAck(int $fileId, string $saveId): void

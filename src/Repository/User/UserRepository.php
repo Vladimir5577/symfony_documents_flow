@@ -36,8 +36,6 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
     }
 
     /**
-     * @param string $identifier
-     * @return User|null
      *
      * Критично: подгрузка ролей и их permissions одним запросом
      *
@@ -110,20 +108,6 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         ];
     }
 
-    //    /**
-    //     * @return User[] Returns an array of User objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('u')
-    //            ->andWhere('u.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('u.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
 
     /**
      * Получить всех активных (не удаленных) пользователей
@@ -289,12 +273,6 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         return true;
     }
 
-    /**
-     * Найти активного пользователя по ID
-     *
-     * @param int $id
-     * @return User|null
-     */
     public function findActive(int $id): ?User
     {
         return $this->find($id);
@@ -307,7 +285,6 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
      *
      * @param array<string, mixed> $criteria Критерии (ключ 'login')
      * @param User|null $excludeUser Пользователь, которого исключить (при редактировании)
-     * @return User|null
      */
     public function findOneByLogin(array $criteria, ?User $excludeUser = null): ?User
     {
@@ -332,13 +309,4 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         return $result[0] ?? null;
     }
 
-    //    public function findOneBySomeField($value): ?User
-    //    {
-    //        return $this->createQueryBuilder('u')
-    //            ->andWhere('u.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
 }

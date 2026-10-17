@@ -145,6 +145,7 @@ class AckDocumentUserRepository extends ServiceEntityRepository
         if ($document->getAudience() === AckAudience::SELECTED) {
             return (int) $this->createQueryBuilder('adu')
                 ->select('COUNT(adu.id)')
+                ->innerJoin('adu.user', 'u')
                 ->where('adu.document = :document')
                 ->setParameter('document', $document)
                 ->getQuery()
@@ -163,6 +164,7 @@ class AckDocumentUserRepository extends ServiceEntityRepository
     {
         return $this->createQueryBuilder('adu')
             ->select('IDENTITY(adu.document) AS documentId', 'adu.status AS status', 'COUNT(adu.id) AS cnt')
+            ->innerJoin('adu.user', 'u')
             ->where('adu.document IN (:ids)')
             ->setParameter('ids', $documentIds)
             ->groupBy('documentId', 'adu.status');

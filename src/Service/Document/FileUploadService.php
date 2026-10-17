@@ -7,15 +7,12 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 class FileUploadService
 {
-    private const MAX_SIZE_BYTES = 9 * 1024 * 1024; // 5 МБ
+    private const MAX_SIZE_BYTES = 9 * 1024 * 1024; // 9 МБ
 
     private const ALLOWED_MIME_TYPES = [
         'application/pdf',
         'application/msword',                                                      // .doc
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-//        'image/jpeg',
-//        'image/jpg',
-//        'image/png',
     ];
 
     public function __construct(

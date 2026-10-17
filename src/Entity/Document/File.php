@@ -84,10 +84,6 @@ class File
     {
         $this->file = $file;
 
-        // Automatically generate a unique file name when the file is set
-//        if ($file) {
-//            $this->filePath = uniqid('file_', true) . '.' . $file->guessExtension();
-//        }
     }
 
     public function getFilePath(): ?string

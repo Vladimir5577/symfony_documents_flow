@@ -62,7 +62,7 @@
       "vhost": "/",
       "apply-to": "queues",
       "priority": 1,
-      "pattern": "^(kanban|notification)\\.",
+      "pattern": "^(kanban|notification|warehouse)\\.",
       "definition": {
         "dead-letter-exchange": "events.dlx"
       }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\User;
 
+use App\Controller\SpaApi\SpaApiError;
 use App\Entity\User\User;
 use App\Entity\User\Worker;
 use App\Enum\User\WorkerStatus;
@@ -122,6 +123,13 @@ final class MeController extends AbstractController
 
         $password = (string) ($payload['password'] ?? '');
         $passwordRepeat = (string) ($payload['password_repeat'] ?? '');
+
+        if ($login !== $user->getLogin() || $password !== '' || $passwordRepeat !== '') {
+            $currentPassword = $payload['currentPassword'] ?? null;
+            if (!is_string($currentPassword) || $currentPassword === '' || !$this->passwordHasher->isPasswordValid($user, $currentPassword)) {
+                throw new \InvalidArgumentException(SpaApiError::INVALID_CREDENTIALS);
+            }
+        }
 
         $user->setLogin($login);
         $user->setPhone($phone !== '' ? $phone : null);

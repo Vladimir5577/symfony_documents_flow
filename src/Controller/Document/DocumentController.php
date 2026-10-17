@@ -60,10 +60,6 @@ final class DocumentController extends AbstractController
     ): Response
     {
         $currentUser = $this->getUser();
-//        if (!$currentUser instanceof User) {
-//            $this->addFlash('error', 'Необходимо войти в систему для создания документа.');
-//            return $this->redirectToRoute('app_login');
-//        }
 
         $documentType = $documentTypeRepository->find($type_id);
         if (!$documentType) {
@@ -73,7 +69,7 @@ final class DocumentController extends AbstractController
         $isAdmin = $this->isGranted('ROLE_ADMIN');
         $userOrganization = $currentUser->getOrganization();
 
-        // Получаем дерево организаций для пользователя
+        // Получаем полное дерево организаций без ограничения организацией пользователя
         $organizationTree = $organizationRepository->getOrganizationTree(null);
 
         // Загружаем организации с дочерними для отображения дерева
@@ -136,13 +132,11 @@ final class DocumentController extends AbstractController
 
         $formData = $request->request->all();
 
-        // Валидация CSRF токена
         if (!$this->isCsrfTokenValid('create_document', $formData['_csrf_token'] ?? '')) {
             $this->addFlash('error', 'Неверный CSRF токен.');
             return $this->redirectToRoute('app_create_document', ['type_id' => $type_id]);
         }
 
-        // Получаем название документа
         $name = trim((string)($formData['name'] ?? ''));
         if ($name === '') {
             $this->addFlash('error', 'Название документа обязательно для заполнения.');
@@ -170,7 +164,6 @@ final class DocumentController extends AbstractController
             return $renderForm($formData);
         }
 
-        // Создаем документ
         $document = new Document();
         $document->setName($name);
         $document->setDescription(trim((string)($formData['description'] ?? '')) ?: null);
@@ -192,7 +185,6 @@ final class DocumentController extends AbstractController
 
         $document->setCreatedBy($currentUser);
 
-        // Обрабатываем deadline
         $deadlineStr = trim((string)($formData['deadline'] ?? ''));
         if ($deadlineStr !== '') {
             try {
@@ -233,7 +225,6 @@ final class DocumentController extends AbstractController
 
         $document->setIsPublished($wantsPublish);
 
-        // Валидация документа
         $errors = $validator->validate($document);
         if (count($errors) > 0) {
             foreach ($errors as $error) {
@@ -268,7 +259,6 @@ final class DocumentController extends AbstractController
             }
         }
 
-        // Сохраняем документ
         $entityManager->persist($document);
 
         // Присваиваем документ выбранным пользователям
@@ -740,13 +730,11 @@ final class DocumentController extends AbstractController
 
         $formData = $request->request->all();
 
-        // Валидация CSRF токена
         if (!$this->isCsrfTokenValid('edit_document', $formData['_csrf_token'] ?? '')) {
             $this->addFlash('error', 'Неверный CSRF токен.');
             return $this->redirectToRoute('app_edit_outgoing_document', ['id' => $id]);
         }
 
-        // Валидация названия
         $name = trim((string)($formData['name'] ?? ''));
         if ($name === '') {
             $this->addFlash('error', 'Название документа обязательно для заполнения.');
@@ -780,7 +768,6 @@ final class DocumentController extends AbstractController
             return $renderForm($formData);
         }
 
-        // Парсинг deadline
         $deadlineStr = trim((string)($formData['deadline'] ?? ''));
         $deadline = null;
         if ($deadlineStr !== '') {
@@ -803,7 +790,6 @@ final class DocumentController extends AbstractController
             }
         }
 
-        // Обновление полей документа
         $document->setName($name);
         $document->setDescription(trim((string)($formData['description'] ?? '')));
         $document->setOrganizationCreator($organization);
@@ -811,7 +797,6 @@ final class DocumentController extends AbstractController
         $document->setDeadline($deadline);
         $document->setIsPublished($wantsPublish);
 
-        // Валидация сущности
         $errors = $validator->validate($document);
         if (count($errors) > 0) {
             foreach ($errors as $error) {
@@ -1205,19 +1190,16 @@ final class DocumentController extends AbstractController
             }
         }
 
-        // Проверяем, что пользователь является получателем документа
         if (!$userRecipient) {
             $this->addFlash('error', 'Вы можете изменять статус только для входящих документов.');
             return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
         }
 
-        // Валидация CSRF токена
         if (!$this->isCsrfTokenValid('document_status_' . $id, $request->request->get('_token'))) {
             $this->addFlash('error', 'Неверный CSRF токен.');
             return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
         }
 
-        // Получаем статус из запроса
         $statusValue = trim((string)($request->request->get('status') ?? ''));
         if ($statusValue === '') {
             $this->addFlash('error', 'Необходимо выбрать статус.');
@@ -1244,14 +1226,11 @@ final class DocumentController extends AbstractController
             return $this->redirectToRoute('app_view_incoming_document', ['id' => $id]);
         }
 
-        // Сохраняем старый статус перед изменением
         $oldStatusForHistory = $oldStatus;
 
-        // Обновляем статус получателя
         $userRecipient->setStatus($status);
         $userRecipient->setUpdatedAt(new \DateTimeImmutable());
 
-        // Записываем историю изменения статуса
         $history = new DocumentHistory();
         $history->setDocument($document);
         $history->setUser($currentUser);

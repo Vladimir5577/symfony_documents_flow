@@ -186,11 +186,15 @@ final class DocumentOutgoingController extends AbstractController
             $recipientUserIds = [];
         }
 
-        $this->recipientsService->replaceRecipients(
-            $document,
-            $this->recipientsService->normalizeUserIds($executorUserIds),
-            $this->recipientsService->normalizeUserIds($recipientUserIds),
-        );
+        try {
+            $this->recipientsService->replaceRecipients(
+                $document,
+                $this->recipientsService->normalizeUserIds($executorUserIds),
+                $this->recipientsService->normalizeUserIds($recipientUserIds),
+            );
+        } catch (HttpException $e) {
+            return $this->jsonError($e);
+        }
         $this->entityManager->flush();
 
         $split = $this->presenter->splitRecipientsByRole($document->getUserRecipients()->toArray());
@@ -199,7 +203,10 @@ final class DocumentOutgoingController extends AbstractController
             'document' => $this->presenter->presentDocumentListItem($document),
             'executors' => $split['executors'],
             'recipients' => $split['recipients'],
+            'files' => $this->attachmentService->presentFilesForDocument($document),
+            'comments' => $this->commentService->presentCommentsForDocument($document->getId(), $user),
             'permissions' => $this->accessService->presentPermissions($document, $user),
+            'statusChoices' => $this->presenter->presentCreationStatusChoices(),
         ]);
     }
 

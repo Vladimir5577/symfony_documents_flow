@@ -7,9 +7,6 @@ namespace DoctrineMigrations;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\Migrations\AbstractMigration;
 
-/**
- * Auto-generated Migration: Please modify to your needs!
- */
 final class Version20260623083610 extends AbstractMigration
 {
     public function getDescription(): string
@@ -19,7 +16,6 @@ final class Version20260623083610 extends AbstractMigration
 
     public function up(Schema $schema): void
     {
-        // this up() migration is auto-generated, please modify it to your needs
         $this->addSql('ALTER TABLE analytics_boards ADD belongs_to_role_id INT DEFAULT NULL');
         $this->addSql('ALTER TABLE analytics_boards ADD CONSTRAINT FK_5B2EEC7DBDDF044B FOREIGN KEY (belongs_to_role_id) REFERENCES role (id) ON DELETE RESTRICT NOT DEFERRABLE');
         $this->addSql('CREATE INDEX idx_analytics_boards_belongs_to_role_id ON analytics_boards (belongs_to_role_id)');
@@ -31,7 +27,6 @@ final class Version20260623083610 extends AbstractMigration
 
     public function down(Schema $schema): void
     {
-        // this down() migration is auto-generated, please modify it to your needs
         $this->addSql('ALTER TABLE analytics_boards DROP CONSTRAINT FK_5B2EEC7DBDDF044B');
         $this->addSql('DROP INDEX idx_analytics_boards_belongs_to_role_id');
         $this->addSql('ALTER TABLE analytics_boards DROP belongs_to_role_id');

@@ -7,8 +7,6 @@ framework:
         cookie_lifetime: 604800
         gc_maxlifetime: 604800
 
-    #esi: true
-    #fragments: true
 
 when@test:
     framework:

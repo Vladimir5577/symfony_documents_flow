@@ -25,6 +25,7 @@ final class DocumentCommentService
         private readonly DocumentApiPresenter $presenter,
         private readonly DocumentAccessService $accessService,
         private readonly EntityManagerInterface $entityManager,
+        private readonly DocumentHistoricalRelationsLoader $historicalRelationsLoader,
         private readonly DocumentNotifier $documentNotifier,
         #[Autowire('%private_upload_dir_documents_comments%')]
         private readonly string $commentsUploadDir,
@@ -45,13 +46,14 @@ final class DocumentCommentService
 
     public function findCommentForDocument(int $documentId, int $commentId): ?DocumentComment
     {
-        return $this->createCommentQueryBuilder()
+        $query = $this->createCommentQueryBuilder()
             ->andWhere('c.id = :commentId')
             ->andWhere('d.id = :documentId')
             ->setParameter('commentId', $commentId)
             ->setParameter('documentId', $documentId)
-            ->getQuery()
-            ->getOneOrNullResult();
+            ->getQuery();
+
+        return $this->historicalRelationsLoader->load($query)[0] ?? null;
     }
 
     /**
@@ -167,18 +169,20 @@ final class DocumentCommentService
      */
     private function findByDocumentId(int $documentId): array
     {
-        return $this->createCommentQueryBuilder()
+        $query = $this->createCommentQueryBuilder()
             ->andWhere('d.id = :documentId')
             ->setParameter('documentId', $documentId)
             ->orderBy('c.createdAt', 'ASC')
-            ->getQuery()
-            ->getResult();
+            ->getQuery();
+
+        return $this->historicalRelationsLoader->load($query);
     }
 
     private function createCommentQueryBuilder(): \Doctrine\ORM\QueryBuilder
     {
         return $this->commentRepository->createQueryBuilder('c')
             ->innerJoin('c.document', 'd')->addSelect('d')
+            ->andWhere('d.deletedAt IS NULL')
             ->leftJoin('c.author', 'a')->addSelect('a')
             ->leftJoin('c.files', 'f')->addSelect('f');
     }

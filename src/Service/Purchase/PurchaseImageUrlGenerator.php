@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Purchase;
 
+use App\Service\ImgproxyUrlSigner;
+
 /**
  * Ссылки на картинки справочника закупок — всегда через imgproxy: он режет размер
  * и отдаёт WebP. Эндпоинта «скачать оригинал» для них нет намеренно.
@@ -17,6 +19,7 @@ final class PurchaseImageUrlGenerator
     public function __construct(
         private readonly string $imgproxyCacheBaseUrl,
         private readonly string $minioPurchaseBucket,
+        private readonly ImgproxyUrlSigner $imgproxyUrlSigner,
     ) {
     }
 
@@ -26,11 +29,8 @@ final class PurchaseImageUrlGenerator
             return null;
         }
 
-        return sprintf(
-            '%s/unsafe/rs:fit:96:96/plain/s3://%s/%s',
-            rtrim($this->imgproxyCacheBaseUrl, '/'),
-            $this->minioPurchaseBucket,
-            $storageKey,
-        );
+        $source = sprintf('s3://%s/%s', $this->minioPurchaseBucket, $storageKey);
+
+        return rtrim($this->imgproxyCacheBaseUrl, '/') . '/' . $this->imgproxyUrlSigner->signSource('rs:fit:96:96', $source);
     }
 }

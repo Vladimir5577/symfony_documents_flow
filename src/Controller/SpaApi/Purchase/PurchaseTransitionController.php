@@ -72,11 +72,11 @@ final class PurchaseTransitionController extends AbstractController
     {
         $payload = json_decode($request->getContent(), true);
         $comment = is_array($payload) ? trim((string) ($payload['comment'] ?? '')) : '';
-        $items = $this->collectItemEdits(is_array($payload) ? ($payload['items'] ?? []) : []);
 
         return $this->taskAction($id, $taskId, $user,
             fn (PurchaseRequest $p, PurchaseApprovalTask $t, User $u) => $this->workflow
-                ->approveTask($p, $t, $u, $comment !== '' ? $comment : null, $items));
+                ->approveTask($p, $t, $u, $comment !== '' ? $comment : null,
+                    $this->collectItemEdits(is_array($payload) ? ($payload['items'] ?? []) : [])));
     }
 
     /** Вернуть автору со своей задачи. Комментарий обязателен. */
@@ -201,7 +201,6 @@ final class PurchaseTransitionController extends AbstractController
      * Правки состава из payload. Позиции, которых разбирающий не прислал,
      * остаются как есть.
      *
-     * @param mixed $rows
      * @return array<int, array{included: bool, quantity: string|null, price: string|null, inStock: bool|null}>
      */
     private function collectItemEdits(mixed $rows): array
@@ -218,6 +217,13 @@ final class PurchaseTransitionController extends AbstractController
 
             $quantity = $row['quantity'] ?? null;
             $price = $row['estimatedPrice'] ?? null;
+            $quantity = is_string($quantity) ? str_replace(',', '.', trim($quantity)) : $quantity;
+            $price = is_string($price) ? str_replace(',', '.', trim($price)) : $price;
+            foreach ([$quantity, $price] as $value) {
+                if ($value !== null && $value !== '' && !is_numeric($value)) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_INVALID_ITEM);
+                }
+            }
             $edits[(int) $row['id']] = [
                 'included' => (bool) ($row['included'] ?? true),
                 'quantity' => is_numeric($quantity) ? (string) $quantity : null,

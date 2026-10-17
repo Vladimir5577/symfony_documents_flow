@@ -63,7 +63,13 @@ final class UserController extends AbstractController
             }
         }
 
-        $roles = $roleRepository->findAllExceptAdmin();
+        $allowedRoleNames = array_filter(
+            [UserRole::ROLE_USER->value, UserRole::ROLE_MANAGER->value],
+            fn (string $role): bool => $this->isGranted($role),
+        );
+        $roles = $isAdmin
+            ? $roleRepository->findAllExceptAdmin()
+            : $roleRepository->findBy(['name' => $allowedRoleNames], ['sortOrder' => 'ASC', 'id' => 'ASC']);
 
         $initialFormData = [];
         if (!$isAdmin && $userOrganization) {
@@ -97,7 +103,6 @@ final class UserController extends AbstractController
             return $this->redirectToRoute('user_register');
         }
 
-        // Получаем выбранную организацию
         $organizationId = (int) ($formData['organization_id'] ?? 0);
         if ($organizationId <= 0) {
             $this->addFlash('error', 'Необходимо выбрать организацию.');
@@ -139,6 +144,10 @@ final class UserController extends AbstractController
 
         $plainPassword = (string) ($formData['plain_password'] ?? '');
         $confirmPassword = (string) ($formData['confirm_password'] ?? '');
+        if ($plainPassword === '') {
+            $this->addFlash('error', 'Пароль не может быть пустым.');
+            return $renderForm($formData);
+        }
         if ($plainPassword !== $confirmPassword) {
             $this->addFlash('error', 'Пароли не совпадают.');
             return $renderForm($formData);
@@ -173,6 +182,10 @@ final class UserController extends AbstractController
 
         foreach ($this->parseSelectedRoleIds($formData) as $roleId) {
             $role = $roleRepository->find($roleId);
+            if ($role && !$isAdmin && !in_array($role->getName(), $allowedRoleNames, true)) {
+                $this->addFlash('error', 'Недостаточно прав для назначения выбранной роли.');
+                return $renderForm($formData);
+            }
             if ($role && $role->getName() !== UserRole::ROLE_ADMIN->value) {
                 $user->addRoleEntity($role);
             }
@@ -336,7 +349,6 @@ final class UserController extends AbstractController
             throw $this->createAccessDeniedException('Недостаточно прав для просмотра профиля.');
         }
 
-        // Загружаем Worker для пользователя, если он существует
         $worker = $workerRepository->findOneBy(['user' => $user]);
 
         $avatarPreviewUrl = null;
@@ -435,7 +447,6 @@ final class UserController extends AbstractController
             throw $this->createNotFoundException('Пользователь не найден');
         }
 
-        // Получаем Worker для пользователя, если он существует
         $worker = $workerRepository->findOneBy(['user' => $user]);
 
         // Получаем дерево организаций
@@ -577,13 +588,11 @@ final class UserController extends AbstractController
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
         $formData = $request->request->all();
 
-        // Валидация CSRF токена
         if (!$this->isCsrfTokenValid('edit_user', $formData['_csrf_token'] ?? '')) {
             $this->addFlash('error', 'Неверный CSRF токен.');
             return $this->redirectToRoute('app_all_users');
         }
 
-        // Получаем ID пользователя из формы
         $userId = (int) ($formData['user_id'] ?? 0);
         if ($userId === 0) {
             $this->addFlash('error', 'Не указан ID пользователя.');
@@ -683,7 +692,6 @@ final class UserController extends AbstractController
                 return $this->redirectToRoute('app_edit_user', ['id' => $userId]);
             }
 
-            // Обновляем организацию только если изменилась
             if ($user->getOrganization()->getId() !== $organization->getId()) {
                 $user->setOrganization($organization);
             }
@@ -710,12 +718,10 @@ final class UserController extends AbstractController
             );
         }
 
-        // Устанавливаем updated_by текущим залогиненным пользователем
         if ($currentUser instanceof User) {
             $user->setUpdatedBy($currentUser);
         }
 
-        // Сохраняем изменения пользователя
         $entityManager->flush();
 
         if ($isAdmin) {
@@ -733,7 +739,6 @@ final class UserController extends AbstractController
                 $worker->setDescription($description !== '' ? $description : null);
                 $entityManager->persist($worker);
             } elseif ($worker) {
-                // Если профессия пустая, удаляем Worker
                 $entityManager->remove($worker);
             }
         }

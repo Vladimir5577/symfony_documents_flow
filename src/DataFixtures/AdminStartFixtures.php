@@ -32,14 +32,12 @@ class AdminStartFixtures extends Fixture implements FixtureGroupInterface
             $role->setSortOrder($index);
             $manager->persist($role);
 
-            // Сохраняем ссылку на роль админа
             if ($userRole === UserRole::ROLE_ADMIN) {
                 $adminRole = $role;
                 $this->addReference('admin_role', $role);
             }
         }
 
-        // Создаем админа
         $admin = new User();
         $admin->setLogin('admin');
         $admin->setLastname('Админ');
@@ -47,11 +45,14 @@ class AdminStartFixtures extends Fixture implements FixtureGroupInterface
         $admin->setEmail('admin@admin.com');
         // Админ без привязки к конкретной организации
         $admin->setOrganization(null);
-        $admin->setPassword($this->passwordHasher->hashPassword($admin, '1234'));
+        $plain = (string) ($_SERVER['ADMIN_INITIAL_PASSWORD'] ?? '');
+        if (\strlen($plain) < 12) {
+            throw new \RuntimeException('Set ADMIN_INITIAL_PASSWORD (12+ chars) before loading the admin fixture');
+        }
+        $admin->setPassword($this->passwordHasher->hashPassword($admin, $plain));
         $admin->addRoleEntity($adminRole);
         $manager->persist($admin);
 
-        // Сохраняем ссылку на админа
         $this->addReference('admin_user', $admin);
 
         // Сначала сохраняем все сущности

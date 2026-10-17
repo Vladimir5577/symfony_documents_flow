@@ -741,7 +741,9 @@ final class ItemController extends AbstractController
             $price = $payload['price'];
             if ($price === null || $price === '') {
                 $item->setPrice(null);
-            } elseif (is_numeric($price)) {
+            } elseif (is_numeric($price) && is_finite((float) $price)
+                && (float) $price >= 0 && (float) $price <= 9999999999.99
+            ) {
                 $item->setPrice(number_format((float) $price, 2, '.', ''));
             } else {
                 return SpaApiError::INVENTORY_INVALID_PRICE;

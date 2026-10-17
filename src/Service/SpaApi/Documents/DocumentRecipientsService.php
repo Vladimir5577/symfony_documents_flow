@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\SpaApi\Documents;
 
+use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Document\DocumentUserRecipient;
 use App\Enum\Document\DocumentRecipientRole;
 use App\Enum\Document\DocumentStatus;
 use App\Repository\User\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 final class DocumentRecipientsService
 {
@@ -39,7 +41,7 @@ final class DocumentRecipientsService
 
         foreach ($executorUserIds as $userId) {
             $user = $this->userRepository->findActive($userId);
-            if ($user === null) {
+            if ($user === null || $user->getDeletedAt() !== null) {
                 continue;
             }
 
@@ -56,7 +58,7 @@ final class DocumentRecipientsService
 
         foreach ($recipientUserIds as $userId) {
             $user = $this->userRepository->findActive($userId);
-            if ($user === null) {
+            if ($user === null || $user->getDeletedAt() !== null) {
                 continue;
             }
 
@@ -70,6 +72,10 @@ final class DocumentRecipientsService
             $document->addUserRecipient($recipient);
             $this->entityManager->persist($recipient);
         }
+
+        if ($document->isPublished() && $document->getUserRecipients()->isEmpty()) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_NO_RECIPIENTS);
+        }
     }
 
     /**
@@ -78,8 +84,19 @@ final class DocumentRecipientsService
      */
     public function replaceRecipients(Document $document, array $executorUserIds, array $recipientUserIds): bool
     {
-        $executorUserIds = $this->normalizeUserIds($executorUserIds);
-        $recipientUserIds = $this->normalizeUserIds($recipientUserIds);
+        $activeUserIds = [];
+        foreach ($this->normalizeUserIds(array_merge($executorUserIds, $recipientUserIds)) as $userId) {
+            $user = $this->userRepository->findActive($userId);
+            if ($user !== null && $user->getDeletedAt() === null) {
+                $activeUserIds[] = $userId;
+            }
+        }
+        $executorUserIds = array_values(array_intersect($this->normalizeUserIds($executorUserIds), $activeUserIds));
+        $recipientUserIds = array_values(array_intersect($this->normalizeUserIds($recipientUserIds), $activeUserIds));
+
+        if ($document->isPublished() && $executorUserIds === [] && $recipientUserIds === []) {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_NO_RECIPIENTS);
+        }
 
         $newRecipientKeys = [];
         foreach ($executorUserIds as $userId) {
@@ -104,10 +121,20 @@ final class DocumentRecipientsService
         }
 
         foreach ($document->getUserRecipients()->toArray() as $recipient) {
-            $this->entityManager->remove($recipient);
+            $userId = $recipient->getUser()?->getId();
+            $key = $userId . '|' . $recipient->getRole()->value;
+            if (!in_array($key, $newRecipientKeys, true)) {
+                $document->removeUserRecipient($recipient);
+                $this->entityManager->remove($recipient);
+                continue;
+            }
+
+            if ($recipient->getRole() === DocumentRecipientRole::EXECUTOR) {
+                $executorUserIds = array_values(array_diff($executorUserIds, [$userId]));
+            } else {
+                $recipientUserIds = array_values(array_diff($recipientUserIds, [$userId]));
+            }
         }
-        $document->getUserRecipients()->clear();
-        $this->entityManager->flush();
 
         $this->attachRecipients($document, $executorUserIds, $recipientUserIds);
         $document->setUpdatedAt(new \DateTimeImmutable());

@@ -47,7 +47,7 @@ final class AckPresenter
             'category' => $category !== null ? $this->presentCategory($category) : null,
             'audience' => $document->getAudience()->value,
             'deadline' => $document->getDeadline()?->format('Y-m-d'),
-            'isOverdue' => $document->isOverdueFor($viewer),
+            'isOverdue' => !($own?->isFinal() ?? false) && $document->isOverdueFor($viewer),
             'publishedAt' => $document->getPublishedAt()?->format(self::DATE_TIME_FORMAT),
             'archivedAt' => $document->getArchivedAt()?->format(self::DATE_TIME_FORMAT),
             'files' => array_map(

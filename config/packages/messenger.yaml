@@ -10,7 +10,6 @@ framework:
                     max_retries: 3
                     multiplier: 2
             failed: 'doctrine://default?queue_name=failed'
-            # sync: 'sync://'
 
             # --- Межсервисная шина событий (RabbitMQ) ---
             # Topic exchange 'events': общий на весь проект.

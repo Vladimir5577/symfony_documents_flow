@@ -59,9 +59,7 @@ final class DocumentSignController extends AbstractController
 
         $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
 
-// ------------------------
 // 1. Импортируем все страницы исходного PDF
-// ------------------------
         $pageCount = $pdf->setSourceFile($sourcePdf);
         for ($i = 1; $i <= $pageCount; $i++) {
             $tpl = $pdf->importPage($i);
@@ -71,9 +69,7 @@ final class DocumentSignController extends AbstractController
             $pdf->useTemplate($tpl);
         }
 
-// ------------------------
 // 2. Добавляем прямоугольный штамп с текстом внутри
-// ------------------------
         $pdf->AddPage();
         $pdf->SetFont('dejavusans', '', 12);  // Используем шрифт для кириллицы
 
@@ -81,22 +77,20 @@ final class DocumentSignController extends AbstractController
         $x_base = 20; // координата X (слева)
         $y_base = 50; // координата Y (сверху)
 
-        $stampWidth = 60; // ширина штампа
-        $stampHeight = 25; // высота штампа
+        $stampWidth = 60;
+        $stampHeight = 25;
 
         $pdf->SetDrawColor(0, 0, 255);  // цвет рамки штампа (синий)
         $pdf->SetTextColor(0, 0, 255);
         $pdf->SetLineWidth(1.0);
-        $pdf->Rect($x_base, $y_base, $stampWidth, $stampHeight); // рисуем прямоугольник
+        $pdf->Rect($x_base, $y_base, $stampWidth, $stampHeight);
 
 // Текст внутри штампа
         $text = "Подпись Bob Ston Parker\n30.01.2026";
         $pdf->SetXY($x_base + 5, $y_base + 5);  // отступаем от краёв прямоугольника
         $pdf->MultiCell($stampWidth - 10, 7, $text, 0, 'C');  // текст по центру
 
-// ------------------------
 // 3. Сохраняем PDF
-// ------------------------
         $pdf->Output($outputPdf, 'F');
 
 
@@ -120,7 +114,7 @@ final class DocumentSignController extends AbstractController
 
         // запуск LibreOffice для конвертации DOCX → PDF
         $process = new \Symfony\Component\Process\Process([
-            '/usr/bin/soffice', // путь к бинарнику LibreOffice
+            '/usr/bin/soffice',
             '--headless',
             '--convert-to', 'pdf',
             $docxFilePath,
@@ -130,15 +124,12 @@ final class DocumentSignController extends AbstractController
 
         $process->run();
 
-// проверка на ошибки
         if (!$process->isSuccessful()) {
             throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
         }
 
-// путь к PDF
         $pdfFilePath = $outputDir . '/' . basename($docxFilePath, '.docx') . '.pdf';
 
-// проверка, что файл создан
         if (!file_exists($pdfFilePath)) {
             throw new \Exception("PDF не был создан");
         }
@@ -174,9 +165,7 @@ final class DocumentSignController extends AbstractController
 
         $pdf = new Fpdi();
 
-// ------------------------
 // 1. Копируем все страницы оригинала
-// ------------------------
         $pageCount = $pdf->setSourceFile($sourcePdf);
         for ($i = 1; $i <= $pageCount; $i++) {
             $tpl = $pdf->importPage($i);
@@ -186,9 +175,7 @@ final class DocumentSignController extends AbstractController
             $pdf->useTemplate($tpl);
         }
 
-// ------------------------
 // 2. Добавляем последнюю страницу с таблицей
-// ------------------------
         $pdf->AddPage();
         $pdf->SetFont('dejavusans', '', 12); // шрифт для кириллицы
 
@@ -197,7 +184,7 @@ final class DocumentSignController extends AbstractController
         $rightX = 110;
         $startY = 30;
         $rowHeight = 25;
-        $tableWidthLeft = 90; // 80
+        $tableWidthLeft = 90;
         $tableWidthRight = 90;
 
 // Рисуем заголовки
@@ -217,12 +204,9 @@ final class DocumentSignController extends AbstractController
             $y += $rowHeight;
         }
 
-// ------------------------
 // 3. Сохраняем финальный PDF
-// ------------------------
         $pdf->Output($outputPdf, 'F');
 
-//        echo "PDF с таблицей сохранен: $outputPdf";
 
 
         return $this->render('document/test.html.twig', [
@@ -262,14 +246,12 @@ final class DocumentSignController extends AbstractController
         }
 
         $sourcePdf = $updatedDir . '/' . $document->getUpdatedFile();      // исходный документ
-//        $outputPdf = $updatedDir . '/' . $document->getUpdatedAt();   // файл с добавленной подписью
         $outputPdf = $sourcePdf;
 
-//        file_put_contents('./test.txt', $outputPdf);
 
         // координаты с фронта
-        // x max = 150
-        // y max = 267
+        // Предел X: ширина страницы минус ширина штампа.
+        // Предел Y: высота страницы минус высота штампа.
         $stampPage = $data['page'];   // номер страницы (1-based!)
         $stampX = $data['x'] / 4;    // X из JS
         $stampY = (840 - $data['y']) / 3.15;    // Y из JS
@@ -286,14 +268,12 @@ final class DocumentSignController extends AbstractController
             $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
             $pdf->useTemplate($tpl);
 
-            // 👇 ТОЛЬКО НА НУЖНОЙ СТРАНИЦЕ
             if ($i === $stampPage) {
 
                 $pdf->SetDrawColor(0, 0, 255);
                 $pdf->SetTextColor(0, 0, 255);
                 $pdf->SetLineWidth(1);
 
-                // размеры штампа
                 $stampWidth = 60;
                 $stampHeight = 18;
 
@@ -304,7 +284,6 @@ final class DocumentSignController extends AbstractController
                 $stampX = max(0, min($stampX, $pageW - $stampWidth));
                 $stampY = max(0, min($stampY, $pageH - $stampHeight));
 
-                // прямоугольный штамп
                 $pdf->Rect($stampX, $stampY, $stampWidth, $stampHeight);
 
                 // текст внутри
@@ -335,35 +314,27 @@ final class DocumentSignController extends AbstractController
         $imagePath = $filesDir . '/image.jpg';
         $outputPdf = $filesDir . '/image_converted.pdf';
 
-// --------------------------
 // Создаём FPDI без первой страницы
-// --------------------------
         $pdf = new Fpdi('P', 'mm', 'A4', true, 'UTF-8', false); // последний параметр false отключает авто AddPage
 
 // Явно добавляем страницу
         $pdf->AddPage();
 
-// размеры картинки
         list($imgWidth, $imgHeight) = getimagesize($imagePath);
 
-// размеры страницы PDF
         $pageWidth  = $pdf->getPageWidth();
         $pageHeight = $pdf->getPageHeight();
 
-// масштабирование
         $scale = min($pageWidth / $imgWidth, $pageHeight / $imgHeight);
 
         $newWidth  = $imgWidth * $scale;
         $newHeight = $imgHeight * $scale;
 
-// центрируем
         $x = ($pageWidth - $newWidth) / 2;
         $y = ($pageHeight - $newHeight) / 2;
 
-// вставляем изображение
         $pdf->Image($imagePath, $x, $y, $newWidth, $newHeight);
 
-// сохраняем PDF
         $pdf->Output($outputPdf, 'F');
 
 
@@ -420,9 +391,7 @@ $projectDir = $this->getParameter('kernel.project_dir');
 
         $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
 
-// ------------------------
 // 1. Импортируем все страницы исходного PDF
-// ------------------------
         $pageCount = $pdf->setSourceFile($sourcePdf);
         for ($i = 1; $i <= $pageCount; $i++) {
             $tpl = $pdf->importPage($i);
@@ -432,9 +401,7 @@ $projectDir = $this->getParameter('kernel.project_dir');
             $pdf->useTemplate($tpl);
         }
 
-// ------------------------
 // 2. Добавляем страницу подписи для текущего подписанта
-// ------------------------
         $pdf->AddPage();
         $pdf->SetFont('dejavusans', '', 12);
 
@@ -455,12 +422,10 @@ $projectDir = $this->getParameter('kernel.project_dir');
             "Подпись сформирована в ИС «Документооборот»."
         );
 
-// ------------------------
 // 2b. Штамп прямо под текстом, смещён вправо
-// ------------------------
 
         $x_base = $x_text + 120;
-        $y_base = $pdf->GetY() + 50; // увеличил отступ с 10 до 20 мм, чтобы не накладывался на текст
+        $y_base = $pdf->GetY() + 50; // отступ 50 мм, чтобы штамп не накладывался на текст
 
         $radius_outer = 25;
         $radius_inner = 20;
@@ -486,9 +451,7 @@ $projectDir = $this->getParameter('kernel.project_dir');
             'C'
         );
 
-// ------------------------
 // 3. Сохраняем PDF
-// ------------------------
         $pdf->Output($outputPdf, 'F');
 
 

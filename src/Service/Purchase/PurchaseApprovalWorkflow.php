@@ -125,13 +125,24 @@ final class PurchaseApprovalWorkflow
         ?string $comment = null,
         array $itemEdits = [],
     ): void {
-        $stage = $this->em->wrapInTransaction(function () use ($request, $task, $actor, $comment, $itemEdits): ?PurchaseApprovalStage {
+        $stage = $this->em->wrapInTransaction(function () use ($request, $task, $actor, $comment, $itemEdits): PurchaseApprovalStage|string|null {
             $this->lockAndRefreshRoute($request);
             $task = $this->findCurrentTask($request, $task->getId(), $actor);
 
             return $this->approveLockedTask($request, $task, $actor, $comment, $itemEdits);
         });
 
+        if (is_string($stage)) {
+            $this->notifier->notifyChanged(
+                $request,
+                $actor,
+                sprintf('Закупка «%s»: %s', $request->getTitle(), $stage),
+                'Повторное согласование',
+            );
+            $this->notifier->notifyStageActivated($request, $actor);
+
+            return;
+        }
         if ($stage === null) {
             return;
         }
@@ -149,12 +160,13 @@ final class PurchaseApprovalWorkflow
         User $actor,
         ?string $comment,
         array $itemEdits,
-    ): ?PurchaseApprovalStage {
+    ): PurchaseApprovalStage|string|null {
         $stage = $this->assertActiveTask($request, $task);
 
         // Те же правки состава, что у директора на разборе. Цена — только у отдела
         // закупок: оплата у финансового директора состав не меняет.
         if ($itemEdits !== [] && $task->getRoleCode() === PurchaseRoleCode::PURCHASE_DEPARTMENT) {
+            $before = $request->getTotalAmountKopecks();
             $changes = $this->editor->applyItemEdits($request, $itemEdits);
             if ($changes !== []) {
                 $this->history->log(
@@ -163,6 +175,53 @@ final class PurchaseApprovalWorkflow
                     PurchaseHistoryAction::ITEMS_EDITED,
                     implode('; ', $changes),
                 );
+            }
+
+            $after = $request->getTotalAmountKopecks();
+            $sourcing = $request->findStageByPurpose(PurchaseStagePurpose::SOURCING);
+            $signed = false;
+            if ($after > $before && $stage->getPurpose() !== PurchaseStagePurpose::SOURCING
+                && ($sourcing === null || $stage->getPosition() > $sourcing->getPosition())
+            ) {
+                $target = $stage;
+                foreach ($request->getStages() as $candidate) {
+                    if ($candidate->getPosition() > ($sourcing?->getPosition() ?? 0)
+                        && $candidate->getPosition() < $target->getPosition()
+                    ) {
+                        $target = $candidate;
+                    }
+                }
+                // Сбрасывать нечего — откат только потерял бы это согласие.
+                foreach ($request->getStages() as $candidate) {
+                    if ($candidate->getPosition() < $target->getPosition() || $candidate->getPosition() > $stage->getPosition()) {
+                        continue;
+                    }
+                    foreach ($candidate->getTasks() as $other) {
+                        $signed = $signed || ($other !== $task && $other->getDecision()->isDecided());
+                    }
+                }
+            }
+            if ($signed) {
+                $from = $request->getStatus();
+                $burned = $this->rewindTo($request, $target);
+                $reason = sprintf(
+                    'сумма выросла с %s до %s — повторное согласование',
+                    number_format($before / 100, 2, ',', ' '),
+                    number_format($after / 100, 2, ',', ' '),
+                );
+                $this->history->logTransition(
+                    $request,
+                    $actor,
+                    $from,
+                    $request->getStatus(),
+                    PurchaseHistoryAction::TASK_REVOKED,
+                    $reason . ($burned === [] ? '' : '. Сброшены согласования: ' . implode(', ', $burned)),
+                );
+                // Первый этап после ресёрча может быть пустым динамическим.
+                $this->advance($request, $actor);
+                $this->save($request);
+
+                return $reason;
             }
         }
 
@@ -624,8 +683,8 @@ final class PurchaseApprovalWorkflow
     }
 
     /**
-     * Заявка ссылается на договор и не загрузила новый файл мимо справочника.
-     * Новый файл без записи в справочнике отменяет пропуск рецензий.
+     * Собственный договор требует повторных подписей даже после регистрации
+     * в справочнике: регистрация не превращает его в переиспользованный.
      */
     private function contractsAreReused(PurchaseRequest $request): bool
     {
@@ -634,7 +693,9 @@ final class PurchaseApprovalWorkflow
         }
         foreach ($request->getFiles() as $file) {
             $contract = $file->getContract();
-            if ($file->getType() === PurchaseFileType::CONTRACT && ($contract === null || $contract->isDraft())) {
+            if ($file->getType() === PurchaseFileType::CONTRACT
+                && ($contract === null || $contract->isDraft() || $file->getSourceFile() === null)
+            ) {
                 return false;
             }
         }
@@ -705,8 +766,8 @@ final class PurchaseApprovalWorkflow
                     if ($task !== $exclude) {
                         $burned[] = $task->resolveTitle();
                     }
-                    $task->reset();
                 }
+                $task->reset();
             }
 
             $stage->setStatus($stage->getTasks()->isEmpty() && $stage->isDynamic()
