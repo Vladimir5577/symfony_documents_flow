@@ -58,6 +58,14 @@ class PurchaseApprovalStage
     #[ORM\Column(name: 'allows_reject', type: Types::BOOLEAN, options: ['default' => true])]
     private bool $allowsReject = true;
 
+    /** Снимок заготовки: на этом этапе решение может отметить «На складе». */
+    #[ORM\Column(name: 'allows_in_stock', type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $allowsInStock = false;
+
+    /** Снимок заготовки: на этом этапе решение может снять позицию. */
+    #[ORM\Column(name: 'allows_exclude', type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $allowsExclude = false;
+
     /** Минуты из заготовки. Пусто — этап не просрочивается. */
     #[ORM\Column(name: 'review_minutes', type: Types::INTEGER, nullable: true)]
     private ?int $reviewMinutes = null;
@@ -163,6 +171,30 @@ class PurchaseApprovalStage
     public function setAllowsReject(bool $allowsReject): static
     {
         $this->allowsReject = $allowsReject;
+
+        return $this;
+    }
+
+    public function allowsInStock(): bool
+    {
+        return $this->allowsInStock;
+    }
+
+    public function setAllowsInStock(bool $allowsInStock): static
+    {
+        $this->allowsInStock = $allowsInStock;
+
+        return $this;
+    }
+
+    public function allowsExclude(): bool
+    {
+        return $this->allowsExclude;
+    }
+
+    public function setAllowsExclude(bool $allowsExclude): static
+    {
+        $this->allowsExclude = $allowsExclude;
 
         return $this;
     }

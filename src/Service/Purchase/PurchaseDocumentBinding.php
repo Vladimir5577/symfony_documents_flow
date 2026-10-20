@@ -79,27 +79,62 @@ final class PurchaseDocumentBinding
                 if (!is_bool($row['inStock'])) {
                     throw new PurchaseTransitionException(SpaApiError::PURCHASE_BINDING_INVALID);
                 }
+                // Снятие склада возвращает цену в сумму. Это делает решение по составу,
+                // не раскладка: иначе сумма растёт после уже поставленных подписей.
+                if ($item->isInStock() && $row['inStock'] === false) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_INSTOCK_LOCKED);
+                }
                 $item->setInStock($row['inStock']);
             }
             if (array_key_exists('contractId', $row)) {
                 $contract = $this->contractFromRow($request, $row['contractId']);
-                $item->setContract($contract);
-                if ($contract !== null) {
-                    $item->setInStock(false);
+                if ($contract !== null && $item->isInStock()) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_INSTOCK_LOCKED);
                 }
+                $item->setContract($contract);
             }
             if (array_key_exists('invoiceFileId', $row)) {
                 $invoice = $this->fileFromRow($request, $row['invoiceFileId'], PurchaseFileType::INVOICE);
-                $item->setInvoiceFile($invoice);
-                if ($invoice !== null) {
-                    $item->setInStock(false);
+                if ($invoice !== null && $item->isInStock()) {
+                    throw new PurchaseTransitionException(SpaApiError::PURCHASE_INSTOCK_LOCKED);
                 }
+                $item->setInvoiceFile($invoice);
             }
             if ($item->isInStock()) {
                 $item->setContract(null);
                 $item->setInvoiceFile(null);
             }
         }
+    }
+
+    /** Покупать нечего: каждая позиция на складе или снята. Договор и счёт тогда не нужны. */
+    public function nothingToBuy(PurchaseRequest $request): bool
+    {
+        if ($request->getItems()->isEmpty()) {
+            return false;
+        }
+        foreach ($request->getItems() as $item) {
+            if (!$item->isExcluded() && !$item->isInStock()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** Каждая позиция снята. Получать нечего, поставку тоже пропускаем. */
+    public function allExcluded(PurchaseRequest $request): bool
+    {
+        if ($request->getItems()->isEmpty()) {
+            return false;
+        }
+        foreach ($request->getItems() as $item) {
+            if (!$item->isExcluded()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -111,7 +146,7 @@ final class PurchaseDocumentBinding
      * сама: скан у него уже есть. Один неутверждённый договор закрывает и
      * скан без привязки — его отнесут к договору, когда появится запись.
      *
-     * Всё на складе — ни счёта, ни подписанного договора: покупать нечего.
+     * Всё на складе или снято — ни счёта, ни подписанного договора: покупать нечего.
      *
      * @throws PurchaseTransitionException
      */

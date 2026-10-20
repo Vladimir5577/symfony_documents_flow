@@ -126,6 +126,8 @@ final class ApprovalRouteEditor
                 ->setTitle($sourceStage->getTitle())
                 ->setPurpose($sourceStage->getPurpose())
                 ->setAllowsReject($sourceStage->allowsReject())
+                ->setAllowsInStock($sourceStage->allowsInStock())
+                ->setAllowsExclude($sourceStage->allowsExclude())
                 ->setReviewMinutes($sourceStage->getReviewMinutes());
             $copy->addStage($stage);
             $this->em->persist($stage);
@@ -358,6 +360,8 @@ final class ApprovalRouteEditor
                 ->setPurpose($purpose)
                 // Отказ на исполнении не имеет смысла: деньги уже потрачены.
                 ->setAllowsReject((bool) ($row['allowsReject'] ?? !$purpose->isExecution()))
+                ->setAllowsInStock((bool) ($row['allowsInStock'] ?? false))
+                ->setAllowsExclude((bool) ($row['allowsExclude'] ?? false))
                 ->setReviewMinutes($this->parseReviewMinutes($row['reviewMinutes'] ?? null));
 
             foreach ($this->parseTasks($row['tasks'] ?? []) as $task) {

@@ -74,6 +74,7 @@ final class PurchaseApiPresenter
             'executor' => $this->presentUser($request->getExecutor()),
             'totalAmount' => $request->getTotalAmount(),
             'itemsCount' => $request->getItems()->count(),
+            'allExcluded' => $this->allItemsExcluded($request),
             // Кнопка создания — от неё форма редактирования и потолок быстрой заявки
             'createdAs' => [
                 'value' => $request->getCreatedAs()->value,
@@ -112,6 +113,22 @@ final class PurchaseApiPresenter
         ];
     }
 
+    /** Все строки сняты. Пустая заявка сюда не попадает: снимать ещё нечего. */
+    private function allItemsExcluded(PurchaseRequest $request): bool
+    {
+        $items = $request->getItems();
+        if ($items->isEmpty()) {
+            return false;
+        }
+        foreach ($items as $item) {
+            if (!$item->isExcluded()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /**
      * Карточка: список + позиции, файлы и доступные действия.
      * Комментарии и история — отдельные эндпоинты с пагинацией.
@@ -136,8 +153,7 @@ final class PurchaseApiPresenter
                 'description' => $item->getDescription(),
                 'quantity' => $item->getQuantity(),
                 'unit' => $item->getUnit(),
-                // У позиции со склада — ноль: её не покупают.
-                'estimatedPrice' => $item->getPayablePrice(),
+                'estimatedPrice' => $item->getEstimatedPrice(),
                 'position' => $item->getPosition(),
                 // Решение разбирающего по позиции: снял галочку и/или урезал количество.
                 // Заявленное автором остаётся в quantity — модалка показывает обе цифры.
@@ -218,6 +234,8 @@ final class PurchaseApiPresenter
             // Что на этапе делают. Фронту нужно отличать разбор и ресёрч от
             // обычной подписи, и выводить это из роли он больше не должен.
             'purpose' => ['value' => $purpose->value, 'label' => $purpose->getLabel()],
+            'allowsInStock' => $stage->allowsInStock(),
+            'allowsExclude' => $stage->allowsExclude(),
             'isExecution' => $purpose->isExecution(),
             'status' => ['value' => $status->value, 'label' => $status->getLabel()],
             'isActive' => $stage->isActive(),
@@ -388,6 +406,8 @@ final class PurchaseApiPresenter
                     'title' => $stage->getTitle(),
                     'purpose' => $stage->getPurpose()->value,
                     'allowsReject' => $stage->allowsReject(),
+                    'allowsInStock' => $stage->allowsInStock(),
+                    'allowsExclude' => $stage->allowsExclude(),
                     'reviewMinutes' => $stage->getReviewMinutes(),
                     'tasks' => array_values(array_map(
                         static fn (PurchaseRouteTemplateTask $task): array => [

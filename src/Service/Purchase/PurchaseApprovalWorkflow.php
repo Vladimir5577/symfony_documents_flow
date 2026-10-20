@@ -128,7 +128,12 @@ final class PurchaseApprovalWorkflow
         // Те же правки состава, что у директора на разборе. Цена — только у отдела
         // закупок: оплата у финансового директора состав не меняет.
         if ($itemEdits !== [] && $task->getRoleCode() === PurchaseRoleCode::PURCHASE_DEPARTMENT) {
-            $changes = $this->editor->applyItemEdits($request, $itemEdits);
+            $changes = $this->editor->applyItemEdits(
+                $request,
+                $itemEdits,
+                $stage->allowsExclude(),
+                $stage->allowsInStock(),
+            );
             if ($changes !== []) {
                 $this->history->log(
                     $request,
@@ -145,19 +150,27 @@ final class PurchaseApprovalWorkflow
         $requiredFile = $task->getRequiresFileType();
         // Договор из справочника может быть без файла «Договор»: шаг закрывает сама ссылка.
         $linkedContract = $requiredFile === PurchaseFileType::CONTRACT && !$request->getContractLinks()->isEmpty();
+        // Все позиции на складе или сняты: файл договора шаг не держит. Счёт в этом
+        // случае отпускает assertComplete.
+        $nothingToBuy = $this->binding->nothingToBuy($request);
         if ($requiredFile === PurchaseFileType::INVOICE) {
             // Счёт мало приложить: позиции надо разложить по счетам. А когда всё
-            // нашлось на складе, счёт не нужен вовсе.
+            // нашлось на складе или снято, счёт не нужен вовсе.
             $this->binding->assertComplete($request);
             $bound = $this->binding->summary($request);
             if ($bound !== '') {
                 $this->history->log($request, $actor, PurchaseHistoryAction::DOCUMENTS_BOUND, $bound);
             }
-        } elseif ($requiredFile !== null && !$linkedContract && !$request->hasFileOfType($requiredFile)) {
+        } elseif (
+            $requiredFile !== null
+            && !($requiredFile === PurchaseFileType::CONTRACT && $nothingToBuy)
+            && !$linkedContract
+            && !$request->hasFileOfType($requiredFile)
+        ) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_FILE_REQUIRED);
         }
 
-        if ($task->getContractReview() !== null && !$task->isContractReviewPassed()) {
+        if ($task->getContractReview() !== null && !$nothingToBuy && !$task->isContractReviewPassed()) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_CONTRACT_REVIEW_REQUIRED);
         }
 
@@ -411,7 +424,12 @@ final class PurchaseApprovalWorkflow
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_TASK_NOT_ACTIVE);
         }
 
-        $changes = $this->editor->applyItemEdits($request, $itemEdits);
+        $changes = $this->editor->applyItemEdits(
+            $request,
+            $itemEdits,
+            $stage->allowsExclude(),
+            $stage->allowsInStock(),
+        );
         if ($changes !== []) {
             $this->history->log(
                 $request,
@@ -565,6 +583,19 @@ final class PurchaseApprovalWorkflow
                 // Прикреплённый договор не рецензируется. Смешанный этап, где есть
                 // и обычная подпись, не трогаем: ей ещё кого ждать.
                 if ($this->contractsAreReused($request) && $this->stageOnlyReviewsContract($stage)) {
+                    $stage->setStatus(PurchaseStageStatus::SKIPPED);
+                    continue;
+                }
+                // Покупать нечего: оплату и промежуточные подписи проезжаем.
+                // Если всё снято, поставку тоже: получать нечего. Если что-то
+                // на складе, заявка встаёт на получении у заявителя.
+                if (
+                    $this->binding->nothingToBuy($request)
+                    && ($this->binding->allExcluded($request) || $stage->getPurpose() !== PurchaseStagePurpose::DELIVERY)
+                ) {
+                    if ($stage->getPurpose()->isExecution()) {
+                        $this->closeApprovalPart($request, $actor);
+                    }
                     $stage->setStatus(PurchaseStageStatus::SKIPPED);
                     continue;
                 }

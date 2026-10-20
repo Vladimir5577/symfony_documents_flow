@@ -44,14 +44,29 @@ final class PurchaseRequestEditor
      * @return list<string> человекочитаемый дифф для истории
      * @throws PurchaseTransitionException
      */
-    public function applyItemEdits(PurchaseRequest $request, array $itemEdits): array
-    {
+    public function applyItemEdits(
+        PurchaseRequest $request,
+        array $itemEdits,
+        bool $allowExclude = true,
+        bool $allowInStock = true,
+    ): array {
         $changes = [];
 
         foreach ($request->getItems() as $item) {
             $edit = $itemEdits[(int) $item->getId()] ?? null;
             if ($edit === null) {
                 continue;
+            }
+            // Флаги этапа решают, какие отметки вообще можно поставить. Чужое
+            // поле в запросе состояние позиции не меняет.
+            if (!$allowExclude) {
+                if ($item->isExcluded()) {
+                    continue;
+                }
+                $edit['included'] = true;
+            }
+            if (!$allowInStock) {
+                $edit['inStock'] = null;
             }
 
             if ($edit['included'] === false) {
@@ -64,6 +79,7 @@ final class PurchaseRequestEditor
                     $changes[] = sprintf('со склада «%s»', (string) $item->getName());
                 }
                 $item->setContract(null);
+                $item->setInvoiceFile(null);
                 continue;
             }
 
@@ -100,7 +116,7 @@ final class PurchaseRequestEditor
             }
 
             $price = $edit['price'] ?? null;
-            // Позиция со склада показана с нулевой ценой: не даём этому нулю затереть настоящую.
+            // Складская позиция из суммы и так выпала. Цену автора не трогаем, как у снятой строки.
             if ($price === null || $price === '' || $item->isInStock()) {
                 continue;
             }
@@ -127,7 +143,10 @@ final class PurchaseRequestEditor
                 break;
             }
         }
-        if (!$hasIncluded) {
+        // Все «Не закупать» на этапе с этой отметкой — законный исход: покупать
+        // нечего, маршрут уйдёт к получению. На остальных этапах пустой состав
+        // по-прежнему отказ.
+        if (!$hasIncluded && !$allowExclude) {
             throw new PurchaseTransitionException(SpaApiError::PURCHASE_ITEMS_REQUIRED);
         }
 

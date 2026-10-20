@@ -193,6 +193,8 @@ final class ApprovalRouteBuilder
             ->setTitle($templateStage->getTitle())
             ->setPurpose($templateStage->getPurpose())
             ->setAllowsReject($templateStage->allowsReject())
+            ->setAllowsInStock($templateStage->allowsInStock())
+            ->setAllowsExclude($templateStage->allowsExclude())
             ->setReviewMinutes($templateStage->getReviewMinutes())
             ->setCandidateRoleCode($templateStage->getCandidateRoleCode());
     }

@@ -57,6 +57,14 @@ class PurchaseRouteTemplateStage
     #[ORM\Column(name: 'allows_reject', type: Types::BOOLEAN, options: ['default' => true])]
     private bool $allowsReject = true;
 
+    /** На решении этого этапа можно отметить позицию «На складе». */
+    #[ORM\Column(name: 'allows_in_stock', type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $allowsInStock = false;
+
+    /** На решении этого этапа можно снять позицию — «Не закупать». */
+    #[ORM\Column(name: 'allows_exclude', type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $allowsExclude = false;
+
     /**
      * Сколько минут этап может оставаться открытым. Пусто — срока нет.
      * В заявку копируется при подаче и дальше живёт в снимке.
@@ -141,6 +149,30 @@ class PurchaseRouteTemplateStage
     public function setAllowsReject(bool $allowsReject): static
     {
         $this->allowsReject = $allowsReject;
+
+        return $this;
+    }
+
+    public function allowsInStock(): bool
+    {
+        return $this->allowsInStock;
+    }
+
+    public function setAllowsInStock(bool $allowsInStock): static
+    {
+        $this->allowsInStock = $allowsInStock;
+
+        return $this;
+    }
+
+    public function allowsExclude(): bool
+    {
+        return $this->allowsExclude;
+    }
+
+    public function setAllowsExclude(bool $allowsExclude): static
+    {
+        $this->allowsExclude = $allowsExclude;
 
         return $this;
     }
