@@ -141,19 +141,18 @@ class ChatMessageService
     {
         $json = json_encode($data);
 
-        $this->hub->publish(new Update(
-            '/chat/room/' . $room->getId(),
-            $json
-        ));
-
+        // Resolve recipients for every event: removed participants keep no room subscription.
         $participants = $this->participantRepository->findByRoom($room);
         foreach ($participants as $participant) {
+            $topic = '/chat/user/' . $participant->getUser()->getId();
+            $this->hub->publish(new Update($topic, $json, private: true));
             $this->hub->publish(new Update(
-                '/chat/user/' . $participant->getUser()->getId(),
+                $topic,
                 json_encode([
                     'type' => 'room_updated',
                     'room_id' => $room->getId(),
-                ])
+                ]),
+                private: true,
             ));
         }
     }

@@ -167,18 +167,21 @@
         </div>
         <div class="card-body d-flex gap-2">
             <form method="post" action="{{ path('app_citizen_appeal_update', {id: appeal.id}) }}" class="d-inline">
+                <input type="hidden" name="_token" value="{{ csrf_token('citizen_appeal_update_' ~ appeal.id) }}">
                 <input type="hidden" name="status" value="new">
                 <button type="submit" class="btn {{ appeal.status == 'new' ? 'btn-secondary' : 'btn-outline-secondary' }}">
                     Новое
                 </button>
             </form>
             <form method="post" action="{{ path('app_citizen_appeal_update', {id: appeal.id}) }}" class="d-inline">
+                <input type="hidden" name="_token" value="{{ csrf_token('citizen_appeal_update_' ~ appeal.id) }}">
                 <input type="hidden" name="status" value="in_progress">
                 <button type="submit" class="btn {{ appeal.status == 'in_progress' ? 'btn-warning' : 'btn-outline-warning' }}">
                     В работе
                 </button>
             </form>
             <form method="post" action="{{ path('app_citizen_appeal_update', {id: appeal.id}) }}" class="d-inline">
+                <input type="hidden" name="_token" value="{{ csrf_token('citizen_appeal_update_' ~ appeal.id) }}">
                 <input type="hidden" name="status" value="done">
                 <button type="submit" class="btn {{ appeal.status == 'done' ? 'btn-success' : 'btn-outline-success' }}">
                     Обработано
@@ -193,6 +196,7 @@
         </div>
         <div class="card-body">
             <form method="post" action="{{ path('app_citizen_appeal_update', {id: appeal.id}) }}">
+                <input type="hidden" name="_token" value="{{ csrf_token('citizen_appeal_update_' ~ appeal.id) }}">
                 <div class="mb-3">
                     <textarea name="adminComment" class="form-control" rows="4">{{ appeal.adminComment }}</textarea>
                 </div>

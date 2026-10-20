@@ -7,7 +7,7 @@ use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
- * Повышает memory_limit только для HTTP-запросов к LiipImagine (/media/cache/…),
+ * Повышает memory_limit только для HTTP-запросов к LiipImagine и подписанным изображениям объявлений,
  * чтобы декодирование крупных JPEG не упиралось в дефолтный лимит PHP, не трогая остальные воркеры/запросы.
  */
 final class LiipImagineRequestMemorySubscriber implements EventSubscriberInterface
@@ -28,7 +28,7 @@ final class LiipImagineRequestMemorySubscriber implements EventSubscriberInterfa
         }
 
         $path = $event->getRequest()->getPathInfo();
-        if (!str_starts_with($path, '/media/cache/')) {
+        if (!str_starts_with($path, '/media/cache/') && !str_starts_with($path, '/spa/api/post-images/')) {
             return;
         }
 

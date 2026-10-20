@@ -130,6 +130,14 @@
                                             <input type="text" id="login-column" class="form-control" name="login" placeholder="Логин" value="{{ user.login }}" required>
                                         </div>
                                     </div>
+                                    {% if app.user and app.user.id == user.id %}
+                                    <div class="col-12">
+                                        <div class="form-group">
+                                            <label for="current-password-column">Текущий пароль</label>
+                                            <input type="password" id="current-password-column" class="form-control" name="current_password" autocomplete="current-password">
+                                        </div>
+                                    </div>
+                                    {% endif %}
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="password-column">Новый пароль</label>

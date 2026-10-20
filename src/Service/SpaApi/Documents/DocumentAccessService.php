@@ -32,7 +32,7 @@ final class DocumentAccessService
             return true;
         }
 
-        return $this->findUserRecipient($document, $user) !== null;
+        return $document->isPublished() && $this->findUserRecipient($document, $user) !== null;
     }
 
     public function canEditOutgoingDocument(Document $document, User $user): bool
@@ -92,7 +92,7 @@ final class DocumentAccessService
                 && $document->getStatus() !== null
                 && !$document->isPublished()
                 && !$document->getUserRecipients()->isEmpty(),
-            'canChangeRecipientStatus' => $recipient !== null,
+            'canChangeRecipientStatus' => $canView && $recipient !== null,
             'canComment' => $this->canCommentDocument($document, $user),
             'canViewRecipientHistory' => $canView || $canEdit,
         ];
