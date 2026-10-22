@@ -31,6 +31,11 @@ final class SpaApiError
     public const DOCUMENT_CANNOT_PUBLISH_DRAFT = 'document_cannot_publish_draft';
     public const DOCUMENT_NO_RECIPIENTS = 'document_no_recipients';
     public const DOCUMENT_VALIDATION_FAILED = 'document_validation_failed';
+    /** Файл для редактора — только у черновика, который можно править. */
+    public const DOCUMENT_OFFICE_DRAFT_ONLY = 'document_office_draft_only';
+    /** Файл не docx и не xlsx. */
+    public const DOCUMENT_FILE_NOT_DOCX = 'document_file_not_docx';
+    public const DOCUMENT_FILE_EDITOR_FAILED = 'document_file_editor_failed';
     public const ORGANIZATION_REQUIRED = 'organization_required';
     public const POST_NOT_FOUND = 'post_not_found';
     public const POST_TITLE_REQUIRED = 'post_title_required';

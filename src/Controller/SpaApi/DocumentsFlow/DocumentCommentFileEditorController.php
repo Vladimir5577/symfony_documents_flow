@@ -30,8 +30,8 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  *
  * В хранилище файл попадает только по «Сохранить»: команда forcesave, callback
  * со status 6 и userdata commit.{saveId}.{userId}. Закрытие (status 2) файл не
- * пишет, а сменяет редакцию ключа — иначе следующий заход получит кэш правок.
- * Успешная запись ставит файлу edited_at. Текст комментария от этого не помечается.
+ * пишет и забывает ключ сессии — иначе следующий заход получит кэш правок.
+ * Успешная запись двигает updatedAt файла. Текст комментария от этого не помечается.
  *
  * Браузер ходит в /spa/api с JWT. Document Server скачивает файл и шлёт callback
  * без JWT, поэтому эти адреса подписаны HMAC.
@@ -83,14 +83,15 @@ final class DocumentCommentFileEditorController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $key = $this->documentKey($file);
+        $key = $this->newKey($fileId);
+        $this->rememberKey($fileId, $key);
         $base = sprintf('%s/document_comment_file_editor/%d/%d', self::INTERNAL_APP, $document->getId(), $file->getId());
         $signed = fn (string $purpose): string => sprintf('%s/%s?%s', $base, $purpose, http_build_query([
             'key' => $key,
             'token' => $this->signFile($purpose, (int) $document->getId(), (int) $file->getId(), $key),
         ]));
 
-        $config = $this->editorConfig($file, $user, $signed('content'), $signed('callback'));
+        $config = $this->editorConfig($file, $user, $signed('content'), $signed('callback'), $key);
         if ($this->jwt->isEnabled()) {
             $config['token'] = $this->jwt->encode($config);
         }
@@ -123,12 +124,11 @@ final class DocumentCommentFileEditorController extends AbstractController
         if ($found instanceof JsonResponse) {
             return $found;
         }
-        [, $file] = $found;
         if (!$user instanceof User) {
             throw $this->createAccessDeniedException();
         }
         $session = $this->sessionFromBody($documentId, $fileId, $user, $request);
-        if ($session === null || $session['mode'] !== 'edit' || $this->documentKey($file) !== $session['key']) {
+        if ($session === null || $session['mode'] !== 'edit' || !$this->isCurrentKey($fileId, $session['key'])) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -184,7 +184,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         $status = (int) ($data['status'] ?? 0);
         // 2 — все вышли. Закрытие файл не пишет.
         if ($status === 2) {
-            $this->dropSession($documentId, $fileId, $key);
+            $this->dropSession($fileId, $key);
 
             return $this->json(['error' => 0]);
         }
@@ -199,7 +199,7 @@ final class DocumentCommentFileEditorController extends AbstractController
 
         $file = $this->commentFiles->find($fileId);
         $document = $file instanceof DocumentCommentFile ? $file->getComment()->getDocument() : null;
-        if (!$file instanceof DocumentCommentFile || !$document instanceof Document || $document->getId() !== $documentId || $this->documentKey($file) !== $key) {
+        if (!$file instanceof DocumentCommentFile || !$document instanceof Document || $document->getId() !== $documentId || !$this->isCurrentKey($fileId, $key)) {
             return $this->json(['error' => 0]);
         }
         $url = PurchaseFileEditorController::internalDownloadUrl((string) ($data['url'] ?? ''), $this->onlyofficeDocumentServerUrl);
@@ -218,15 +218,12 @@ final class DocumentCommentFileEditorController extends AbstractController
         return $this->json(['error' => 0]);
     }
 
-    private function dropSession(int $documentId, int $fileId, string $key): void
+    private function dropSession(int $fileId, string $key): void
     {
-        $file = $this->commentFiles->find($fileId);
-        $document = $file instanceof DocumentCommentFile ? $file->getComment()->getDocument() : null;
-        if (!$file instanceof DocumentCommentFile || !$document instanceof Document || $document->getId() !== $documentId || $this->documentKey($file) !== $key) {
+        if (!$this->isCurrentKey($fileId, $key)) {
             return;
         }
-        $file->nextEditorRevision();
-        $this->em->flush();
+        $this->cache->deleteItem($this->keyCacheId($fileId));
     }
 
     private function writeFile(Document $document, DocumentCommentFile $file, string $bytes): bool
@@ -245,7 +242,7 @@ final class DocumentCommentFileEditorController extends AbstractController
     /**
      * @return array<string, mixed>
      */
-    private function editorConfig(DocumentCommentFile $file, User $user, string $contentUrl, string $callbackUrl): array
+    private function editorConfig(DocumentCommentFile $file, User $user, string $contentUrl, string $callbackUrl, string $key): array
     {
         $ext = $this->officeExt($file) ?? 'docx';
 
@@ -256,7 +253,7 @@ final class DocumentCommentFileEditorController extends AbstractController
             'documentType' => self::OFFICE_TYPE[$ext],
             'document' => [
                 'fileType' => $ext,
-                'key' => $this->documentKey($file),
+                'key' => $key,
                 'title' => $file->getFilename() ?: 'document.' . $ext,
                 'url' => $contentUrl,
                 'permissions' => ['edit' => true, 'review' => false, 'comment' => true],
@@ -271,11 +268,33 @@ final class DocumentCommentFileEditorController extends AbstractController
         ];
     }
 
-    private function documentKey(DocumentCommentFile $file): string
+    private function newKey(int $fileId): string
     {
-        $base = sprintf('cf%dr%d', $file->getId(), $file->getEditorRevision());
+        $base = sprintf('cf%d-%s', $fileId, bin2hex(random_bytes(8)));
 
         return $base . '-' . substr(hash_hmac('sha256', 'comment-file-key|' . $base, $this->appSecret), 0, 16);
+    }
+
+    private function rememberKey(int $fileId, string $key): void
+    {
+        // ponytail: cache.app, 24 ч. cache:clear или срок — «Сохранить» в уже открытой вкладке не пройдёт, пока не открыть снова. Колонка-счётчик, если ключ должен пережить сброс кэша.
+        $item = $this->cache->getItem($this->keyCacheId($fileId));
+        $item->set($key);
+        $item->expiresAfter(86400);
+        $this->cache->save($item);
+    }
+
+    private function isCurrentKey(int $fileId, string $key): bool
+    {
+        $item = $this->cache->getItem($this->keyCacheId($fileId));
+        $stored = $item->isHit() ? $item->get() : null;
+
+        return is_string($stored) && hash_equals($stored, $key);
+    }
+
+    private function keyCacheId(int $fileId): string
+    {
+        return 'comment_file_editor_key_' . $fileId;
     }
 
     /**
