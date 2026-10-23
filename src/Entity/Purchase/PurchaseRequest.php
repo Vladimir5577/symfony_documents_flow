@@ -442,11 +442,11 @@ class PurchaseRequest
     {
         $total = 0;
         foreach ($this->items as $item) {
-            // Снятые директором позиции в сумму не идут, количество — утверждённое
-            if ($item->isExcluded()) {
+            // Снятые и складские позиции в сумму не идут. Цена строки при этом не меняется.
+            if ($item->isExcluded() || $item->isInStock()) {
                 continue;
             }
-            $kopecks = self::decimalToInt($item->getPayablePrice(), 2);
+            $kopecks = self::decimalToInt((string) $item->getEstimatedPrice(), 2);
             $thousandths = self::decimalToInt($item->getEffectiveQuantity(), 3);
             // Копейки × тысячные доли штуки → копейки, половина копейки вверх.
             $total += intdiv($kopecks * $thousandths + 500, 1000);

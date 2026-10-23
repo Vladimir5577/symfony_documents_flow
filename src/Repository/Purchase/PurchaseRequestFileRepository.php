@@ -314,7 +314,10 @@ class PurchaseRequestFileRepository extends ServiceEntityRepository
             $requestId = (int) $item['purchase_request_id'];
             $quantity = (float) ($item['approved_quantity'] ?? $item['quantity']);
             $inStock = $item['in_stock'] === true || $item['in_stock'] === 't' || $item['in_stock'] === '1' || $item['in_stock'] === 1;
-            $amount = $inStock ? 0.0 : self::lineAmount((string) $item['quantity'], $item['approved_quantity'], (string) $item['estimated_price']);
+            if ($inStock) {
+                continue;
+            }
+            $amount = self::lineAmount((string) $item['quantity'], $item['approved_quantity'], (string) $item['estimated_price']);
             $byRequest[$requestId][] = [
                 'name' => (string) ($item['name'] ?? ''),
                 'quantity' => $quantity,

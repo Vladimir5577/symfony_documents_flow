@@ -81,6 +81,8 @@ final class SpaApiError
     public const PURCHASE_ITEMS_INVOICE_REQUIRED = 'purchase_items_invoice_required';
     public const PURCHASE_ITEMS_CONTRACT_REQUIRED = 'purchase_items_contract_required';
     public const PURCHASE_BINDING_INVALID = 'purchase_binding_invalid';
+    /** Раскладка не снимает «на складе»: это растит сумму мимо решения по составу. */
+    public const PURCHASE_INSTOCK_LOCKED = 'purchase_instock_locked';
     public const PURCHASE_TASK_NOT_REVOKABLE = 'purchase_task_not_revokable';
     /** С этого этапа возвращать автору нельзя — например, товар уже оплачен. */
     public const PURCHASE_REJECT_NOT_ALLOWED = 'purchase_reject_not_allowed';

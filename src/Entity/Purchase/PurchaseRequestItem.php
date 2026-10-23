@@ -166,15 +166,6 @@ class PurchaseRequestItem
         return $this;
     }
 
-    /**
-     * Цена к оплате: позиция со склада не покупается и стоит ноль. Цена автора
-     * остаётся в строке и вернётся, если отметку «на складе» снимут.
-     */
-    public function getPayablePrice(): string
-    {
-        return $this->inStock ? '0.00' : (string) $this->estimatedPrice;
-    }
-
     public function isExcluded(): bool
     {
         return $this->excluded;
