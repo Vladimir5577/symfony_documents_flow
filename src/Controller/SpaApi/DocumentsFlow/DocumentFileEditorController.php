@@ -34,9 +34,13 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * Редактор docx и xlsx исходящего документа. Правит автор документа или администратор.
  *
  * В хранилище файл попадает только по «Сохранить»: команда forcesave, callback
- * со status 6 и userdata commit.{saveId}.{userId}. Закрытие редактора (status 2)
- * файл не пишет и забывает ключ сессии — иначе следующий заход получит кэш
- * несохранённых правок.
+ * со status 6 и userdata commit.{saveId}.{userId}. Пока ключ жив, следующее
+ * открытие входит в ту же сессию — иначе вторая вкладка затирает его и
+ * «Сохранить» в первой получает 403. Закрытие (status 2), когда в сессии уже
+ * никого нет, ключ забывает: следующий заход не получит кэш правок.
+ *
+ * docx открывается в рецензировании: новая вставка и удаление остаются правкой
+ * с ФИО, пока её не примут. Текст, набранный раньше, без автора. xlsx так не умеет.
  *
  * Браузер ходит в /spa/api с JWT. Document Server скачивает файл и шлёт callback
  * без JWT, поэтому эти адреса подписаны HMAC. Подпись Document Server
@@ -132,7 +136,7 @@ final class DocumentFileEditorController extends AbstractController
         }
 
         $edit = $this->canEdit($document, $user);
-        $key = $this->newKey($fileId);
+        $key = $edit ? ($this->storedKey($fileId) ?? $this->newKey($fileId)) : $this->newKey($fileId);
         if ($edit) {
             $this->rememberKey($fileId, $key);
         }
@@ -278,7 +282,12 @@ final class DocumentFileEditorController extends AbstractController
 
     private function dropSession(int $fileId, string $key): void
     {
-        if (!$this->isCurrentKey($fileId, $key)) {
+        $stored = $this->readKey($fileId);
+        if ($stored === null || !hash_equals($stored['key'], $key)) {
+            return;
+        }
+        // ponytail: 20 с. Второй вход обновляет at, и status 2 от уже вышедшего не стирает ключ. Дольше окна опоздавший callback сотрёт ключ, «Сохранить» получит 403, пока не открыть снова.
+        if ($stored['at'] > time() - 20) {
             return;
         }
         $this->cache->deleteItem($this->keyCacheId($fileId));
@@ -302,6 +311,9 @@ final class DocumentFileEditorController extends AbstractController
      */
     private function editorConfig(Document $document, File $file, User $user, bool $edit, string $contentUrl, ?string $callbackUrl, string $key): array
     {
+        $ext = $this->officeExt($file) ?? 'docx';
+        // Рецензирование только у Word: в xlsx OnlyOffice не оставляет автора ячейки.
+        $review = $edit && $ext === 'docx';
         $editorConfig = [
             'lang' => 'ru',
             'mode' => $edit ? 'edit' : 'view',
@@ -309,12 +321,24 @@ final class DocumentFileEditorController extends AbstractController
             // Пишет файл только наша команда forcesave, не таймер Document Server.
             'customization' => ['forcesave' => false],
         ];
+        if ($ext === 'docx') {
+            // edit: false — режим нельзя выключить, каждая новая правка с автором.
+            // Принять в нём можно свою правку; чужую OnlyOffice не даёт.
+            // trackChanges не шлём зрителю: false выключает рецензирование целиком.
+            $reviewUi = [
+                'reviewDisplay' => 'markup',
+                'hoverMode' => true,
+            ];
+            if ($review) {
+                $reviewUi['trackChanges'] = true;
+            }
+            $editorConfig['customization']['review'] = $reviewUi;
+        }
         if ($edit && $callbackUrl !== null) {
             $editorConfig['callbackUrl'] = $callbackUrl;
         }
 
         $presented = $this->attachments->presentFile($document, $file);
-        $ext = $this->officeExt($file) ?? 'docx';
 
         return [
             'width' => '100%',
@@ -326,9 +350,11 @@ final class DocumentFileEditorController extends AbstractController
                 'key' => $key,
                 'title' => (string) ($presented['filename'] ?? 'document.' . $ext),
                 'url' => $contentUrl,
-                'permissions' => $edit
-                    ? ['edit' => true, 'review' => false, 'comment' => true]
-                    : ['edit' => false, 'review' => false, 'comment' => false],
+                'permissions' => match (true) {
+                    $review => ['edit' => false, 'review' => true, 'comment' => true],
+                    $edit => ['edit' => true, 'review' => false, 'comment' => true],
+                    default => ['edit' => false, 'review' => false, 'comment' => false],
+                },
             ],
             'editorConfig' => $editorConfig,
         ];
@@ -345,15 +371,40 @@ final class DocumentFileEditorController extends AbstractController
     {
         // ponytail: cache.app, 24 ч. cache:clear или срок — «Сохранить» в уже открытой вкладке не пройдёт, пока не открыть снова. Колонка-счётчик, если ключ должен пережить сброс кэша.
         $item = $this->cache->getItem($this->keyCacheId($fileId));
-        $item->set($key);
+        $item->set(['key' => $key, 'at' => time()]);
         $item->expiresAfter(86400);
         $this->cache->save($item);
     }
 
-    private function isCurrentKey(int $fileId, string $key): bool
+    private function storedKey(int $fileId): ?string
+    {
+        return $this->readKey($fileId)['key'] ?? null;
+    }
+
+    /**
+     * @return array{key: string, at: int}|null
+     */
+    private function readKey(int $fileId): ?array
     {
         $item = $this->cache->getItem($this->keyCacheId($fileId));
-        $stored = $item->isHit() ? $item->get() : null;
+        if (!$item->isHit()) {
+            return null;
+        }
+        $stored = $item->get();
+        // Раньше в кэше лежала строка. at = 0: закрытие такой сессии по-прежнему забывает ключ.
+        if (is_string($stored) && $stored !== '') {
+            return ['key' => $stored, 'at' => 0];
+        }
+        if (is_array($stored) && is_string($stored['key'] ?? null) && $stored['key'] !== '') {
+            return ['key' => $stored['key'], 'at' => (int) ($stored['at'] ?? 0)];
+        }
+
+        return null;
+    }
+
+    private function isCurrentKey(int $fileId, string $key): bool
+    {
+        $stored = $this->storedKey($fileId);
 
         return is_string($stored) && hash_equals($stored, $key);
     }

@@ -29,9 +29,14 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * Редактор docx/xlsx во вложении комментария. Правит автор комментария или администратор.
  *
  * В хранилище файл попадает только по «Сохранить»: команда forcesave, callback
- * со status 6 и userdata commit.{saveId}.{userId}. Закрытие (status 2) файл не
- * пишет и забывает ключ сессии — иначе следующий заход получит кэш правок.
+ * со status 6 и userdata commit.{saveId}.{userId}. Пока ключ жив, следующее
+ * открытие входит в ту же сессию — иначе вторая вкладка затирает его и
+ * «Сохранить» в первой получает 403. Закрытие (status 2), когда в сессии уже
+ * никого нет, ключ забывает: следующий заход не получит кэш правок.
  * Успешная запись двигает updatedAt файла. Текст комментария от этого не помечается.
+ *
+ * docx открывается в рецензировании: новая вставка и удаление остаются правкой
+ * с ФИО, пока её не примут. xlsx так не умеет.
  *
  * Браузер ходит в /spa/api с JWT. Document Server скачивает файл и шлёт callback
  * без JWT, поэтому эти адреса подписаны HMAC.
@@ -83,7 +88,7 @@ final class DocumentCommentFileEditorController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $key = $this->newKey($fileId);
+        $key = $this->storedKey($fileId) ?? $this->newKey($fileId);
         $this->rememberKey($fileId, $key);
         $base = sprintf('%s/document_comment_file_editor/%d/%d', self::INTERNAL_APP, $document->getId(), $file->getId());
         $signed = fn (string $purpose): string => sprintf('%s/%s?%s', $base, $purpose, http_build_query([
@@ -220,7 +225,12 @@ final class DocumentCommentFileEditorController extends AbstractController
 
     private function dropSession(int $fileId, string $key): void
     {
-        if (!$this->isCurrentKey($fileId, $key)) {
+        $stored = $this->readKey($fileId);
+        if ($stored === null || !hash_equals($stored['key'], $key)) {
+            return;
+        }
+        // ponytail: 20 с. Второй вход обновляет at, и status 2 от уже вышедшего не стирает ключ. Дольше окна опоздавший callback сотрёт ключ, «Сохранить» получит 403, пока не открыть снова.
+        if ($stored['at'] > time() - 20) {
             return;
         }
         $this->cache->deleteItem($this->keyCacheId($fileId));
@@ -245,6 +255,17 @@ final class DocumentCommentFileEditorController extends AbstractController
     private function editorConfig(DocumentCommentFile $file, User $user, string $contentUrl, string $callbackUrl, string $key): array
     {
         $ext = $this->officeExt($file) ?? 'docx';
+        $review = $ext === 'docx';
+        $customization = ['forcesave' => false];
+        if ($review) {
+            // edit: false — режим нельзя выключить, каждая новая правка с автором.
+            // Принять в нём можно свою правку; чужую OnlyOffice не даёт.
+            $customization['review'] = [
+                'trackChanges' => true,
+                'reviewDisplay' => 'markup',
+                'hoverMode' => true,
+            ];
+        }
 
         return [
             'width' => '100%',
@@ -256,14 +277,16 @@ final class DocumentCommentFileEditorController extends AbstractController
                 'key' => $key,
                 'title' => $file->getFilename() ?: 'document.' . $ext,
                 'url' => $contentUrl,
-                'permissions' => ['edit' => true, 'review' => false, 'comment' => true],
+                'permissions' => $review
+                    ? ['edit' => false, 'review' => true, 'comment' => true]
+                    : ['edit' => true, 'review' => false, 'comment' => true],
             ],
             'editorConfig' => [
                 'lang' => 'ru',
                 'mode' => 'edit',
                 'callbackUrl' => $callbackUrl,
                 'user' => ['id' => (string) $user->getId(), 'name' => $this->userName($user)],
-                'customization' => ['forcesave' => false],
+                'customization' => $customization,
             ],
         ];
     }
@@ -279,15 +302,40 @@ final class DocumentCommentFileEditorController extends AbstractController
     {
         // ponytail: cache.app, 24 ч. cache:clear или срок — «Сохранить» в уже открытой вкладке не пройдёт, пока не открыть снова. Колонка-счётчик, если ключ должен пережить сброс кэша.
         $item = $this->cache->getItem($this->keyCacheId($fileId));
-        $item->set($key);
+        $item->set(['key' => $key, 'at' => time()]);
         $item->expiresAfter(86400);
         $this->cache->save($item);
     }
 
-    private function isCurrentKey(int $fileId, string $key): bool
+    private function storedKey(int $fileId): ?string
+    {
+        return $this->readKey($fileId)['key'] ?? null;
+    }
+
+    /**
+     * @return array{key: string, at: int}|null
+     */
+    private function readKey(int $fileId): ?array
     {
         $item = $this->cache->getItem($this->keyCacheId($fileId));
-        $stored = $item->isHit() ? $item->get() : null;
+        if (!$item->isHit()) {
+            return null;
+        }
+        $stored = $item->get();
+        // Раньше в кэше лежала строка. at = 0: закрытие такой сессии по-прежнему забывает ключ.
+        if (is_string($stored) && $stored !== '') {
+            return ['key' => $stored, 'at' => 0];
+        }
+        if (is_array($stored) && is_string($stored['key'] ?? null) && $stored['key'] !== '') {
+            return ['key' => $stored['key'], 'at' => (int) ($stored['at'] ?? 0)];
+        }
+
+        return null;
+    }
+
+    private function isCurrentKey(int $fileId, string $key): bool
+    {
+        $stored = $this->storedKey($fileId);
 
         return is_string($stored) && hash_equals($stored, $key);
     }
