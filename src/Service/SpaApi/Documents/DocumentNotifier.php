@@ -119,6 +119,45 @@ final class DocumentNotifier
     }
 
     /**
+     * В документ (или во вложение обсуждения) внесли правки и нажали «Сохранить».
+     * Имя — кто сохранил. Получатели — автор, исполнители и получатели.
+     * Сам сохранивший отсеивается в NotificationPublisher.
+     */
+    public function notifyEdited(Document $document, User $actor, bool $discussion = false): void
+    {
+        $recipients = [];
+
+        $creator = $document->getCreatedBy();
+        $creatorId = $creator?->getId();
+        if ($creator instanceof User && $creatorId !== null) {
+            $recipients[$creatorId] = $creator;
+        }
+
+        foreach ($document->getUserRecipients() as $userRecipient) {
+            $recipientUser = $userRecipient->getUser();
+            $recipientId = $recipientUser?->getId();
+            if ($recipientUser instanceof User && $recipientId !== null) {
+                $recipients[$recipientId] = $recipientUser;
+            }
+        }
+
+        $actorName = trim((string) $actor->getLastname() . ' ' . (string) $actor->getFirstname());
+        if ($actorName === '') {
+            $actorName = (string) $actor->getLogin();
+        }
+
+        $this->publishSplitByRole(
+            document: $document,
+            event: 'edited',
+            recipients: $recipients,
+            title: $actorName . ' внёс правки в документ ' . (string) $document->getName(),
+            actor: $actor,
+            typeLabel: 'Правки в документе',
+            anchor: $discussion ? self::COMMENTS_ANCHOR : '',
+        );
+    }
+
+    /**
      * Автор документа смотрит его как исходящий, остальные — как входящий,
      * и ссылки у них разные. В контракте ссылка одна на событие, поэтому это
      * честно два разных события, а не одно с ветвлением внутри.

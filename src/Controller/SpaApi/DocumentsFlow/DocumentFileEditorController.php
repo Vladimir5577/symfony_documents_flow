@@ -13,6 +13,7 @@ use App\Repository\Document\DocumentRepository;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentAttachmentService;
+use App\Service\SpaApi\Documents\DocumentNotifier;
 use Doctrine\ORM\EntityManagerInterface;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -71,6 +72,7 @@ final class DocumentFileEditorController extends AbstractController
         private readonly DocumentRepository $documents,
         private readonly DocumentAccessService $access,
         private readonly DocumentAttachmentService $attachments,
+        private readonly DocumentNotifier $notifier,
         private readonly OnlyOfficeJwt $jwt,
         private readonly EntityManagerInterface $em,
         #[Autowire(service: 'cache.app')]
@@ -280,6 +282,7 @@ final class DocumentFileEditorController extends AbstractController
         }
         $document->setUpdatedAt(new \DateTimeImmutable());
         $this->em->flush();
+        $this->notifyEdited($document, (string) ($data['userdata'] ?? ''));
         $this->markAck($fileId, $saveId);
 
         return $this->json(['error' => 0]);
@@ -618,6 +621,27 @@ final class DocumentFileEditorController extends AbstractController
         }
 
         return $m[1];
+    }
+
+    private static function parseSaverId(string $userdata): int
+    {
+        if (preg_match('/^commit\.[a-f0-9]{16}\.(\d+)$/', $userdata, $m) !== 1) {
+            return 0;
+        }
+
+        return (int) $m[1];
+    }
+
+    private function notifyEdited(Document $document, string $userdata): void
+    {
+        $userId = self::parseSaverId($userdata);
+        $actor = $userId > 0 ? $this->em->find(User::class, $userId) : null;
+        if (!$actor instanceof User) {
+            return;
+        }
+
+        $loaded = $this->documents->findOneWithRelations((int) $document->getId()) ?? $document;
+        $this->notifier->notifyEdited($loaded, $actor);
     }
 
     /** @return array{key: string, mode: string}|null */

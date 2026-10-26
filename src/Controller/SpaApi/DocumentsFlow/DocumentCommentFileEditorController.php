@@ -14,6 +14,7 @@ use App\Repository\Document\DocumentRepository;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentCommentService;
+use App\Service\SpaApi\Documents\DocumentNotifier;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -66,6 +67,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         private readonly DocumentCommentFileRepository $commentFiles,
         private readonly DocumentAccessService $access,
         private readonly DocumentCommentService $comments,
+        private readonly DocumentNotifier $notifier,
         private readonly OnlyOfficeJwt $jwt,
         private readonly EntityManagerInterface $em,
         #[Autowire(service: 'cache.app')]
@@ -219,6 +221,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         $file->setSizeBytes(strlen($downloaded));
         $file->markEdited();
         $this->em->flush();
+        $this->notifyEdited($document, (string) ($data['userdata'] ?? ''), true);
         $this->markAck($fileId, $saveId);
 
         return $this->json(['error' => 0]);
@@ -440,6 +443,27 @@ final class DocumentCommentFileEditorController extends AbstractController
         }
 
         return $m[1];
+    }
+
+    private static function parseSaverId(string $userdata): int
+    {
+        if (preg_match('/^commit\.[a-f0-9]{16}\.(\d+)$/', $userdata, $m) !== 1) {
+            return 0;
+        }
+
+        return (int) $m[1];
+    }
+
+    private function notifyEdited(Document $document, string $userdata, bool $discussion = false): void
+    {
+        $userId = self::parseSaverId($userdata);
+        $actor = $userId > 0 ? $this->em->find(User::class, $userId) : null;
+        if (!$actor instanceof User) {
+            return;
+        }
+
+        $loaded = $this->documents->findOneWithRelations((int) $document->getId()) ?? $document;
+        $this->notifier->notifyEdited($loaded, $actor, $discussion);
     }
 
     /** @return array{key: string, mode: string}|null */
