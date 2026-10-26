@@ -69,6 +69,12 @@ final class DocumentAccessService
         return $comment->getAuthor()->getId() === $user->getId();
     }
 
+    /** docx/xlsx в обсуждении: кто видит документ. Текст сообщения — только автор и админ. */
+    public function canEditCommentFile(DocumentComment $comment, User $user): bool
+    {
+        return $this->canViewDocument($comment->getDocument(), $user);
+    }
+
     /**
      * @return array{
      *     canView: bool,

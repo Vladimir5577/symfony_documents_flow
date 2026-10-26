@@ -218,12 +218,12 @@ final class DocumentApiPresenter
      *
      * @return list<array<string, mixed>>
      */
-    public function presentDocumentComments(iterable $comments, User $viewer, bool $isAdmin): array
+    public function presentDocumentComments(iterable $comments, User $viewer, bool $isAdmin, bool $viewerCanEditFiles = false): array
     {
         $rows = [];
         foreach ($comments as $comment) {
             if ($comment instanceof DocumentComment) {
-                $rows[] = $this->presentDocumentComment($comment, $viewer, $isAdmin);
+                $rows[] = $this->presentDocumentComment($comment, $viewer, $isAdmin, $viewerCanEditFiles);
             }
         }
 
@@ -253,7 +253,7 @@ final class DocumentApiPresenter
     /**
      * @return array<string, mixed>
      */
-    public function presentDocumentComment(DocumentComment $comment, User $viewer, bool $isAdmin): array
+    public function presentDocumentComment(DocumentComment $comment, User $viewer, bool $isAdmin, bool $viewerCanEditFiles = false): array
     {
         $author = $comment->getAuthor();
         $canManage = $isAdmin || $author->getId() === $viewer->getId();
@@ -267,6 +267,7 @@ final class DocumentApiPresenter
             'updatedAt' => $comment->getUpdatedAt()?->format(\DateTimeInterface::ATOM),
             'canEdit' => $canManage,
             'canDelete' => $canManage,
+            'canEditFiles' => $canManage || $viewerCanEditFiles,
             'files' => array_map(
                 fn (DocumentCommentFile $file): array => $this->presentDocumentCommentFile($file),
                 $comment->getFiles()->toArray(),

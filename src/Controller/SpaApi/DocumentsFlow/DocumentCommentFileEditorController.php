@@ -364,7 +364,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         if (!$file instanceof DocumentCommentFile || $file->getComment()->getDocument()->getId() !== $documentId) {
             return $this->json(['error' => SpaApiError::COMMENT_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
-        if (!$this->access->canManageComment($file->getComment(), $user)) {
+        if (!$this->access->canEditCommentFile($file->getComment(), $user)) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
         if ($this->officeExt($file) === null) {

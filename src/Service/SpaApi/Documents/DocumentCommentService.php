@@ -36,10 +36,15 @@ final class DocumentCommentService
      */
     public function presentCommentsForDocument(int $documentId, User $viewer): array
     {
+        $comments = $this->findByDocumentId($documentId);
+        $canEditFiles = isset($comments[0])
+            && $this->accessService->canViewDocument($comments[0]->getDocument(), $viewer);
+
         return $this->presenter->presentDocumentComments(
-            $this->findByDocumentId($documentId),
+            $comments,
             $viewer,
             $this->accessService->isAdmin(),
+            $canEditFiles,
         );
     }
 
@@ -149,6 +154,7 @@ final class DocumentCommentService
             $comment,
             $viewer,
             $this->accessService->isAdmin(),
+            $this->accessService->canViewDocument($comment->getDocument(), $viewer),
         );
     }
 
