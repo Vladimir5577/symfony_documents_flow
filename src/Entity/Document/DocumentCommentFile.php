@@ -54,6 +54,17 @@ class DocumentCommentFile
     #[ORM\Column(name: 'updated_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $updatedAt = null;
 
+    /**
+     * Редакция для OnlyOffice — часть ключа документа.
+     * Растёт, когда сессия закрылась, чтобы следующий заход не взял кэш правок.
+     */
+    #[ORM\Column(name: 'editor_revision', type: Types::INTEGER, options: ['default' => 1])]
+    private int $editorRevision = 1;
+
+    /** Содержимое перезаписано из редактора. Загрузка файла это поле не ставит. */
+    #[ORM\Column(name: 'edited_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $editedAt = null;
+
     public function __construct()
     {
         $this->createdAt = new \DateTimeImmutable();
@@ -158,5 +169,25 @@ class DocumentCommentFile
     public function getUpdatedAt(): ?\DateTimeImmutable
     {
         return $this->updatedAt;
+    }
+
+    public function getEditorRevision(): int
+    {
+        return $this->editorRevision;
+    }
+
+    public function nextEditorRevision(): void
+    {
+        ++$this->editorRevision;
+    }
+
+    public function getEditedAt(): ?\DateTimeImmutable
+    {
+        return $this->editedAt;
+    }
+
+    public function markEdited(): void
+    {
+        $this->editedAt = new \DateTimeImmutable();
     }
 }

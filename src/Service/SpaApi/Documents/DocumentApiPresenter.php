@@ -285,6 +285,7 @@ final class DocumentApiPresenter
             'contentType' => $file->getContentType(),
             'size' => $file->getSizeBytes(),
             'createdAt' => $file->getCreatedAt()->format(\DateTimeInterface::ATOM),
+            'editedAt' => $file->getEditedAt()?->format(\DateTimeInterface::ATOM),
         ];
     }
 
