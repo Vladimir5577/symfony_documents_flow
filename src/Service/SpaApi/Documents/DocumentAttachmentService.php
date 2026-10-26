@@ -82,6 +82,12 @@ final class DocumentAttachmentService
         return is_file($absolutePath) ? $absolutePath : null;
     }
 
+    /** То же имя, что в карточке: title и расширение из пути. */
+    public function displayName(File $file): string
+    {
+        return (string) $this->presenter->presentDocumentFile($file)['filename'];
+    }
+
     /**
      * @return array<string, mixed>
      */
