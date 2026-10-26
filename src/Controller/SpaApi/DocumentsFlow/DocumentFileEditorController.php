@@ -40,7 +40,9 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * никого нет, ключ забывает: следующий заход не получит кэш правок.
  *
  * docx открывается в рецензировании: новая вставка и удаление остаются правкой
- * с ФИО, пока её не примут. Текст, набранный раньше, без автора. xlsx так не умеет.
+ * с ФИО, пока её не примут. Текст, набранный раньше, без автора. xlsx так не умеет:
+ * быстрый режим без переключателя, зритель при живом ключе входит в ту же сессию.
+ * Комментарий к ячейке меняет и удаляет только его автор.
  *
  * Браузер ходит в /spa/api с JWT. Document Server скачивает файл и шлёт callback
  * без JWT, поэтому эти адреса подписаны HMAC. Подпись Document Server
@@ -136,7 +138,10 @@ final class DocumentFileEditorController extends AbstractController
         }
 
         $edit = $this->canEdit($document, $user);
-        $key = $edit ? ($this->storedKey($fileId) ?? $this->newKey($fileId)) : $this->newKey($fileId);
+        $stored = $this->storedKey($fileId);
+        // xlsx-зритель входит в сессию редакторов: имя на ячейке есть только пока ключ жив.
+        $joinLive = !$edit && $this->officeExt($file) === 'xlsx' && is_string($stored);
+        $key = ($edit || $joinLive) ? ($stored ?? $this->newKey($fileId)) : $this->newKey($fileId);
         if ($edit) {
             $this->rememberKey($fileId, $key);
         }
@@ -152,7 +157,7 @@ final class DocumentFileEditorController extends AbstractController
             $user,
             $edit,
             $signed('content'),
-            $edit ? $signed('callback') : null,
+            ($edit || $joinLive) ? $signed('callback') : null,
             $key,
         );
         if ($this->jwt->isEnabled()) {
@@ -321,6 +326,10 @@ final class DocumentFileEditorController extends AbstractController
             // Пишет файл только наша команда forcesave, не таймер Document Server.
             'customization' => ['forcesave' => false],
         ];
+        if ($ext === 'xlsx') {
+            // Строгий режим прячет чужие ячейки до своего Save, выбор запоминает браузер.
+            $editorConfig['coEditing'] = ['mode' => 'fast', 'change' => false];
+        }
         if ($ext === 'docx') {
             // edit: false — режим нельзя выключить, каждая новая правка с автором.
             // Принять в нём можно свою правку; чужую OnlyOffice не даёт.
@@ -334,11 +343,20 @@ final class DocumentFileEditorController extends AbstractController
             }
             $editorConfig['customization']['review'] = $reviewUi;
         }
-        if ($edit && $callbackUrl !== null) {
+        if ($callbackUrl !== null) {
             $editorConfig['callbackUrl'] = $callbackUrl;
         }
 
         $presented = $this->attachments->presentFile($document, $file);
+        $permissions = match (true) {
+            $review => ['edit' => false, 'review' => true, 'comment' => true],
+            $edit => ['edit' => true, 'review' => false, 'comment' => true],
+            default => ['edit' => false, 'review' => false, 'comment' => false],
+        };
+        if ($ext === 'xlsx' && $permissions['comment']) {
+            $permissions['editCommentAuthorOnly'] = true;
+            $permissions['deleteCommentAuthorOnly'] = true;
+        }
 
         return [
             'width' => '100%',
@@ -350,11 +368,7 @@ final class DocumentFileEditorController extends AbstractController
                 'key' => $key,
                 'title' => (string) ($presented['filename'] ?? 'document.' . $ext),
                 'url' => $contentUrl,
-                'permissions' => match (true) {
-                    $review => ['edit' => false, 'review' => true, 'comment' => true],
-                    $edit => ['edit' => true, 'review' => false, 'comment' => true],
-                    default => ['edit' => false, 'review' => false, 'comment' => false],
-                },
+                'permissions' => $permissions,
             ],
             'editorConfig' => $editorConfig,
         ];

@@ -36,7 +36,8 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * Успешная запись двигает updatedAt файла. Текст комментария от этого не помечается.
  *
  * docx открывается в рецензировании: новая вставка и удаление остаются правкой
- * с ФИО, пока её не примут. xlsx так не умеет.
+ * с ФИО, пока её не примут. xlsx так не умеет: быстрый режим без переключателя.
+ * Комментарий к ячейке меняет и удаляет только его автор.
  *
  * Браузер ходит в /spa/api с JWT. Document Server скачивает файл и шлёт callback
  * без JWT, поэтому эти адреса подписаны HMAC.
@@ -266,6 +267,24 @@ final class DocumentCommentFileEditorController extends AbstractController
                 'hoverMode' => true,
             ];
         }
+        $permissions = $review
+            ? ['edit' => false, 'review' => true, 'comment' => true]
+            : ['edit' => true, 'review' => false, 'comment' => true];
+        if ($ext === 'xlsx') {
+            $permissions['editCommentAuthorOnly'] = true;
+            $permissions['deleteCommentAuthorOnly'] = true;
+        }
+        $editorConfig = [
+            'lang' => 'ru',
+            'mode' => 'edit',
+            'callbackUrl' => $callbackUrl,
+            'user' => ['id' => (string) $user->getId(), 'name' => $this->userName($user)],
+            'customization' => $customization,
+        ];
+        if ($ext === 'xlsx') {
+            // Строгий режим прячет чужие ячейки до своего Save, выбор запоминает браузер.
+            $editorConfig['coEditing'] = ['mode' => 'fast', 'change' => false];
+        }
 
         return [
             'width' => '100%',
@@ -277,17 +296,9 @@ final class DocumentCommentFileEditorController extends AbstractController
                 'key' => $key,
                 'title' => $file->getFilename() ?: 'document.' . $ext,
                 'url' => $contentUrl,
-                'permissions' => $review
-                    ? ['edit' => false, 'review' => true, 'comment' => true]
-                    : ['edit' => true, 'review' => false, 'comment' => true],
+                'permissions' => $permissions,
             ],
-            'editorConfig' => [
-                'lang' => 'ru',
-                'mode' => 'edit',
-                'callbackUrl' => $callbackUrl,
-                'user' => ['id' => (string) $user->getId(), 'name' => $this->userName($user)],
-                'customization' => $customization,
-            ],
+            'editorConfig' => $editorConfig,
         ];
     }
 
