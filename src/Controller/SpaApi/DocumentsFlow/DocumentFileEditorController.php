@@ -282,7 +282,7 @@ final class DocumentFileEditorController extends AbstractController
         }
         $document->setUpdatedAt(new \DateTimeImmutable());
         $this->em->flush();
-        $this->notifyEdited($document, (string) ($data['userdata'] ?? ''));
+        $this->notifyEdited($document, (string) ($data['userdata'] ?? ''), $this->attachments->displayName($file));
         $this->markAck($fileId, $saveId);
 
         return $this->json(['error' => 0]);
@@ -632,7 +632,7 @@ final class DocumentFileEditorController extends AbstractController
         return (int) $m[1];
     }
 
-    private function notifyEdited(Document $document, string $userdata): void
+    private function notifyEdited(Document $document, string $userdata, string $fileName = ''): void
     {
         $userId = self::parseSaverId($userdata);
         $actor = $userId > 0 ? $this->em->find(User::class, $userId) : null;
@@ -641,7 +641,7 @@ final class DocumentFileEditorController extends AbstractController
         }
 
         $loaded = $this->documents->findOneWithRelations((int) $document->getId()) ?? $document;
-        $this->notifier->notifyEdited($loaded, $actor);
+        $this->notifier->notifyEdited($loaded, $actor, fileName: $fileName);
     }
 
     /** @return array{key: string, mode: string}|null */

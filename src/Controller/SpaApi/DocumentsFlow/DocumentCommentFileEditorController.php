@@ -221,7 +221,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         $file->setSizeBytes(strlen($downloaded));
         $file->markEdited();
         $this->em->flush();
-        $this->notifyEdited($document, (string) ($data['userdata'] ?? ''), true);
+        $this->notifyEdited($document, (string) ($data['userdata'] ?? ''), true, (string) ($file->getFilename() ?? ''));
         $this->markAck($fileId, $saveId);
 
         return $this->json(['error' => 0]);
@@ -454,7 +454,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         return (int) $m[1];
     }
 
-    private function notifyEdited(Document $document, string $userdata, bool $discussion = false): void
+    private function notifyEdited(Document $document, string $userdata, bool $discussion = false, string $fileName = ''): void
     {
         $userId = self::parseSaverId($userdata);
         $actor = $userId > 0 ? $this->em->find(User::class, $userId) : null;
@@ -463,7 +463,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         }
 
         $loaded = $this->documents->findOneWithRelations((int) $document->getId()) ?? $document;
-        $this->notifier->notifyEdited($loaded, $actor, $discussion);
+        $this->notifier->notifyEdited($loaded, $actor, $discussion, $fileName);
     }
 
     /** @return array{key: string, mode: string}|null */

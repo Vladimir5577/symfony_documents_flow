@@ -120,10 +120,11 @@ final class DocumentNotifier
 
     /**
      * В документ (или во вложение обсуждения) внесли правки и нажали «Сохранить».
-     * Имя — кто сохранил. Получатели — автор, исполнители и получатели.
+     * Имя — кто сохранил. $fileName — имя файла, как его видит пользователь.
+     * Получатели — автор, исполнители и получатели.
      * Сам сохранивший отсеивается в NotificationPublisher.
      */
-    public function notifyEdited(Document $document, User $actor, bool $discussion = false): void
+    public function notifyEdited(Document $document, User $actor, bool $discussion = false, string $fileName = ''): void
     {
         $recipients = [];
 
@@ -146,11 +147,17 @@ final class DocumentNotifier
             $actorName = (string) $actor->getLogin();
         }
 
+        $fileName = trim($fileName);
+        $documentName = (string) $document->getName();
+        $title = $fileName === ''
+            ? $actorName . ' внёс правки в документ ' . $documentName
+            : $actorName . ' внёс правки в файл «' . $fileName . '» документа ' . $documentName;
+
         $this->publishSplitByRole(
             document: $document,
             event: 'edited',
             recipients: $recipients,
-            title: $actorName . ' внёс правки в документ ' . (string) $document->getName(),
+            title: $title,
             actor: $actor,
             typeLabel: 'Правки в документе',
             anchor: $discussion ? self::COMMENTS_ANCHOR : '',
