@@ -10,6 +10,7 @@ use App\Entity\Document\Document;
 use App\Entity\Document\File;
 use App\Entity\User\User;
 use App\Repository\Document\DocumentRepository;
+use App\Service\OnlyOffice\BlankPdf;
 use App\Service\OnlyOffice\BlankPresentation;
 use App\Service\OnlyOffice\EditorSessionKey;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
@@ -34,7 +35,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 /**
- * Редактор docx, xlsx и pptx исходящего документа. Правит автор документа или администратор.
+ * Редактор docx, xlsx, pptx и pdf исходящего документа. Правит автор документа или администратор.
  *
  * В хранилище файл попадает только по «Сохранить»: команда forcesave, callback
  * со status 6 и userdata commit.{saveId}.{userId}. Пока в сессии кто-то есть,
@@ -49,7 +50,8 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * с ФИО, пока её не примут. Текст, набранный раньше, без автора. xlsx так не умеет:
  * быстрый режим без переключателя, зритель при живом ключе входит в ту же сессию.
  * Комментарий к ячейке меняет и удаляет только его автор.
- * pptx тоже без рецензирования, в быстром соавторстве.
+ * pptx и pdf тоже без рецензирования, в быстром соавторстве.
+ * pdf открывается в комментариях: правка текста — переключатель в шапке редактора.
  *
  * Браузер ходит в /spa/api с JWT. Document Server скачивает файл и шлёт callback
  * без JWT, поэтому эти адреса подписаны HMAC. Подпись Document Server
@@ -67,6 +69,7 @@ final class DocumentFileEditorController extends AbstractController
         'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'pdf' => 'application/pdf',
     ];
 
     /** @var array<string, string> */
@@ -74,6 +77,7 @@ final class DocumentFileEditorController extends AbstractController
         'docx' => 'word',
         'xlsx' => 'cell',
         'pptx' => 'slide',
+        'pdf' => 'pdf',
     ];
 
     public function __construct(
@@ -108,6 +112,7 @@ final class DocumentFileEditorController extends AbstractController
         $path = match ($format) {
             'xlsx' => $this->blankXlsx(),
             'pptx' => BlankPresentation::create(),
+            'pdf' => BlankPdf::create(),
             default => $this->blankDocx(),
         };
         if ($path === null) {
@@ -352,7 +357,7 @@ final class DocumentFileEditorController extends AbstractController
             // Пишет файл только наша команда forcesave, не таймер Document Server.
             'customization' => ['forcesave' => false],
         ];
-        if ($ext === 'xlsx' || $ext === 'pptx') {
+        if ($ext === 'xlsx' || $ext === 'pptx' || $ext === 'pdf') {
             // Строгий режим прячет чужие правки до своего Save, выбор запоминает браузер.
             $editorConfig['coEditing'] = ['mode' => 'fast', 'change' => false];
         }
@@ -607,7 +612,7 @@ final class DocumentFileEditorController extends AbstractController
     private function blankName(Document $document, string $format): string
     {
         $title = trim(str_replace(["\r", "\n", '/', '\\', "\0"], ' ', (string) $document->getName()));
-        $title = preg_replace('/\.(docx|xlsx|pptx)$/iu', '', $title) ?? $title;
+        $title = preg_replace('/\.(docx|xlsx|pptx|pdf)$/iu', '', $title) ?? $title;
         $title = trim($title);
         if ($title === '') {
             $title = 'Документ';

@@ -33,7 +33,7 @@ final class SpaApiError
     public const DOCUMENT_VALIDATION_FAILED = 'document_validation_failed';
     /** Файл для редактора — только у черновика, который можно править. */
     public const DOCUMENT_OFFICE_DRAFT_ONLY = 'document_office_draft_only';
-    /** Файл не docx, не xlsx и не pptx. */
+    /** Файл не docx, не xlsx, не pptx и не pdf. */
     public const DOCUMENT_FILE_NOT_DOCX = 'document_file_not_docx';
     public const DOCUMENT_FILE_EDITOR_FAILED = 'document_file_editor_failed';
     public const ORGANIZATION_REQUIRED = 'organization_required';
