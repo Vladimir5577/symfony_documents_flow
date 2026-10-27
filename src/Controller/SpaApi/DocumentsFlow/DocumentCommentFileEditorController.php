@@ -11,6 +11,7 @@ use App\Entity\Document\DocumentCommentFile;
 use App\Entity\User\User;
 use App\Repository\Document\DocumentCommentFileRepository;
 use App\Repository\Document\DocumentRepository;
+use App\Service\OnlyOffice\EditorSessionKey;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentCommentService;
@@ -30,10 +31,13 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * Редактор docx/xlsx во вложении комментария. Правит автор комментария или администратор.
  *
  * В хранилище файл попадает только по «Сохранить»: команда forcesave, callback
- * со status 6 и userdata commit.{saveId}.{userId}. Пока ключ жив, следующее
- * открытие входит в ту же сессию — иначе вторая вкладка затирает его и
- * «Сохранить» в первой получает 403. Закрытие (status 2), когда в сессии уже
- * никого нет, ключ забывает: следующий заход не получит кэш правок.
+ * со status 6 и userdata commit.{saveId}.{userId}. Пока в сессии кто-то есть,
+ * следующее открытие входит в неё — иначе вторая вкладка затирает ключ и
+ * «Сохранить» в первой получает 403. После записи тот же ключ новому заходу
+ * нельзя: Document Server показывает «Версия изменилась». Закрытие (status 2
+ * и 4) такой ключ забывает сразу. Несохранённую сессию моложе 20 с не трогает,
+ * и повторное открытие не продлевает эти 20 с. Если сервер всё же отверг ключ,
+ * редактор просит refresh — тогда ключ всегда новый, без диалога.
  * Успешная запись двигает updatedAt файла. Текст комментария от этого не помечается.
  *
  * docx открывается в рецензировании: новая вставка и удаление остаются правкой
@@ -80,7 +84,7 @@ final class DocumentCommentFileEditorController extends AbstractController
     }
 
     #[Route('/spa/api/documents-flow/documents/{documentId}/comments/files/{fileId}/editor', name: 'spa_api_documents_flow_comment_file_editor_open', requirements: ['documentId' => '\d+', 'fileId' => '\d+'], methods: ['POST'])]
-    public function open(int $documentId, int $fileId, #[CurrentUser] ?User $user): JsonResponse
+    public function open(int $documentId, int $fileId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
         $found = $this->findEditable($documentId, $fileId, $user);
         if ($found instanceof JsonResponse) {
@@ -91,8 +95,21 @@ final class DocumentCommentFileEditorController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
-        $key = $this->storedKey($fileId) ?? $this->newKey($fileId);
-        $this->rememberKey($fileId, $key);
+        $stored = $this->readKey($fileId);
+        $refresh = EditorSessionKey::wantsFresh($request->getContent());
+        $busy = false;
+        if (
+            !$refresh
+            && $stored !== null
+            && ($stored['saved'] || $stored['at'] <= time() - EditorSessionKey::KEEP_SECONDS)
+        ) {
+            $busy = $this->sessionBusy($stored['key']);
+        }
+        $key = $refresh
+            ? $this->newKey($fileId)
+            : EditorSessionKey::next($stored, true, $busy, fn (): string => $this->newKey($fileId));
+        $same = $stored !== null && hash_equals($stored['key'], $key);
+        $this->rememberKey($fileId, $key, $same && $stored['saved'], $same && !$busy ? $stored['at'] : null);
         $base = sprintf('%s/document_comment_file_editor/%d/%d', self::INTERNAL_APP, $document->getId(), $file->getId());
         $signed = fn (string $purpose): string => sprintf('%s/%s?%s', $base, $purpose, http_build_query([
             'key' => $key,
@@ -190,8 +207,8 @@ final class DocumentCommentFileEditorController extends AbstractController
         }
 
         $status = (int) ($data['status'] ?? 0);
-        // 2 — все вышли. Закрытие файл не пишет.
-        if ($status === 2) {
+        // 2 — вышли с несохранёнными правками, 4 — без новых (в том числе сразу после forcesave). Файл не пишем.
+        if ($status === 2 || $status === 4) {
             $this->dropSession($fileId, $key);
 
             return $this->json(['error' => 0]);
@@ -222,6 +239,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         $file->markEdited();
         $this->em->flush();
         $this->notifyEdited($document, (string) ($data['userdata'] ?? ''), true, (string) ($file->getFilename() ?? ''));
+        $this->markSaved($fileId, $key);
         $this->markAck($fileId, $saveId);
 
         return $this->json(['error' => 0]);
@@ -229,12 +247,7 @@ final class DocumentCommentFileEditorController extends AbstractController
 
     private function dropSession(int $fileId, string $key): void
     {
-        $stored = $this->readKey($fileId);
-        if ($stored === null || !hash_equals($stored['key'], $key)) {
-            return;
-        }
-        // ponytail: 20 с. Второй вход обновляет at, и status 2 от уже вышедшего не стирает ключ. Дольше окна опоздавший callback сотрёт ключ, «Сохранить» получит 403, пока не открыть снова.
-        if ($stored['at'] > time() - 20) {
+        if (!EditorSessionKey::forget($this->readKey($fileId), $key, time())) {
             return;
         }
         $this->cache->deleteItem($this->keyCacheId($fileId));
@@ -312,13 +325,27 @@ final class DocumentCommentFileEditorController extends AbstractController
         return $base . '-' . substr(hash_hmac('sha256', 'comment-file-key|' . $base, $this->appSecret), 0, 16);
     }
 
-    private function rememberKey(int $fileId, string $key): void
+    private function rememberKey(int $fileId, string $key, bool $saved = false, ?int $at = null): void
     {
         // ponytail: cache.app, 24 ч. cache:clear или срок — «Сохранить» в уже открытой вкладке не пройдёт, пока не открыть снова. Колонка-счётчик, если ключ должен пережить сброс кэша.
         $item = $this->cache->getItem($this->keyCacheId($fileId));
-        $item->set(['key' => $key, 'at' => time()]);
+        $item->set(['key' => $key, 'at' => $at ?? time(), 'saved' => $saved]);
         $item->expiresAfter(86400);
         $this->cache->save($item);
+    }
+
+    private function markSaved(int $fileId, string $key): void
+    {
+        $stored = $this->readKey($fileId);
+        if ($stored === null || !hash_equals($stored['key'], $key)) {
+            return;
+        }
+        $this->rememberKey($fileId, $key, true);
+    }
+
+    private function sessionBusy(string $key): bool
+    {
+        return EditorSessionKey::busy($this->command($key, 'info', ''));
     }
 
     private function storedKey(int $fileId): ?string
@@ -327,7 +354,7 @@ final class DocumentCommentFileEditorController extends AbstractController
     }
 
     /**
-     * @return array{key: string, at: int}|null
+     * @return array{key: string, at: int, saved: bool}|null
      */
     private function readKey(int $fileId): ?array
     {
@@ -338,10 +365,14 @@ final class DocumentCommentFileEditorController extends AbstractController
         $stored = $item->get();
         // Раньше в кэше лежала строка. at = 0: закрытие такой сессии по-прежнему забывает ключ.
         if (is_string($stored) && $stored !== '') {
-            return ['key' => $stored, 'at' => 0];
+            return ['key' => $stored, 'at' => 0, 'saved' => false];
         }
         if (is_array($stored) && is_string($stored['key'] ?? null) && $stored['key'] !== '') {
-            return ['key' => $stored['key'], 'at' => (int) ($stored['at'] ?? 0)];
+            return [
+                'key' => $stored['key'],
+                'at' => (int) ($stored['at'] ?? 0),
+                'saved' => ($stored['saved'] ?? false) === true,
+            ];
         }
 
         return null;
@@ -540,7 +571,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         }
         $payload = json_encode($body);
         if ($payload === false) {
-            return ['error' => 1];
+            return ['error' => 1, 'unreachable' => true];
         }
 
         $context = stream_context_create([
@@ -553,10 +584,10 @@ final class DocumentCommentFileEditorController extends AbstractController
         ]);
         $response = @file_get_contents($commandUrl, false, $context);
         if ($response === false) {
-            return ['error' => 1];
+            return ['error' => 1, 'unreachable' => true];
         }
         $decoded = json_decode($response, true);
 
-        return is_array($decoded) ? $decoded : ['error' => 1];
+        return is_array($decoded) ? $decoded : ['error' => 1, 'unreachable' => true];
     }
 }
