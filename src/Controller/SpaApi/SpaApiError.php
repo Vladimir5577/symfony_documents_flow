@@ -24,6 +24,9 @@ final class SpaApiError
     public const UPDATE_FIELDS_REQUIRED = 'update_fields_required';
     public const USER_NOT_FOUND = 'user_not_found';
     public const DOCUMENT_NOT_FOUND = 'document_not_found';
+    public const BOARD_NOT_FOUND = 'board_not_found';
+    public const BOARD_TITLE_REQUIRED = 'board_title_required';
+    public const BOARD_SCENE_TOO_LARGE = 'board_scene_too_large';
     public const DOCUMENT_TYPE_NOT_FOUND = 'document_type_not_found';
     public const DOCUMENT_NAME_REQUIRED = 'document_name_required';
     public const DOCUMENT_INVALID_STATUS = 'document_invalid_status';
