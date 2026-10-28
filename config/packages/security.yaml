@@ -105,6 +105,8 @@ security:
         - { path: ^/document_file_editor, roles: PUBLIC_ACCESS }
         # То же для вложения в обсуждении документа.
         - { path: ^/document_comment_file_editor, roles: PUBLIC_ACCESS }
+        # Группы файлов: OnlyOffice скачивает xlsx и шлёт callback без JWT. Доступ — токен в query.
+        - { path: ^/file_group_editor, roles: PUBLIC_ACCESS }
         - { path: ^/$, roles: PUBLIC_ACCESS } # корневой путь - редирект на /login
 
         # SPA API: выдача и обновление JWT — публичные эндпоинты
