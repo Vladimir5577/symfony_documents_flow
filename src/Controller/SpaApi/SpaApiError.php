@@ -193,4 +193,6 @@ final class SpaApiError
     public const FILE_GROUP_MEMBER_NOT_FOUND = 'file_group_member_not_found';
     public const FILE_GROUP_OWNER_NOT_MEMBER = 'file_group_owner_not_member';
     public const FILE_GROUP_EDITOR_FAILED = 'file_group_editor_failed';
+    /** Папку тащат внутрь её же подпапки — дерево замкнулось бы в кольцо. */
+    public const FILE_GROUP_FOLDER_LOOP = 'file_group_folder_loop';
 }

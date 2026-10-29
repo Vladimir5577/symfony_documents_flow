@@ -74,6 +74,11 @@ class FileGroupFile
         return $this->folder;
     }
 
+    public function setFolder(?FileGroupFolder $folder): void
+    {
+        $this->folder = $folder;
+    }
+
     public function getOriginalName(): string
     {
         return $this->originalName;

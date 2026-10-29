@@ -208,6 +208,43 @@ final class FileGroupController extends AbstractController
         return $this->respond($group, $user, $parentId, Response::HTTP_CREATED);
     }
 
+    #[Route('/{groupId}/folders/{folderId}/parent', name: 'spa_api_file_groups_folder_move', requirements: ['groupId' => '\d+', 'folderId' => '\d+'], methods: ['PATCH'])]
+    public function moveFolder(int $groupId, int $folderId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        $user = $this->user($user);
+        $group = $this->manageable($groupId, $user);
+        if ($group instanceof JsonResponse) {
+            return $group;
+        }
+        $folder = $this->folderIn($group, $folderId);
+        if ($folder instanceof JsonResponse) {
+            return $folder;
+        }
+        $body = $this->jsonBody($request);
+        if ($body instanceof JsonResponse) {
+            return $body;
+        }
+        $parentId = (int) ($body['parentId'] ?? 0);
+        $parent = null;
+        if ($parentId > 0) {
+            if ($parentId === $folderId) {
+                return $this->json(['error' => SpaApiError::FILE_GROUP_FOLDER_LOOP], Response::HTTP_BAD_REQUEST);
+            }
+            $found = $this->folderIn($group, $parentId);
+            if ($found instanceof JsonResponse) {
+                return $found;
+            }
+            if (isset($this->folderIdsUnder($group, $folderId)[$parentId])) {
+                return $this->json(['error' => SpaApiError::FILE_GROUP_FOLDER_LOOP], Response::HTTP_BAD_REQUEST);
+            }
+            $parent = $found;
+        }
+        $folder->setParent($parent);
+        $this->em->flush();
+
+        return $this->respond($group, $user, $parentId);
+    }
+
     #[Route('/{groupId}/folders/{folderId}', name: 'spa_api_file_groups_folder_rename', requirements: ['groupId' => '\d+', 'folderId' => '\d+'], methods: ['PATCH'])]
     public function renameFolder(int $groupId, int $folderId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
@@ -313,6 +350,37 @@ final class FileGroupController extends AbstractController
         $this->storage->unlinkAll([$path]);
 
         return $this->respond($group, $user, $request->query->getInt('folderId') ?: $folderId);
+    }
+
+    #[Route('/{groupId}/files/{fileId}/folder', name: 'spa_api_file_groups_file_move', requirements: ['groupId' => '\d+', 'fileId' => '\d+'], methods: ['PATCH'])]
+    public function moveFile(int $groupId, int $fileId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        $user = $this->user($user);
+        $group = $this->manageable($groupId, $user);
+        if ($group instanceof JsonResponse) {
+            return $group;
+        }
+        $file = $this->fileIn($group, $fileId);
+        if ($file instanceof JsonResponse) {
+            return $file;
+        }
+        $body = $this->jsonBody($request);
+        if ($body instanceof JsonResponse) {
+            return $body;
+        }
+        $folderId = (int) ($body['folderId'] ?? 0);
+        $folder = null;
+        if ($folderId > 0) {
+            $found = $this->folderIn($group, $folderId);
+            if ($found instanceof JsonResponse) {
+                return $found;
+            }
+            $folder = $found;
+        }
+        $file->setFolder($folder);
+        $this->em->flush();
+
+        return $this->respond($group, $user, $folderId);
     }
 
     #[Route('/{groupId}/files/{fileId}/content', name: 'spa_api_file_groups_file_content', requirements: ['groupId' => '\d+', 'fileId' => '\d+'], methods: ['GET'])]
@@ -473,19 +541,17 @@ final class FileGroupController extends AbstractController
             }
             $current = $found;
         }
-        $currentId = $current?->getId();
+        // Дерево целиком: сайд-панель показывает структуру, а не только текущую папку.
         $folders = [];
         foreach ($group->getFolders() as $folder) {
-            if (($folder->getParent()?->getId()) !== $currentId) {
-                continue;
-            }
-            $folders[] = ['id' => (int) $folder->getId(), 'name' => $folder->getName()];
+            $folders[] = [
+                'id' => (int) $folder->getId(),
+                'name' => $folder->getName(),
+                'parentId' => $folder->getParent() !== null ? (int) $folder->getParent()->getId() : null,
+            ];
         }
         $files = [];
         foreach ($group->getFiles() as $file) {
-            if (($file->getFolder()?->getId()) !== $currentId) {
-                continue;
-            }
             $writers = [];
             foreach ($file->getWriters() as $writer) {
                 $writers[] = $this->access->presentUser($writer);
@@ -496,6 +562,7 @@ final class FileGroupController extends AbstractController
                 'name' => $file->getOriginalName(),
                 'size' => $file->getSize(),
                 'canWrite' => $this->access->canWrite($file, $user),
+                'folderId' => $file->getFolder() !== null ? (int) $file->getFolder()->getId() : null,
                 'writers' => $writers,
             ];
         }
@@ -516,7 +583,7 @@ final class FileGroupController extends AbstractController
                 'owner' => $this->access->presentUser($group->getOwner()),
                 'createdAt' => $group->getCreatedAt()->format(\DateTimeInterface::ATOM),
             ],
-            'folderId' => $currentId,
+            'folderId' => $current?->getId(),
             'breadcrumbs' => $this->breadcrumbs($current),
             'folders' => $folders,
             'files' => $files,

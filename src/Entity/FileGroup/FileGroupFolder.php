@@ -55,6 +55,11 @@ class FileGroupFolder
         return $this->parent;
     }
 
+    public function setParent(?self $parent): void
+    {
+        $this->parent = $parent;
+    }
+
     public function getName(): string
     {
         return $this->name;
