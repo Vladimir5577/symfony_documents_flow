@@ -53,6 +53,12 @@ final class DocumentUpdateService
             throw new BadRequestHttpException(SpaApiError::ORGANIZATION_REQUIRED);
         }
 
+        if ($organizationId !== $document->getOrganizationCreator()?->getId()
+            && !$this->accessService->isAdmin()
+            && $organizationId !== $currentUser->getOrganization()?->getId()) {
+            throw new AccessDeniedHttpException(SpaApiError::ACCESS_DENIED);
+        }
+
         $organization = $this->organizationRepository->find($organizationId);
         if (!$organization instanceof AbstractOrganization) {
             throw new NotFoundHttpException(SpaApiError::ORGANIZATION_NOT_FOUND);

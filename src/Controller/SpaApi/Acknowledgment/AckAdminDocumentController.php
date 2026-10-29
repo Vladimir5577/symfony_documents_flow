@@ -127,9 +127,14 @@ final class AckAdminDocumentController extends AbstractController
             return $this->json(['error' => SpaApiError::ACK_DOCUMENT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $payload = json_decode((string) $request->getContent(), true);
-        if (!is_array($payload)) {
+        $payload = json_decode((string) $request->getContent());
+        if (!$payload instanceof \stdClass) {
             return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+        }
+        $payload = (array) $payload;
+
+        if (array_key_exists('userIds', $payload) && !is_array($payload['userIds'])) {
+            return $this->json(['error' => SpaApiError::ACK_DOCUMENT_NO_RECIPIENTS], Response::HTTP_BAD_REQUEST);
         }
 
         // Состав аудитории после публикации заморожен: люди уже отмечаются, и

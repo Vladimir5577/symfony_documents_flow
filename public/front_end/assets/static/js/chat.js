@@ -14,8 +14,9 @@
         messages: [],
         loading: false,
         hasMore: true,
-        eventSourceRoom: null,
+        subscriptionTimer: null,
         eventSourceUser: null,
+        lastEventId: '',
     };
 
     // DOM refs
@@ -228,7 +229,6 @@
 
         loadMessages(roomId, null);
         markAsRead(roomId);
-        subscribeRoomTopic(roomId);
         loadRoomDetails(roomId);
     }
 
@@ -826,88 +826,100 @@
 
     function subscribeUserTopic() {
         if (!MERCURE_URL || !CURRENT_USER_ID) return;
-        var url = new URL(MERCURE_URL);
-        url.searchParams.append('topic', '/chat/user/' + CURRENT_USER_ID);
+        clearTimeout(state.subscriptionTimer);
+        if (state.eventSourceUser) {
+            state.eventSourceUser.close();
+            state.eventSourceUser = null;
+        }
 
-        state.eventSourceUser = new EventSource(url);
-        state.eventSourceUser.onmessage = function (e) {
-            try {
-                var data = JSON.parse(e.data);
-                if (data.type === 'room_updated') {
-                    loadRoomsDebounced();
-                }
-            } catch (err) {}
-        };
+        fetch('/api/chat/subscription', { credentials: 'same-origin', cache: 'no-store' })
+            .then(function (response) {
+                if (!response.ok) throw new Error('Chat subscription failed');
+                return response.json();
+            })
+            .then(function (subscription) {
+                var url = new URL(MERCURE_URL, window.location.href);
+                url.searchParams.append('topic', subscription.topic);
+                if (state.lastEventId) url.searchParams.set('lastEventID', state.lastEventId);
+                state.eventSourceUser = new EventSource(url, { withCredentials: true });
+                state.eventSourceUser.onmessage = function (e) {
+                    state.lastEventId = e.lastEventId;
+                    try {
+                        var data = JSON.parse(e.data);
+                        if (data.type === 'room_updated') {
+                            loadRoomsDebounced();
+                            return;
+                        }
+                        var roomId = data.room_id || (data.message && data.message.room_id);
+                        if (roomId === state.currentRoomId) handleRoomEvent(data, roomId);
+                    } catch (err) {}
+                };
+                state.eventSourceUser.onerror = function () {
+                    clearTimeout(state.subscriptionTimer);
+                    state.eventSourceUser.close();
+                    state.subscriptionTimer = setTimeout(subscribeUserTopic, 5000);
+                };
+                // Refresh the subscriber JWT before its one-hour expiry.
+                state.subscriptionTimer = setTimeout(subscribeUserTopic, 50 * 60 * 1000);
+            })
+            .catch(function () {
+                state.subscriptionTimer = setTimeout(subscribeUserTopic, 5000);
+            });
     }
 
-    function subscribeRoomTopic(roomId) {
-        if (state.eventSourceRoom) {
-            state.eventSourceRoom.close();
-            state.eventSourceRoom = null;
-        }
-        if (!MERCURE_URL) return;
-
-        var url = new URL(MERCURE_URL);
-        url.searchParams.append('topic', '/chat/room/' + roomId);
-
-        state.eventSourceRoom = new EventSource(url);
-        state.eventSourceRoom.onmessage = function (e) {
-            try {
-                var data = JSON.parse(e.data);
-                if (data.type === 'new_message' && data.message) {
-                    if (state.currentRoomId === roomId) {
-                        var exists = state.messages.some(function (m) { return m.id === data.message.id; });
-                        if (!exists) {
-                            state.messages.push(data.message);
-                            var room = state.rooms.find(function (r) { return r.id === roomId; });
-                            var isGroup = room && room.type !== 'private';
-                            appendMessageDOM(data.message, isGroup);
-                            scrollToBottom();
-                            if (data.message.sender && data.message.sender.id !== CURRENT_USER_ID) {
-                                markAsRead(roomId);
-                            }
-                        }
-                    }
-                } else if (data.type === 'message_edited' && data.message) {
-                    var editedMsg = state.messages.find(function (m) { return m.id === data.message.id; });
-                    if (editedMsg) {
-                        editedMsg.content = data.message.content;
-                        editedMsg.updated_at = data.message.updated_at;
-                    }
-                    var editedBubble = els.messagesArea.querySelector('[data-message-id="' + data.message.id + '"]');
-                    if (editedBubble) {
-                        var textEl = editedBubble.querySelector('.chat-bubble-text');
-                        if (textEl) textEl.innerHTML = escapeHtml(data.message.content);
-                        var timeEl = editedBubble.querySelector('.chat-bubble-time');
-                        if (timeEl) {
-                            timeEl.innerHTML = formatMessageTime(data.message.created_at) +
-                                ' <span class="chat-edited-label">изменено ' + formatMessageTime(data.message.updated_at) + '</span>';
-                        }
-                    }
-                } else if (data.type === 'message_deleted' && data.message_id) {
-                    var msg = state.messages.find(function (m) { return m.id === data.message_id; });
-                    if (msg) {
-                        msg.is_deleted = true;
-                        msg.content = null;
-                        msg.files = [];
-                    }
-                    var bubble = els.messagesArea.querySelector('[data-message-id="' + data.message_id + '"]');
-                    if (bubble) {
-                        var timeEl = bubble.querySelector('.chat-bubble-time');
-                        var timeHtml = timeEl ? timeEl.outerHTML : '';
-                        bubble.innerHTML = '<div class="chat-deleted"><em>Сообщение удалено</em></div>' + timeHtml;
-                    }
-                } else if (data.type === 'read') {
-                    // Update read status checkmarks
-                    if (data.user_id && data.user_id !== CURRENT_USER_ID) {
-                        els.messagesArea.querySelectorAll('.chat-read-status').forEach(function (el) {
-                            el.innerHTML = '<i class="bi bi-check2-all text-primary"></i>';
-                        });
-                        state.messages.forEach(function (m) { m.is_read = true; });
+    function handleRoomEvent(data, roomId) {
+        if (data.type === 'new_message' && data.message) {
+            if (state.currentRoomId === roomId) {
+                var exists = state.messages.some(function (m) { return m.id === data.message.id; });
+                if (!exists) {
+                    state.messages.push(data.message);
+                    var room = state.rooms.find(function (r) { return r.id === roomId; });
+                    var isGroup = room && room.type !== 'private';
+                    appendMessageDOM(data.message, isGroup);
+                    scrollToBottom();
+                    if (data.message.sender && data.message.sender.id !== CURRENT_USER_ID) {
+                        markAsRead(roomId);
                     }
                 }
-            } catch (err) {}
-        };
+            }
+        } else if (data.type === 'message_edited' && data.message) {
+            var editedMsg = state.messages.find(function (m) { return m.id === data.message.id; });
+            if (editedMsg) {
+                editedMsg.content = data.message.content;
+                editedMsg.updated_at = data.message.updated_at;
+            }
+            var editedBubble = els.messagesArea.querySelector('[data-message-id="' + data.message.id + '"]');
+            if (editedBubble) {
+                var textEl = editedBubble.querySelector('.chat-bubble-text');
+                if (textEl) textEl.innerHTML = escapeHtml(data.message.content);
+                var timeEl = editedBubble.querySelector('.chat-bubble-time');
+                if (timeEl) {
+                    timeEl.innerHTML = formatMessageTime(data.message.created_at) +
+                        ' <span class="chat-edited-label">изменено ' + formatMessageTime(data.message.updated_at) + '</span>';
+                }
+            }
+        } else if (data.type === 'message_deleted' && data.message_id) {
+            var msg = state.messages.find(function (m) { return m.id === data.message_id; });
+            if (msg) {
+                msg.is_deleted = true;
+                msg.content = null;
+                msg.files = [];
+            }
+            var bubble = els.messagesArea.querySelector('[data-message-id="' + data.message_id + '"]');
+            if (bubble) {
+                var timeEl = bubble.querySelector('.chat-bubble-time');
+                var timeHtml = timeEl ? timeEl.outerHTML : '';
+                bubble.innerHTML = '<div class="chat-deleted"><em>Сообщение удалено</em></div>' + timeHtml;
+            }
+        } else if (data.type === 'read') {
+            // Update read status checkmarks
+            if (data.user_id && data.user_id !== CURRENT_USER_ID) {
+                els.messagesArea.querySelectorAll('.chat-read-status').forEach(function (el) {
+                    el.innerHTML = '<i class="bi bi-check2-all text-primary"></i>';
+                });
+                state.messages.forEach(function (m) { m.is_read = true; });
+            }
+        }
     }
 
     // -------- Private Chat Modal --------

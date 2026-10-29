@@ -9,6 +9,7 @@ use App\Entity\User\User;
 use App\Repository\Document\DocumentCommentFileRepository;
 use App\Repository\Document\DocumentCommentRepository;
 use App\Repository\Document\DocumentRepository;
+use App\Service\SpaApi\Documents\DocumentAccessService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -25,6 +26,7 @@ final class DocumentCommentController extends AbstractController
     public function __construct(
         #[Autowire('%private_upload_dir_documents_comments%')]
         private readonly string $commentsUploadDir,
+        private readonly DocumentAccessService $accessService,
     ) {
     }
 
@@ -47,8 +49,7 @@ final class DocumentCommentController extends AbstractController
         }
 
         if (!$this->hasAccess($document, $currentUser)) {
-            $this->addFlash('error', 'Нет доступа к этому документу.');
-            return $this->redirectDocumentView($document, $currentUser);
+            throw $this->createAccessDeniedException('Нет доступа к этому документу.');
         }
 
         if (!$this->isCsrfTokenValid('document_comment_create_' . $id, (string) $request->request->get('_token'))) {
@@ -117,6 +118,10 @@ final class DocumentCommentController extends AbstractController
 
         $document = $comment->getDocument();
 
+        if (!$this->hasAccess($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к этому документу.');
+        }
+
         if (!$this->isCsrfTokenValid('document_comment_edit_' . $id, (string) $request->request->get('_token'))) {
             $this->addFlash('error', 'Неверный токен. Попробуйте снова.');
             return $this->redirectDocumentView($document, $currentUser);
@@ -162,6 +167,10 @@ final class DocumentCommentController extends AbstractController
 
         $document = $comment->getDocument();
 
+        if (!$this->hasAccess($document, $currentUser)) {
+            throw $this->createAccessDeniedException('Нет доступа к этому документу.');
+        }
+
         if (!$this->isCsrfTokenValid('document_comment_delete_' . $id, (string) $request->request->get('_token'))) {
             $this->addFlash('error', 'Неверный токен. Попробуйте снова.');
             return $this->redirectDocumentView($document, $currentUser);
@@ -200,8 +209,7 @@ final class DocumentCommentController extends AbstractController
 
         $document = $fileEntity->getComment()->getDocument();
         if (!$this->hasAccess($document, $currentUser)) {
-            $this->addFlash('error', 'Нет доступа к этому файлу.');
-            return $this->redirectToRoute('app_incoming_documents');
+            throw $this->createAccessDeniedException('Нет доступа к этому файлу.');
         }
 
         $storageKey = $fileEntity->getStorageKey();
@@ -215,7 +223,9 @@ final class DocumentCommentController extends AbstractController
         }
 
         $downloadName = $fileEntity->getFilename() ?: $storageKey;
-        $inline = $request->query->getBoolean('inline');
+        $mime = mime_content_type($absolutePath) ?: 'application/octet-stream';
+        $safePreview = in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'], true);
+        $inline = $request->query->getBoolean('inline') && $safePreview;
 
         $response = new StreamedResponse(static function () use ($absolutePath) {
             $handle = fopen($absolutePath, 'rb');
@@ -229,7 +239,8 @@ final class DocumentCommentController extends AbstractController
             fclose($handle);
         });
 
-        $response->headers->set('Content-Type', $fileEntity->getContentType() ?: 'application/octet-stream');
+        $response->headers->set('Content-Type', $safePreview ? $mime : 'application/octet-stream');
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Content-Disposition', ($inline ? 'inline' : 'attachment') . '; filename="' . addslashes($downloadName) . '"');
 
         return $response;
@@ -237,18 +248,7 @@ final class DocumentCommentController extends AbstractController
 
     private function hasAccess(Document $document, User $user): bool
     {
-        if ($this->isGranted('ROLE_ADMIN')) {
-            return true;
-        }
-        if ($document->getCreatedBy() && $document->getCreatedBy()->getId() === $user->getId()) {
-            return true;
-        }
-        foreach ($document->getUserRecipients() as $recipient) {
-            if ($recipient->getUser() && $recipient->getUser()->getId() === $user->getId()) {
-                return true;
-            }
-        }
-        return false;
+        return $this->accessService->canViewDocument($document, $user);
     }
 
     private function redirectDocumentView(Document $document, User $user, ?string $anchor = null): Response

@@ -23,6 +23,10 @@ security:
         internal_api:
             pattern: ^/api/internal
             security: false
+        # Подписанные картинки для <img>: подпись и срок проверяет контроллер.
+        post_images:
+            pattern: ^/spa/api/post-images/
+            security: false
         refresh_jwt:
             pattern: ^/spa/api/(token/refresh|logout)
             stateless: true
@@ -48,6 +52,8 @@ security:
         main:
             lazy: true
             provider: app_user_provider
+            login_throttling:
+                limiter: security.login_throttling.spa_api.limiter
             form_login:
                 login_path: app_login
                 check_path: app_login
@@ -99,7 +105,8 @@ security:
         # Публичные роуты (доступны всем, включая неаутентифицированных)
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/save_docx, roles: PUBLIC_ACCESS }
-        # OnlyOffice скачивает docx и шлёт callback без JWT. Доступ — токен сессии в query.
+        - { path: ^/docx_editor_content/, roles: PUBLIC_ACCESS }
+        # OnlyOffice обращается без JWT пользователя: сессия в query и подпись сервера в callback.
         - { path: ^/purchase_file_editor, roles: PUBLIC_ACCESS }
         # То же для docx документооборота: скачивание и callback без JWT, доступ — токен в query.
         - { path: ^/document_file_editor, roles: PUBLIC_ACCESS }

@@ -6,6 +6,7 @@
     <style>
         html, body { height: 100%; margin: 0; }
         #editor { width: 100%; height: 100%; }
+        #save-error { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 12px; background: #fff3cd; color: #664d03; }
         .save-btn {
             position: fixed;
             bottom: 70px;
@@ -25,11 +26,12 @@
     <script src="{{ onlyofficeDocumentServerUrl }}/web-apps/apps/api/documents/api.js"></script>
 </head>
 <body>
+<div id="save-error" role="alert" hidden></div>
 <button class="save-btn">Сохранить документ</button>
 {% if documentId %}
 <form id="save-file-to-document-form" method="post" action="{{ path('app_save_file_from_template_to_document') }}" style="display: none;">
     <input type="hidden" name="document_id" value="{{ documentId }}">
-    <input type="hidden" name="filename" value="{{ filename }}">
+    <input type="hidden" name="session" value="{{ sessionId }}">
     <input type="hidden" name="from_template" value="{{ fromTemplate ? '1' : '0' }}">
     <input type="hidden" name="_token" value="{{ csrf_token('save_file_to_document') }}">
 </form>
@@ -40,43 +42,68 @@
     {# Один ключ на сессию — нужен для кнопки «Сохранить» и для сохранения при уходе со страницы #}
     const docKey = "{{ docKey|e('js') }}";
     const triggerSaveUrl = "{{ path('app_trigger_forcesave')|e('js') }}";
+    const saveStatusUrl = "{{ path('app_docx_editor_save_status', {session: sessionId})|e('js') }}";
+    const heartbeatUrl = "{{ path('app_docx_editor_heartbeat', {session: sessionId})|e('js') }}";
+    const heartbeatToken = "{{ csrf_token('docx_editor_heartbeat')|e('js') }}";
     const documentId = {{ documentId ?? 'null' }};
-    const filename = "{{ filename|e('js') }}";
-    const callbackUrl = "http://nginx/save_docx?filename=" + encodeURIComponent(filename);
+    const saveRequest = { key: docKey, session: "{{ sessionId|e('js') }}", _token: "{{ csrf_token('trigger_forcesave')|e('js') }}" };
+    const docEditor = new DocsAPI.DocEditor("editor", {{ editorConfig|json_encode(constant('JSON_HEX_TAG') b-or constant('JSON_HEX_AMP') b-or constant('JSON_HEX_APOS') b-or constant('JSON_HEX_QUOT'))|raw }});
+    let savingStopped = false;
 
-    const docEditor = new DocsAPI.DocEditor("editor", {
-        width: "100%",
-        height: "100%",
-        type: "desktop",
-        document: {
-            fileType: "docx",
-            key: docKey,
-            title: filename,
-            url: "{{ documentFileUrl|e('js') }}"
-        },
-        editorConfig: {
-            lang: "ru",
-            callbackUrl: callbackUrl,
-            autosave: true,
-            autosaveInterval: 2,
-            customization: {
-                forcesave: true   // кнопка «Сохранить» в панели OnlyOffice — сразу шлёт callback
-            }
+    function stopSaving() {
+        savingStopped = true;
+        clearInterval(heartbeatTimer);
+        document.querySelector('.save-btn').disabled = true;
+        const message = document.getElementById('save-error');
+        message.textContent = 'Сохранение остановлено. Не удалось продлить сессию редактора. Проверьте подключение и доступ к документу.';
+        message.hidden = false;
+    }
+
+    async function renewSession() {
+        if (savingStopped) return;
+        try {
+            const response = await fetch(heartbeatUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ _token: heartbeatToken }),
+                signal: AbortSignal.timeout(15000)
+            });
+            if (!response.ok || !(await response.json()).expires) throw new Error('Editor session expired');
+        } catch (error) {
+            stopSaving();
         }
+    }
+
+    const heartbeatTimer = setInterval(renewSession, 60000);
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) renewSession();
     });
 
     // ???
     // Сохранение при уходе со страницы (закрытие вкладки, переход, перезагрузка)
     window.addEventListener("beforeunload", function () {
-        navigator.sendBeacon(triggerSaveUrl, new Blob([JSON.stringify({ key: docKey })], { type: "application/json" }));
+        if (savingStopped) return;
+        navigator.sendBeacon(triggerSaveUrl, new Blob([JSON.stringify(saveRequest)], { type: "application/json" }));
     });
 
     document.querySelector('.save-btn').addEventListener('click', function () {
         // Сначала триггерим сохранение в OnlyOffice (как нажатие кнопки «Сохранить» в редакторе)
         fetch(triggerSaveUrl, {
             method: 'POST',
-            body: JSON.stringify({ key: docKey }),
+            body: JSON.stringify(saveRequest),
             headers: { 'Content-Type': 'application/json' }
+        }).then(function (response) {
+            if (!response.ok) throw new Error('OnlyOffice command failed');
+            return response.json();
+        }).then(async function (result) {
+            if (result.error !== 0 && result.error !== 4) throw new Error('OnlyOffice command failed');
+            for (let attempt = 0; attempt < 60; attempt++) {
+                const response = await fetch(saveStatusUrl + '?saveId=' + encodeURIComponent(result.saveId));
+                if (!response.ok) throw new Error('OnlyOffice command failed');
+                if ((await response.json()).saved) return;
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            throw new Error('OnlyOffice command failed');
         }).then(function () {
             return Swal.fire({ title: "Файл будет прикреплен к документу" });
         }).then(function () {
@@ -84,10 +111,9 @@
             var form = document.getElementById('save-file-to-document-form');
             if (form) form.submit();
         }).catch(function () {
-            if (documentId) {
-                var form = document.getElementById('save-file-to-document-form');
-                if (form) form.submit();
-            }
+            const message = document.getElementById('save-error');
+            message.textContent = 'Не удалось сохранить документ. Проверьте подключение и доступ к документу.';
+            message.hidden = false;
         });
     });
 </script>

@@ -12,7 +12,7 @@
     {# Обложка #}
     {% if post.coverImageName %}
         <div class="post-card-cover">
-            <img src="/uploads/posts/{{ post.id }}/{{ post.coverImageName }}" alt="" class="w-100" style="max-height:320px;object-fit:cover">
+            <img src="{{ path('app_post_cover', {id: post.id}) }}" alt="" class="w-100" style="max-height:320px;object-fit:cover">
         </div>
     {% endif %}
 

@@ -220,22 +220,27 @@
 
             <div class="d-flex gap-2 flex-wrap mb-0">
                 <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="_token" value="{{ csrf_token('contract_application_update_' ~ application.id) }}">
                     <input type="hidden" name="status" value="new">
                     <button type="submit" class="btn btn-sm {{ application.status == 'new' ? 'btn-secondary' : 'btn-outline-secondary' }}">Новая</button>
                 </form>
                 <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="_token" value="{{ csrf_token('contract_application_update_' ~ application.id) }}">
                     <input type="hidden" name="status" value="in_review">
                     <button type="submit" class="btn btn-sm {{ application.status == 'in_review' ? 'btn-warning' : 'btn-outline-warning' }}">На проверке</button>
                 </form>
                 <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="_token" value="{{ csrf_token('contract_application_update_' ~ application.id) }}">
                     <input type="hidden" name="status" value="contract_sent">
                     <button type="submit" class="btn btn-sm {{ application.status == 'contract_sent' ? 'btn-info' : 'btn-outline-info' }}">Договор отправлен</button>
                 </form>
                 <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="_token" value="{{ csrf_token('contract_application_update_' ~ application.id) }}">
                     <input type="hidden" name="status" value="signed">
                     <button type="submit" class="btn btn-sm {{ application.status == 'signed' ? 'btn-success' : 'btn-outline-success' }}">Подписан</button>
                 </form>
                 <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}" class="d-inline">
+                    <input type="hidden" name="_token" value="{{ csrf_token('contract_application_update_' ~ application.id) }}">
                     <input type="hidden" name="status" value="rejected">
                     <button type="submit" class="btn btn-sm {{ application.status == 'rejected' ? 'btn-danger' : 'btn-outline-danger' }}">Отклонена</button>
                 </form>
@@ -250,6 +255,7 @@
         </div>
         <div class="card-body">
             <form method="post" action="{{ path('app_contract_application_update', {id: application.id}) }}">
+                <input type="hidden" name="_token" value="{{ csrf_token('contract_application_update_' ~ application.id) }}">
                 <div class="mb-3">
                     <textarea name="adminComment" class="form-control" rows="3">{{ application.adminComment }}</textarea>
                 </div>

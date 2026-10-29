@@ -6,32 +6,44 @@ namespace App\Service\SpaApi\Post;
 
 use App\Entity\Post\File as PostFile;
 use App\Entity\Post\Post;
-use Liip\ImagineBundle\Imagine\Cache\CacheManager;
+use App\Security\Voter\PostVoter;
+use Symfony\Component\HttpFoundation\UriSigner;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 
 /**
- * Генерация URL превью (400×400) для изображений постов через LiipImagine.
- *
- * storageKey — путь относительно data_root лоадера post_uploads
- * (%private_upload_dir_posts%), т.е. {postId}/{имя файла}.
+ * Изображения постов выдаются только после проверки видимости объявления.
  */
 final class PostImagePreviewUrlGenerator
 {
-    private const FILTER = 'post_image_preview';
+    public const URL_TTL = 3600;
+
     private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
 
     public function __construct(
-        private readonly CacheManager $imagineCacheManager,
+        private readonly UrlGeneratorInterface $urlGenerator,
+        private readonly UriSigner $uriSigner,
+        private readonly AuthorizationCheckerInterface $authorizationChecker,
     ) {
     }
 
     public function getCoverPreviewUrl(Post $post): ?string
+    {
+        return $this->getCoverImageUrl($post, true);
+    }
+
+    public function getCoverImageUrl(Post $post, bool $thumbnail = false): ?string
     {
         $name = $post->getCoverImageName();
         if ($name === null || $name === '' || !$this->isImageName($name)) {
             return null;
         }
 
-        return $this->buildPreviewUrl($this->buildStorageKey($post->getId(), $name));
+        return $this->sign($post, 'spa_api_post_images_cover', [
+            'id' => $post->getId(),
+            'thumbnail' => $thumbnail ? 1 : 0,
+        ]);
     }
 
     public function getFilePreviewUrl(PostFile $file): ?string
@@ -41,12 +53,9 @@ final class PostImagePreviewUrlGenerator
             return null;
         }
 
-        $postId = $file->getPost()?->getId();
-        $storageKey = str_contains($filePath, '/')
-            ? $filePath
-            : $this->buildStorageKey($postId, $filePath);
-
-        return $this->buildPreviewUrl($storageKey);
+        return $this->sign($file->getPost(), 'spa_api_post_images_file', [
+            'fileId' => $file->getId(),
+        ]);
     }
 
     public function isImageName(string $name): bool
@@ -56,30 +65,15 @@ final class PostImagePreviewUrlGenerator
         return in_array($ext, self::IMAGE_EXTENSIONS, true);
     }
 
-    private function buildStorageKey(?int $postId, string $name): string
+    private function sign(?Post $post, string $route, array $parameters): string
     {
-        return $postId . '/' . $name;
-    }
-
-    private function buildPreviewUrl(string $storageKey): string
-    {
-        return $this->toRelativePath(
-            $this->imagineCacheManager->getBrowserPath($storageKey, self::FILTER),
-        );
-    }
-
-    private function toRelativePath(string $url): string
-    {
-        // Keep URLs same-origin on the client to avoid CORS caused by absolute host:port generation.
-        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
-            $parts = parse_url($url);
-            $path = $parts['path'] ?? '/';
-            $query = isset($parts['query']) ? '?' . $parts['query'] : '';
-            $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
-
-            return $path . $query . $fragment;
+        if (!$this->authorizationChecker->isGranted(PostVoter::VIEW, $post)) {
+            throw new AccessDeniedException();
         }
 
-        return $url;
+        return $this->uriSigner->sign(
+            $this->urlGenerator->generate($route, $parameters, UrlGeneratorInterface::ABSOLUTE_URL),
+            time() + self::URL_TTL,
+        );
     }
 }

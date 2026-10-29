@@ -93,6 +93,7 @@
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
+                                _token: "{{ csrf_token('executors_signature')|e('js') }}",
                                 id: documentId,
                                 page: pageNum,
                                 x: pdfX,
