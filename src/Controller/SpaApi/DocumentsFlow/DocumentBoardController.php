@@ -100,11 +100,20 @@ final class DocumentBoardController extends AbstractController
     }
 
     #[Route('/{id}', name: 'spa_api_documents_flow_boards_view', requirements: ['id' => '\d+'], methods: ['GET'])]
-    public function view(int $id, #[CurrentUser] ?User $user): JsonResponse
+    public function view(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
         $board = $this->visibleBoard($id, $user);
         if ($board instanceof JsonResponse) {
             return $board;
+        }
+
+        if ($request->query->getBoolean('access')) {
+            return $this->json([
+                'board' => [
+                    'me' => $this->presenter->presentUserBrief($user),
+                    'canManage' => $user instanceof User && $this->canManage($board, $user),
+                ],
+            ]);
         }
 
         return $this->json(['board' => $this->presentDetail($board, $user)]);
