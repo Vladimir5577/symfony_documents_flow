@@ -14,6 +14,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'file_group_file')]
 #[ORM\Index(name: 'idx_file_group_file_group', columns: ['group_id'])]
 #[ORM\Index(name: 'idx_file_group_file_folder', columns: ['folder_id'])]
+#[ORM\Index(name: 'idx_file_group_file_uploaded_by', columns: ['uploaded_by_id'])]
 class FileGroupFile
 {
     #[ORM\Id]
@@ -37,6 +38,11 @@ class FileGroupFile
 
     #[ORM\Column]
     private int $size;
+
+    /** Кто загрузил. У файла создателя группы пусто: у него и так полная запись. */
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'uploaded_by_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?User $uploadedBy = null;
 
     /** @var Collection<int, User> */
     #[ORM\ManyToMany(targetEntity: User::class)]
@@ -87,6 +93,16 @@ class FileGroupFile
     public function getStoredName(): string
     {
         return $this->storedName;
+    }
+
+    public function getUploadedBy(): ?User
+    {
+        return $this->uploadedBy;
+    }
+
+    public function setUploadedBy(?User $user): void
+    {
+        $this->uploadedBy = $user;
     }
 
     public function getSize(): int

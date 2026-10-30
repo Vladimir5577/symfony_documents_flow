@@ -34,6 +34,13 @@ class FileGroup
     #[ORM\InverseJoinColumn(name: 'user_id', referencedColumnName: 'id', onDelete: 'CASCADE')]
     private Collection $members;
 
+    /** @var Collection<int, User> */
+    #[ORM\ManyToMany(targetEntity: User::class)]
+    #[ORM\JoinTable(name: 'file_group_uploader')]
+    #[ORM\JoinColumn(name: 'group_id', referencedColumnName: 'id', onDelete: 'CASCADE')]
+    #[ORM\InverseJoinColumn(name: 'user_id', referencedColumnName: 'id', onDelete: 'CASCADE')]
+    private Collection $uploaders;
+
     /** @var Collection<int, FileGroupFolder> */
     #[ORM\OneToMany(mappedBy: 'group', targetEntity: FileGroupFolder::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $folders;
@@ -50,6 +57,7 @@ class FileGroup
         $this->owner = $owner;
         $this->name = $name;
         $this->members = new ArrayCollection();
+        $this->uploaders = new ArrayCollection();
         $this->folders = new ArrayCollection();
         $this->files = new ArrayCollection();
         $this->createdAt = new \DateTimeImmutable();
@@ -91,6 +99,25 @@ class FileGroup
     public function removeMember(User $user): void
     {
         $this->members->removeElement($user);
+        $this->uploaders->removeElement($user);
+    }
+
+    /** @return Collection<int, User> */
+    public function getUploaders(): Collection
+    {
+        return $this->uploaders;
+    }
+
+    public function addUploader(User $user): void
+    {
+        if ($this->members->contains($user) && !$this->uploaders->contains($user)) {
+            $this->uploaders->add($user);
+        }
+    }
+
+    public function removeUploader(User $user): void
+    {
+        $this->uploaders->removeElement($user);
     }
 
     /** @return Collection<int, FileGroupFolder> */

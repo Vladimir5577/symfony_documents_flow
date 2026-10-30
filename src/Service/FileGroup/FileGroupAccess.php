@@ -25,6 +25,11 @@ final class FileGroupAccess
         return $this->isOwner($group, $user);
     }
 
+    public function canUpload(FileGroup $group, User $user): bool
+    {
+        return $this->isOwner($group, $user) || $group->getUploaders()->contains($user);
+    }
+
     public function canWrite(FileGroupFile $file, User $user): bool
     {
         $group = $file->getGroup();
@@ -32,7 +37,11 @@ final class FileGroupAccess
             return false;
         }
 
-        return $this->isOwner($group, $user) || $file->getWriters()->contains($user);
+        $author = $file->getUploadedBy();
+
+        return $this->isOwner($group, $user)
+            || ($author instanceof User && $author->getId() === $user->getId())
+            || $file->getWriters()->contains($user);
     }
 
     /** @return array{id: int, fullName: string} */

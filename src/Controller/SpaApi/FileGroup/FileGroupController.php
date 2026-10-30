@@ -149,6 +149,11 @@ final class FileGroupController extends AbstractController
             return $this->json(['error' => SpaApiError::FILE_GROUP_OWNER_NOT_MEMBER], Response::HTTP_BAD_REQUEST);
         }
         $group->addMember($member);
+        foreach ($group->getFiles() as $file) {
+            if ($file->getUploadedBy()?->getId() === $member->getId()) {
+                $file->addWriter($member);
+            }
+        }
         $this->em->flush();
 
         return $this->respond($group, $user, (int) ($body['folderId'] ?? 0));
@@ -175,6 +180,35 @@ final class FileGroupController extends AbstractController
         $this->em->flush();
 
         return $this->respond($group, $user, $request->query->getInt('folderId'));
+    }
+
+    #[Route('/{groupId}/members/{userId}', name: 'spa_api_file_groups_member_upload', requirements: ['groupId' => '\d+', 'userId' => '\d+'], methods: ['PATCH'])]
+    public function memberUpload(int $groupId, int $userId, Request $request, #[CurrentUser] ?User $user): JsonResponse
+    {
+        $user = $this->user($user);
+        $group = $this->manageable($groupId, $user);
+        if ($group instanceof JsonResponse) {
+            return $group;
+        }
+        $member = $this->member($group, $userId);
+        if (!$member instanceof User) {
+            return $this->json(['error' => SpaApiError::FILE_GROUP_MEMBER_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+        $body = $this->jsonBody($request);
+        if ($body instanceof JsonResponse) {
+            return $body;
+        }
+        if (!is_bool($body['canUpload'] ?? null)) {
+            return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
+        }
+        if ($body['canUpload']) {
+            $group->addUploader($member);
+        } else {
+            $group->removeUploader($member);
+        }
+        $this->em->flush();
+
+        return $this->respond($group, $user, (int) ($body['folderId'] ?? 0));
     }
 
     #[Route('/{groupId}/folders', name: 'spa_api_file_groups_folder_create', requirements: ['groupId' => '\d+'], methods: ['POST'])]
@@ -293,9 +327,12 @@ final class FileGroupController extends AbstractController
     public function upload(int $groupId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
         $user = $this->user($user);
-        $group = $this->manageable($groupId, $user);
+        $group = $this->readable($groupId, $user);
         if ($group instanceof JsonResponse) {
             return $group;
+        }
+        if (!$this->access->canUpload($group, $user)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
         $upload = $request->files->get('file');
         if (!$upload instanceof UploadedFile || !$upload->isValid()) {
@@ -324,6 +361,10 @@ final class FileGroupController extends AbstractController
             $file = $this->storage->store($group, $upload, $name, $folder);
         } catch (\RuntimeException) {
             return $this->json(['error' => SpaApiError::FILE_GROUP_EDITOR_FAILED], Response::HTTP_BAD_GATEWAY);
+        }
+        if (!$this->access->isOwner($group, $user)) {
+            $file->setUploadedBy($user);
+            $file->addWriter($user);
         }
         $this->em->persist($file);
         $this->em->flush();
@@ -445,6 +486,13 @@ final class FileGroupController extends AbstractController
             }
             $wanted[$memberId] = $member;
         }
+        $author = $file->getUploadedBy();
+        if ($author instanceof User) {
+            $authorMember = $this->member($group, (int) $author->getId());
+            if ($authorMember instanceof User) {
+                $wanted[(int) $authorMember->getId()] = $authorMember;
+            }
+        }
         foreach ($file->getWriters()->toArray() as $writer) {
             $writerId = (int) $writer->getId();
             if (!isset($wanted[$writerId])) {
@@ -557,12 +605,14 @@ final class FileGroupController extends AbstractController
                 $writers[] = $this->access->presentUser($writer);
             }
             usort($writers, static fn (array $a, array $b): int => strcmp(mb_strtolower($a['fullName']), mb_strtolower($b['fullName'])));
+            $author = $file->getUploadedBy();
             $files[] = [
                 'id' => (int) $file->getId(),
                 'name' => $file->getOriginalName(),
                 'size' => $file->getSize(),
                 'canWrite' => $this->access->canWrite($file, $user),
                 'folderId' => $file->getFolder() !== null ? (int) $file->getFolder()->getId() : null,
+                'authorId' => $author instanceof User ? (int) $author->getId() : null,
                 'writers' => $writers,
             ];
         }
@@ -571,7 +621,9 @@ final class FileGroupController extends AbstractController
         usort($files, $byName);
         $members = [];
         foreach ($group->getMembers() as $member) {
-            $members[] = $this->access->presentUser($member);
+            $row = $this->access->presentUser($member);
+            $row['canUpload'] = $group->getUploaders()->contains($member);
+            $members[] = $row;
         }
         usort($members, static fn (array $a, array $b): int => strcmp(mb_strtolower($a['fullName']), mb_strtolower($b['fullName'])));
 
@@ -580,6 +632,7 @@ final class FileGroupController extends AbstractController
                 'id' => (int) $group->getId(),
                 'name' => $group->getName(),
                 'isOwner' => $this->access->isOwner($group, $user),
+                'canUpload' => $this->access->canUpload($group, $user),
                 'owner' => $this->access->presentUser($group->getOwner()),
                 'createdAt' => $group->getCreatedAt()->format(\DateTimeInterface::ATOM),
             ],
