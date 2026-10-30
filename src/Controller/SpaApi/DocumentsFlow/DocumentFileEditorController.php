@@ -715,7 +715,8 @@ final class DocumentFileEditorController extends AbstractController
 
     private function signFile(string $purpose, int $documentId, int $fileId, string $key): string
     {
-        return hash_hmac('sha256', $purpose . "\n" . $documentId . "\n" . $fileId . "\n" . $key, $this->appSecret);
+        // Тип в подписи: тот же HMAC с id закупки иначе открывает этот файл.
+        return hash_hmac('sha256', "documents-flow\n" . $purpose . "\n" . $documentId . "\n" . $fileId . "\n" . $key, $this->appSecret);
     }
 
     private function markAck(int $fileId, string $saveId): void
