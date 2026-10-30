@@ -7,7 +7,9 @@ namespace App\Controller\SpaApi\Inventory;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Inventory\NomenclatureItem;
 use App\Entity\User\User;
+use App\Repository\Inventory\ItemCategoryRepository;
 use App\Repository\Inventory\NomenclatureItemRepository;
+use App\Service\Inventory\CategoryTree;
 use App\Service\Inventory\InventoryAccessResolver;
 use App\Service\Inventory\ItemFilterFactory;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
@@ -59,6 +61,7 @@ final class ExportController extends AbstractController
 
     public function __construct(
         private readonly NomenclatureItemRepository $itemRepository,
+        private readonly ItemCategoryRepository $categoryRepository,
         private readonly InventoryAccessResolver $accessResolver,
         private readonly ItemFilterFactory $filterFactory,
     ) {
@@ -85,13 +88,13 @@ final class ExportController extends AbstractController
 
         $items = $this->itemRepository->findFiltered($scope, $filters, self::EXPORT_LIMIT);
 
-        return $this->streamXlsx($this->build($items));
+        return $this->streamXlsx($this->build($items, $this->categoryRepository->loadTree()));
     }
 
     /**
      * @param NomenclatureItem[] $items
      */
-    private function build(array $items): Spreadsheet
+    private function build(array $items, CategoryTree $categories): Spreadsheet
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -114,7 +117,10 @@ final class ExportController extends AbstractController
             $sheet->setCellValueExplicit([1, $row], (string) $item->getId(), DataType::TYPE_NUMERIC);
             $this->text($sheet, 2, $row, $item->getInventoryNumber());
             $this->text($sheet, 3, $row, $item->getName());
-            $this->text($sheet, 4, $row, $item->getCategory()?->getName());
+            // Полный путь, как у организации: «Мини ПК» без «Оргтехника / ПК» в таблице
+            // неотличимо от одноимённой подкатегории в другой ветке.
+            $categoryId = $item->getCategory()?->getId();
+            $this->text($sheet, 4, $row, $categoryId !== null ? $categories->path((int) $categoryId) : null);
             $this->text($sheet, 5, $row, $organization?->getPath());
             $this->text($sheet, 6, $row, $item->getSerialNumber());
             $this->text($sheet, 7, $row, $item->getStatus()->getLabel());

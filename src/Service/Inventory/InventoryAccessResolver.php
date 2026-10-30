@@ -7,6 +7,7 @@ namespace App\Service\Inventory;
 use App\Entity\Inventory\InventoryAccess;
 use App\Entity\User\User;
 use App\Repository\Inventory\InventoryAccessRepository;
+use App\Repository\Inventory\ItemCategoryRepository;
 use App\Repository\Organization\OrganizationRepository;
 use Symfony\Bundle\SecurityBundle\Security;
 
@@ -22,6 +23,7 @@ final class InventoryAccessResolver
     public function __construct(
         private readonly InventoryAccessRepository $accessRepository,
         private readonly OrganizationRepository $organizationRepository,
+        private readonly ItemCategoryRepository $categoryRepository,
         private readonly Security $security,
     ) {
     }
@@ -79,7 +81,21 @@ final class InventoryAccessResolver
         }
 
         $adminOrgIds = array_values(array_unique($adminOrgIds));
-        foreach ($categoryOrgIds as $categoryId => $orgIds) {
+
+        // Ответственный за «ПК» отвечает и за «Мини ПК» в этой ветке: привязка раскрывается
+        // на всю ветку. Дерево грузится, только если привязки по категориям вообще есть.
+        $expanded = [];
+        if ($categoryOrgIds !== []) {
+            $tree = $this->categoryRepository->loadTree();
+            foreach ($categoryOrgIds as $categoryId => $orgIds) {
+                foreach ($tree->subtreeIds($categoryId) as $descendantId) {
+                    $expanded[$descendantId] = array_merge($expanded[$descendantId] ?? [], $orgIds);
+                }
+            }
+        }
+
+        $categoryOrgIds = [];
+        foreach ($expanded as $categoryId => $orgIds) {
             $categoryOrgIds[$categoryId] = array_values(array_unique($orgIds));
         }
 

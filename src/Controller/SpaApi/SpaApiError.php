@@ -135,6 +135,10 @@ final class SpaApiError
     public const INVENTORY_CATEGORY_NAME_REQUIRED = 'inventory_category_name_required';
     public const INVENTORY_CATEGORY_NOT_ALLOWED = 'inventory_category_not_allowed';
     public const INVENTORY_CATEGORY_NOT_FOUND = 'inventory_category_not_found';
+    /** Родителем выбрана сама категория или её потомок — получился бы цикл. */
+    public const INVENTORY_CATEGORY_PARENT_INVALID = 'inventory_category_parent_invalid';
+    /** Вложенность превысила CategoryTree::MAX_DEPTH. */
+    public const INVENTORY_CATEGORY_TOO_DEEP = 'inventory_category_too_deep';
     public const INVENTORY_EXPORT_TOO_LARGE = 'inventory_export_too_large';
     public const INVENTORY_FILE_NOT_FOUND = 'inventory_file_not_found';
     public const INVENTORY_FILE_TOO_LARGE = 'inventory_file_too_large';

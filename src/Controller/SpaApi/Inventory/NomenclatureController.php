@@ -237,7 +237,9 @@ final class NomenclatureController extends AbstractController
     /**
      * Категория вида. Необязательна: неразобранный вид заводится без неё, как раньше
      * заводился без категории отдельный предмет. Неактивную ставить нельзя — она
-     * не предлагается в формах, и вид с ней стал бы невыбираемым.
+     * не предлагается в формах, и вид с ней стал бы невыбираемым. Неактивна она и
+     * тогда, когда отключён кто-то из предков. Вешать вид можно на любой уровень:
+     * и на «Мониторы», и на «Мини ПК» внутри «ПК».
      *
      * @return array{0: ItemCategory|null, 1: JsonResponse|null}
      */
@@ -256,7 +258,7 @@ final class NomenclatureController extends AbstractController
             )];
         }
 
-        if (!$category->isActive()) {
+        if (!$this->categoryRepository->loadTree()->isActive($categoryId)) {
             return [null, $this->json(
                 ['error' => SpaApiError::INVENTORY_CATEGORY_NOT_ALLOWED],
                 Response::HTTP_CONFLICT,

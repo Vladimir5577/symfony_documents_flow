@@ -10,6 +10,7 @@ use App\Repository\Inventory\InventoryAccessRepository;
 use App\Repository\Inventory\ItemCategoryRepository;
 use App\Repository\Inventory\NomenclatureItemRepository;
 use App\Repository\Inventory\NomenclatureRepository;
+use App\Service\Inventory\CategoryTree;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -21,6 +22,9 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 /**
  * Справочник категорий. Читают все админы инвентаризации (нужен для фильтров и форм),
  * правит только главный администратор.
+ *
+ * Категории вложенные. Список отдаётся плоским, в порядке обхода дерева, с parentId,
+ * уровнем и полным путём — дерево по нему фронт строит сам.
  */
 #[Route('/spa/api/inventory/categories')]
 #[IsGranted('ROLE_INVENTORY_MANAGER')]
@@ -35,17 +39,24 @@ final class CategoryController extends AbstractController
     ) {
     }
 
+    /**
+     * only_active отдаёт только то, что можно выбрать в форме: категория отключена
+     * сама или у неё отключён кто-то из предков — её нет.
+     */
     #[Route('', name: 'spa_api_inventory_categories_list', methods: ['GET'])]
     public function list(Request $request): JsonResponse
     {
         $onlyActive = $request->query->getBoolean('only_active');
+        $tree = $this->categoryRepository->loadTree();
 
-        return $this->json([
-            'categories' => array_map(
-                fn (ItemCategory $category): array => $this->format($category),
-                $this->categoryRepository->findAllOrdered($onlyActive),
-            ),
-        ]);
+        $categories = [];
+        foreach ($tree->orderedIds() as $id) {
+            if (!$onlyActive || $tree->isActive($id)) {
+                $categories[] = $this->format($id, $tree);
+            }
+        }
+
+        return $this->json(['categories' => $categories]);
     }
 
     #[Route('', name: 'spa_api_inventory_categories_create', methods: ['POST'])]
@@ -57,22 +68,37 @@ final class CategoryController extends AbstractController
             return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
-        $name = trim((string) ($payload['name'] ?? ''));
+        $name = mb_substr(trim((string) ($payload['name'] ?? '')), 0, 128);
         if ($name === '') {
             return $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NAME_REQUIRED], Response::HTTP_BAD_REQUEST);
         }
 
-        if ($this->categoryRepository->findOneBy(['name' => $name]) !== null) {
+        [$parent, $parentError] = $this->resolveParent($payload['parentId'] ?? null);
+        if ($parentError !== null) {
+            return $parentError;
+        }
+
+        if ($parent !== null
+            && $this->categoryRepository->loadTree()->depth((int) $parent->getId()) + 1 > CategoryTree::MAX_DEPTH
+        ) {
+            return $this->tooDeep();
+        }
+
+        if ($this->categoryRepository->findSibling($name, $parent) !== null) {
             return $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NAME_EXISTS], Response::HTTP_CONFLICT);
         }
 
         $category = new ItemCategory();
-        $category->setName(mb_substr($name, 0, 128));
+        $category->setName($name);
+        $category->setParent($parent);
 
         $this->em->persist($category);
         $this->em->flush();
 
-        return $this->json(['category' => $this->format($category)], Response::HTTP_CREATED);
+        return $this->json(
+            ['category' => $this->format((int) $category->getId(), $this->categoryRepository->loadTree())],
+            Response::HTTP_CREATED,
+        );
     }
 
     #[Route('/{id}', name: 'spa_api_inventory_categories_update', requirements: ['id' => '\d+'], methods: ['PATCH'])]
@@ -89,22 +115,52 @@ final class CategoryController extends AbstractController
             return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
 
+        $name = $category->getName();
         if (array_key_exists('name', $payload)) {
-            $name = trim((string) $payload['name']);
+            $name = mb_substr(trim((string) $payload['name']), 0, 128);
             if ($name === '') {
                 return $this->json(
                     ['error' => SpaApiError::INVENTORY_CATEGORY_NAME_REQUIRED],
                     Response::HTTP_BAD_REQUEST,
                 );
             }
+        }
 
-            $duplicate = $this->categoryRepository->findOneBy(['name' => $name]);
-            if ($duplicate !== null && $duplicate->getId() !== $category->getId()) {
-                return $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NAME_EXISTS], Response::HTTP_CONFLICT);
+        // Перенос в другую ветку. Права ответственных и фильтры считаются по дереву
+        // на лету, поэтому вместе с категорией переезжает всё, что под ней, без
+        // единой правки позиций.
+        $parent = $category->getParent();
+        if (array_key_exists('parentId', $payload)) {
+            [$parent, $parentError] = $this->resolveParent($payload['parentId']);
+            if ($parentError !== null) {
+                return $parentError;
             }
 
-            $category->setName(mb_substr($name, 0, 128));
+            if ($parent !== null) {
+                $tree = $this->categoryRepository->loadTree();
+
+                // Родителем не может быть сама категория или её потомок: ветка
+                // замкнулась бы в кольцо и выпала из дерева.
+                if (in_array((int) $parent->getId(), $tree->subtreeIds($id), true)) {
+                    return $this->json(
+                        ['error' => SpaApiError::INVENTORY_CATEGORY_PARENT_INVALID],
+                        Response::HTTP_CONFLICT,
+                    );
+                }
+
+                // Переезжает ветка целиком, поэтому считается её высота, а не один уровень.
+                if ($tree->depth((int) $parent->getId()) + $tree->height($id) > CategoryTree::MAX_DEPTH) {
+                    return $this->tooDeep();
+                }
+            }
         }
+
+        if ($this->categoryRepository->findSibling($name, $parent, $id) !== null) {
+            return $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NAME_EXISTS], Response::HTTP_CONFLICT);
+        }
+
+        $category->setName($name);
+        $category->setParent($parent);
 
         if (array_key_exists('isActive', $payload)) {
             $category->setIsActive((bool) $payload['isActive']);
@@ -112,7 +168,7 @@ final class CategoryController extends AbstractController
 
         $this->em->flush();
 
-        return $this->json(['category' => $this->format($category)]);
+        return $this->json(['category' => $this->format($id, $this->categoryRepository->loadTree())]);
     }
 
     #[Route('/{id}', name: 'spa_api_inventory_categories_delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
@@ -125,17 +181,19 @@ final class CategoryController extends AbstractController
         }
 
         // Виды считаются отдельно от позиций: категория теперь висит на виде, и вид
-        // без единой позиции всё равно держит внешний ключ. Без этой проверки наружу
-        // ушла бы сырая ошибка RESTRICT вместо внятного 409.
+        // без единой позиции всё равно держит внешний ключ. Подкатегории держат свой.
+        // Без этих проверок наружу ушла бы сырая ошибка RESTRICT вместо внятного 409.
         $itemsCount = $this->itemRepository->countByCategory($category);
         $nomenclatureCount = $this->nomenclatureRepository->countByCategory($category);
         $responsibleCount = $this->accessRepository->count(['category' => $category]);
-        if ($itemsCount > 0 || $nomenclatureCount > 0 || $responsibleCount > 0) {
+        $childrenCount = $this->categoryRepository->count(['parent' => $category]);
+        if ($itemsCount > 0 || $nomenclatureCount > 0 || $responsibleCount > 0 || $childrenCount > 0) {
             return $this->json([
                 'error' => SpaApiError::INVENTORY_CATEGORY_HAS_ITEMS,
                 'itemsCount' => $itemsCount,
                 'nomenclatureCount' => $nomenclatureCount,
                 'responsibleCount' => $responsibleCount,
+                'childrenCount' => $childrenCount,
             ], Response::HTTP_CONFLICT);
         }
 
@@ -146,14 +204,49 @@ final class CategoryController extends AbstractController
     }
 
     /**
-     * @return array{id: int|null, name: string, isActive: bool}
+     * Родитель из тела запроса. null или 0 — корневая категория.
+     *
+     * @return array{0: ItemCategory|null, 1: JsonResponse|null}
      */
-    private function format(ItemCategory $category): array
+    private function resolveParent(mixed $rawId): array
+    {
+        $parentId = (int) ($rawId ?? 0);
+        if ($parentId <= 0) {
+            return [null, null];
+        }
+
+        $parent = $this->categoryRepository->find($parentId);
+        if (!$parent instanceof ItemCategory) {
+            return [null, $this->json(['error' => SpaApiError::INVENTORY_CATEGORY_NOT_FOUND], Response::HTTP_NOT_FOUND)];
+        }
+
+        return [$parent, null];
+    }
+
+    private function tooDeep(): JsonResponse
+    {
+        return $this->json([
+            'error' => SpaApiError::INVENTORY_CATEGORY_TOO_DEEP,
+            'maxDepth' => CategoryTree::MAX_DEPTH,
+        ], Response::HTTP_CONFLICT);
+    }
+
+    /**
+     * isActive — флаг самой категории, его и переключают. available — можно ли её
+     * выбрать в форме с учётом предков: отключённая «Оргтехника» гасит всю ветку.
+     *
+     * @return array{id: int, name: string, parentId: int|null, path: string, level: int, isActive: bool, available: bool}
+     */
+    private function format(int $id, CategoryTree $tree): array
     {
         return [
-            'id' => $category->getId(),
-            'name' => $category->getName(),
-            'isActive' => $category->isActive(),
+            'id' => $id,
+            'name' => $tree->name($id),
+            'parentId' => $tree->parentId($id),
+            'path' => $tree->path($id),
+            'level' => $tree->depth($id),
+            'isActive' => $tree->isOwnActive($id),
+            'available' => $tree->isActive($id),
         ];
     }
 }
