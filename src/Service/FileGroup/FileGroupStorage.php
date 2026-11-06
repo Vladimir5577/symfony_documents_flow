@@ -7,9 +7,18 @@ namespace App\Service\FileGroup;
 use App\Entity\FileGroup\FileGroup;
 use App\Entity\FileGroup\FileGroupFile;
 use App\Entity\FileGroup\FileGroupFolder;
+use Aws\S3\Exception\S3Exception;
+use Aws\S3\S3Client;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
+/**
+ * Хранение файлов групп.
+ *
+ * Этап 0→1: S3-клиент и бакет уже подключены; пока байты ещё на диске
+ * (PRIVATE_UPLOAD_DIR/file_groups). Следующий шаг — put/get/delete в MinIO
+ * с dual-read со старого диска.
+ */
 final class FileGroupStorage
 {
     public const MAX_BYTES = 10 * 1024 * 1024;
@@ -34,7 +43,46 @@ final class FileGroupStorage
     public function __construct(
         #[Autowire('%private_upload_dir%')]
         private readonly string $uploadDir,
+        private readonly S3Client $s3,
+        private readonly string $bucket,
     ) {
+    }
+
+    /** Имя бакета MinIO (для миграции и проверок). */
+    public function bucket(): string
+    {
+        return $this->bucket;
+    }
+
+    /** Ключ объекта: {groupId}/{hex}.{ext} — как у закупок, без исходного имени. */
+    public function objectKey(FileGroup $group, string $originalName): string
+    {
+        $ext = self::extension($originalName);
+        if (!preg_match('/^[a-z0-9]{1,20}$/', $ext)) {
+            $ext = '';
+        }
+
+        return sprintf(
+            '%d/%s%s',
+            (int) $group->getId(),
+            bin2hex(random_bytes(16)),
+            $ext === '' ? '' : '.' . $ext,
+        );
+    }
+
+    /** Есть ли объект в бакете — dual-read и CLI миграции опираются на это. */
+    public function hasObject(string $storageKey): bool
+    {
+        try {
+            $this->s3->headObject([
+                'Bucket' => $this->bucket,
+                'Key' => $storageKey,
+            ]);
+
+            return true;
+        } catch (S3Exception) {
+            return false;
+        }
     }
 
     public static function extension(string $name): string
