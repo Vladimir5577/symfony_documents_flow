@@ -21,6 +21,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
@@ -124,15 +125,33 @@ final class FileGroupEditorController extends AbstractController
             return $this->json(['error' => SpaApiError::FILE_GROUP_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
         $file = $this->em->find(FileGroupFile::class, $fileId);
-        $path = $file instanceof FileGroupFile && $file->getGroup()->getId() === $groupId
-            ? $this->storage->path($file)
-            : null;
-        if ($path === null || !is_file($path)) {
+        if (!$file instanceof FileGroupFile || $file->getGroup()->getId() !== $groupId) {
+            return $this->json(['error' => SpaApiError::FILE_GROUP_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+        $located = $this->storage->locate($file);
+        if ($located === null) {
             return $this->json(['error' => SpaApiError::FILE_GROUP_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $response = new BinaryFileResponse($path);
-        $response->headers->set('Content-Type', FileGroupStorage::mime($file->getStoredName()));
+        if ($located['source'] === 's3') {
+            $object = $located['object'];
+            $stream = $object['Body'];
+            $response = new StreamedResponse(static function () use ($stream): void {
+                while (!$stream->eof()) {
+                    echo $stream->read(8192);
+                }
+            });
+            if ($object['ContentLength'] !== null) {
+                $response->headers->set('Content-Length', (string) $object['ContentLength']);
+            }
+            $response->headers->set(
+                'Content-Type',
+                (string) ($object['ContentType'] ?? FileGroupStorage::mime($file->getStoredName())),
+            );
+        } else {
+            $response = new BinaryFileResponse($located['path']);
+            $response->headers->set('Content-Type', FileGroupStorage::mime($file->getStoredName()));
+        }
         $response->headers->set('Cache-Control', 'no-store');
 
         return $response;
@@ -184,8 +203,9 @@ final class FileGroupEditorController extends AbstractController
         if (strlen($bytes) > FileGroupStorage::MAX_BYTES) {
             return false;
         }
-        $path = $this->storage->path($file);
-        if (!is_file($path) || file_put_contents($path, $bytes) === false) {
+        try {
+            $this->storage->replace($file, $bytes);
+        } catch (\Throwable) {
             return false;
         }
         $file->setSize(strlen($bytes));

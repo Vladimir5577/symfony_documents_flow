@@ -16,10 +16,12 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
@@ -117,14 +119,10 @@ final class FileGroupController extends AbstractController
         if ($group instanceof JsonResponse) {
             return $group;
         }
-        $paths = [];
-        foreach ($group->getFiles() as $file) {
-            $paths[] = $this->storage->path($file);
-        }
-        $dir = $this->storage->directory($group);
+        $files = $group->getFiles()->toArray();
         $this->em->remove($group);
         $this->em->flush();
-        $this->storage->unlinkAll($paths, $dir);
+        $this->storage->deleteFiles($files, $group);
 
         return new JsonResponse(null, Response::HTTP_NO_CONTENT);
     }
@@ -385,10 +383,9 @@ final class FileGroupController extends AbstractController
             return $file;
         }
         $folderId = (int) ($file->getFolder()?->getId() ?? 0);
-        $path = $this->storage->path($file);
         $this->em->remove($file);
         $this->em->flush();
-        $this->storage->unlinkAll([$path]);
+        $this->storage->deleteFile($file);
 
         return $this->respond($group, $user, $request->query->getInt('folderId') ?: $folderId);
     }
@@ -436,17 +433,41 @@ final class FileGroupController extends AbstractController
         if ($file instanceof JsonResponse) {
             return $file;
         }
-        $path = $this->storage->path($file);
-        if (!is_file($path)) {
+        $located = $this->storage->locate($file);
+        if ($located === null) {
             return $this->json(['error' => SpaApiError::FILE_GROUP_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
-        $response = new BinaryFileResponse($path);
         $ext = FileGroupStorage::extension($file->getStoredName());
-        $response->headers->set('Content-Type', FileGroupStorage::mime($file->getStoredName()));
-        $response->setContentDisposition(
-            isset(FileGroupStorage::IMAGES[$ext]) ? ResponseHeaderBag::DISPOSITION_INLINE : ResponseHeaderBag::DISPOSITION_ATTACHMENT,
-            $file->getOriginalName(),
-        );
+        $disposition = isset(FileGroupStorage::IMAGES[$ext])
+            ? ResponseHeaderBag::DISPOSITION_INLINE
+            : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
+        $name = $file->getOriginalName();
+
+        if ($located['source'] === 's3') {
+            $object = $located['object'];
+            $stream = $object['Body'];
+            $response = new StreamedResponse(static function () use ($stream): void {
+                while (!$stream->eof()) {
+                    echo $stream->read(8192);
+                }
+            });
+            if ($object['ContentLength'] !== null) {
+                $response->headers->set('Content-Length', (string) $object['ContentLength']);
+            }
+            $response->headers->set(
+                'Content-Type',
+                (string) ($object['ContentType'] ?? FileGroupStorage::mime($file->getStoredName())),
+            );
+        } else {
+            $response = new BinaryFileResponse($located['path']);
+            $response->headers->set('Content-Type', FileGroupStorage::mime($file->getStoredName()));
+        }
+
+        $response->headers->set('Content-Disposition', HeaderUtils::makeDisposition(
+            $disposition,
+            $name,
+            preg_replace('/[^\x20-\x7e]|%/', '_', $name) ?? 'file',
+        ));
 
         return $response;
     }
@@ -680,11 +701,11 @@ final class FileGroupController extends AbstractController
     private function deleteFolderTree(FileGroup $group, FileGroupFolder $root): void
     {
         $ids = $this->folderIdsUnder($group, (int) $root->getId());
-        $paths = [];
+        $files = [];
         foreach ($group->getFiles() as $file) {
             $folderId = $file->getFolder()?->getId();
             if ($folderId !== null && isset($ids[$folderId])) {
-                $paths[] = $this->storage->path($file);
+                $files[] = $file;
                 $this->em->remove($file);
             }
         }
@@ -720,7 +741,7 @@ final class FileGroupController extends AbstractController
             }
         }
         $this->em->flush();
-        $this->storage->unlinkAll($paths);
+        $this->storage->deleteFiles($files);
     }
 
     /** @return array<int, true> */

@@ -53,26 +53,28 @@
 MinIO: **сначала объект, потом строка в БД** — при обратном сбое осталась бы
 строка в пустоту; так худшее — осиротевший объект.
 
-## Сейчас (этап 0)
+## Сейчас (этапы 0–2 + 4; проверено на стенде 2026-11-06)
 
 | Что | Где |
 |-----|-----|
-| Метаданные | Postgres (`file_group`, `file_group_folder`, `file_group_file`, …) |
-| Байты | диск `PRIVATE_UPLOAD_DIR/file_groups/{groupId}/{storedName}` |
-| DI MinIO | `FileGroupStorage` уже получает `S3Client` + `MINIO_FILE_GROUP_BUCKET` |
-| Хелперы | `objectKey()`, `hasObject()`, `bucket()` — задел под dual-read и CLI |
+| Метаданные | Postgres (`file_group_*`); `stored_name` = ключ объекта (VARCHAR 255) |
+| Новые байты | MinIO bucket `file-groups`, ключ `{groupId}/{hex}.{ext}` |
+| Старые байты | dual-read: сначала MinIO по ключу, иначе диск `…/file_groups/{groupId}/{storedName}` |
+| OnlyOffice save | `putObject` тем же ключом; если файл был только на диске — уезжает в бакет |
+| Удаление | `deleteObject` + unlink диска (best-effort) |
 
-Запись / чтение / удаление / OnlyOffice save пока идут **с диска**. Превью через
-imgproxy ещё нет.
+Смоук на стенде: открытие группы, загрузка / скачивание / удаление — OK.
+Превью через imgproxy ещё нет. CLI-миграции старых файлов ещё нет — dual-read держит
+их живыми.
 
 ## План перехода на MinIO
 
 Ветка: `feature/file-groups-minio`.
 
 1. **Инфра (готово)** — бакет, env, DI, хелперы ключа.
-2. **Storage API** — `putObject` / `getObject` / `deleteObject`; dual-read со старого диска.
+2. **Storage API (готово, проверено)** — `putObject` / dual-read / `deleteObject`; OnlyOffice `replace`.
 3. **Миграция** — CLI: диск → бакет, идемпотентно; потом выключить fallback.
-4. **OnlyOffice** — callback save пишет в тот же `storageKey` (в том же PR, что п.2).
+4. **OnlyOffice (готово вместе с п.2)** — callback save → тот же ключ в MinIO.
 5. **Превью (опционально)** — imgproxy URL для картинок в detail API.
 6. **Чистка** — убрать dual-read и локальные `uploads/file_groups/*`.
 
@@ -94,8 +96,8 @@ imgproxy ещё нет.
 1. Миграции таблиц `file_group*`.
 2. `MINIO_FILE_GROUP_BUCKET=file-groups` в окружении Symfony (см. `.env.example`).
 3. Бакет `file-groups` в MinIO (команда выше).
-4. Пока этап 0: каталог `PRIVATE_UPLOAD_DIR/file_groups` должен быть доступен
-   php-контейнеру на запись (как сейчас).
+4. Пока dual-read жив: каталог `PRIVATE_UPLOAD_DIR/file_groups` нужен для старых
+   файлов (чтение). Новые загрузки пишут только в MinIO.
 
 Realtime каталога нет: новый файл у соседа — после «Обновить» или перезахода.
 Уведомления о новых файлах в колокольчик — отдельная задача (общий
@@ -107,7 +109,7 @@ Realtime каталога нет: новый файл у соседа — пос
 
 Перечислено, чтобы не искать.
 
-    MinIO put/get в проде       этап 1–3 ветки feature/file-groups-minio
+    CLI миграции диск→MinIO     этап 3 ветки feature/file-groups-minio
     Превью imgproxy             этап 5
     Уведомления о новых файлах  отдельный план
     Realtime дерева             нет; кнопка «Обновить» на фронте

@@ -7,17 +7,17 @@ namespace App\Service\FileGroup;
 use App\Entity\FileGroup\FileGroup;
 use App\Entity\FileGroup\FileGroupFile;
 use App\Entity\FileGroup\FileGroupFolder;
+use Aws\Result;
 use Aws\S3\Exception\S3Exception;
 use Aws\S3\S3Client;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 /**
- * Хранение файлов групп.
+ * Файлы групп: новые — в MinIO, старые с диска читаются dual-read до CLI-миграции.
  *
- * Этап 0→1: S3-клиент и бакет уже подключены; пока байты ещё на диске
- * (PRIVATE_UPLOAD_DIR/file_groups). Следующий шаг — put/get/delete в MinIO
- * с dual-read со старого диска.
+ * В БД ключ лежит в `stored_name` (как у закупок storage_key). Порядок загрузки:
+ * сначала объект, потом строка — иначе UI покажет файл, который нельзя скачать.
  */
 final class FileGroupStorage
 {
@@ -48,13 +48,12 @@ final class FileGroupStorage
     ) {
     }
 
-    /** Имя бакета MinIO (для миграции и проверок). */
     public function bucket(): string
     {
         return $this->bucket;
     }
 
-    /** Ключ объекта: {groupId}/{hex}.{ext} — как у закупок, без исходного имени. */
+    /** Ключ объекта: {groupId}/{hex}.{ext} — без исходного имени. */
     public function objectKey(FileGroup $group, string $originalName): string
     {
         $ext = self::extension($originalName);
@@ -70,7 +69,6 @@ final class FileGroupStorage
         );
     }
 
-    /** Есть ли объект в бакете — dual-read и CLI миграции опираются на это. */
     public function hasObject(string $storageKey): bool
     {
         try {
@@ -102,46 +100,117 @@ final class FileGroupStorage
         return self::OFFICE[self::extension($name)][1] ?? null;
     }
 
-    public function path(FileGroupFile $file): string
+    /**
+     * Сначала объект в MinIO, потом сущность. `stored_name` = ключ объекта.
+     *
+     * @throws \RuntimeException при сбое putObject
+     */
+    public function store(FileGroup $group, UploadedFile $upload, string $originalName, ?FileGroupFolder $folder): FileGroupFile
     {
-        return $this->directory($file->getGroup()) . '/' . $file->getStoredName();
+        $size = (int) $upload->getSize();
+        $storageKey = $this->objectKey($group, $originalName);
+
+        try {
+            $this->s3->putObject([
+                'Bucket' => $this->bucket,
+                'Key' => $storageKey,
+                'SourceFile' => $upload->getPathname(),
+                'ContentType' => self::mime($originalName),
+            ]);
+        } catch (S3Exception $e) {
+            throw new \RuntimeException('file_group_upload', 0, $e);
+        }
+
+        return new FileGroupFile($group, $originalName, $storageKey, $size, $folder);
     }
 
     /**
-     * @param list<string> $paths
+     * Dual-read: MinIO по ключу, иначе старый диск.
+     *
+     * @return array{source: 's3', object: Result}|array{source: 'disk', path: string}|null
      */
-    public function unlinkAll(array $paths, ?string $directory = null): void
+    public function locate(FileGroupFile $file): ?array
     {
-        foreach ($paths as $path) {
-            if (is_file($path)) {
-                @unlink($path);
+        $key = $file->getStoredName();
+        if ($this->hasObject($key)) {
+            return [
+                'source' => 's3',
+                'object' => $this->s3->getObject([
+                    'Bucket' => $this->bucket,
+                    'Key' => $key,
+                ]),
+            ];
+        }
+
+        $path = $this->diskPath($file);
+        if (is_file($path)) {
+            return ['source' => 'disk', 'path' => $path];
+        }
+
+        return null;
+    }
+
+    /** Перезапись того же ключа (OnlyOffice save). Старый диск-only файл уезжает в MinIO. */
+    public function replace(FileGroupFile $file, string $bytes): void
+    {
+        $key = $file->getStoredName();
+        $this->s3->putObject([
+            'Bucket' => $this->bucket,
+            'Key' => $key,
+            'Body' => $bytes,
+            'ContentType' => self::mime($key),
+        ]);
+
+        $path = $this->diskPath($file);
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * Объекта/файла может уже не быть — строку всё равно удаляем.
+     *
+     * @param list<FileGroupFile> $files
+     */
+    public function deleteFiles(array $files, ?FileGroup $group = null): void
+    {
+        foreach ($files as $file) {
+            $this->deleteFile($file);
+        }
+        if ($group !== null) {
+            $dir = $this->directory($group);
+            if (is_dir($dir)) {
+                @rmdir($dir);
             }
         }
-        if ($directory !== null && is_dir($directory)) {
-            @rmdir($directory);
+    }
+
+    public function deleteFile(FileGroupFile $file): void
+    {
+        $key = $file->getStoredName();
+        try {
+            $this->s3->deleteObject([
+                'Bucket' => $this->bucket,
+                'Key' => $key,
+            ]);
+        } catch (S3Exception) {
+            // Уже нет или бакет недоступен — строку всё равно сносим.
         }
+
+        $path = $this->diskPath($file);
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
+    /** Старый локальный путь (dual-read / миграция). */
+    public function diskPath(FileGroupFile $file): string
+    {
+        return $this->directory($file->getGroup()) . '/' . $file->getStoredName();
     }
 
     public function directory(FileGroup $group): string
     {
         return rtrim($this->uploadDir, '/') . '/file_groups/' . $group->getId();
-    }
-
-    public function store(FileGroup $group, UploadedFile $upload, string $originalName, ?FileGroupFolder $folder): FileGroupFile
-    {
-        $size = (int) $upload->getSize();
-        $ext = self::extension($originalName);
-        if (!preg_match('/^[a-z0-9]{1,20}$/', $ext)) {
-            $ext = '';
-        }
-        $stored = bin2hex(random_bytes(16)) . ($ext === '' ? '' : '.' . $ext);
-        $dir = $this->directory($group);
-        // ponytail: /uploads/file_groups, не var/ проекта — www-data не создаёт каталоги в bind-mount. В MinIO, когда понадобятся превью.
-        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
-            throw new \RuntimeException('file_group_dir');
-        }
-        $upload->move($dir, $stored);
-
-        return new FileGroupFile($group, $originalName, $stored, $size, $folder);
     }
 }
