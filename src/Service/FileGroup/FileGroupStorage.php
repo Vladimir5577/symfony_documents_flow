@@ -203,6 +203,41 @@ final class FileGroupStorage
         }
     }
 
+    /**
+     * Диск → MinIO тем же ключом (`stored_name`). Идемпотентно: уже в бакете — skip.
+     *
+     * @return 'ok'|'skip'|'missing'
+     */
+    public function migrateFromDisk(FileGroupFile $file, bool $deleteDisk = false): string
+    {
+        $key = $file->getStoredName();
+        if ($this->hasObject($key)) {
+            return 'skip';
+        }
+
+        $path = $this->diskPath($file);
+        if (!is_file($path)) {
+            return 'missing';
+        }
+
+        try {
+            $this->s3->putObject([
+                'Bucket' => $this->bucket,
+                'Key' => $key,
+                'SourceFile' => $path,
+                'ContentType' => self::mime($file->getOriginalName()),
+            ]);
+        } catch (S3Exception $e) {
+            throw new \RuntimeException('file_group_migrate', 0, $e);
+        }
+
+        if ($deleteDisk) {
+            @unlink($path);
+        }
+
+        return 'ok';
+    }
+
     /** Старый локальный путь (dual-read / миграция). */
     public function diskPath(FileGroupFile $file): string
     {
