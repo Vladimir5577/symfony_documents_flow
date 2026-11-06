@@ -60,25 +60,40 @@ docker compose -f docker-compose.yml -f file_storage/docker-compose.yml up -d
 ```
 
 ### 4. Создать bucket (ОБЯЗАТЕЛЬНЫЙ разовый шаг)
-MinIO стартует пустым. Bucket для канбан-вложений нужно создать один раз —
-он сохранится в `minio_data` и переживёт перезапуски.
+MinIO стартует пустым. Нужные бакеты создают один раз — они сохранятся в
+`minio_data` и переживут перезапуски.
+
+Типичный набор для проекта (имена = env Symfony / Go):
+
+| Бакет | Env (Symfony / Go) | Модуль |
+|---|---|---|
+| `kanban` | `MINIO_BUCKET_NAME` / `MINIO_KANBAN_BUCKET` | вложения канбана (Go) |
+| `user` | `MINIO_USER_BUCKET` | аватары |
+| `inventory` | `MINIO_INVENTORY_BUCKET` | инвентаризация |
+| `purchase` | `MINIO_PURCHASE_BUCKET` | закупки |
+| `acknowledgment` | `MINIO_ACKNOWLEDGMENT_BUCKET` | ознакомление |
+| `file-groups` | `MINIO_FILE_GROUP_BUCKET` | общие файлы (переход с диска) |
 
 **Вариант А — через веб-консоль:**
 1. Открыть http://localhost:9001
 2. Войти (`MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` из `.env`)
-3. Buckets → Create Bucket → имя из `MINIO_KANBAN_BUCKET` (по умолчанию `kanban`)
+3. Buckets → Create Bucket → нужные имена из таблицы выше
 
 **Вариант Б — одной командой через `mc` в контейнере:**
 ```sh
 docker run --rm --network project-net \
   minio/mc:RELEASE.2025-09-07T16-13-09Z sh -c \
   "mc alias set local http://minio:9000 minioadmin minioadmin && \
-   mc mb -p local/kanban"
+   mc mb -p local/kanban && \
+   mc mb -p local/file-groups"
 ```
-(подставить свои логин/пароль/имя bucket из `.env`)
+(подставить свои логин/пароль; остальные бакеты — теми же `mc mb -p local/<имя>`)
 
 > Bucket создаётся вручную намеренно — авто-init-контейнер убран, чтобы не
 > плодить разовый `Exited`-контейнер при каждом `up`.
+
+Документация модуля общих файлов (статус миграции на MinIO):
+`dev_docks/spa_api/file_groups/Readme_file_groups.md`.
 
 ### 5. Проверка
 ```sh
@@ -117,7 +132,8 @@ curl -I http://localhost:8082/healthz   # nginx-кэш отвечает
 | Переменная | Назначение | Дефолт |
 |---|---|---|
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | креды MinIO | minioadmin |
-| `MINIO_KANBAN_BUCKET` | имя bucket для вложений | kanban |
+| `MINIO_KANBAN_BUCKET` | имя bucket для вложений канбана | kanban |
+| (Symfony) `MINIO_FILE_GROUP_BUCKET` | бакет общих файлов | `file-groups` |
 | `MINIO_CONSOLE_PORT` | порт веб-консоли (localhost) | 9001 |
 | `IMGPROXY_KEY` / `IMGPROXY_SALT` | подпись URL (прод) | пусто |
 | `IMGPROXY_ALLOW_UNSAFE_URL` | 1 = без подписи (только локалка) | 1 |
