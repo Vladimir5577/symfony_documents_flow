@@ -17,7 +17,6 @@ use App\Service\OnlyOffice\OnlyOfficeJwt;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -128,30 +127,24 @@ final class FileGroupEditorController extends AbstractController
         if (!$file instanceof FileGroupFile || $file->getGroup()->getId() !== $groupId) {
             return $this->json(['error' => SpaApiError::FILE_GROUP_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
-        $located = $this->storage->locate($file);
-        if ($located === null) {
+        $object = $this->storage->locate($file);
+        if ($object === null) {
             return $this->json(['error' => SpaApiError::FILE_GROUP_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        if ($located['source'] === 's3') {
-            $object = $located['object'];
-            $stream = $object['Body'];
-            $response = new StreamedResponse(static function () use ($stream): void {
-                while (!$stream->eof()) {
-                    echo $stream->read(8192);
-                }
-            });
-            if ($object['ContentLength'] !== null) {
-                $response->headers->set('Content-Length', (string) $object['ContentLength']);
+        $stream = $object['Body'];
+        $response = new StreamedResponse(static function () use ($stream): void {
+            while (!$stream->eof()) {
+                echo $stream->read(8192);
             }
-            $response->headers->set(
-                'Content-Type',
-                (string) ($object['ContentType'] ?? FileGroupStorage::mime($file->getStoredName())),
-            );
-        } else {
-            $response = new BinaryFileResponse($located['path']);
-            $response->headers->set('Content-Type', FileGroupStorage::mime($file->getStoredName()));
+        });
+        if ($object['ContentLength'] !== null) {
+            $response->headers->set('Content-Length', (string) $object['ContentLength']);
         }
+        $response->headers->set(
+            'Content-Type',
+            (string) ($object['ContentType'] ?? FileGroupStorage::mime($file->getStoredName())),
+        );
         $response->headers->set('Cache-Control', 'no-store');
 
         return $response;

@@ -11,10 +11,10 @@ use App\Entity\FileGroup\FileGroupFolder;
 use App\Entity\User\User;
 use App\Service\FileGroup\FileGroupAccess;
 use App\Service\FileGroup\FileGroupEditorSession;
+use App\Service\FileGroup\FileGroupImageUrlGenerator;
 use App\Service\FileGroup\FileGroupStorage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -32,6 +32,7 @@ final class FileGroupController extends AbstractController
         private readonly EntityManagerInterface $em,
         private readonly FileGroupAccess $access,
         private readonly FileGroupStorage $storage,
+        private readonly FileGroupImageUrlGenerator $imageUrls,
         private readonly FileGroupEditorSession $sessions,
     ) {
     }
@@ -122,7 +123,7 @@ final class FileGroupController extends AbstractController
         $files = $group->getFiles()->toArray();
         $this->em->remove($group);
         $this->em->flush();
-        $this->storage->deleteFiles($files, $group);
+        $this->storage->deleteFiles($files);
 
         return new JsonResponse(null, Response::HTTP_NO_CONTENT);
     }
@@ -433,8 +434,8 @@ final class FileGroupController extends AbstractController
         if ($file instanceof JsonResponse) {
             return $file;
         }
-        $located = $this->storage->locate($file);
-        if ($located === null) {
+        $object = $this->storage->locate($file);
+        if ($object === null) {
             return $this->json(['error' => SpaApiError::FILE_GROUP_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
         $ext = FileGroupStorage::extension($file->getStoredName());
@@ -442,27 +443,19 @@ final class FileGroupController extends AbstractController
             ? ResponseHeaderBag::DISPOSITION_INLINE
             : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
         $name = $file->getOriginalName();
-
-        if ($located['source'] === 's3') {
-            $object = $located['object'];
-            $stream = $object['Body'];
-            $response = new StreamedResponse(static function () use ($stream): void {
-                while (!$stream->eof()) {
-                    echo $stream->read(8192);
-                }
-            });
-            if ($object['ContentLength'] !== null) {
-                $response->headers->set('Content-Length', (string) $object['ContentLength']);
+        $stream = $object['Body'];
+        $response = new StreamedResponse(static function () use ($stream): void {
+            while (!$stream->eof()) {
+                echo $stream->read(8192);
             }
-            $response->headers->set(
-                'Content-Type',
-                (string) ($object['ContentType'] ?? FileGroupStorage::mime($file->getStoredName())),
-            );
-        } else {
-            $response = new BinaryFileResponse($located['path']);
-            $response->headers->set('Content-Type', FileGroupStorage::mime($file->getStoredName()));
+        });
+        if ($object['ContentLength'] !== null) {
+            $response->headers->set('Content-Length', (string) $object['ContentLength']);
         }
-
+        $response->headers->set(
+            'Content-Type',
+            (string) ($object['ContentType'] ?? FileGroupStorage::mime($file->getStoredName())),
+        );
         $response->headers->set('Content-Disposition', HeaderUtils::makeDisposition(
             $disposition,
             $name,
@@ -635,6 +628,7 @@ final class FileGroupController extends AbstractController
                 'folderId' => $file->getFolder() !== null ? (int) $file->getFolder()->getId() : null,
                 'authorId' => $author instanceof User ? (int) $author->getId() : null,
                 'writers' => $writers,
+                'previewUrl' => $this->imageUrls->previewUrl($file->getOriginalName(), $file->getStoredName()),
             ];
         }
         $byName = static fn (array $a, array $b): int => strcmp(mb_strtolower($a['name']), mb_strtolower($b['name']));

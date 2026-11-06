@@ -14,10 +14,9 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 /**
- * Файлы групп: новые — в MinIO, старые с диска читаются dual-read до CLI-миграции.
- *
- * В БД ключ лежит в `stored_name` (как у закупок storage_key). Порядок загрузки:
- * сначала объект, потом строка — иначе UI покажет файл, который нельзя скачать.
+ * Файлы групп в MinIO. В БД ключ — `stored_name`.
+ * Порядок загрузки: сначала объект, потом строка.
+ * CLI `migrateFromDisk` ещё читает старый диск на других стендах.
  */
 final class FileGroupStorage
 {
@@ -101,8 +100,6 @@ final class FileGroupStorage
     }
 
     /**
-     * Сначала объект в MinIO, потом сущность. `stored_name` = ключ объекта.
-     *
      * @throws \RuntimeException при сбое putObject
      */
     public function store(FileGroup $group, UploadedFile $upload, string $originalName, ?FileGroupFolder $folder): FileGroupFile
@@ -124,98 +121,71 @@ final class FileGroupStorage
         return new FileGroupFile($group, $originalName, $storageKey, $size, $folder);
     }
 
-    /**
-     * Dual-read: MinIO по ключу, иначе старый диск.
-     *
-     * @return array{source: 's3', object: Result}|array{source: 'disk', path: string}|null
-     */
-    public function locate(FileGroupFile $file): ?array
+    public function locate(FileGroupFile $file): ?Result
     {
-        $key = $file->getStoredName();
-        if ($this->hasObject($key)) {
-            return [
-                'source' => 's3',
-                'object' => $this->s3->getObject([
-                    'Bucket' => $this->bucket,
-                    'Key' => $key,
-                ]),
-            ];
+        try {
+            return $this->s3->getObject([
+                'Bucket' => $this->bucket,
+                'Key' => $file->getStoredName(),
+            ]);
+        } catch (S3Exception) {
+            return null;
         }
-
-        $path = $this->diskPath($file);
-        if (is_file($path)) {
-            return ['source' => 'disk', 'path' => $path];
-        }
-
-        return null;
     }
 
-    /** Перезапись того же ключа (OnlyOffice save). Старый диск-only файл уезжает в MinIO. */
+    /** Перезапись того же ключа (OnlyOffice save). */
     public function replace(FileGroupFile $file, string $bytes): void
     {
-        $key = $file->getStoredName();
         $this->s3->putObject([
             'Bucket' => $this->bucket,
-            'Key' => $key,
+            'Key' => $file->getStoredName(),
             'Body' => $bytes,
-            'ContentType' => self::mime($key),
+            'ContentType' => self::mime($file->getStoredName()),
         ]);
-
-        $path = $this->diskPath($file);
-        if (is_file($path)) {
-            @unlink($path);
-        }
     }
 
     /**
-     * Объекта/файла может уже не быть — строку всё равно удаляем.
+     * Объекта может уже не быть — строку всё равно удаляем.
      *
      * @param list<FileGroupFile> $files
      */
-    public function deleteFiles(array $files, ?FileGroup $group = null): void
+    public function deleteFiles(array $files): void
     {
         foreach ($files as $file) {
             $this->deleteFile($file);
-        }
-        if ($group !== null) {
-            $dir = $this->directory($group);
-            if (is_dir($dir)) {
-                @rmdir($dir);
-            }
         }
     }
 
     public function deleteFile(FileGroupFile $file): void
     {
-        $key = $file->getStoredName();
         try {
             $this->s3->deleteObject([
                 'Bucket' => $this->bucket,
-                'Key' => $key,
+                'Key' => $file->getStoredName(),
             ]);
         } catch (S3Exception) {
             // Уже нет или бакет недоступен — строку всё равно сносим.
         }
-
-        $path = $this->diskPath($file);
-        if (is_file($path)) {
-            @unlink($path);
-        }
     }
 
     /**
-     * Диск → MinIO тем же ключом (`stored_name`). Идемпотентно: уже в бакете — skip.
+     * Диск → MinIO тем же ключом. Идемпотентно. Для стендов, где CLI ещё не гоняли.
      *
      * @return 'ok'|'skip'|'missing'
      */
     public function migrateFromDisk(FileGroupFile $file, bool $deleteDisk = false): string
     {
         $key = $file->getStoredName();
+        $path = $this->diskPath($file);
+
         if ($this->hasObject($key)) {
+            if ($deleteDisk && is_file($path)) {
+                @unlink($path);
+            }
+
             return 'skip';
         }
 
-        $path = $this->diskPath($file);
         if (!is_file($path)) {
             return 'missing';
         }
@@ -238,14 +208,9 @@ final class FileGroupStorage
         return 'ok';
     }
 
-    /** Старый локальный путь (dual-read / миграция). */
+    /** Локальный путь только для CLI-миграции. */
     public function diskPath(FileGroupFile $file): string
     {
-        return $this->directory($file->getGroup()) . '/' . $file->getStoredName();
-    }
-
-    public function directory(FileGroup $group): string
-    {
-        return rtrim($this->uploadDir, '/') . '/file_groups/' . $group->getId();
+        return rtrim($this->uploadDir, '/') . '/file_groups/' . $file->getGroup()->getId() . '/' . $file->getStoredName();
     }
 }

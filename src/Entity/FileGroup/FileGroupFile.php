@@ -33,7 +33,7 @@ class FileGroupFile
     #[ORM\Column(length: 255)]
     private string $originalName;
 
-    /** Ключ объекта MinIO (`{groupId}/{hex}.{ext}`) или старое имя на диске. */
+    /** Ключ объекта MinIO (`{groupId}/{hex}.{ext}` или старый flat hex после CLI). */
     #[ORM\Column(length: 255)]
     private string $storedName;
 

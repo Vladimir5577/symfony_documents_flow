@@ -72,7 +72,7 @@ MinIO стартует пустым. Нужные бакеты создают о
 | `inventory` | `MINIO_INVENTORY_BUCKET` | инвентаризация |
 | `purchase` | `MINIO_PURCHASE_BUCKET` | закупки |
 | `acknowledgment` | `MINIO_ACKNOWLEDGMENT_BUCKET` | ознакомление |
-| `file-groups` | `MINIO_FILE_GROUP_BUCKET` | общие файлы (переход с диска) |
+| `file-groups` | `MINIO_FILE_GROUP_BUCKET` | общие файлы |
 
 **Вариант А — через веб-консоль:**
 1. Открыть http://localhost:9001

@@ -88,6 +88,11 @@ services:
             $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
             $minioPurchaseBucket: '%env(MINIO_PURCHASE_BUCKET)%'
 
+    App\Service\FileGroup\FileGroupImageUrlGenerator:
+        arguments:
+            $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
+            $bucket: '%env(MINIO_FILE_GROUP_BUCKET)%'
+
     App\Service\User\UserAvatarUrlGenerator:
         arguments:
             $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
