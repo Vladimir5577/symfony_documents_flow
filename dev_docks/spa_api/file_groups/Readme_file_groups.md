@@ -51,9 +51,12 @@
 | `catalog_changed` | папки/файлы/участники/writers | refetch detail (кнопка «Обновить» тоже) |
 | `group_deleted` | удаление группы | уводит со страницы группы |
 
+Deep-link каталога: `/file-groups/{id}?folder={folderId}&file={fileId}` — панель открывает папку, выделяет файл (как клик в дереве).
+
 Колокольчик:
-- `file_uploaded` → участники + владелец (актор исключён), ссылка `/file-groups/{id}`;
-- `member_added` → только приглашённый, ссылка `/file-groups/{id}`.
+- `file_uploaded` → участники + владелец (актор исключён), ссылка `/file-groups/{id}?folder={folderId}&file={fileId}` (без `folder`, если файл в корне);
+- `member_added` → только приглашённый, ссылка `/file-groups/{id}`;
+- `writer_granted` / `writer_revoked` → кому дали или сняли право записи на office-файл (`PUT .../writers`), та же deep-ссылка на файл.
 
 Пустой `NEXT_PUBLIC_MERCURE_URL` на фронте выключает live-каталог (как у канбана).
 

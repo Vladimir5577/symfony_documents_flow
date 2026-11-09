@@ -388,7 +388,7 @@ final class FileGroupController extends AbstractController
         }
         $this->em->persist($file);
         $this->em->flush();
-        $this->realtime->notifyFileUploaded($group, $user, $name);
+        $this->realtime->notifyFileUploaded($group, $user, $file);
 
         return $this->respondChanged($group, $user, $folderId, 'file_uploaded', Response::HTTP_CREATED);
     }
@@ -534,8 +534,11 @@ final class FileGroupController extends AbstractController
                 $wanted[(int) $authorMember->getId()] = $authorMember;
             }
         }
-        foreach ($file->getWriters()->toArray() as $writer) {
-            $writerId = (int) $writer->getId();
+        $before = [];
+        foreach ($file->getWriters() as $writer) {
+            $before[(int) $writer->getId()] = $writer;
+        }
+        foreach ($before as $writerId => $writer) {
             if (!isset($wanted[$writerId])) {
                 $file->removeWriter($writer);
                 $this->sessions->dropUser((int) $file->getId(), $writerId);
@@ -545,6 +548,17 @@ final class FileGroupController extends AbstractController
             $file->addWriter($member);
         }
         $this->em->flush();
+
+        foreach ($wanted as $memberId => $member) {
+            if (!isset($before[$memberId])) {
+                $this->realtime->notifyWriterGranted($group, $user, $member, $file);
+            }
+        }
+        foreach ($before as $memberId => $member) {
+            if (!isset($wanted[$memberId])) {
+                $this->realtime->notifyWriterRevoked($group, $user, $member, $file);
+            }
+        }
 
         return $this->respondChanged(
             $group,

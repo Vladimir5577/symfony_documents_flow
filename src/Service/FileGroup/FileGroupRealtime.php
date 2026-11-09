@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\FileGroup;
 
 use App\Entity\FileGroup\FileGroup;
+use App\Entity\FileGroup\FileGroupFile;
 use App\Entity\User\User;
 use App\Service\Notification\NotificationPublisher;
 use Symfony\Component\Mercure\HubInterface;
@@ -50,7 +51,7 @@ final class FileGroupRealtime
         ]);
     }
 
-    public function notifyFileUploaded(FileGroup $group, User $actor, string $fileName): void
+    public function notifyFileUploaded(FileGroup $group, User $actor, FileGroupFile $file): void
     {
         $groupId = $group->getId();
         if ($groupId === null) {
@@ -66,8 +67,8 @@ final class FileGroupRealtime
             module: self::MODULE,
             event: 'file_uploaded',
             recipients: $recipients,
-            title: sprintf('Новый файл «%s» в каталоге «%s»', $fileName, $group->getName()),
-            link: '/file-groups/' . $groupId,
+            title: sprintf('Новый файл «%s» в каталоге «%s»', $file->getOriginalName(), $group->getName()),
+            link: $this->fileLink($groupId, $file),
             actor: $actor,
             typeLabel: 'Общие файлы',
         );
@@ -90,6 +91,54 @@ final class FileGroupRealtime
             actor: $actor,
             typeLabel: 'Общие файлы',
         );
+    }
+
+    public function notifyWriterGranted(FileGroup $group, User $actor, User $member, FileGroupFile $file): void
+    {
+        $groupId = $group->getId();
+        if ($groupId === null) {
+            return;
+        }
+
+        $this->notifications->publish(
+            module: self::MODULE,
+            event: 'writer_granted',
+            recipients: [$member],
+            title: sprintf('Вам дали право редактировать «%s» в каталоге «%s»', $file->getOriginalName(), $group->getName()),
+            link: $this->fileLink($groupId, $file),
+            actor: $actor,
+            typeLabel: 'Общие файлы',
+        );
+    }
+
+    public function notifyWriterRevoked(FileGroup $group, User $actor, User $member, FileGroupFile $file): void
+    {
+        $groupId = $group->getId();
+        if ($groupId === null) {
+            return;
+        }
+
+        $this->notifications->publish(
+            module: self::MODULE,
+            event: 'writer_revoked',
+            recipients: [$member],
+            title: sprintf('У вас снято право редактировать «%s» в каталоге «%s»', $file->getOriginalName(), $group->getName()),
+            link: $this->fileLink($groupId, $file),
+            actor: $actor,
+            typeLabel: 'Общие файлы',
+        );
+    }
+
+    /** Ссылка сразу в папку файла: фронт читает `folder` и `file`. */
+    private function fileLink(int $groupId, FileGroupFile $file): string
+    {
+        $query = ['file' => (string) $file->getId()];
+        $folderId = $file->getFolder()?->getId();
+        if ($folderId !== null) {
+            $query['folder'] = (string) $folderId;
+        }
+
+        return '/file-groups/' . $groupId . '?' . http_build_query($query);
     }
 
     /** @param array<string, mixed> $payload */
