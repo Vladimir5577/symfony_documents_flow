@@ -166,9 +166,14 @@ final class FileGroupController extends AbstractController
     public function removeMember(int $groupId, int $userId, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
         $user = $this->user($user);
-        $group = $this->manageable($groupId, $user);
+        $selfLeave = $user->getId() === $userId;
+        // Владелец снимает участника; участник может только сам себя убрать («покинуть»).
+        $group = $selfLeave ? $this->readable($groupId, $user) : $this->manageable($groupId, $user);
         if ($group instanceof JsonResponse) {
             return $group;
+        }
+        if ($selfLeave && $this->access->isOwner($group, $user)) {
+            return $this->json(['error' => SpaApiError::FILE_GROUP_OWNER_NOT_MEMBER], Response::HTTP_BAD_REQUEST);
         }
         $member = $this->member($group, $userId);
         if (!$member instanceof User) {
@@ -181,6 +186,12 @@ final class FileGroupController extends AbstractController
         }
         $group->removeMember($member);
         $this->em->flush();
+
+        if ($selfLeave) {
+            $this->realtime->catalogChanged($group, $user, 'member_left');
+
+            return new JsonResponse(null, Response::HTTP_NO_CONTENT);
+        }
 
         return $this->respondChanged($group, $user, $request->query->getInt('folderId'), 'member_removed');
     }
@@ -707,7 +718,16 @@ final class FileGroupController extends AbstractController
         return $chain;
     }
 
-    /** @return array{id: int, name: string, isOwner: bool, memberCount: int, createdAt: string} */
+    /**
+     * @return array{
+     *     id: int,
+     *     name: string,
+     *     isOwner: bool,
+     *     memberCount: int,
+     *     createdAt: string,
+     *     owner: array{id: int, fullName: string}
+     * }
+     */
     private function summary(FileGroup $group, User $user): array
     {
         return [
@@ -716,6 +736,7 @@ final class FileGroupController extends AbstractController
             'isOwner' => $this->access->isOwner($group, $user),
             'memberCount' => $group->getMembers()->count(),
             'createdAt' => $group->getCreatedAt()->format(\DateTimeInterface::ATOM),
+            'owner' => $this->access->presentUser($group->getOwner()),
         ];
     }
 
