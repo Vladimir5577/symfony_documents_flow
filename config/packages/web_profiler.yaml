@@ -4,8 +4,6 @@ when@dev:
 
     framework:
         profiler:
-            # Сбор профиля на каждый успешный запрос на этом диске — около 2 с.
-            only_exceptions: true
             collect_serializer_data: true
 
 when@test:
