@@ -73,6 +73,25 @@ final class FileGroupRealtime
         );
     }
 
+    /** Колокольчик приглашённому: иначе группа в «Доступные мне» видна только после ручного обновления списка. */
+    public function notifyMemberAdded(FileGroup $group, User $actor, User $member): void
+    {
+        $groupId = $group->getId();
+        if ($groupId === null) {
+            return;
+        }
+
+        $this->notifications->publish(
+            module: self::MODULE,
+            event: 'member_added',
+            recipients: [$member],
+            title: sprintf('Вас добавили в группу «%s»', $group->getName()),
+            link: '/file-groups/' . $groupId,
+            actor: $actor,
+            typeLabel: 'Общие файлы',
+        );
+    }
+
     /** @param array<string, mixed> $payload */
     private function publishMercure(string $topic, array $payload): void
     {

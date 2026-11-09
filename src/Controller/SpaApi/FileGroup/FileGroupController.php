@@ -43,22 +43,24 @@ final class FileGroupController extends AbstractController
     public function list(#[CurrentUser] ?User $user): JsonResponse
     {
         $user = $this->user($user);
+        // MEMBER OF — без join members: иначе Doctrine гидрирует коллекцию
+        // только текущим пользователем и memberCount становится 1.
         /** @var list<FileGroup> $rows */
         $rows = $this->em->createQueryBuilder()
-            ->select('g', 'm')
+            ->select('g', 'o')
             ->from(FileGroup::class, 'g')
-            ->leftJoin('g.members', 'm')
-            ->where('g.owner = :user OR m = :user')
+            ->join('g.owner', 'o')
+            ->where('g.owner = :user OR :user MEMBER OF g.members')
             ->setParameter('user', $user)
             ->orderBy('g.createdAt', 'DESC')
             ->getQuery()
             ->getResult();
         $groups = [];
         foreach ($rows as $group) {
-            $groups[(int) $group->getId()] = $this->summary($group, $user);
+            $groups[] = $this->summary($group, $user);
         }
 
-        return $this->json(['groups' => array_values($groups)]);
+        return $this->json(['groups' => $groups]);
     }
 
     #[Route('', name: 'spa_api_file_groups_create', methods: ['POST'])]
@@ -151,6 +153,7 @@ final class FileGroupController extends AbstractController
         if ($this->access->isOwner($group, $member)) {
             return $this->json(['error' => SpaApiError::FILE_GROUP_OWNER_NOT_MEMBER], Response::HTTP_BAD_REQUEST);
         }
+        $already = $group->getMembers()->contains($member);
         $group->addMember($member);
         foreach ($group->getFiles() as $file) {
             if ($file->getUploadedBy()?->getId() === $member->getId()) {
@@ -158,6 +161,9 @@ final class FileGroupController extends AbstractController
             }
         }
         $this->em->flush();
+        if (!$already) {
+            $this->realtime->notifyMemberAdded($group, $user, $member);
+        }
 
         return $this->respondChanged($group, $user, (int) ($body['folderId'] ?? 0), 'member_added');
     }
