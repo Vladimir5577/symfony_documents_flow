@@ -66,14 +66,14 @@ final class FileGroupRealtime
             module: self::MODULE,
             event: 'file_uploaded',
             recipients: $recipients,
-            title: sprintf('Новый файл «%s» в группе «%s»', $fileName, $group->getName()),
+            title: sprintf('Новый файл «%s» в каталоге «%s»', $fileName, $group->getName()),
             link: '/file-groups/' . $groupId,
             actor: $actor,
             typeLabel: 'Общие файлы',
         );
     }
 
-    /** Колокольчик приглашённому: иначе группа в «Доступные мне» видна только после ручного обновления списка. */
+    /** Колокольчик приглашённому: иначе каталог в «Доступные мне» виден только после ручного обновления списка. */
     public function notifyMemberAdded(FileGroup $group, User $actor, User $member): void
     {
         $groupId = $group->getId();
@@ -85,7 +85,7 @@ final class FileGroupRealtime
             module: self::MODULE,
             event: 'member_added',
             recipients: [$member],
-            title: sprintf('Вас добавили в группу «%s»', $group->getName()),
+            title: sprintf('Вас добавили в каталог «%s»', $group->getName()),
             link: '/file-groups/' . $groupId,
             actor: $actor,
             typeLabel: 'Общие файлы',
