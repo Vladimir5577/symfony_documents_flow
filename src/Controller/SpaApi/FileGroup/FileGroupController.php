@@ -12,6 +12,7 @@ use App\Entity\User\User;
 use App\Service\FileGroup\FileGroupAccess;
 use App\Service\FileGroup\FileGroupEditorSession;
 use App\Service\FileGroup\FileGroupImageUrlGenerator;
+use App\Service\FileGroup\FileGroupRealtime;
 use App\Service\FileGroup\FileGroupStorage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -34,6 +35,7 @@ final class FileGroupController extends AbstractController
         private readonly FileGroupStorage $storage,
         private readonly FileGroupImageUrlGenerator $imageUrls,
         private readonly FileGroupEditorSession $sessions,
+        private readonly FileGroupRealtime $realtime,
     ) {
     }
 
@@ -108,6 +110,7 @@ final class FileGroupController extends AbstractController
         }
         $group->setName($name);
         $this->em->flush();
+        $this->realtime->catalogChanged($group, $user, 'group_renamed');
 
         return $this->json(['group' => $this->summary($group, $user)]);
     }
@@ -124,6 +127,7 @@ final class FileGroupController extends AbstractController
         $this->em->remove($group);
         $this->em->flush();
         $this->storage->deleteFiles($files);
+        $this->realtime->groupDeleted($groupId, $user);
 
         return new JsonResponse(null, Response::HTTP_NO_CONTENT);
     }
@@ -155,7 +159,7 @@ final class FileGroupController extends AbstractController
         }
         $this->em->flush();
 
-        return $this->respond($group, $user, (int) ($body['folderId'] ?? 0));
+        return $this->respondChanged($group, $user, (int) ($body['folderId'] ?? 0), 'member_added');
     }
 
     #[Route('/{groupId}/members/{userId}', name: 'spa_api_file_groups_member_remove', requirements: ['groupId' => '\d+', 'userId' => '\d+'], methods: ['DELETE'])]
@@ -178,7 +182,7 @@ final class FileGroupController extends AbstractController
         $group->removeMember($member);
         $this->em->flush();
 
-        return $this->respond($group, $user, $request->query->getInt('folderId'));
+        return $this->respondChanged($group, $user, $request->query->getInt('folderId'), 'member_removed');
     }
 
     #[Route('/{groupId}/members/{userId}', name: 'spa_api_file_groups_member_upload', requirements: ['groupId' => '\d+', 'userId' => '\d+'], methods: ['PATCH'])]
@@ -207,7 +211,7 @@ final class FileGroupController extends AbstractController
         }
         $this->em->flush();
 
-        return $this->respond($group, $user, (int) ($body['folderId'] ?? 0));
+        return $this->respondChanged($group, $user, (int) ($body['folderId'] ?? 0), 'member_upload');
     }
 
     #[Route('/{groupId}/folders', name: 'spa_api_file_groups_folder_create', requirements: ['groupId' => '\d+'], methods: ['POST'])]
@@ -238,7 +242,7 @@ final class FileGroupController extends AbstractController
         $this->em->persist(new FileGroupFolder($group, $name, $parent));
         $this->em->flush();
 
-        return $this->respond($group, $user, $parentId, Response::HTTP_CREATED);
+        return $this->respondChanged($group, $user, $parentId, 'folder_created', Response::HTTP_CREATED);
     }
 
     #[Route('/{groupId}/folders/{folderId}/parent', name: 'spa_api_file_groups_folder_move', requirements: ['groupId' => '\d+', 'folderId' => '\d+'], methods: ['PATCH'])]
@@ -275,7 +279,7 @@ final class FileGroupController extends AbstractController
         $folder->setParent($parent);
         $this->em->flush();
 
-        return $this->respond($group, $user, $parentId);
+        return $this->respondChanged($group, $user, $parentId, 'folder_moved');
     }
 
     #[Route('/{groupId}/folders/{folderId}', name: 'spa_api_file_groups_folder_rename', requirements: ['groupId' => '\d+', 'folderId' => '\d+'], methods: ['PATCH'])]
@@ -301,7 +305,7 @@ final class FileGroupController extends AbstractController
         $folder->setName($name);
         $this->em->flush();
 
-        return $this->respond($group, $user, (int) ($folder->getParent()?->getId() ?? 0));
+        return $this->respondChanged($group, $user, (int) ($folder->getParent()?->getId() ?? 0), 'folder_renamed');
     }
 
     #[Route('/{groupId}/folders/{folderId}', name: 'spa_api_file_groups_folder_delete', requirements: ['groupId' => '\d+', 'folderId' => '\d+'], methods: ['DELETE'])]
@@ -319,7 +323,7 @@ final class FileGroupController extends AbstractController
         $parentId = (int) ($folder->getParent()?->getId() ?? 0);
         $this->deleteFolderTree($group, $folder);
 
-        return $this->respond($group, $user, $parentId);
+        return $this->respondChanged($group, $user, $parentId, 'folder_deleted');
     }
 
     #[Route('/{groupId}/files', name: 'spa_api_file_groups_file_upload', requirements: ['groupId' => '\d+'], methods: ['POST'])]
@@ -367,8 +371,9 @@ final class FileGroupController extends AbstractController
         }
         $this->em->persist($file);
         $this->em->flush();
+        $this->realtime->notifyFileUploaded($group, $user, $name);
 
-        return $this->respond($group, $user, $folderId, Response::HTTP_CREATED);
+        return $this->respondChanged($group, $user, $folderId, 'file_uploaded', Response::HTTP_CREATED);
     }
 
     #[Route('/{groupId}/files/{fileId}', name: 'spa_api_file_groups_file_delete', requirements: ['groupId' => '\d+', 'fileId' => '\d+'], methods: ['DELETE'])]
@@ -388,7 +393,12 @@ final class FileGroupController extends AbstractController
         $this->em->flush();
         $this->storage->deleteFile($file);
 
-        return $this->respond($group, $user, $request->query->getInt('folderId') ?: $folderId);
+        return $this->respondChanged(
+            $group,
+            $user,
+            $request->query->getInt('folderId') ?: $folderId,
+            'file_deleted',
+        );
     }
 
     #[Route('/{groupId}/files/{fileId}/folder', name: 'spa_api_file_groups_file_move', requirements: ['groupId' => '\d+', 'fileId' => '\d+'], methods: ['PATCH'])]
@@ -419,7 +429,7 @@ final class FileGroupController extends AbstractController
         $file->setFolder($folder);
         $this->em->flush();
 
-        return $this->respond($group, $user, $folderId);
+        return $this->respondChanged($group, $user, $folderId, 'file_moved');
     }
 
     #[Route('/{groupId}/files/{fileId}/content', name: 'spa_api_file_groups_file_content', requirements: ['groupId' => '\d+', 'fileId' => '\d+'], methods: ['GET'])]
@@ -519,7 +529,12 @@ final class FileGroupController extends AbstractController
         }
         $this->em->flush();
 
-        return $this->respond($group, $user, $request->query->getInt('folderId') ?: (int) ($file->getFolder()?->getId() ?? 0));
+        return $this->respondChanged(
+            $group,
+            $user,
+            $request->query->getInt('folderId') ?: (int) ($file->getFolder()?->getId() ?? 0),
+            'writers_changed',
+        );
     }
 
     private function user(?User $user): User
@@ -590,6 +605,18 @@ final class FileGroupController extends AbstractController
         }
 
         return $this->json($payload, $status);
+    }
+
+    private function respondChanged(
+        FileGroup $group,
+        User $actor,
+        int $folderId,
+        string $event,
+        int $status = 200,
+    ): JsonResponse {
+        $this->realtime->catalogChanged($group, $actor, $event);
+
+        return $this->respond($group, $actor, $folderId, $status);
     }
 
     /** @return array<string, mixed>|JsonResponse */
