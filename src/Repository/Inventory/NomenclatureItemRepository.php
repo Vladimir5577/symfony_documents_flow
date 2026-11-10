@@ -129,17 +129,13 @@ class NomenclatureItemRepository extends ServiceEntityRepository
         // обе необязательны, и внутренний молча выкинул бы неразобранные позиции
         // из всех списков. Документ присоединяется сразу: и список, и выгрузка
         // показывают его у каждой строки, а ленивый прокси означал бы отдельный
-        // SELECT на каждый документ. Работник владельца (`aw`) в ответ не идёт, но
-        // джойн обязателен: worker — инверсная сторона OneToOne у User, прокси на неё
-        // построить нельзя. Без джойна страница с разными владельцами стоит
-        // +20 запросов, а выгрузка — до +10000.
+        // SELECT на каждый документ.
         $qb = $this->createQueryBuilder('i')
-            ->addSelect('n', 'c', 'o', 'a', 'aw', 'u')
+            ->addSelect('n', 'c', 'o', 'a', 'u')
             ->join('i.nomenclature', 'n')
             ->leftJoin('n.category', 'c')
             ->leftJoin('i.organization', 'o')
             ->leftJoin('i.user', 'a')
-            ->leftJoin('a.worker', 'aw')
             ->leftJoin('i.upd', 'u');
 
         $this->applyScope($qb, $scope);

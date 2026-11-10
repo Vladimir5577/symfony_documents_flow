@@ -77,7 +77,7 @@
                                             <label for="user_employee_status">Статус сотрудника</label>
                                             <select id="user_employee_status" class="form-control" name="user_employee_status">
                                                 {% for value, label in user_employee_status_choices %}
-                                                    <option value="{{ value }}" {% if (user.worker ? user.worker.workerStatus.value : 'AT_WORK') == value %}selected{% endif %}>{{ label }}</option>
+                                                    <option value="{{ value }}" {% if (user.workerStatus ? user.workerStatus.value : 'AT_WORK') == value %}selected{% endif %}>{{ label }}</option>
                                                 {% endfor %}
                                             </select>
                                         </div>
@@ -146,13 +146,13 @@
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="profession-column">Профессия (опционально)</label>
-                                            <input type="text" id="profession-column" class="form-control" name="profession-column" placeholder="Профессия" value="{{ worker.profession|default('') }}">
+                                            <input type="text" id="profession-column" class="form-control" name="profession-column" placeholder="Профессия" value="{{ user.profession|default('') }}">
                                         </div>
                                     </div>
                                     <div class="col-12">
                                         <div class="form-group">
                                             <label for="description-column">Описание профессии (опционально)</label>
-                                            <textarea id="description-column" class="form-control" name="description-column" placeholder="Описание" rows="3">{{ worker.description|default('') }}</textarea>
+                                            <textarea id="description-column" class="form-control" name="description-column" placeholder="Описание" rows="3">{{ user.description|default('') }}</textarea>
                                         </div>
                                     </div>
                                     {% endif %}

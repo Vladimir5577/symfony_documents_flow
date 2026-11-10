@@ -1,4 +1,4 @@
-{# Контент модалки просмотра пользователя (подгружается по AJAX). Переменные: user, worker #}
+{# Контент модалки просмотра пользователя (подгружается по AJAX). Переменные: user #}
 <div class="user-view-modal-parts">
     <div class="user-view-modal-body-part">
     <table class="table table-borderless mb-0">
@@ -29,7 +29,7 @@
             </tr>
             <tr>
                 <th class="text-muted">Статус:</th>
-                <td><span class="badge bg-secondary badge-status-compact">{{ user.worker ? user.worker.workerStatus.getLabel() : '—' }}</span></td>
+                <td><span class="badge bg-secondary badge-status-compact">{{ user.workerStatus ? user.workerStatus.getLabel() : '—' }}</span></td>
             </tr>
             <tr>
                 <th class="text-muted">Организация:</th>
@@ -73,17 +73,17 @@
                     {% endif %}
                 </td>
             </tr>
-            {% if worker %}
+            {% if user.profession is not null %}
             <tr>
                 <th class="text-muted">Профессия:</th>
-                <td><strong>{{ worker.profession }}</strong></td>
-            </tr>
-            {% if worker.description %}
-            <tr>
-                <th class="text-muted">Описание:</th>
-                <td>{{ worker.description }}</td>
+                <td><strong>{{ user.profession }}</strong></td>
             </tr>
             {% endif %}
+            {% if user.description %}
+            <tr>
+                <th class="text-muted">Описание:</th>
+                <td>{{ user.description }}</td>
+            </tr>
             {% endif %}
         </tbody>
     </table>

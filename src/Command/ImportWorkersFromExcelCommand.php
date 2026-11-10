@@ -5,7 +5,6 @@ namespace App\Command;
 use App\Entity\Organization\Department;
 use App\Entity\Organization\Organization;
 use App\Entity\User\User;
-use App\Entity\User\Worker;
 use App\Enum\User\WorkerStatus;
 use App\Service\User\LoginGeneratorService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -116,13 +115,12 @@ class ImportWorkersFromExcelCommand extends Command
                     : null;
                 $user->setBirthDay($birthDay);
 
-                $worker = new Worker();
-                $worker->setProfession((string) ($profession ?? ''));
+                $user->setProfession((string) ($profession ?? ''));
                 $hiredAtStr = trim((string) ($row[23] ?? ''), " \t\n\r\0\x0B'");
                 $hiredAt = $hiredAt !== ''
                     ? \DateTimeImmutable::createFromFormat('d.m.Y', $hiredAtStr) ?: null
                     : null;
-                $worker->setHiredAt($hiredAt);
+                $user->setHiredAt($hiredAt);
 
                 switch ($workerStatus) {
                     case 'Работа':
@@ -169,9 +167,7 @@ class ImportWorkersFromExcelCommand extends Command
                         break;
                 }
 
-                $worker->setWorkerStatus($workerStatus);
-
-                $user->setWorker($worker);
+                $user->setWorkerStatus($workerStatus);
 
                 $this->entityManager->persist($user);
                 $this->entityManager->flush();

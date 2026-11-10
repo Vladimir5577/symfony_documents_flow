@@ -2,7 +2,7 @@
 
 namespace App\DataFixtures;
 
-use App\Entity\User\Worker;
+use App\Enum\User\WorkerStatus;
 use App\Repository\User\UserRepository;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
@@ -63,19 +63,16 @@ class WorkerFixtures extends Fixture implements DependentFixtureInterface
         $selectedUsers = array_slice($users, 0, $workersCount);
 
         foreach ($selectedUsers as $index => $user) {
-            $worker = new Worker();
-            $worker->setUser($user);
-            $worker->setProfession($professions[array_rand($professions)]);
+            $user->setProfession($professions[array_rand($professions)]);
+            $user->setWorkerStatus(WorkerStatus::AT_WORK);
 
             // Случайное описание (70% имеют описание)
             if (rand(0, 100) < 70) {
                 $description = $descriptions[array_rand($descriptions)];
                 if ($description !== null) {
-                    $worker->setDescription($description);
+                    $user->setDescription($description);
                 }
             }
-
-            $manager->persist($worker);
         }
 
         $manager->flush();

@@ -3,6 +3,7 @@
 namespace App\Entity\User;
 
 use App\Entity\Organization\AbstractOrganization;
+use App\Enum\User\WorkerStatus;
 use App\Repository\User\UserRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -71,8 +72,17 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\JoinColumn(name: 'boss_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?self $boss = null;
 
-    #[ORM\OneToOne(mappedBy: 'user', targetEntity: Worker::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
-    private ?Worker $worker = null;
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $profession = null;
+
+    #[ORM\Column(name: 'worker_status', length: 50, nullable: true, enumType: WorkerStatus::class)]
+    private ?WorkerStatus $workerStatus = null;
+
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $description = null;
+
+    #[ORM\Column(name: 'hired_at', type: Types::DATE_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $hiredAt = null;
 
     // 5) phone
     #[ORM\Column(length: 30, nullable: true)]
@@ -268,19 +278,63 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    public function getWorker(): ?Worker
+    public function getProfession(): ?string
     {
-        return $this->worker;
+        return $this->profession;
     }
 
-    public function setWorker(?Worker $worker): static
+    public function setProfession(?string $profession): static
     {
-        if ($worker !== null) {
-            $worker->setUser($this);
-        }
-        $this->worker = $worker;
+        $this->profession = $profession;
 
         return $this;
+    }
+
+    public function getWorkerStatus(): ?WorkerStatus
+    {
+        return $this->workerStatus;
+    }
+
+    public function setWorkerStatus(?WorkerStatus $workerStatus): static
+    {
+        $this->workerStatus = $workerStatus;
+
+        return $this;
+    }
+
+    public function getDescription(): ?string
+    {
+        return $this->description;
+    }
+
+    public function setDescription(?string $description): static
+    {
+        $this->description = $description;
+
+        return $this;
+    }
+
+    /**
+     * Дата приёма на работу (только дата, без времени).
+     */
+    public function getHiredAt(): ?\DateTimeImmutable
+    {
+        return $this->hiredAt;
+    }
+
+    public function setHiredAt(?\DateTimeImmutable $hiredAt): static
+    {
+        $this->hiredAt = $hiredAt;
+
+        return $this;
+    }
+
+    /**
+     * Дата приёма в формате ДД.ММ.ГГГГ (без часов, минут, секунд).
+     */
+    public function getHiredAtFormatted(): ?string
+    {
+        return $this->hiredAt?->format('d.m.Y');
     }
 
     public function getPhone(): ?string

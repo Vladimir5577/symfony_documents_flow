@@ -32,14 +32,11 @@ class UpdRepository extends ServiceEntityRepository
      */
     public function findPaginated(InventoryScope $scope, array $filters, int $page, int $limit): array
     {
-        // Автор (`cb`) идёт в карточку, его работник (`cbw`) — нет, но джойн обязателен:
-        // worker — инверсная сторона OneToOne у User, прокси на неё построить нельзя.
-        // Без обоих джойнов страница из 20 документов стоит +40 запросов.
+        // Автор (`cb`) идёт в карточку: без джойна страница из 20 документов стоит +20 запросов.
         $qb = $this->createQueryBuilder('u')
-            ->addSelect('o', 'cb', 'cbw')
+            ->addSelect('o', 'cb')
             ->join('u.organization', 'o')
-            ->leftJoin('u.createdBy', 'cb')
-            ->leftJoin('cb.worker', 'cbw');
+            ->leftJoin('u.createdBy', 'cb');
 
         $this->applyScope($qb, $scope);
         $this->applyFilters($qb, $filters);

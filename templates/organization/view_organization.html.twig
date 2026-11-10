@@ -236,11 +236,11 @@
                                                         {{ user.lastname ?? '-' }} {{ user.firstname ?? '-' }}{% if user.patronymic %} {{ user.patronymic }}{% endif %}
                                                     </td>
                                                     <td>
-                                                        {{ user.worker ? user.worker.profession : '—' }}
+                                                        {{ user.profession ?? '—' }}
                                                     </td>
                                                     <td class="table-users-status-col">
                                                         <span class="badge bg-secondary badge-status-compact">
-                                                            {{ user.worker ? user.worker.workerStatus.getLabel() : '—' }}
+                                                            {{ user.workerStatus ? user.workerStatus.getLabel() : '—' }}
                                                         </span>
                                                     </td>
                                                 </tr>

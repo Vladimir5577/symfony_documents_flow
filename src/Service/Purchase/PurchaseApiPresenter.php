@@ -608,7 +608,7 @@ final class PurchaseApiPresenter
         return [
             'id' => $user->getId(),
             'name' => $name !== '' ? $name : (string) $user->getLogin(),
-            'position' => $user->getWorker()?->getProfession(),
+            'position' => $user->getProfession(),
         ];
     }
 }

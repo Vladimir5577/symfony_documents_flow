@@ -244,7 +244,7 @@ final class PurchaseApproverController extends AbstractController
                         'name' => $name !== '' ? $name : (string) $user?->getLogin(),
                         // Должность: в списке из десятка фамилий директору нужно
                         // понимать, кому он отдаёт заявку, а не только «кто это».
-                        'position' => $user?->getWorker()?->getProfession(),
+                        'position' => $user?->getProfession(),
                     ],
                     // Функции в модуле: по ним маршрут и адресует ролевые шаги
                     'roles' => array_values(array_map(

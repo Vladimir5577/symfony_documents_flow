@@ -26,13 +26,10 @@ class UpdFileRepository extends ServiceEntityRepository
      */
     public function findByUpd(Upd $upd): array
     {
-        // Загрузивший (`ub`) идёт в ответ, его работник (`ubw`) — нет, но джойн обязателен:
-        // worker — инверсная сторона OneToOne у User, прокси на неё построить нельзя,
-        // и каждый файл стоил бы двух лишних запросов.
+        // Загрузивший (`ub`) идёт в ответ: без джойна каждый файл стоил бы лишнего запроса.
         return $this->createQueryBuilder('f')
-            ->addSelect('ub', 'ubw')
+            ->addSelect('ub')
             ->leftJoin('f.uploadedBy', 'ub')
-            ->leftJoin('ub.worker', 'ubw')
             ->andWhere('f.upd = :upd')
             ->setParameter('upd', $upd)
             ->orderBy('f.createdAt', 'ASC')

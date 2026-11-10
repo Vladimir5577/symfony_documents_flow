@@ -3,13 +3,11 @@
 namespace App\Controller\User;
 
 use App\Entity\User\User;
-use App\Entity\User\Worker;
 use App\Enum\User\UserRole;
 use App\Enum\User\WorkerStatus;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\RoleRepository;
 use App\Repository\User\UserRepository;
-use App\Repository\User\WorkerRepository;
 use App\Service\User\LoginGeneratorService;
 use App\Service\User\UserAvatarStorageService;
 use App\Service\User\UserAvatarUrlGenerator;
@@ -186,21 +184,16 @@ final class UserController extends AbstractController
             return $renderForm($formData);
         }
 
-        $entityManager->persist($user);
-        $entityManager->flush();
-
         $profession = trim((string) ($formData['profession-column'] ?? ''));
         if ($profession !== '') {
-            $worker = new Worker();
-            $worker->setUser($user);
-            $worker->setProfession($profession);
-            $description = trim((string) ($formData['description-column'] ?? ''));
-            if ($description !== '') {
-                $worker->setDescription($description);
-            }
-            $entityManager->persist($worker);
-            $entityManager->flush();
+            $user->setProfession($profession);
+            $user->setWorkerStatus(WorkerStatus::AT_WORK);
         }
+        $description = trim((string) ($formData['description-column'] ?? ''));
+        $user->setDescription($description !== '' ? $description : null);
+
+        $entityManager->persist($user);
+        $entityManager->flush();
 
         $this->addFlash('success', 'Регистрация успешна.');
         return $this->redirectToRoute('app_view_user', ['id' => $user->getId()]);
@@ -277,7 +270,6 @@ final class UserController extends AbstractController
 
         $usersData = [];
         foreach ($pagination['users'] as $user) {
-            $worker = $user->getWorker();
             $usersData[] = [
                 'id' => $user->getId(),
                 'lastname' => $user->getLastname() ?? '-',
@@ -285,8 +277,8 @@ final class UserController extends AbstractController
                 'patronymic' => $user->getPatronymic() ?? '-',
                 'login' => $user->getLogin(),
                 'phone' => $user->getPhone() ?? '-',
-                'profession' => $worker?->getProfession() ?? '—',
-                'userEmployeeStatusLabel' => $worker?->getWorkerStatus()->getLabel() ?? '—',
+                'profession' => $user->getProfession() ?? '—',
+                'userEmployeeStatusLabel' => $user->getWorkerStatus()?->getLabel() ?? '—',
                 'viewUrl' => $this->generateUrl('app_view_user', ['id' => $user->getId(), 'page' => $page]),
             ];
         }
@@ -303,7 +295,7 @@ final class UserController extends AbstractController
     }
 
     #[Route('/user/{id}', name: 'app_view_user', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function viewUser(int $id, Request $request, UserRepository $userRepository, WorkerRepository $workerRepository): Response
+    public function viewUser(int $id, Request $request, UserRepository $userRepository): Response
     {
         /** @var User|null $currentUser */
         $currentUser = $this->getUser();
@@ -336,9 +328,6 @@ final class UserController extends AbstractController
             throw $this->createAccessDeniedException('Недостаточно прав для просмотра профиля.');
         }
 
-        // Загружаем Worker для пользователя, если он существует
-        $worker = $workerRepository->findOneBy(['user' => $user]);
-
         $avatarPreviewUrl = null;
         if ($user->getAvatarName()) {
             $avatarPreviewUrl = $this->avatarUrlGenerator->getAvatarUrl($user);
@@ -347,14 +336,13 @@ final class UserController extends AbstractController
         return $this->render('user/view_user.html.twig', [
             'active_tab' => 'view_user',
             'user' => $user,
-            'worker' => $worker,
             'page' => $page,
             'avatar_preview_url' => $avatarPreviewUrl,
         ]);
     }
 
     #[Route('/user/{id}/view-modal', name: 'app_view_user_modal', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function viewUserModal(int $id, Request $request, UserRepository $userRepository, WorkerRepository $workerRepository): Response
+    public function viewUserModal(int $id, Request $request, UserRepository $userRepository): Response
     {
         if (!$request->isXmlHttpRequest()) {
             return $this->redirectToRoute('app_view_user', ['id' => $id]);
@@ -374,16 +362,13 @@ final class UserController extends AbstractController
             return new Response('Пользователь не найден', Response::HTTP_NOT_FOUND);
         }
 
-        $worker = $workerRepository->findOneBy(['user' => $user]);
-
         return $this->render('user/partials/_modal_view_user_content.html.twig', [
             'user' => $user,
-            'worker' => $worker,
         ]);
     }
 
     #[Route('/user/{id}/view-modal-document', name: 'app_view_user_modal_document', methods: ['GET'], requirements: ['id' => '\d+'])]
-    public function viewUserModalForDocument(int $id, Request $request, UserRepository $userRepository, WorkerRepository $workerRepository): Response
+    public function viewUserModalForDocument(int $id, Request $request, UserRepository $userRepository): Response
     {
         if (!$request->isXmlHttpRequest()) {
             return $this->redirectToRoute('app_view_user', ['id' => $id]);
@@ -400,11 +385,8 @@ final class UserController extends AbstractController
             return new Response('Пользователь не найден', Response::HTTP_NOT_FOUND);
         }
 
-        $worker = $workerRepository->findOneBy(['user' => $user]);
-
         return $this->render('user/partials/_modal_view_user_content_document.html.twig', [
             'user' => $user,
-            'worker' => $worker,
         ]);
     }
 
@@ -414,8 +396,7 @@ final class UserController extends AbstractController
         Request $request,
         UserRepository $userRepository,
         OrganizationRepository $organizationRepository,
-        RoleRepository $roleRepository,
-        WorkerRepository $workerRepository
+        RoleRepository $roleRepository
     ): Response {
         $currentUser = $this->getUser();
         $isAdmin = $currentUser instanceof User && $this->isGranted('ROLE_ADMIN');
@@ -433,9 +414,6 @@ final class UserController extends AbstractController
         if (!$user) {
             throw $this->createNotFoundException('Пользователь не найден');
         }
-
-        // Получаем Worker для пользователя, если он существует
-        $worker = $workerRepository->findOneBy(['user' => $user]);
 
         // Получаем дерево организаций
         $currentUserOrg = $currentUser instanceof User ? $currentUser->getOrganization() : null;
@@ -459,7 +437,6 @@ final class UserController extends AbstractController
         return $this->render('user/edit_user.html.twig', [
             'active_tab' => 'edit_user',
             'user' => $user,
-            'worker' => $worker,
             'is_admin' => $isAdmin,
             'organizations' => $organizationsWithChildren,
             'roles' => $roles,
@@ -567,7 +544,6 @@ final class UserController extends AbstractController
         UserRepository $userRepository,
         OrganizationRepository $organizationRepository,
         RoleRepository $roleRepository,
-        WorkerRepository $workerRepository,
         UserPasswordHasherInterface $passwordHasher
     ): Response {
         $currentUser = $this->getUser();
@@ -630,9 +606,8 @@ final class UserController extends AbstractController
         $employeeStatusValue = (string) ($formData['user_employee_status'] ?? '');
         if ($employeeStatusValue !== '') {
             $status = WorkerStatus::tryFrom($employeeStatusValue);
-            $worker = $user->getWorker();
-            if ($status !== null && $worker !== null && $worker->getWorkerStatus() !== $status) {
-                $worker->setWorkerStatus($status);
+            if ($status !== null) {
+                $user->setWorkerStatus($status);
             }
         }
 
@@ -706,23 +681,10 @@ final class UserController extends AbstractController
         $entityManager->flush();
 
         if ($isAdmin) {
-            // Обновляем или создаем Worker
             $profession = trim((string) ($formData['profession-column'] ?? ''));
-            $worker = $workerRepository->findOneBy(['user' => $user]);
-
-            if ($profession !== '') {
-                if (!$worker) {
-                    $worker = new Worker();
-                    $worker->setUser($user);
-                }
-                $worker->setProfession($profession);
-                $description = trim((string) ($formData['description-column'] ?? ''));
-                $worker->setDescription($description !== '' ? $description : null);
-                $entityManager->persist($worker);
-            } elseif ($worker) {
-                // Если профессия пустая, удаляем Worker
-                $entityManager->remove($worker);
-            }
+            $description = trim((string) ($formData['description-column'] ?? ''));
+            $user->setProfession($profession !== '' ? $profession : null);
+            $user->setDescription($description !== '' ? $description : null);
         }
 
         $entityManager->flush();

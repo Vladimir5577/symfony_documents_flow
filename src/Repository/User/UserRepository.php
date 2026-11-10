@@ -87,8 +87,8 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
 
         $statusEnum = $status !== null && $status !== '' ? WorkerStatus::tryFrom($status) : null;
         if ($statusEnum !== null) {
-            $qb->leftJoin('u.worker', 'w')->andWhere('w.workerStatus = :status')->setParameter('status', $statusEnum);
-            $countQb->leftJoin('u.worker', 'w')->andWhere('w.workerStatus = :status')->setParameter('status', $statusEnum);
+            $qb->andWhere('u.workerStatus = :status')->setParameter('status', $statusEnum);
+            $countQb->andWhere('u.workerStatus = :status')->setParameter('status', $statusEnum);
         }
 
         $total = (int) $countQb->getQuery()->getSingleScalarResult();

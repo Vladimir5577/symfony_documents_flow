@@ -26,7 +26,6 @@ final class ApiChatUserController extends AbstractController
             return $this->json(['error' => 'User not found'], 404);
         }
 
-        $worker = $user->getWorker();
         $org = $user->getOrganization();
 
         $departmentName = null;
@@ -47,7 +46,7 @@ final class ApiChatUserController extends AbstractController
             'avatar' => $this->avatarUrlGenerator->getAvatarUrl($user),
             'phone' => $user->getPhone(),
             'email' => $user->getEmail(),
-            'profession' => $worker ? $worker->getProfession() : null,
+            'profession' => $user->getProfession(),
             'department' => $departmentName,
             'organization' => $organizationName,
             'last_seen_at' => $user->getLastSeenAt()?->format('c'),

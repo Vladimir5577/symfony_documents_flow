@@ -39,7 +39,7 @@ final class DocumentApiPresenter
         return [
             'id' => $user->getId(),
             'fullName' => $this->formatUserFullName($user),
-            'profession' => $user->getWorker()?->getProfession(),
+            'profession' => $user->getProfession(),
         ];
     }
 

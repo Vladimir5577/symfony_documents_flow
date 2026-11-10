@@ -93,9 +93,6 @@ final class ReferenceController extends AbstractController
             );
         }
 
-        // Поля, а не сущности: у User есть worker — инверсная сторона OneToOne, прокси
-        // на неё Doctrine построить не может и делает SELECT на каждого загруженного
-        // человека. В отделе на 242 сотрудника это 242 лишних запроса, 370 мс против 8.
         $users = $this->userRepository->createQueryBuilder('u')
             ->select('u.id, u.lastname, u.firstname, u.patronymic, u.login')
             ->addSelect('IDENTITY(u.organization) AS organizationId')

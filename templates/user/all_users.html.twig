@@ -88,10 +88,10 @@
                                             <td>{{ user.firstname ?? '-' }}</td>
                                             <td>{{ user.patronymic ?? '-' }}</td>
                                             <td>{{ user.phone ?? '-' }}</td>
-                                            <td>{{ user.worker ? user.worker.profession : '—' }}</td>
+                                            <td>{{ user.profession ?? '—' }}</td>
                                             <td class="table-users-status-col">
                                                 <span class="badge bg-secondary badge-status-compact">
-                                                    {{ user.worker ? user.worker.workerStatus.getLabel() : '—' }}
+                                                    {{ user.workerStatus ? user.workerStatus.getLabel() : '—' }}
                                                 </span>
                                             </td>
                                         </tr>

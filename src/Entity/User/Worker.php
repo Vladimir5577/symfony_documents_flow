@@ -7,6 +7,10 @@ use App\Repository\User\WorkerRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
+/**
+ * Устарело: поля перенесены в User. Сущность оставлена только чтобы таблица worker
+ * не попала в DROP до ручного переноса данных; в коде не используется.
+ */
 #[ORM\Entity(repositoryClass: WorkerRepository::class)]
 class Worker
 {
@@ -15,7 +19,7 @@ class Worker
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\OneToOne(targetEntity: User::class, inversedBy: 'worker')]
+    #[ORM\OneToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'user_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE', unique: true)]
     private User $user;
 
