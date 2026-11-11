@@ -93,6 +93,61 @@ final class FileGroupRealtime
         );
     }
 
+    /** Исключённому: каталог пропадает из «Доступные мне», поэтому колокольчик обязателен. */
+    public function notifyMemberRemoved(FileGroup $group, User $actor, User $member): void
+    {
+        $groupId = $group->getId();
+        if ($groupId === null) {
+            return;
+        }
+
+        $this->notifications->publish(
+            module: self::MODULE,
+            event: 'member_removed',
+            recipients: [$member],
+            title: sprintf('Вас убрали из каталога «%s»', $group->getName()),
+            link: '/file-groups',
+            actor: $actor,
+            typeLabel: 'Общие файлы',
+        );
+    }
+
+    public function notifyUploadGranted(FileGroup $group, User $actor, User $member): void
+    {
+        $groupId = $group->getId();
+        if ($groupId === null) {
+            return;
+        }
+
+        $this->notifications->publish(
+            module: self::MODULE,
+            event: 'upload_granted',
+            recipients: [$member],
+            title: sprintf('Вам разрешили загружать файлы в каталог «%s»', $group->getName()),
+            link: '/file-groups/' . $groupId,
+            actor: $actor,
+            typeLabel: 'Общие файлы',
+        );
+    }
+
+    public function notifyUploadRevoked(FileGroup $group, User $actor, User $member): void
+    {
+        $groupId = $group->getId();
+        if ($groupId === null) {
+            return;
+        }
+
+        $this->notifications->publish(
+            module: self::MODULE,
+            event: 'upload_revoked',
+            recipients: [$member],
+            title: sprintf('В каталоге «%s» снято право загружать файлы', $group->getName()),
+            link: '/file-groups/' . $groupId,
+            actor: $actor,
+            typeLabel: 'Общие файлы',
+        );
+    }
+
     public function notifyWriterGranted(FileGroup $group, User $actor, User $member, FileGroupFile $file): void
     {
         $groupId = $group->getId();

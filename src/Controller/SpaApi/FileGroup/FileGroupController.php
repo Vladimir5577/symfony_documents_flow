@@ -199,6 +199,8 @@ final class FileGroupController extends AbstractController
             return new JsonResponse(null, Response::HTTP_NO_CONTENT);
         }
 
+        $this->realtime->notifyMemberRemoved($group, $user, $member);
+
         return $this->respondChanged($group, $user, $request->query->getInt('folderId'), 'member_removed');
     }
 
@@ -221,12 +223,19 @@ final class FileGroupController extends AbstractController
         if (!is_bool($body['canUpload'] ?? null)) {
             return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
         }
+        $wasUploader = $group->getUploaders()->contains($member);
         if ($body['canUpload']) {
             $group->addUploader($member);
         } else {
             $group->removeUploader($member);
         }
         $this->em->flush();
+
+        if ($wasUploader && !$body['canUpload']) {
+            $this->realtime->notifyUploadRevoked($group, $user, $member);
+        } elseif (!$wasUploader && $body['canUpload']) {
+            $this->realtime->notifyUploadGranted($group, $user, $member);
+        }
 
         return $this->respondChanged($group, $user, (int) ($body['folderId'] ?? 0), 'member_upload');
     }
