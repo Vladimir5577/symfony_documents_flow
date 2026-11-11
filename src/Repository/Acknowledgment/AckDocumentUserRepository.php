@@ -104,10 +104,6 @@ class AckDocumentUserRepository extends ServiceEntityRepository
      * большинства просто нет, и выборка из ack_document_user показала бы только
      * тех, кто уже отреагировал, — то есть ровно не тех, кого ищут в отчёте.
      *
-     * Отдаём скаляры, а не сущности: у User обратная сторона OneToOne на Worker,
-     * и каждая гидрация человека стоит отдельного SELECT. На странице отчёта в
-     * полсотни строк это полсотни лишних запросов на ровном месте.
-     *
      * @return list<array{userId: int, lastname: string, firstname: string, patronymic: ?string,
      *                    status: ?AckStatus, comment: ?string, actedAt: ?\DateTimeImmutable}>
      */

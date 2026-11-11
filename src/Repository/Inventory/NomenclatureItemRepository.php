@@ -41,7 +41,7 @@ class NomenclatureItemRepository extends ServiceEntityRepository
     /**
      * @param array{
      *     organizationIds?: int[]|null,
-     *     categoryId?: int|null,
+     *     categoryIds?: int[]|null,
      *     noCategory?: bool,
      *     status?: ItemStatus|null,
      *     assignedToId?: int|null,
@@ -129,17 +129,13 @@ class NomenclatureItemRepository extends ServiceEntityRepository
         // обе необязательны, и внутренний молча выкинул бы неразобранные позиции
         // из всех списков. Документ присоединяется сразу: и список, и выгрузка
         // показывают его у каждой строки, а ленивый прокси означал бы отдельный
-        // SELECT на каждый документ. Работник владельца (`aw`) в ответ не идёт, но
-        // джойн обязателен: worker — инверсная сторона OneToOne у User, прокси на неё
-        // построить нельзя. Без джойна страница с разными владельцами стоит
-        // +20 запросов, а выгрузка — до +10000.
+        // SELECT на каждый документ.
         $qb = $this->createQueryBuilder('i')
-            ->addSelect('n', 'c', 'o', 'a', 'aw', 'u')
+            ->addSelect('n', 'c', 'o', 'a', 'u')
             ->join('i.nomenclature', 'n')
             ->leftJoin('n.category', 'c')
             ->leftJoin('i.organization', 'o')
             ->leftJoin('i.user', 'a')
-            ->leftJoin('a.worker', 'aw')
             ->leftJoin('i.upd', 'u');
 
         $this->applyScope($qb, $scope);
@@ -338,19 +334,28 @@ class NomenclatureItemRepository extends ServiceEntityRepository
             $qb->setParameter('scopeAdminOrgs', $scope->adminOrgIds);
         }
 
-        $index = 0;
+        // Категории с одинаковым набором организаций сводятся в одно условие с IN:
+        // скоуп уже раскрыт на подкатегории, и ответственный за «Оргтехнику» иначе
+        // дал бы по OR-ветке на каждый её узел.
+        $categoriesByOrgs = [];
         foreach ($scope->categoryOrgIds as $categoryId => $organizationIds) {
             if ($organizationIds === []) {
                 continue;
             }
 
+            sort($organizationIds);
+            $key = implode(',', $organizationIds);
+            $categoriesByOrgs[$key]['orgs'] = $organizationIds;
+            $categoriesByOrgs[$key]['categories'][] = $categoryId;
+        }
+
+        foreach (array_values($categoriesByOrgs) as $index => $group) {
             $or->add(sprintf(
-                '(n.category = :scopeCategory%1$d AND i.organization IN (:scopeCategoryOrgs%1$d))',
+                '(n.category IN (:scopeCategories%1$d) AND i.organization IN (:scopeCategoryOrgs%1$d))',
                 $index,
             ));
-            $qb->setParameter('scopeCategory' . $index, $categoryId);
-            $qb->setParameter('scopeCategoryOrgs' . $index, $organizationIds);
-            ++$index;
+            $qb->setParameter('scopeCategories' . $index, $group['categories']);
+            $qb->setParameter('scopeCategoryOrgs' . $index, $group['orgs']);
         }
 
         if ($or->count() === 0) {
@@ -375,8 +380,8 @@ class NomenclatureItemRepository extends ServiceEntityRepository
 
         if (!empty($filters['noCategory'])) {
             $qb->andWhere('n.category IS NULL');
-        } elseif (!empty($filters['categoryId'])) {
-            $qb->andWhere('n.category = :categoryId')->setParameter('categoryId', $filters['categoryId']);
+        } elseif (!empty($filters['categoryIds'])) {
+            $qb->andWhere('n.category IN (:categoryIds)')->setParameter('categoryIds', $filters['categoryIds']);
         }
 
         if (!empty($filters['nomenclatureId'])) {

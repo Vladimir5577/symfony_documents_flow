@@ -133,8 +133,7 @@ final class OrganizationController extends AbstractController
             ],
             'users' => array_map(
                 static function ($user) {
-                    $worker = $user->getWorker();
-                    $workerStatus = $worker?->getWorkerStatus();
+                    $workerStatus = $user->getWorkerStatus();
 
                     return [
                         'id' => $user->getId(),
@@ -143,7 +142,7 @@ final class OrganizationController extends AbstractController
                             $user->getFirstname(),
                             $user->getPatronymic(),
                         ]))),
-                        'profession' => $worker?->getProfession(),
+                        'profession' => $user->getProfession(),
                         'status' => $workerStatus?->value,
                         'statusLabel' => $workerStatus?->getLabel(),
                     ];

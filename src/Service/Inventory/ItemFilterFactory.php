@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Inventory;
 
 use App\Enum\Inventory\ItemStatus;
+use App\Repository\Inventory\ItemCategoryRepository;
 use App\Repository\Organization\OrganizationRepository;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -19,6 +20,7 @@ final class ItemFilterFactory
 {
     public function __construct(
         private readonly OrganizationRepository $organizationRepository,
+        private readonly ItemCategoryRepository $categoryRepository,
     ) {
     }
 
@@ -29,7 +31,7 @@ final class ItemFilterFactory
     {
         return [
             'organizationIds' => $this->resolveOrganizationIds($request),
-            'categoryId' => $request->query->getInt('category_id') ?: null,
+            'categoryIds' => $this->resolveCategoryIds($request),
             'nomenclatureId' => $request->query->getInt('nomenclature_id') ?: null,
             'updId' => $request->query->getInt('upd_id') ?: null,
             'noCategory' => $request->query->getBoolean('no_category'),
@@ -41,6 +43,23 @@ final class ItemFilterFactory
             'sort' => (string) $request->query->get('sort', ''),
             'direction' => (string) $request->query->get('direction', ''),
         ];
+    }
+
+    /**
+     * Категория берётся вместе с подкатегориями: фильтр «Оргтехника» показывает
+     * и мониторы, и мини ПК. Несуществующий id даёт [-1], а не пустой список —
+     * пустой фильтр не применился бы, и вместо пустого результата пришло бы всё.
+     *
+     * @return int[]|null
+     */
+    private function resolveCategoryIds(Request $request): ?array
+    {
+        $categoryId = $request->query->getInt('category_id');
+        if ($categoryId <= 0) {
+            return null;
+        }
+
+        return $this->categoryRepository->loadTree()->subtreeIds($categoryId) ?: [-1];
     }
 
     /**

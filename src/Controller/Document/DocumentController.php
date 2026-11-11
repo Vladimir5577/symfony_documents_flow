@@ -390,7 +390,7 @@ final class DocumentController extends AbstractController
                 (string) ($user->getPatronymic() ?? '')
             ));
 
-            $profession = $user->getWorker()?->getProfession();
+            $profession = $user->getProfession();
 
             $data[] = [
                 'id' => $user->getId(),
@@ -431,7 +431,7 @@ final class DocumentController extends AbstractController
             $data[] = [
                 'id' => $user->getId(),
                 'name' => $fullName,
-                'profession' => $user->getWorker()?->getProfession(),
+                'profession' => $user->getProfession(),
             ];
         }
 

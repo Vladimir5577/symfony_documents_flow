@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Controller\SpaApi\User;
 
 use App\Entity\User\User;
-use App\Entity\User\Worker;
 use App\Enum\User\WorkerStatus;
 use App\Service\User\UserAvatarStorageService;
 use App\Service\User\UserAvatarUrlGenerator;
@@ -132,14 +131,7 @@ final class MeController extends AbstractController
                 throw new \InvalidArgumentException('Некорректный статус сотрудника.');
             }
 
-            $worker = $user->getWorker();
-            if ($worker === null) {
-                $worker = new Worker();
-                $worker->setProfession('');
-                $user->setWorker($worker);
-            }
-
-            $worker->setWorkerStatus($status);
+            $user->setWorkerStatus($status);
         }
 
         if ($password !== '' || $passwordRepeat !== '') {
@@ -187,7 +179,7 @@ final class MeController extends AbstractController
      */
     private function buildMePayload(User $user): array
     {
-        $workerStatus = $user->getWorker()?->getWorkerStatus();
+        $workerStatus = $user->getWorkerStatus();
         $avatarUrl = null;
 
         if ($user->getAvatarName() !== null && $user->getAvatarName() !== '') {

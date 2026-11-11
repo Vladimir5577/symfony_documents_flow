@@ -95,8 +95,7 @@ final class UserController extends AbstractController
         return $this->json([
             'users' => array_map(
                 static function (User $user): array {
-                    $worker = $user->getWorker();
-                    $workerStatus = $worker?->getWorkerStatus();
+                    $workerStatus = $user->getWorkerStatus();
                     $organization = $user->getOrganization();
 
                     return [
@@ -106,7 +105,7 @@ final class UserController extends AbstractController
                         'patronymic' => $user->getPatronymic() ?? '-',
                         'login' => $user->getLogin(),
                         'phone' => $user->getPhone() ?? '-',
-                        'profession' => $worker?->getProfession() ?? '-',
+                        'profession' => $user->getProfession() ?? '-',
                         'status' => $workerStatus?->value,
                         'statusLabel' => $workerStatus?->getLabel() ?? '-',
                         'organization' => $organization !== null ? [
@@ -190,8 +189,8 @@ final class UserController extends AbstractController
 
         $statusEnum = $status !== null && $status !== '' ? WorkerStatus::tryFrom($status) : null;
         if ($statusEnum !== null) {
-            $qb->leftJoin('u.worker', 'w')->andWhere('w.workerStatus = :status')->setParameter('status', $statusEnum);
-            $countQb->leftJoin('u.worker', 'w')->andWhere('w.workerStatus = :status')->setParameter('status', $statusEnum);
+            $qb->andWhere('u.workerStatus = :status')->setParameter('status', $statusEnum);
+            $countQb->andWhere('u.workerStatus = :status')->setParameter('status', $statusEnum);
         }
 
         $total = (int) $countQb->getQuery()->getSingleScalarResult();

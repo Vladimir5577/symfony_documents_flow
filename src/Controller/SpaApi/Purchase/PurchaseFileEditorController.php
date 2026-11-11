@@ -507,10 +507,11 @@ final class PurchaseFileEditorController extends AbstractController
     /**
      * Подпись адресов файла (content) и callback: они общие на сессию, пользователя
      * в них нет. Назначение входит в подпись — по адресу чтения запись не собрать.
+     * Тип ресурса тоже: иначе ссылка документа с теми же id подходит сюда.
      */
     private function signFile(string $purpose, int $purchaseId, int $fileId, string $key): string
     {
-        return hash_hmac('sha256', $purpose . "\n" . $purchaseId . "\n" . $fileId . "\n" . $key, $this->appSecret);
+        return hash_hmac('sha256', "purchase\n" . $purpose . "\n" . $purchaseId . "\n" . $fileId . "\n" . $key, $this->appSecret);
     }
 
     private function isDocx(PurchaseRequestFile $file): bool
