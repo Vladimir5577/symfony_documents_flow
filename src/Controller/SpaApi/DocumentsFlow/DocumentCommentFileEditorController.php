@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\DocumentsFlow;
 
-use App\Controller\SpaApi\Purchase\PurchaseFileEditorController;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Document\DocumentCommentFile;
@@ -227,7 +226,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         if (!$file instanceof DocumentCommentFile || !$document instanceof Document || $document->getId() !== $documentId || !$this->isCurrentKey($fileId, $key)) {
             return $this->json(['error' => 0]);
         }
-        $url = PurchaseFileEditorController::internalDownloadUrl((string) ($data['url'] ?? ''), $this->onlyofficeDocumentServerUrl);
+        $url = DocumentFileEditorController::internalDownloadUrl((string) ($data['url'] ?? ''), $this->onlyofficeDocumentServerUrl);
         if ($url === null) {
             return $this->json(['error' => 1]);
         }

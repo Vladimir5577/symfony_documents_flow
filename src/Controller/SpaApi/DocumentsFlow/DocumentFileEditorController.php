@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Controller\SpaApi\DocumentsFlow;
 
-use App\Controller\SpaApi\Purchase\PurchaseFileEditorController;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Document\File;
@@ -291,7 +290,7 @@ final class DocumentFileEditorController extends AbstractController
         if (!$document instanceof Document || !$file instanceof File || !$this->isCurrentKey($fileId, $key)) {
             return $this->json(['error' => 0]);
         }
-        $url = PurchaseFileEditorController::internalDownloadUrl((string) ($data['url'] ?? ''), $this->onlyofficeDocumentServerUrl);
+        $url = self::internalDownloadUrl((string) ($data['url'] ?? ''), $this->onlyofficeDocumentServerUrl);
         if ($url === null) {
             return $this->json(['error' => 1]);
         }
@@ -770,5 +769,44 @@ final class DocumentFileEditorController extends AbstractController
         $decoded = json_decode($response, true);
 
         return is_array($decoded) ? $decoded : ['error' => 1, 'unreachable' => true];
+    }
+
+    /**
+     * Адрес собранного файла из callback → внутренний адрес Document Server;
+     * null — адрес не его.
+     *
+     * Без проверки file_get_contents прочитал бы что угодно из тела запроса:
+     * file://, php://filter или внутренний сервис. Файл отдаёт только кэш
+     * Document Server — по публичному адресу (как его видит браузер) или
+     * внутреннему http://onlyoffice.
+     */
+    public static function internalDownloadUrl(string $url, string $documentServerUrl): ?string
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts) || !in_array($parts['scheme'] ?? null, ['http', 'https'], true) || !isset($parts['host'])) {
+            return null;
+        }
+        $path = $parts['path'] ?? '';
+
+        $prefix = null;
+        if ($parts['host'] === 'onlyoffice') {
+            $prefix = '';
+        } else {
+            $public = parse_url($documentServerUrl);
+            if (is_array($public)
+                && ($public['scheme'] ?? null) === $parts['scheme']
+                && strcasecmp($public['host'] ?? '', $parts['host']) === 0
+                && ($public['port'] ?? null) === ($parts['port'] ?? null)
+            ) {
+                $prefix = rtrim($public['path'] ?? '', '/');
+            }
+        }
+        if ($prefix === null || !str_starts_with($path, $prefix . '/cache/files/')) {
+            return null;
+        }
+
+        $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+
+        return 'http://onlyoffice:80' . substr($path, strlen($prefix)) . $query;
     }
 }

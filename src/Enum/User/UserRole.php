@@ -17,9 +17,6 @@ enum UserRole: string
     case ROLE_FINANCE = 'ROLE_FINANCE';
     case ROLE_CLIENTS_DEPARTMENT = 'ROLE_CLIENTS_DEPARTMENT';
     case ROLE_MECHANIC = 'ROLE_MECHANIC';
-    // Роли закупок здесь были и уехали в модуль: справочник purchase_role плюс
-    // полномочия PurchaseCapability. Состав согласантов меняется чаще, чем
-    // выходят релизы, и роль-константа означала деплой на каждую правку.
     case ROLE_INVENTORY_ADMIN = 'ROLE_INVENTORY_ADMIN';
     case ROLE_INVENTORY_MANAGER = 'ROLE_INVENTORY_MANAGER';
     case ROLE_DOC_OFFICE = 'ROLE_DOC_OFFICE';
