@@ -321,6 +321,7 @@ final class DocumentBoardController extends AbstractController
             'documentDirection' => $this->documentDirection($board, $user),
             'updatedAt' => $board->getUpdatedAt()->format(DATE_ATOM),
             'canManage' => $this->canManage($board, $user),
+            'author' => $this->presenter->presentUserBrief($board->getCreatedBy()),
         ];
     }
 
