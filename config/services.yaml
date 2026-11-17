@@ -68,11 +68,6 @@ services:
             $s3: '@Aws\S3\S3Client'
             $bucket: '%env(MINIO_USER_BUCKET)%'
 
-    App\Service\Purchase\PurchaseFileStorageService:
-        arguments:
-            $s3: '@Aws\S3\S3Client'
-            $bucket: '%env(MINIO_PURCHASE_BUCKET)%'
-
     App\Service\Acknowledgment\AckFileStorageService:
         arguments:
             $s3: '@Aws\S3\S3Client'
@@ -82,11 +77,6 @@ services:
         arguments:
             $s3: '@Aws\S3\S3Client'
             $bucket: '%env(MINIO_FILE_GROUP_BUCKET)%'
-
-    App\Service\Purchase\PurchaseImageUrlGenerator:
-        arguments:
-            $imgproxyCacheBaseUrl: '%env(IMGPROXY_CACHE_BASE_URL)%'
-            $minioPurchaseBucket: '%env(MINIO_PURCHASE_BUCKET)%'
 
     App\Service\FileGroup\FileGroupImageUrlGenerator:
         arguments:

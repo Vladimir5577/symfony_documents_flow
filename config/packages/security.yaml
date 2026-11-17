@@ -80,10 +80,6 @@ security:
         ROLE_FINANCE: ROLE_USER
         ROLE_CLIENTS_DEPARTMENT: ROLE_USER
         ROLE_MECHANIC: ROLE_USER
-        # Закупки глобальных ролей не имеют: состав участников и их полномочия
-        # ведёт админка модуля (purchase_role), а маршрут адресует шаги ролям
-        # оттуда. Две системы прав на один модуль неизбежно разъезжались, и
-        # никто не мог сказать, какая из них настоящая.
         # Главный администратор инвентаризации видит всё и умеет всё, что умеет
         # привязанный к организации, — отсюда наследование.
         ROLE_INVENTORY_ADMIN: [ROLE_INVENTORY_MANAGER, ROLE_USER]
@@ -99,9 +95,7 @@ security:
         # Публичные роуты (доступны всем, включая неаутентифицированных)
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/save_docx, roles: PUBLIC_ACCESS }
-        # OnlyOffice скачивает docx и шлёт callback без JWT. Доступ — токен сессии в query.
-        - { path: ^/purchase_file_editor, roles: PUBLIC_ACCESS }
-        # То же для docx документооборота: скачивание и callback без JWT, доступ — токен в query.
+        # OnlyOffice скачивает docx документооборота и шлёт callback без JWT. Доступ — токен сессии в query.
         - { path: ^/document_file_editor, roles: PUBLIC_ACCESS }
         # То же для вложения в обсуждении документа.
         - { path: ^/document_comment_file_editor, roles: PUBLIC_ACCESS }
