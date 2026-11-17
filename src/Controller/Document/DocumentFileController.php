@@ -6,28 +6,22 @@ use App\Entity\Document\Document;
 use App\Entity\Document\File;
 use App\Repository\Document\DocumentRepository;
 use App\Repository\Document\FileRepository;
+use App\Service\Document\DocumentFileStorage;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class DocumentFileController extends AbstractController
 {
     #[Route('/document_upload_files_action/{id}', name: 'document_upload_files_action', methods: ['POST'], requirements: ['id' => '\d+'])]
-    public function new(Request $request, int $id, DocumentRepository $documentRepository, \Doctrine\ORM\EntityManagerInterface $entityManager): Response
+    public function new(Request $request, int $id, DocumentRepository $documentRepository, \Doctrine\ORM\EntityManagerInterface $entityManager, DocumentFileStorage $fileStorage): Response
     {
         $document = $documentRepository->find($id);
         if (!$document) {
             throw $this->createNotFoundException('Документ не найден.');
-        }
-
-        $baseUploadDir = $this->getParameter('private_upload_dir_documents_originals');
-        $documentDir = $baseUploadDir . '/' . $id;
-        if (!is_dir($documentDir)) {
-            mkdir($documentDir, 0755, true);
         }
 
         $uploadedFiles = $request->files->get('file') ?? $request->files->get('files');
@@ -59,7 +53,7 @@ final class DocumentFileController extends AbstractController
             }
             $fileEntity = new File();
             $fileEntity->setDocument($document);
-            $fileEntity->setFile($uploadedFile);
+            $fileStorage->storeAttachment($fileEntity, $uploadedFile);
             $fileEntity->setTitle(pathinfo($clientName, PATHINFO_FILENAME));
             $document->addFile($fileEntity);
             $entityManager->persist($fileEntity);
@@ -102,48 +96,22 @@ final class DocumentFileController extends AbstractController
     }
 
     #[Route('/document_file_download/{id}', name: 'document_file_download', requirements: ['id' => '\d+'])]
-    public function download(int $id, Request $request, FileRepository $fileRepository): Response
+    public function download(int $id, Request $request, FileRepository $fileRepository, DocumentFileStorage $fileStorage): Response
     {
         $fileEntity = $fileRepository->find($id);
         if (!$fileEntity instanceof File) {
             throw $this->createNotFoundException('Файл не найден.');
         }
 
-        $filePath = $fileEntity->getFilePath();
-        if (!$filePath) {
-            throw $this->createNotFoundException('Файл не прикреплён.');
-        }
-
-        $documentId = $fileEntity->getDocument()?->getId();
-        $uploadDir = $this->getParameter('private_upload_dir_documents_originals');
-        $absolutePath = str_contains($filePath, '/')
-            ? $uploadDir . '/' . $filePath
-            : $uploadDir . '/' . $documentId . '/' . $filePath;
-
-        if (!is_file($absolutePath)) {
-            throw $this->createNotFoundException('Файл не найден на диске.');
-        }
-
+        $filePath = (string) $fileEntity->getFilePath();
         $filename = $fileEntity->getTitle()
             ? $fileEntity->getTitle().'.'.pathinfo($filePath, PATHINFO_EXTENSION)
             : $filePath;
 
-        $inline = $request->query->getBoolean('inline');
-
-        $response = new StreamedResponse(static function () use ($absolutePath) {
-            $handle = fopen($absolutePath, 'rb');
-            if ($handle === false) {
-                return;
-            }
-            while (!feof($handle)) {
-                echo fread($handle, 8192);
-                flush();
-            }
-            fclose($handle);
-        });
-
-        $response->headers->set('Content-Type', mime_content_type($absolutePath) ?: 'application/octet-stream');
-        $response->headers->set('Content-Disposition', ($inline ? 'inline' : 'attachment').'; filename="'.addslashes($filename).'"');
+        $response = $fileStorage->response(DocumentFileStorage::attachmentKey($fileEntity), $filename, $request->query->getBoolean('inline'));
+        if ($response === null) {
+            throw $this->createNotFoundException('Файл не найден в хранилище.');
+        }
 
         return $response;
     }
@@ -164,15 +132,7 @@ final class DocumentFileController extends AbstractController
             return $this->redirectToRoute('app_view_outgoing_document', ['id' => $documentId], Response::HTTP_SEE_OTHER);
         }
 
-        $uploadDir = $this->getParameter('private_upload_dir_documents_originals');
-        $filePath = $fileEntity->getFilePath();
-        $absolutePath = ($filePath && str_contains($filePath, '/'))
-            ? $uploadDir . '/' . $filePath
-            : ($documentId ? $uploadDir . '/' . $documentId . '/' . $filePath : $uploadDir . '/' . $filePath);
-        if ($filePath && is_file($absolutePath)) {
-            @unlink($absolutePath);
-        }
-
+        // Объект в MinIO удалит DocumentFileRemoveListener.
         $entityManager->remove($fileEntity);
         if ($documentId) {
             $document = $documentRepository->find($documentId);

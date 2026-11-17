@@ -10,14 +10,13 @@ use App\Entity\Document\DocumentCommentFile;
 use App\Entity\User\User;
 use App\Repository\Document\DocumentCommentFileRepository;
 use App\Repository\Document\DocumentRepository;
+use App\Service\Document\DocumentFileStorage;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentCommentService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
@@ -30,6 +29,7 @@ final class DocumentCommentController extends AbstractController
         private readonly DocumentCommentFileRepository $commentFileRepository,
         private readonly DocumentAccessService $accessService,
         private readonly DocumentCommentService $commentService,
+        private readonly DocumentFileStorage $storage,
     ) {
     }
 
@@ -87,16 +87,14 @@ final class DocumentCommentController extends AbstractController
             return $this->json(['error' => SpaApiError::COMMENT_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $absolutePath = $this->commentService->resolveCommentFilePath($document, $fileEntity);
-        if ($absolutePath === null) {
+        $response = $this->storage->response(
+            DocumentFileStorage::commentFileKey($fileEntity),
+            $fileEntity->getFilename() ?? 'file',
+            $request->query->getBoolean('inline'),
+        );
+        if ($response === null) {
             return $this->json(['error' => SpaApiError::FILE_NOT_FOUND_ON_DISK], Response::HTTP_NOT_FOUND);
         }
-
-        $response = new BinaryFileResponse($absolutePath);
-        $disposition = $request->query->getBoolean('inline')
-            ? ResponseHeaderBag::DISPOSITION_INLINE
-            : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
-        $response->setContentDisposition($disposition, $fileEntity->getFilename() ?? 'file');
 
         return $response;
     }

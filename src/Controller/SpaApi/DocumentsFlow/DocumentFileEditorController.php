@@ -9,6 +9,7 @@ use App\Entity\Document\Document;
 use App\Entity\Document\File;
 use App\Entity\User\User;
 use App\Repository\Document\DocumentRepository;
+use App\Service\Document\DocumentFileStorage;
 use App\Service\OnlyOffice\EditorSessionKey;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
 use App\Service\SpaApi\Documents\DocumentAccessService;
@@ -22,7 +23,6 @@ use PhpOffice\PhpWord\PhpWord;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -75,6 +75,7 @@ final class DocumentFileEditorController extends AbstractController
         private readonly DocumentRepository $documents,
         private readonly DocumentAccessService $access,
         private readonly DocumentAttachmentService $attachments,
+        private readonly DocumentFileStorage $storage,
         private readonly DocumentNotifier $notifier,
         private readonly OnlyOfficeJwt $jwt,
         private readonly EntityManagerInterface $em,
@@ -127,7 +128,7 @@ final class DocumentFileEditorController extends AbstractController
             }
         }
 
-        return $this->json($this->attachments->presentFile($document, $file), Response::HTTP_CREATED);
+        return $this->json($this->attachments->presentFile($file), Response::HTTP_CREATED);
     }
 
     #[Route('/spa/api/documents-flow/outgoing/{documentId}/attachments/{fileId}/editor', name: 'spa_api_documents_flow_file_editor_open', requirements: ['documentId' => '\d+', 'fileId' => '\d+'], methods: ['POST'])]
@@ -243,17 +244,15 @@ final class DocumentFileEditorController extends AbstractController
         if ($this->keyFromQuery('content', $documentId, $fileId, $request) === null) {
             return $this->json(['error' => SpaApiError::ATTACHMENT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
-        $document = $this->documents->find($documentId);
-        $file = $document instanceof Document ? $this->attachments->findForDocument($documentId, $fileId) : null;
-        $path = $document instanceof Document && $file instanceof File
-            ? $this->attachments->resolveFilePath($document, $file)
-            : null;
+        $file = $this->attachments->findForDocument($documentId, $fileId);
         $ext = $this->officeExt($file);
-        if ($path === null || $ext === null) {
+        $response = $ext !== null
+            ? $this->storage->response(DocumentFileStorage::attachmentKey($file), $this->attachments->displayName($file), true)
+            : null;
+        if ($response === null) {
             return $this->json(['error' => SpaApiError::ATTACHMENT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $response = new BinaryFileResponse($path);
         $response->headers->set('Content-Type', self::OFFICE_MIME[$ext]);
         $response->headers->set('Cache-Control', 'no-store');
 
@@ -295,7 +294,7 @@ final class DocumentFileEditorController extends AbstractController
             return $this->json(['error' => 1]);
         }
         $downloaded = @file_get_contents($url);
-        if ($downloaded === false || $downloaded === '' || !$this->writeFile($document, $file, $downloaded)) {
+        if ($downloaded === false || $downloaded === '' || !$this->writeFile($file, $downloaded)) {
             return $this->json(['error' => 1]);
         }
         $document->setUpdatedAt(new \DateTimeImmutable());
@@ -315,17 +314,21 @@ final class DocumentFileEditorController extends AbstractController
         $this->cache->deleteItem($this->keyCacheId($fileId));
     }
 
-    private function writeFile(Document $document, File $file, string $bytes): bool
+    private function writeFile(File $file, string $bytes): bool
     {
         if (strlen($bytes) > self::MAX_FILE_SIZE) {
             return false;
         }
-        $path = $this->attachments->resolveFilePath($document, $file);
-        if ($path === null) {
+        $key = DocumentFileStorage::attachmentKey($file);
+        if ($key === null) {
             return false;
         }
+        if (!$this->storage->put($key, $bytes, $file->getContentType())) {
+            return false;
+        }
+        $file->setSizeBytes(strlen($bytes));
 
-        return file_put_contents($path, $bytes) !== false;
+        return true;
     }
 
     /**
@@ -364,7 +367,7 @@ final class DocumentFileEditorController extends AbstractController
             $editorConfig['callbackUrl'] = $callbackUrl;
         }
 
-        $presented = $this->attachments->presentFile($document, $file);
+        $presented = $this->attachments->presentFile($file);
         $permissions = match (true) {
             $review => ['edit' => false, 'review' => true, 'comment' => true],
             $edit => ['edit' => true, 'review' => false, 'comment' => true],

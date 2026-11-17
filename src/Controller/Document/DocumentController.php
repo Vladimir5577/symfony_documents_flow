@@ -17,6 +17,7 @@ use App\Repository\Document\DocumentTypeRepository;
 use App\Repository\Document\DocumentUserRecipientRepository;
 use App\Repository\Organization\OrganizationRepository;
 use App\Repository\User\UserRepository;
+use App\Service\Document\DocumentFileStorage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -51,6 +52,7 @@ final class DocumentController extends AbstractController
         UserRepository         $userRepository,
         EntityManagerInterface $entityManager,
         ValidatorInterface     $validator,
+        DocumentFileStorage    $fileStorage,
     ): Response
     {
         $currentUser = $this->getUser();
@@ -332,7 +334,7 @@ final class DocumentController extends AbstractController
         $connection = $entityManager->getConnection();
         $connection->beginTransaction();
         try {
-            // Сначала сохраняем документ и получателей, чтобы у документа появился id (нужен Vich для пути загрузки)
+            // Сначала сохраняем документ и получателей, чтобы у документа появился id (он входит в ключ файла)
             $entityManager->flush();
 
             // Прикрепляем файлы к документу (после flush document уже имеет id)
@@ -343,7 +345,7 @@ final class DocumentController extends AbstractController
                 $clientName = $uploadedFile->getClientOriginalName();
                 $fileEntity = new File();
                 $fileEntity->setDocument($document);
-                $fileEntity->setFile($uploadedFile);
+                $fileStorage->storeAttachment($fileEntity, $uploadedFile);
                 $fileEntity->setTitle(pathinfo($clientName, PATHINFO_FILENAME));
                 $document->addFile($fileEntity);
                 $entityManager->persist($fileEntity);

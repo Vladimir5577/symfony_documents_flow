@@ -10,16 +10,15 @@ use App\Entity\Document\DocumentCommentFile;
 use App\Entity\User\User;
 use App\Repository\Document\DocumentCommentFileRepository;
 use App\Repository\Document\DocumentRepository;
+use App\Service\Document\DocumentFileStorage;
 use App\Service\OnlyOffice\EditorSessionKey;
 use App\Service\OnlyOffice\OnlyOfficeJwt;
 use App\Service\SpaApi\Documents\DocumentAccessService;
-use App\Service\SpaApi\Documents\DocumentCommentService;
 use App\Service\SpaApi\Documents\DocumentNotifier;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -69,7 +68,7 @@ final class DocumentCommentFileEditorController extends AbstractController
         private readonly DocumentRepository $documents,
         private readonly DocumentCommentFileRepository $commentFiles,
         private readonly DocumentAccessService $access,
-        private readonly DocumentCommentService $comments,
+        private readonly DocumentFileStorage $storage,
         private readonly DocumentNotifier $notifier,
         private readonly OnlyOfficeJwt $jwt,
         private readonly EntityManagerInterface $em,
@@ -183,13 +182,14 @@ final class DocumentCommentFileEditorController extends AbstractController
         if (!$file instanceof DocumentCommentFile || !$document instanceof Document || $document->getId() !== $documentId) {
             return $this->json(['error' => SpaApiError::COMMENT_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
-        $path = $this->comments->resolveCommentFilePath($document, $file);
         $ext = $this->officeExt($file);
-        if ($path === null || $ext === null) {
+        $response = $ext !== null
+            ? $this->storage->response(DocumentFileStorage::commentFileKey($file), (string) $file->getFilename(), true)
+            : null;
+        if ($response === null) {
             return $this->json(['error' => SpaApiError::COMMENT_FILE_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $response = new BinaryFileResponse($path);
         $response->headers->set('Content-Type', self::OFFICE_MIME[$ext]);
         $response->headers->set('Cache-Control', 'no-store');
 
@@ -231,7 +231,7 @@ final class DocumentCommentFileEditorController extends AbstractController
             return $this->json(['error' => 1]);
         }
         $downloaded = @file_get_contents($url);
-        if ($downloaded === false || $downloaded === '' || !$this->writeFile($document, $file, $downloaded)) {
+        if ($downloaded === false || $downloaded === '' || !$this->writeFile($file, $downloaded)) {
             return $this->json(['error' => 1]);
         }
         $file->setSizeBytes(strlen($downloaded));
@@ -252,17 +252,16 @@ final class DocumentCommentFileEditorController extends AbstractController
         $this->cache->deleteItem($this->keyCacheId($fileId));
     }
 
-    private function writeFile(Document $document, DocumentCommentFile $file, string $bytes): bool
+    private function writeFile(DocumentCommentFile $file, string $bytes): bool
     {
         if (strlen($bytes) > self::MAX_FILE_SIZE) {
             return false;
         }
-        $path = $this->comments->resolveCommentFilePath($document, $file);
-        if ($path === null) {
+        $key = DocumentFileStorage::commentFileKey($file);
+        if ($key === null) {
             return false;
         }
-
-        return file_put_contents($path, $bytes) !== false;
+        return $this->storage->put($key, $bytes, $file->getContentType());
     }
 
     /**

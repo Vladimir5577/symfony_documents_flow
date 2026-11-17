@@ -7,14 +7,13 @@ namespace App\Controller\SpaApi\DocumentsFlow;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\User\User;
 use App\Repository\Document\DocumentRepository;
+use App\Service\Document\DocumentFileStorage;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentAttachmentService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
@@ -26,6 +25,7 @@ final class DocumentAttachmentController extends AbstractController
         private readonly DocumentRepository $documentRepository,
         private readonly DocumentAccessService $accessService,
         private readonly DocumentAttachmentService $attachmentService,
+        private readonly DocumentFileStorage $storage,
     ) {
     }
 
@@ -57,7 +57,7 @@ final class DocumentAttachmentController extends AbstractController
         }
 
         return $this->json(
-            $this->attachmentService->presentFile($document, $fileEntity),
+            $this->attachmentService->presentFile($fileEntity),
             Response::HTTP_CREATED,
         );
     }
@@ -79,19 +79,14 @@ final class DocumentAttachmentController extends AbstractController
             return $this->json(['error' => SpaApiError::ATTACHMENT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $absolutePath = $this->attachmentService->resolveFilePath($document, $fileEntity);
-        if ($absolutePath === null) {
+        $response = $this->storage->response(
+            DocumentFileStorage::attachmentKey($fileEntity),
+            $this->attachmentService->displayName($fileEntity),
+            $request->query->getBoolean('inline'),
+        );
+        if ($response === null) {
             return $this->json(['error' => SpaApiError::FILE_NOT_FOUND_ON_DISK], Response::HTTP_NOT_FOUND);
         }
-
-        $response = new BinaryFileResponse($absolutePath);
-        $disposition = $request->query->getBoolean('inline')
-            ? ResponseHeaderBag::DISPOSITION_INLINE
-            : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
-        $response->setContentDisposition(
-            $disposition,
-            $this->attachmentService->presentFile($document, $fileEntity)['filename'] ?? 'file',
-        );
 
         return $response;
     }
