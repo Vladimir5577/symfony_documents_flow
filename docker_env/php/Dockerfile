@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     librabbitmq-dev \
     git \
     unzip \
+    qpdf \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install gd pdo pdo_mysql pgsql pdo_pgsql zip \
     && pecl install xdebug amqp \

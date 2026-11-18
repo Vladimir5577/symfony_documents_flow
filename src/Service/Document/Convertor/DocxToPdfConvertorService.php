@@ -3,6 +3,9 @@
 namespace App\Service\Document\Convertor;
 
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Process;
 
 class DocxToPdfConvertorService
 {
@@ -25,39 +28,43 @@ class DocxToPdfConvertorService
 
     public function convertDocxToPdf(string $docxFilePath): void
     {
-//        $projectDir = $this->getParameter('kernel.project_dir');
-//        $outputDir = $projectDir . '/public/files'; // абсолютный путь
-//        $docxFilePath = $this->documentsOriginalsDir . DIRECTORY_SEPARATOR . $docxFileName; // файл который загружен
+        $this->convert($docxFilePath, $this->documentsUpdatedDir);
+    }
 
-        // создаём временный профиль для LibreOffice
-        $tmpProfile = '/tmp/libreoffice_profile';
-        if (!is_dir($tmpProfile)) {
-            mkdir($tmpProfile, 0777, true);
-        }
+    /**
+     * Кладёт {имя docx}.pdf в $outDir и возвращает путь к нему.
+     * У каждого запуска свой профиль LibreOffice: с общим два одновременных
+     * запуска мешают друг другу.
+     */
+    public function convert(string $docxFilePath, string $outDir): string
+    {
+        $profile = sys_get_temp_dir() . '/libreoffice_profile_' . bin2hex(random_bytes(8));
 
-        // запуск LibreOffice для конвертации DOCX → PDF
-        $process = new \Symfony\Component\Process\Process([
-            '/usr/bin/soffice', // путь к бинарнику LibreOffice
+        $process = new Process([
+            '/usr/bin/soffice',
             '--headless',
+            '-env:UserInstallation=file://' . $profile,
             '--convert-to', 'pdf',
+            '--outdir', $outDir,
             $docxFilePath,
-            '--outdir', $this->documentsUpdatedDir,
-            '-env:UserInstallation=file://' . $tmpProfile
         ]);
+        $process->setTimeout(120);
 
-        $process->run();
+        try {
+            $process->run();
+        } finally {
+            (new Filesystem())->remove($profile);
+        }
 
-        // проверка на ошибки
         if (!$process->isSuccessful()) {
-            throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
+            throw new ProcessFailedException($process);
         }
 
-        // путь к PDF
-        $pdfFilePath = $this->documentsUpdatedDir . DIRECTORY_SEPARATOR . basename($docxFilePath, '.docx') . '.pdf';
-
-        // проверка, что файл создан
-        if (!file_exists($pdfFilePath)) {
-            throw new \Exception("PDF не был создан");
+        $pdfFilePath = rtrim($outDir, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . pathinfo($docxFilePath, PATHINFO_FILENAME) . '.pdf';
+        if (!is_file($pdfFilePath)) {
+            throw new \RuntimeException('PDF не был создан');
         }
+
+        return $pdfFilePath;
     }
 }

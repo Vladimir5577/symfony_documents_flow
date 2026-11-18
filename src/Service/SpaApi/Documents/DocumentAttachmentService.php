@@ -8,8 +8,10 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Document\File;
 use App\Repository\Document\FileRepository;
+use App\Service\Document\Convertor\DocxToPdfConvertorService;
 use App\Service\Document\DocumentFileStorage;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
@@ -22,6 +24,7 @@ final class DocumentAttachmentService
         private readonly DocumentApiPresenter $presenter,
         private readonly EntityManagerInterface $entityManager,
         private readonly DocumentFileStorage $storage,
+        private readonly DocxToPdfConvertorService $docxToPdf,
     ) {
     }
 
@@ -42,6 +45,35 @@ final class DocumentAttachmentService
         $this->entityManager->flush();
 
         return $fileEntity;
+    }
+
+    /**
+     * PDF-копия docx отдельным вложением: автор смотрит, не поехала ли вёрстка,
+     * и подписывают уже её. Сам docx остаётся как был.
+     */
+    public function convertToPdf(Document $document, File $docx): File
+    {
+        if (strtolower(pathinfo((string) $docx->getFilePath(), PATHINFO_EXTENSION)) !== 'docx') {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_FILE_CONVERSION_FAILED);
+        }
+
+        $fs = new Filesystem();
+        $dir = sys_get_temp_dir() . '/docx_to_pdf_' . bin2hex(random_bytes(8));
+        $fs->mkdir($dir);
+
+        try {
+            $source = $dir . '/source.docx';
+            if (!$this->storage->saveTo(DocumentFileStorage::attachmentKey($docx), $source)) {
+                throw new BadRequestHttpException(SpaApiError::FILE_NOT_FOUND_ON_DISK);
+            }
+
+            $pdf = $this->docxToPdf->convert($source, $dir);
+            $name = pathinfo($this->displayName($docx), PATHINFO_FILENAME) . '.pdf';
+
+            return $this->upload($document, new UploadedFile($pdf, $name, 'application/pdf', null, true));
+        } finally {
+            $fs->remove($dir);
+        }
     }
 
     public function delete(Document $document, File $fileEntity): void

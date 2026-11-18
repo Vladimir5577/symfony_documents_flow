@@ -110,6 +110,22 @@ final class DocumentFileStorage
         ]);
     }
 
+    /** Скачивает объект в локальный файл. false — объекта нет. */
+    public function saveTo(?string $key, string $path): bool
+    {
+        if ($key === null) {
+            return false;
+        }
+
+        try {
+            $this->s3->getObject(['Bucket' => $this->bucket, 'Key' => $key, 'SaveAs' => $path]);
+        } catch (S3Exception) {
+            return false;
+        }
+
+        return true;
+    }
+
     public function exists(string $key): bool
     {
         return $this->s3->doesObjectExistV2($this->bucket, $key);
