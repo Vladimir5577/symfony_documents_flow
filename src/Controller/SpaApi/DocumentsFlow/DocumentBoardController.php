@@ -102,18 +102,13 @@ final class DocumentBoardController extends AbstractController
     #[Route('/{id}', name: 'spa_api_documents_flow_boards_view', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function view(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
+        if ($request->query->getBoolean('access')) {
+            return $this->access($id, $user);
+        }
+
         $board = $this->visibleBoard($id, $user);
         if ($board instanceof JsonResponse) {
             return $board;
-        }
-
-        if ($request->query->getBoolean('access')) {
-            return $this->json([
-                'board' => [
-                    'me' => $this->presenter->presentUserBrief($user),
-                    'canManage' => $user instanceof User && $this->canManage($board, $user),
-                ],
-            ]);
         }
 
         return $this->json(['board' => $this->presentDetail($board, $user)]);
@@ -122,11 +117,11 @@ final class DocumentBoardController extends AbstractController
     #[Route('/{id}', name: 'spa_api_documents_flow_boards_update', requirements: ['id' => '\d+'], methods: ['PATCH'])]
     public function update(int $id, Request $request, #[CurrentUser] ?User $user): JsonResponse
     {
-        $board = $this->visibleBoard($id, $user);
-        if ($board instanceof JsonResponse) {
-            return $board;
+        $granted = $this->granted($id, $user);
+        if ($granted instanceof JsonResponse) {
+            return $granted;
         }
-        if (!$user instanceof User || !$this->canManage($board, $user)) {
+        if (!$granted['canManage']) {
             return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
         }
 
@@ -135,26 +130,39 @@ final class DocumentBoardController extends AbstractController
             return $payload;
         }
 
+        $title = null;
         if (array_key_exists('title', $payload)) {
             $title = trim((string) $payload['title']);
             if ($title === '' || mb_strlen($title) > 255) {
                 return $this->json(['error' => SpaApiError::BOARD_TITLE_REQUIRED], Response::HTTP_BAD_REQUEST);
             }
-            $board->setTitle($title);
-            $board->touch();
         }
 
+        $userIds = null;
         if (array_key_exists('userIds', $payload)) {
             if (!is_array($payload['userIds'])) {
                 return $this->json(['error' => SpaApiError::INVALID_JSON], Response::HTTP_BAD_REQUEST);
             }
-            $this->replaceParticipants($board, $payload['userIds']);
-            $board->touch();
+            $userIds = $this->participantIds($payload['userIds'], $granted['row']['createdById']);
         }
 
-        $this->entityManager->flush();
+        if ($title !== null || $userIds !== null) {
+            $this->entityManager->wrapInTransaction(function () use ($id, $title, $userIds): void {
+                if ($userIds !== null) {
+                    $this->boardRepository->setParticipantIds($id, $userIds);
+                }
+                $this->boardRepository->touch($id, $title);
+            });
+        }
 
-        return $this->json(['board' => $this->presentDetail($board, $user)]);
+        $board = $this->boardRepository->findSummary($id);
+        if (!$board instanceof DocumentBoard) {
+            return $this->json(['error' => SpaApiError::BOARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->json([
+            'board' => $this->presentMeta($board, $granted['user'], $this->boardRepository->findParticipantUsers($id)),
+        ]);
     }
 
     #[Route('/{id}/scene', name: 'spa_api_documents_flow_boards_scene', requirements: ['id' => '\d+'], methods: ['PUT'])]
@@ -200,6 +208,59 @@ final class DocumentBoardController extends AbstractController
         $this->entityManager->flush();
 
         return $this->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    private function access(int $id, ?User $user): JsonResponse
+    {
+        $granted = $this->granted($id, $user);
+        if ($granted instanceof JsonResponse) {
+            return $granted;
+        }
+
+        return $this->json([
+            'board' => [
+                'me' => $this->presenter->presentUserBrief($granted['user']),
+                'canManage' => $granted['canManage'],
+            ],
+        ]);
+    }
+
+    /**
+     * @return array{
+     *     user: User,
+     *     row: array{id: int, createdById: int|null, documentId: int|null, documentAuthorId: int|null},
+     *     canManage: bool
+     * }|JsonResponse
+     */
+    private function granted(int $id, ?User $user): array|JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $row = $this->boardRepository->findAccessRow($id);
+        if ($row === null) {
+            return $this->json(['error' => SpaApiError::BOARD_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        $userId = (int) $user->getId();
+        $admin = $this->accessService->isAdmin();
+        $author = $row['createdById'] === $userId;
+        $documentAuthor = $row['documentId'] !== null && $row['documentAuthorId'] === $userId;
+        $participant = !$admin && !$author && $this->boardRepository->hasParticipant($row['id'], $userId);
+        $recipient = !$admin && !$author && !$participant && !$documentAuthor
+            && $row['documentId'] !== null
+            && $this->boardRepository->isDocumentRecipient($row['documentId'], $userId);
+
+        if (!$admin && !$author && !$participant && !$documentAuthor && !$recipient) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        return [
+            'user' => $user,
+            'row' => $row,
+            'canManage' => $admin || $author || $documentAuthor,
+        ];
     }
 
     private function visibleBoard(int $id, ?User $user): DocumentBoard|JsonResponse
@@ -250,6 +311,32 @@ final class DocumentBoardController extends AbstractController
         $document = $board->getDocument();
 
         return $document instanceof Document && $this->accessService->canEditOutgoingDocument($document, $user);
+    }
+
+    /**
+     * @param list<mixed> $userIds
+     *
+     * @return list<int>
+     */
+    private function participantIds(array $userIds, ?int $authorId): array
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn ($id): int => (int) $id, $userIds),
+            static fn (int $id): bool => $id > 0 && $id !== $authorId,
+        )));
+        if ($ids === []) {
+            return [];
+        }
+
+        $found = [];
+        foreach ($this->userRepository->findBy(['id' => $ids]) as $participant) {
+            $participantId = $participant->getId();
+            if ($participantId !== null) {
+                $found[] = $participantId;
+            }
+        }
+
+        return $found;
     }
 
     /** @param mixed $userIds */
@@ -325,22 +412,34 @@ final class DocumentBoardController extends AbstractController
         ];
     }
 
-    /** @return array<string, mixed> */
-    private function presentDetail(DocumentBoard $board, User $user): array
+    /**
+     * @param iterable<User> $participants
+     *
+     * @return array<string, mixed>
+     */
+    private function presentMeta(DocumentBoard $board, User $user, iterable $participants): array
     {
-        $participants = [];
-        foreach ($board->getParticipants() as $participant) {
+        $rows = [];
+        foreach ($participants as $participant) {
             $brief = $this->presenter->presentUserBrief($participant);
             if ($brief !== null) {
-                $participants[] = $brief;
+                $rows[] = $brief;
             }
         }
 
         return [
             ...$this->presentSummary($board, $user),
-            'scene' => $board->scenePayload(),
-            'participants' => $participants,
+            'participants' => $rows,
             'me' => $this->presenter->presentUserBrief($user),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function presentDetail(DocumentBoard $board, User $user): array
+    {
+        return [
+            ...$this->presentMeta($board, $user, $board->getParticipants()),
+            'scene' => $board->scenePayload(),
         ];
     }
 
