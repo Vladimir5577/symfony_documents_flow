@@ -24,6 +24,9 @@ final class SpaApiError
     public const UPDATE_FIELDS_REQUIRED = 'update_fields_required';
     public const USER_NOT_FOUND = 'user_not_found';
     public const DOCUMENT_NOT_FOUND = 'document_not_found';
+    public const BOARD_NOT_FOUND = 'board_not_found';
+    public const BOARD_TITLE_REQUIRED = 'board_title_required';
+    public const BOARD_SCENE_TOO_LARGE = 'board_scene_too_large';
     public const DOCUMENT_TYPE_NOT_FOUND = 'document_type_not_found';
     public const DOCUMENT_NAME_REQUIRED = 'document_name_required';
     public const DOCUMENT_INVALID_STATUS = 'document_invalid_status';
@@ -33,7 +36,7 @@ final class SpaApiError
     public const DOCUMENT_VALIDATION_FAILED = 'document_validation_failed';
     /** Файл для редактора — только у черновика, который можно править. */
     public const DOCUMENT_OFFICE_DRAFT_ONLY = 'document_office_draft_only';
-    /** Файл не docx и не xlsx. */
+    /** Файл не docx, не xlsx, не pptx и не pdf. */
     public const DOCUMENT_FILE_NOT_DOCX = 'document_file_not_docx';
     public const DOCUMENT_FILE_EDITOR_FAILED = 'document_file_editor_failed';
     public const DOCUMENT_FILE_CONVERSION_FAILED = 'document_file_conversion_failed';
@@ -108,4 +111,16 @@ final class SpaApiError
     public const ACK_STATUS_ALREADY_FINAL = 'ack_status_already_final';
     public const ACK_STATUS_COMMENT_REQUIRED = 'ack_status_comment_required';
     public const ACK_STATUS_INVALID = 'ack_status_invalid';
+
+    public const FILE_GROUP_NOT_FOUND = 'file_group_not_found';
+    public const FILE_GROUP_NAME_REQUIRED = 'file_group_name_required';
+    public const FILE_GROUP_FOLDER_NOT_FOUND = 'file_group_folder_not_found';
+    public const FILE_GROUP_FILE_NOT_FOUND = 'file_group_file_not_found';
+    public const FILE_GROUP_FILE_TYPE = 'file_group_file_type';
+    public const FILE_GROUP_FILE_TOO_LARGE = 'file_group_file_too_large';
+    public const FILE_GROUP_MEMBER_NOT_FOUND = 'file_group_member_not_found';
+    public const FILE_GROUP_OWNER_NOT_MEMBER = 'file_group_owner_not_member';
+    public const FILE_GROUP_EDITOR_FAILED = 'file_group_editor_failed';
+    /** Папку тащат внутрь её же подпапки — дерево замкнулось бы в кольцо. */
+    public const FILE_GROUP_FOLDER_LOOP = 'file_group_folder_loop';
 }

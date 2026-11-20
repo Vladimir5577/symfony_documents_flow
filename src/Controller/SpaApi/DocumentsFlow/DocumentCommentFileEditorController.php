@@ -26,7 +26,7 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
 
 /**
- * Редактор docx/xlsx во вложении комментария. Правит автор комментария или администратор.
+ * Редактор docx, xlsx, pptx и pdf во вложении комментария. Правит автор комментария или администратор.
  *
  * В хранилище файл попадает только по «Сохранить»: команда forcesave, callback
  * со status 6 и userdata commit.{saveId}.{userId}. Пока в сессии кто-то есть,
@@ -41,6 +41,8 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * docx открывается в рецензировании: новая вставка и удаление остаются правкой
  * с ФИО, пока её не примут. xlsx так не умеет: быстрый режим без переключателя.
  * Комментарий к ячейке меняет и удаляет только его автор.
+ * pptx и pdf тоже без рецензирования, в быстром соавторстве.
+ * pdf открывается в комментариях: правка текста — переключатель в шапке редактора.
  *
  * Браузер ходит в /spa/api с JWT. Document Server скачивает файл и шлёт callback
  * без JWT, поэтому эти адреса подписаны HMAC.
@@ -56,12 +58,16 @@ final class DocumentCommentFileEditorController extends AbstractController
     private const OFFICE_MIME = [
         'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'pdf' => 'application/pdf',
     ];
 
     /** @var array<string, string> */
     private const OFFICE_TYPE = [
         'docx' => 'word',
         'xlsx' => 'cell',
+        'pptx' => 'slide',
+        'pdf' => 'pdf',
     ];
 
     public function __construct(
@@ -295,8 +301,8 @@ final class DocumentCommentFileEditorController extends AbstractController
             'user' => ['id' => (string) $user->getId(), 'name' => $this->userName($user)],
             'customization' => $customization,
         ];
-        if ($ext === 'xlsx') {
-            // Строгий режим прячет чужие ячейки до своего Save, выбор запоминает браузер.
+        if ($ext === 'xlsx' || $ext === 'pptx' || $ext === 'pdf') {
+            // Строгий режим прячет чужие правки до своего Save, выбор запоминает браузер.
             $editorConfig['coEditing'] = ['mode' => 'fast', 'change' => false];
         }
 
