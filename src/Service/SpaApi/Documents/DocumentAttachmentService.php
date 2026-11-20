@@ -8,8 +8,10 @@ use App\Controller\SpaApi\SpaApiError;
 use App\Entity\Document\Document;
 use App\Entity\Document\File;
 use App\Repository\Document\FileRepository;
+use App\Service\Document\Convertor\DocxToPdfConvertorService;
+use App\Service\Document\DocumentFileStorage;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
@@ -21,8 +23,8 @@ final class DocumentAttachmentService
         private readonly FileRepository $fileRepository,
         private readonly DocumentApiPresenter $presenter,
         private readonly EntityManagerInterface $entityManager,
-        #[Autowire('%private_upload_dir_documents_originals%')]
-        private readonly string $uploadDir,
+        private readonly DocumentFileStorage $storage,
+        private readonly DocxToPdfConvertorService $docxToPdf,
     ) {
     }
 
@@ -35,7 +37,7 @@ final class DocumentAttachmentService
         $clientName = $uploaded->getClientOriginalName();
         $fileEntity = new File();
         $fileEntity->setDocument($document);
-        $fileEntity->setFile($uploaded);
+        $this->storage->storeAttachment($fileEntity, $uploaded);
         $fileEntity->setTitle(pathinfo($clientName, PATHINFO_FILENAME));
         $document->addFile($fileEntity);
         $document->setUpdatedAt(new \DateTimeImmutable());
@@ -43,6 +45,35 @@ final class DocumentAttachmentService
         $this->entityManager->flush();
 
         return $fileEntity;
+    }
+
+    /**
+     * PDF-копия docx отдельным вложением: автор смотрит, не поехала ли вёрстка,
+     * и подписывают уже её. Сам docx остаётся как был.
+     */
+    public function convertToPdf(Document $document, File $docx): File
+    {
+        if (strtolower(pathinfo((string) $docx->getFilePath(), PATHINFO_EXTENSION)) !== 'docx') {
+            throw new BadRequestHttpException(SpaApiError::DOCUMENT_FILE_CONVERSION_FAILED);
+        }
+
+        $fs = new Filesystem();
+        $dir = sys_get_temp_dir() . '/docx_to_pdf_' . bin2hex(random_bytes(8));
+        $fs->mkdir($dir);
+
+        try {
+            $source = $dir . '/source.docx';
+            if (!$this->storage->saveTo(DocumentFileStorage::attachmentKey($docx), $source)) {
+                throw new BadRequestHttpException(SpaApiError::FILE_NOT_FOUND_ON_DISK);
+            }
+
+            $pdf = $this->docxToPdf->convert($source, $dir);
+            $name = pathinfo($this->displayName($docx), PATHINFO_FILENAME) . '.pdf';
+
+            return $this->upload($document, new UploadedFile($pdf, $name, 'application/pdf', null, true));
+        } finally {
+            $fs->remove($dir);
+        }
     }
 
     public function delete(Document $document, File $fileEntity): void
@@ -67,21 +98,6 @@ final class DocumentAttachmentService
         return $fileEntity;
     }
 
-    public function resolveFilePath(Document $document, File $fileEntity): ?string
-    {
-        $filePath = $fileEntity->getFilePath();
-        if ($filePath === null || $filePath === '') {
-            return null;
-        }
-
-        $documentId = $document->getId();
-        $absolutePath = str_contains($filePath, '/')
-            ? $this->uploadDir . '/' . $filePath
-            : $this->uploadDir . '/' . $documentId . '/' . $filePath;
-
-        return is_file($absolutePath) ? $absolutePath : null;
-    }
-
     /** То же имя, что в карточке: title и расширение из пути. */
     public function displayName(File $file): string
     {
@@ -91,13 +107,9 @@ final class DocumentAttachmentService
     /**
      * @return array<string, mixed>
      */
-    public function presentFile(Document $document, File $fileEntity): array
+    public function presentFile(File $fileEntity): array
     {
-        $absolutePath = $this->resolveFilePath($document, $fileEntity);
-        $size = $absolutePath !== null ? (filesize($absolutePath) ?: null) : null;
-        $contentType = $absolutePath !== null ? (mime_content_type($absolutePath) ?: null) : null;
-
-        return $this->presenter->presentDocumentFile($fileEntity, $size, $contentType);
+        return $this->presenter->presentDocumentFile($fileEntity, $fileEntity->getSizeBytes(), $fileEntity->getContentType());
     }
 
     /**
@@ -108,7 +120,7 @@ final class DocumentAttachmentService
         $rows = [];
         foreach ($document->getFiles() as $file) {
             if ($file instanceof File) {
-                $rows[] = $this->presentFile($document, $file);
+                $rows[] = $this->presentFile($file);
             }
         }
 

@@ -10,8 +10,8 @@ use App\Entity\Document\DocumentComment;
 use App\Entity\Document\DocumentCommentFile;
 use App\Entity\User\User;
 use App\Repository\Document\DocumentCommentRepository;
+use App\Service\Document\DocumentFileStorage;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -26,8 +26,7 @@ final class DocumentCommentService
         private readonly DocumentAccessService $accessService,
         private readonly EntityManagerInterface $entityManager,
         private readonly DocumentNotifier $documentNotifier,
-        #[Autowire('%private_upload_dir_documents_comments%')]
-        private readonly string $commentsUploadDir,
+        private readonly DocumentFileStorage $storage,
     ) {
     }
 
@@ -89,7 +88,7 @@ final class DocumentCommentService
             $attachment = new DocumentCommentFile();
             $attachment->setAuthor($author);
             $attachment->setComment($comment);
-            $attachment->setFile($uploaded);
+            $this->storage->storeCommentFile($attachment, $uploaded);
             $comment->addFile($attachment);
             $this->entityManager->persist($attachment);
         }
@@ -115,18 +114,6 @@ final class DocumentCommentService
     {
         $this->entityManager->remove($comment);
         $this->entityManager->flush();
-    }
-
-    public function resolveCommentFilePath(Document $document, DocumentCommentFile $fileEntity): ?string
-    {
-        $storageKey = $fileEntity->getStorageKey();
-        if ($storageKey === null || $storageKey === '') {
-            return null;
-        }
-
-        $absolutePath = $this->commentsUploadDir . '/' . $document->getId() . '/' . $storageKey;
-
-        return is_file($absolutePath) ? $absolutePath : null;
     }
 
     /**

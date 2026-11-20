@@ -9,23 +9,16 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
+/**
+ * Образец: первые опыты с FPDI/TCPDF и LibreOffice (штамп, таблица исполнителей,
+ * docx → PDF, картинка → PDF). Маршруты сняты — код не вызывается.
+ * Рабочая подпись: App\Service\SpaApi\Documents\DocumentFileSignatureService.
+ * Файлы-примеры из public/files удалены, шаблоны test.html.twig и sign_document.html.twig тоже.
+ */
 final class DocumentSignController extends AbstractController
 {
-
-    #[Route('/document/sign', name: 'app_document_sign')]
-    public function index(): Response
-    {
-        return $this->render('document_sign/index.html.twig', [
-            'controller_name' => 'DocumentSignController',
-        ]);
-    }
-
-
-    // @deprecated
-    #[Route('/sign_document', name: 'app_sign_document')]
     public function signDocument(): Response
     {
         $projectDir = $this->getParameter('kernel.project_dir');
@@ -35,9 +28,9 @@ final class DocumentSignController extends AbstractController
 
         $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
 
-// ------------------------
-// 1. Импортируем все страницы исходного PDF
-// ------------------------
+        // ------------------------
+        // 1. Импортируем все страницы исходного PDF
+        // ------------------------
         $pageCount = $pdf->setSourceFile($sourcePdf);
         for ($i = 1; $i <= $pageCount; $i++) {
             $tpl = $pdf->importPage($i);
@@ -47,13 +40,13 @@ final class DocumentSignController extends AbstractController
             $pdf->useTemplate($tpl);
         }
 
-// ------------------------
-// 2. Добавляем прямоугольный штамп с текстом внутри
-// ------------------------
+        // ------------------------
+        // 2. Добавляем прямоугольный штамп с текстом внутри
+        // ------------------------
         $pdf->AddPage();
         $pdf->SetFont('dejavusans', '', 12);  // Используем шрифт для кириллицы
 
-// Прямоугольник для штампа
+        // Прямоугольник для штампа
         $x_base = 20; // координата X (слева)
         $y_base = 50; // координата Y (сверху)
 
@@ -65,30 +58,28 @@ final class DocumentSignController extends AbstractController
         $pdf->SetLineWidth(1.0);
         $pdf->Rect($x_base, $y_base, $stampWidth, $stampHeight); // рисуем прямоугольник
 
-// Текст внутри штампа
+        // Текст внутри штампа
         $text = "Подпись Bob Ston Parker\n30.01.2026";
         $pdf->SetXY($x_base + 5, $y_base + 5);  // отступаем от краёв прямоугольника
         $pdf->MultiCell($stampWidth - 10, 7, $text, 0, 'C');  // текст по центру
 
-// ------------------------
-// 3. Сохраняем PDF
-// ------------------------
+        // ------------------------
+        // 3. Сохраняем PDF
+        // ------------------------
         $pdf->Output($outputPdf, 'F');
-
 
         return $this->render('document/history_outgoing_document.html.twig', [
             'active_tab' => 'outgoing_documents',
         ]);
     }
 
-    #[Route('/convert_docx_to_pdf_document', name: 'app_convert_docx_to_pdf_documents')]
     public function convertDocxToPdfDocument(DocumentRepository $documentRepository): Response
     {
         $projectDir = $this->getParameter('kernel.project_dir');
         $outputDir = $projectDir . '/public/files'; // абсолютный путь
         $docxFilePath = $outputDir . '/word.docx'; // файл который загружен
 
-// создаём временный профиль для LibreOffice
+        // создаём временный профиль для LibreOffice
         $tmpProfile = '/tmp/libreoffice_profile';
         if (!is_dir($tmpProfile)) {
             mkdir($tmpProfile, 0777, true);
@@ -106,33 +97,30 @@ final class DocumentSignController extends AbstractController
 
         $process->run();
 
-// проверка на ошибки
+        // проверка на ошибки
         if (!$process->isSuccessful()) {
             throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
         }
 
-// путь к PDF
+        // путь к PDF
         $pdfFilePath = $outputDir . '/' . basename($docxFilePath, '.docx') . '.pdf';
 
-// проверка, что файл создан
+        // проверка, что файл создан
         if (!file_exists($pdfFilePath)) {
             throw new \Exception("PDF не был создан");
         }
-
 
         return $this->render('document/history_outgoing_document.html.twig', [
             'active_tab' => 'outgoing_documents',
         ]);
     }
 
-    #[Route('/edit_pdf', name: 'app_edit_pdf')]
     public function editPdf(DocumentRepository $documentRepository): Response
     {
         return $this->render('document/test.html.twig', [
         ]);
     }
 
-    #[Route('/create_pdf_table_executors', name: 'app_create_pdf_table_executors')]
     public function createPdfTableExecutors(DocumentRepository $documentRepository): Response
     {
 
@@ -141,7 +129,7 @@ final class DocumentSignController extends AbstractController
         $sourcePdf = $filesDir . '/dummy_1.pdf';
         $outputPdf = $filesDir . '/dummy_with_table.pdf';
 
-// Список исполнителей
+        // Список исполнителей
         $executors = [
             'Иван Иванов',
             'Мария Петрова',
@@ -150,9 +138,9 @@ final class DocumentSignController extends AbstractController
 
         $pdf = new Fpdi();
 
-// ------------------------
-// 1. Копируем все страницы оригинала
-// ------------------------
+        // ------------------------
+        // 1. Копируем все страницы оригинала
+        // ------------------------
         $pageCount = $pdf->setSourceFile($sourcePdf);
         for ($i = 1; $i <= $pageCount; $i++) {
             $tpl = $pdf->importPage($i);
@@ -162,13 +150,13 @@ final class DocumentSignController extends AbstractController
             $pdf->useTemplate($tpl);
         }
 
-// ------------------------
-// 2. Добавляем последнюю страницу с таблицей
-// ------------------------
+        // ------------------------
+        // 2. Добавляем последнюю страницу с таблицей
+        // ------------------------
         $pdf->AddPage();
         $pdf->SetFont('dejavusans', '', 12); // шрифт для кириллицы
 
-// Определяем размеры таблицы
+        // Определяем размеры таблицы
         $leftX = 20;
         $rightX = 110;
         $startY = 30;
@@ -176,12 +164,12 @@ final class DocumentSignController extends AbstractController
         $tableWidthLeft = 90; // 80
         $tableWidthRight = 90;
 
-// Рисуем заголовки
+        // Рисуем заголовки
         $pdf->SetXY($leftX, $startY);
         $pdf->Cell($tableWidthLeft, $rowHeight, 'Исполнитель', 1, 0, 'C');
         $pdf->Cell($tableWidthRight, $rowHeight, 'Место для штампа', 1, 1, 'C');
 
-// Рисуем строки
+        // Рисуем строки
         $y = $startY + $rowHeight;
         foreach ($executors as $executor) {
             $pdf->SetXY($leftX, $y);
@@ -193,19 +181,17 @@ final class DocumentSignController extends AbstractController
             $y += $rowHeight;
         }
 
-// ------------------------
-// 3. Сохраняем финальный PDF
-// ------------------------
+        // ------------------------
+        // 3. Сохраняем финальный PDF
+        // ------------------------
         $pdf->Output($outputPdf, 'F');
 
-//        echo "PDF с таблицей сохранен: $outputPdf";
-
+        //        echo "PDF с таблицей сохранен: $outputPdf";
 
         return $this->render('document/test.html.twig', [
         ]);
     }
 
-    #[Route('/executors_signature', name: 'app_executors_signature')]
     public function executorsSignature(
         Request $request,
         DocumentRepository $documentRepository,
@@ -232,10 +218,7 @@ final class DocumentSignController extends AbstractController
         }
 
         $sourcePdf = $updatedDir . '/' . $document->getUpdatedFile();      // исходный документ
-//        $outputPdf = $updatedDir . '/' . $document->getUpdatedAt();   // файл с добавленной подписью
         $outputPdf = $sourcePdf;
-
-//        file_put_contents('./test.txt', $outputPdf);
 
         // координаты с фронта
         // x max = 150
@@ -256,7 +239,7 @@ final class DocumentSignController extends AbstractController
             $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
             $pdf->useTemplate($tpl);
 
-            // 👇 ТОЛЬКО НА НУЖНОЙ СТРАНИЦЕ
+            // штамп только на выбранной странице
             if ($i === $stampPage) {
 
                 $pdf->SetDrawColor(0, 0, 255);
@@ -296,7 +279,6 @@ final class DocumentSignController extends AbstractController
         ]);
     }
 
-    #[Route('/convert_img_to_pdf', name: 'app_convert_img_to_pdf')]
     public function convertImgToPdf(Request $request): Response
     {
         $projectDir = $this->getParameter('kernel.project_dir');
@@ -305,44 +287,41 @@ final class DocumentSignController extends AbstractController
         $imagePath = $filesDir . '/image.jpg';
         $outputPdf = $filesDir . '/image_converted.pdf';
 
-// --------------------------
-// Создаём FPDI без первой страницы
-// --------------------------
+        // --------------------------
+        // Создаём FPDI без первой страницы
+        // --------------------------
         $pdf = new Fpdi('P', 'mm', 'A4', true, 'UTF-8', false); // последний параметр false отключает авто AddPage
 
-// Явно добавляем страницу
+        // Явно добавляем страницу
         $pdf->AddPage();
 
-// размеры картинки
+        // размеры картинки
         list($imgWidth, $imgHeight) = getimagesize($imagePath);
 
-// размеры страницы PDF
+        // размеры страницы PDF
         $pageWidth  = $pdf->getPageWidth();
         $pageHeight = $pdf->getPageHeight();
 
-// масштабирование
+        // масштабирование
         $scale = min($pageWidth / $imgWidth, $pageHeight / $imgHeight);
 
         $newWidth  = $imgWidth * $scale;
         $newHeight = $imgHeight * $scale;
 
-// центрируем
+        // центрируем
         $x = ($pageWidth - $newWidth) / 2;
         $y = ($pageHeight - $newHeight) / 2;
 
-// вставляем изображение
+        // вставляем изображение
         $pdf->Image($imagePath, $x, $y, $newWidth, $newHeight);
 
-// сохраняем PDF
+        // сохраняем PDF
         $pdf->Output($outputPdf, 'F');
-
-
 
         return $this->render('document/test.html.twig', [
         ]);
     }
 
-    #[Route('/sign_and_save_document/{id}', name: 'app_sign_and_save_document')]
     public function signAndSaveDocument(
         int $id,
         DocumentRepository $documentRepository,
@@ -373,8 +352,6 @@ final class DocumentSignController extends AbstractController
         ]);
     }
 }
-
-
 
 /*
 
@@ -457,8 +434,5 @@ $projectDir = $this->getParameter('kernel.project_dir');
 // 3. Сохраняем PDF
 // ------------------------
         $pdf->Output($outputPdf, 'F');
-
-
-
 
 */

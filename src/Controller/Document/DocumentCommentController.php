@@ -9,13 +9,12 @@ use App\Entity\User\User;
 use App\Repository\Document\DocumentCommentFileRepository;
 use App\Repository\Document\DocumentCommentRepository;
 use App\Repository\Document\DocumentRepository;
+use App\Service\Document\DocumentFileStorage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
 final class DocumentCommentController extends AbstractController
@@ -23,8 +22,7 @@ final class DocumentCommentController extends AbstractController
     private const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 МБ
 
     public function __construct(
-        #[Autowire('%private_upload_dir_documents_comments%')]
-        private readonly string $commentsUploadDir,
+        private readonly DocumentFileStorage $fileStorage,
     ) {
     }
 
@@ -85,7 +83,7 @@ final class DocumentCommentController extends AbstractController
             $attachment = new DocumentCommentFile();
             $attachment->setAuthor($currentUser);
             $attachment->setComment($comment);
-            $attachment->setFile($uploaded);
+            $this->fileStorage->storeCommentFile($attachment, $uploaded);
             $comment->addFile($attachment);
             $entityManager->persist($attachment);
         }
@@ -204,33 +202,14 @@ final class DocumentCommentController extends AbstractController
             return $this->redirectToRoute('app_incoming_documents');
         }
 
-        $storageKey = $fileEntity->getStorageKey();
-        if (!$storageKey) {
-            throw $this->createNotFoundException('Файл не прикреплён.');
+        $response = $this->fileStorage->response(
+            DocumentFileStorage::commentFileKey($fileEntity),
+            $fileEntity->getFilename() ?: 'file',
+            $request->query->getBoolean('inline'),
+        );
+        if ($response === null) {
+            throw $this->createNotFoundException('Файл не найден в хранилище.');
         }
-
-        $absolutePath = $this->commentsUploadDir . '/' . $document->getId() . '/' . $storageKey;
-        if (!is_file($absolutePath)) {
-            throw $this->createNotFoundException('Файл не найден на диске.');
-        }
-
-        $downloadName = $fileEntity->getFilename() ?: $storageKey;
-        $inline = $request->query->getBoolean('inline');
-
-        $response = new StreamedResponse(static function () use ($absolutePath) {
-            $handle = fopen($absolutePath, 'rb');
-            if ($handle === false) {
-                return;
-            }
-            while (!feof($handle)) {
-                echo fread($handle, 8192);
-                flush();
-            }
-            fclose($handle);
-        });
-
-        $response->headers->set('Content-Type', $fileEntity->getContentType() ?: 'application/octet-stream');
-        $response->headers->set('Content-Disposition', ($inline ? 'inline' : 'attachment') . '; filename="' . addslashes($downloadName) . '"');
 
         return $response;
     }

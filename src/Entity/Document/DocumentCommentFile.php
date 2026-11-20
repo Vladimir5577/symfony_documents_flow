@@ -6,27 +6,15 @@ use App\Entity\User\User;
 use App\Repository\Document\DocumentCommentFileRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\HttpFoundation\File\File as SymfonyFile;
-use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
 #[ORM\Entity(repositoryClass: DocumentCommentFileRepository::class)]
 #[ORM\Table(name: 'document_comment_file')]
-#[Vich\Uploadable]
 class DocumentCommentFile
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
-
-    #[Vich\UploadableField(
-        mapping: 'document_comment_files',
-        fileNameProperty: 'storageKey',
-        size: 'sizeBytes',
-        mimeType: 'contentType',
-        originalName: 'filename',
-    )]
-    private ?SymfonyFile $file = null;
 
     #[ORM\Column(name: 'storage_key', length: 500, nullable: true)]
     private ?string $storageKey = null;
@@ -62,20 +50,6 @@ class DocumentCommentFile
     public function getId(): ?int
     {
         return $this->id;
-    }
-
-    public function getFile(): ?SymfonyFile
-    {
-        return $this->file;
-    }
-
-    public function setFile(?SymfonyFile $file = null): void
-    {
-        $this->file = $file;
-
-        if ($file !== null) {
-            $this->updatedAt = new \DateTimeImmutable();
-        }
     }
 
     public function getStorageKey(): ?string

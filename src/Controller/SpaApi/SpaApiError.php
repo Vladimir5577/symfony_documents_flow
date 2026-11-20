@@ -39,6 +39,10 @@ final class SpaApiError
     /** Файл не docx, не xlsx, не pptx и не pdf. */
     public const DOCUMENT_FILE_NOT_DOCX = 'document_file_not_docx';
     public const DOCUMENT_FILE_EDITOR_FAILED = 'document_file_editor_failed';
+    public const DOCUMENT_FILE_CONVERSION_FAILED = 'document_file_conversion_failed';
+    public const DOCUMENT_FILE_NOT_PDF = 'document_file_not_pdf';
+    public const DOCUMENT_FILE_SIGN_FAILED = 'document_file_sign_failed';
+    public const DOCUMENT_SIGNATURE_INVALID = 'document_signature_invalid';
     public const ORGANIZATION_REQUIRED = 'organization_required';
     public const POST_NOT_FOUND = 'post_not_found';
     public const POST_TITLE_REQUIRED = 'post_title_required';

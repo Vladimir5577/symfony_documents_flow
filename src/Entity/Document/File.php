@@ -5,12 +5,9 @@ namespace App\Entity\Document;
 use App\Repository\Document\FileRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\HttpFoundation\File\File as SymfonyFile;
-use Vich\UploaderBundle\Mapping\Attribute as Vich;
 
 #[ORM\Entity(repositoryClass: FileRepository::class)]
 #[ORM\Table(name: 'file_document')]
-#[Vich\Uploadable]
 class File
 {
     #[ORM\Id]
@@ -28,11 +25,15 @@ class File
     #[ORM\JoinColumn(name: 'document_id', referencedColumnName: 'id', nullable: false)]
     private ?Document $document = null;
 
-    #[Vich\UploadableField(mapping: 'document_files', fileNameProperty: 'filePath')]
-    private ?SymfonyFile $file = null;
-
+    /** Имя объекта в MinIO, см. DocumentFileStorage. */
     #[ORM\Column(type: Types::STRING, length: 255, nullable: true)]
     private ?string $filePath = null;
+
+    #[ORM\Column(name: 'content_type', length: 100, nullable: true)]
+    private ?string $contentType = null;
+
+    #[ORM\Column(name: 'size_bytes', type: Types::INTEGER, nullable: true)]
+    private ?int $sizeBytes = null;
 
     public function getId(): ?int
     {
@@ -75,21 +76,6 @@ class File
         return $this;
     }
 
-    public function getFile(): ?SymfonyFile
-    {
-        return $this->file;
-    }
-
-    public function setFile(?SymfonyFile $file = null): void
-    {
-        $this->file = $file;
-
-        // Automatically generate a unique file name when the file is set
-//        if ($file) {
-//            $this->filePath = uniqid('file_', true) . '.' . $file->guessExtension();
-//        }
-    }
-
     public function getFilePath(): ?string
     {
         return $this->filePath;
@@ -98,6 +84,30 @@ class File
     public function setFilePath(?string $filePath): static
     {
         $this->filePath = $filePath;
+
+        return $this;
+    }
+
+    public function getContentType(): ?string
+    {
+        return $this->contentType;
+    }
+
+    public function setContentType(?string $contentType): static
+    {
+        $this->contentType = $contentType;
+
+        return $this;
+    }
+
+    public function getSizeBytes(): ?int
+    {
+        return $this->sizeBytes;
+    }
+
+    public function setSizeBytes(?int $sizeBytes): static
+    {
+        $this->sizeBytes = $sizeBytes;
 
         return $this;
     }

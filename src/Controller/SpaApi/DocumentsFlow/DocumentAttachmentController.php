@@ -7,14 +7,14 @@ namespace App\Controller\SpaApi\DocumentsFlow;
 use App\Controller\SpaApi\SpaApiError;
 use App\Entity\User\User;
 use App\Repository\Document\DocumentRepository;
+use App\Service\Document\DocumentFileStorage;
 use App\Service\SpaApi\Documents\DocumentAccessService;
 use App\Service\SpaApi\Documents\DocumentAttachmentService;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
@@ -26,6 +26,8 @@ final class DocumentAttachmentController extends AbstractController
         private readonly DocumentRepository $documentRepository,
         private readonly DocumentAccessService $accessService,
         private readonly DocumentAttachmentService $attachmentService,
+        private readonly DocumentFileStorage $storage,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -57,7 +59,7 @@ final class DocumentAttachmentController extends AbstractController
         }
 
         return $this->json(
-            $this->attachmentService->presentFile($document, $fileEntity),
+            $this->attachmentService->presentFile($fileEntity),
             Response::HTTP_CREATED,
         );
     }
@@ -79,21 +81,51 @@ final class DocumentAttachmentController extends AbstractController
             return $this->json(['error' => SpaApiError::ATTACHMENT_NOT_FOUND], Response::HTTP_NOT_FOUND);
         }
 
-        $absolutePath = $this->attachmentService->resolveFilePath($document, $fileEntity);
-        if ($absolutePath === null) {
+        $response = $this->storage->response(
+            DocumentFileStorage::attachmentKey($fileEntity),
+            $this->attachmentService->displayName($fileEntity),
+            $request->query->getBoolean('inline'),
+        );
+        if ($response === null) {
             return $this->json(['error' => SpaApiError::FILE_NOT_FOUND_ON_DISK], Response::HTTP_NOT_FOUND);
         }
 
-        $response = new BinaryFileResponse($absolutePath);
-        $disposition = $request->query->getBoolean('inline')
-            ? ResponseHeaderBag::DISPOSITION_INLINE
-            : ResponseHeaderBag::DISPOSITION_ATTACHMENT;
-        $response->setContentDisposition(
-            $disposition,
-            $this->attachmentService->presentFile($document, $fileEntity)['filename'] ?? 'file',
-        );
-
         return $response;
+    }
+
+    /** Сохранить docx как PDF — новым вложением рядом. */
+    #[Route('/{id}/pdf', name: 'spa_api_documents_flow_outgoing_attachments_to_pdf', requirements: ['documentId' => '\d+', 'id' => '\d+'], methods: ['POST'])]
+    public function toPdf(int $documentId, int $id, #[CurrentUser] ?User $user): JsonResponse
+    {
+        if (!$user instanceof User) {
+            throw $this->createAccessDeniedException();
+        }
+
+        $document = $this->findAccessibleDocument($documentId, $user);
+        if ($document instanceof JsonResponse) {
+            return $document;
+        }
+
+        if (!$this->accessService->canEditOutgoingDocument($document, $user)) {
+            return $this->json(['error' => SpaApiError::ACCESS_DENIED], Response::HTTP_FORBIDDEN);
+        }
+
+        $fileEntity = $this->attachmentService->findForDocument($documentId, $id);
+        if ($fileEntity === null) {
+            return $this->json(['error' => SpaApiError::ATTACHMENT_NOT_FOUND], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $pdf = $this->attachmentService->convertToPdf($document, $fileEntity);
+        } catch (HttpException $e) {
+            return $this->jsonError($e);
+        } catch (\RuntimeException $e) {
+            $this->logger->error('docx не перевёлся в PDF', ['fileId' => $id, 'exception' => $e]);
+
+            return $this->json(['error' => SpaApiError::DOCUMENT_FILE_CONVERSION_FAILED], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return $this->json($this->attachmentService->presentFile($pdf), Response::HTTP_CREATED);
     }
 
     #[Route('/{id}', name: 'spa_api_documents_flow_outgoing_attachments_delete', requirements: ['documentId' => '\d+', 'id' => '\d+'], methods: ['DELETE'])]
